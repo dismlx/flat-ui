@@ -29,7 +29,8 @@ local _, ns = ...
 -- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
 -- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours. Fade the block: the alpha of each
 -- held frame (SetAlpha, which the game allows in a fight) eases to the faded value over Fade time, once the block has not been wanted for Wait
--- before fading, and back to full in a tenth of a second when it is: in a fight, under the mouse (over its own block), with a target (Full
+-- before fading, and back to full in a tenth of a second when it is: in a fight, under the mouse (over its own block, or over Flat UI's page arrows
+-- left of a main bar it holds, ns.OwnPagerOver), with a target (Full
 -- opacity with a target, off by default; UnitExists("target"), a withheld answer counting as a target, read at each pass of the fade), as you
 -- cast (Full opacity as you cast, off by default: while UnitCastingInfo or UnitChannelInfo of the player gives a plain name, and for a moment
 -- after each spell or item used, UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the fade's own frame, so an instant
@@ -522,6 +523,10 @@ local function Under(plan)
 		return false
 	end
 	if plan.spots[TOTEM] and Answers(TOTEM_ARROW, "IsVisible") then
+		return true
+	end
+	-- Flat UI's page arrows lie left of its main bar, outside the block's rectangle (OwnBars.lua).
+	if plan.spots[BARS.main.frame] and type(ns.OwnPagerOver) == "function" and ns.OwnPagerOver() then
 		return true
 	end
 	if not x then

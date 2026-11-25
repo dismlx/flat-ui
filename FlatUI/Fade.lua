@@ -7,8 +7,12 @@ local _, ns = ...
 -- Blizzard_APIDocumentationGenerated/SimpleFrameAPIDocumentation.lua:1133-1142). The alpha a frame had is read before the first write and put
 -- back when the module, the row or the part goes off. A faded frame still takes clicks and shows tooltips, since alpha does not touch the mouse.
 --
--- One frame of the addon's own runs every 0.05 s while the module is on. A row is at full opacity while the mouse is over the row's hover frame,
--- in a fight (with In combat ticked), with a target (With a target ticked; not the Target frame row, see When shown), while the cursor holds something, while
+-- One frame of the addon's own runs every 0.05 s while the module is on. A row is at full opacity while the mouse is over the row's hover frame
+-- (the Main action bar row's includes Flat UI's page arrows, FlatUIBar1PageUp and FlatUIBar1PageDown, left of its bar),
+-- in a fight (with In combat ticked), with a target (With a target ticked; not the Target frame row, see When shown), as you cast (As you cast ticked;
+-- the action bar, stance and pet bar rows only: while UnitCastingInfo or UnitChannelInfo of the player gives a plain name, and for a moment after each
+-- spell or item used, UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the module's own frame, as the bar block's Full opacity
+-- as you cast does, so an instant use counts and Wait before fading holds the bars after it), while the cursor holds something, while
 -- the spell flyout is open and in Edit Mode.
 -- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. A frame is written only when its value changes.
 -- A frame whose alpha something else holds at 0 (the hidden minimap buttons) is left alone, and a frame the action bar block fades is left to that fade.
@@ -180,7 +184,8 @@ end
 -- The row of the bag windows, whose more and busy are given below, once the functions they call are made.
 local WINDOWS_ROW = { row = "bagWindows", label = "Bag windows", frames = {}, opens = true }
 local ENTRIES = {
-	{ bar = true, row = "main", label = "Main action bar", frames = { "MainActionBar" } },
+	-- Flat UI's page arrows lie left of its main bar (OwnBars.lua); with the game's buttons the names are not there.
+	{ bar = true, row = "main", label = "Main action bar", frames = { "MainActionBar" }, beside = { "FlatUIBar1PageUp", "FlatUIBar1PageDown" } },
 	{ bar = true, row = "bar2", label = "Action bar 2", frames = { "MultiBarBottomLeft" } },
 	{ bar = true, row = "bar3", label = "Action bar 3", frames = { "MultiBarBottomRight" } },
 	{ bar = true, row = "bar4", label = "Action bar 4", frames = { "MultiBarRight" } },
@@ -316,6 +321,24 @@ local function HasTarget()
 	end
 	local ok, exists = pcall(UnitExists, "target")
 	return ok and (ns.IsSecret(exists) or exists == true)
+end
+
+-- Whether the player casts or channels now, or used a spell or an item a moment ago (state.castAt, from the driver's events). A withheld name does
+-- not count.
+local function Casting()
+	if state.castAt and GetTime() - state.castAt < 0.15 then
+		return true
+	end
+	for _, read in ipairs({ "UnitCastingInfo", "UnitChannelInfo" }) do
+		local fn = _G[read]
+		if type(fn) == "function" then
+			local ok, name = pcall(fn, "player")
+			if ok and not ns.IsSecret(name) and type(name) == "string" then
+				return true
+			end
+		end
+	end
+	return false
 end
 
 -- What keeps every row at full opacity, whatever the mouse does. With a target is asked apart (Step), as it does not hold a targeted row.
@@ -684,6 +707,7 @@ local function Step(dt)
 	local floor, delay, seconds = Opt("alpha") / 100, Opt("delay") / 1000, math.max(Opt("time") / 1000, 0.05)
 	local step = dt / seconds
 	local always, targeted = Wanted(), Opt("target") and HasTarget()
+	local casting = Opt("cast") == true and Casting()
 	for rule in pairs(asked) do
 		asked[rule] = nil
 	end
@@ -732,7 +756,7 @@ local function Step(dt)
 				added, fresh = Added(entry)
 			end
 			-- A bag window that opened this pass, or one in use, holds its row at full.
-			local full = always or (targeted and not entry.targeted) or (entry.rule == true and Holds(Opt(entry.row)))
+			local full = always or (targeted and not entry.targeted) or (casting and entry.bar == true) or (entry.rule == true and Holds(Opt(entry.row)))
 				or (entry.opens == true and fresh) or (entry.busy ~= nil and entry.busy(added) == true)
 			if not full then
 				local hover = entry.hover and Resolve(entry.hover)
@@ -814,6 +838,13 @@ local function Refresh()
 			driver = CreateFrame("Frame")
 			ns.Own[driver] = true
 			driver:SetScript("OnUpdate", Tick)
+			-- As you cast: the time of the player's last spell or item use. An event reaches a hidden frame too.
+			for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_SUCCEEDED" }) do
+				pcall(driver.RegisterUnitEvent, driver, event, "player")
+			end
+			driver:SetScript("OnEvent", function()
+				state.castAt = GetTime()
+			end)
 		end
 		driver:Show()
 		Step(0)

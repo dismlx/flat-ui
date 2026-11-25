@@ -10,6 +10,13 @@ local _, ns = ...
 -- The flat panel of Bar background is a frame of the addon's own behind a bar, shown with it and as faint as it: behind Flat UI's own bar in
 -- place of the main bar and bars 2 to 8 while Flat UI's buttons are in use (the game's bars are parked at alpha 0 under them), else behind the
 -- game's bar.
+-- Test mode (TM.Register "actionbars", Action buttons): while it is on, every 5 s, the first four shown buttons of Flat UI's main bar that hold
+-- something (ns.ButtonSamples) play samples of their looks, all on Flat UI's own frames and out of combat: button 1 fills as a 2 s cast that lands,
+-- button 2 flashes as an interrupt, button 3 pulses as an aim (ButtonEffects.lua), and button 4 runs a 4 s sweep in the Sweep colour and opacity,
+-- with its edge line and numbers, that ends with the ready flash (ButtonStates.lua). A change of an action bar row or of the cast bar's colours
+-- gives the samples that show the new look and plays the others; a change of profile plays them all again. Each part plays only while its row is
+-- on. With test mode off, a change of one of those rows with the options window open plays its sample once (ns.ButtonStatesChanged,
+-- ns.ButtonEffectsChanged). A Refresh (a change of profile among them) tells OwnBars.lua to place the page arrows again (ns.OwnPagerChanged).
 
 local KEY = "actionbars"
 
@@ -802,6 +809,10 @@ local function Refresh()
 	if type(ns.ButtonTextRefresh) == "function" then
 		ns.ButtonTextRefresh()
 	end
+	-- A profile that turns Page arrows on the main bar on or off reaches the arrows here: Core's Apply refreshes the module, not the row.
+	if type(ns.OwnPagerChanged) == "function" then
+		pcall(ns.OwnPagerChanged)
+	end
 end
 
 -- The restyled buttons, bar by bar.
@@ -969,6 +980,28 @@ local function Marked()
 	return n
 end
 
+-- The first shown buttons of Flat UI's main bar that hold something, at most four, in the bar's order: the buttons the samples of test mode and of a
+-- change of a row play on. Empty without Flat UI's buttons.
+function ns.ButtonSamples()
+	local list = {}
+	if not OwnOn() then
+		return list
+	end
+	for _, button in ipairs(OwnList()) do
+		if OwnBarOf(button) == 1 then
+			local okShown, shown = pcall(button.IsVisible, button)
+			local st = type(ns.OwnState) == "function" and ns.OwnState(button)
+			if okShown and not ns.IsSecret(shown) and shown == true and type(st) == "table" and st.has == true then
+				list[#list + 1] = button
+				if #list >= 4 then
+					break
+				end
+			end
+		end
+	end
+	return list
+end
+
 -- The game's own code that runs on these events has finished one frame later: the empty buttons and the bars are looked at then.
 local laterQueued = false
 
@@ -1040,3 +1073,75 @@ ns.Register(KEY, {
 		return lines
 	end,
 })
+
+-- Test mode: the samples of the looks of Flat UI's buttons, every 5 s while it is on (the header above). force starts each again; without it a sample
+-- that shows goes on.
+local function Sample(force)
+	if not OwnOn() then
+		return
+	end
+	local list = ns.ButtonSamples()
+	if type(ns.ButtonEffectsSample) == "function" then
+		ns.ButtonEffectsSample({ cast = list[1], interrupt = list[2], aim = list[3] }, force)
+	end
+	if list[4] and type(ns.ButtonStatesSample) == "function" then
+		ns.ButtonStatesSample(list[4], force)
+	end
+end
+
+local function SampleOff()
+	if type(ns.ButtonEffectsSampleOff) == "function" then
+		ns.ButtonEffectsSampleOff()
+	end
+	if type(ns.ButtonStatesSampleOff) == "function" then
+		ns.ButtonStatesSampleOff()
+	end
+end
+
+-- The cast bar's colours that the samples take, and the rows whose sample plays on buttons 1 to 3 (the role, the button's place in the list).
+local SAMPLE_COLOURS = { ["castbars.castColour"] = true, ["castbars.channelColour"] = true, ["castbars.interruptedColour"] = true }
+local SAMPLE_ROWS = { ["actionbars.castAnim"] = { "cast", 1 }, ["actionbars.interruptAnim"] = { "interrupt", 2 }, ["actionbars.aimAnim"] = { "aim", 3 } }
+
+-- A change while test mode is on: a change of profile plays every sample again; Cast fill animation, Interrupt flash or Aim highlight plays its own
+-- unless it shows; a cast bar colour colours the samples that show; any other action bar row gives the sweep sample its look, or plays it.
+local function SampleChanged(path)
+	if path == "*" then
+		Sample(true)
+		return
+	end
+	if type(path) ~= "string" or not OwnOn() then
+		return
+	end
+	local row = SAMPLE_ROWS[path]
+	if SAMPLE_COLOURS[path] then
+		if type(ns.ButtonEffectsSampleLook) == "function" then
+			ns.ButtonEffectsSampleLook()
+		end
+	elseif row then
+		local button = ns.ButtonSamples()[row[2]]
+		if button and type(ns.ButtonEffectsSample) == "function" then
+			ns.ButtonEffectsSample({ [row[1]] = button })
+		end
+	elseif path:match("^actionbars%.") then
+		local button = ns.ButtonSamples()[4]
+		if button and type(ns.ButtonStatesSample) == "function" then
+			ns.ButtonStatesSample(button)
+		end
+	end
+end
+
+if ns.TestMode then
+	ns.TestMode.Register("actionbars", {
+		module = KEY,
+		label = "Action buttons",
+		every = 5,
+		Start = function()
+			Sample(true)
+		end,
+		Tick = function()
+			Sample(true)
+		end,
+		Stop = SampleOff,
+		Changed = SampleChanged,
+	})
+end

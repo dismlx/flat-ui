@@ -10,6 +10,11 @@ local _, ns = ...
 -- At a Hotkey position other than the top right the hotkey is also justified to that side or the middle (SetJustifyH), since the game's box is
 -- right-justified and nearly as wide as the button. A Hotkey size or Macro name size above 100% gives that text a box as tall as it is
 -- (SetHeight; the game's is 10, too short for a larger font, which then draws nothing), set again with the position and put back at 100%.
+-- The count (reagents, ammunition, stacks) takes Count size, Count colour (white by default: SetTextColor, through ns.TextStyle, which keeps the
+-- game's colour to put back and is allowed in a fight) and Count position (Bottom right by default, Bottom left, Top left, Top right or Bottom). The
+-- game never anchors or colours an action button's count again after its OnLoad (ActionButton.lua:638, 853 and 1742-1743 only), so the anchor it
+-- had is read the first time and put back at Bottom right; the other corners keep that anchor's inset (5 and 5 on the template's buttons,
+-- ActionButtonTemplate.xml:92-96), the count is justified to its side, and it is placed out of combat only, as the hotkey is.
 
 local KEY = "actionbars"
 local POINTS = {
@@ -22,7 +27,7 @@ local JUSTIFY = { topleft = "LEFT", bottomleft = "LEFT", top = "CENTER", center 
 -- above 100% does not fit in it and is not drawn, so those get a box as tall as their text.
 local TEXT_HEIGHT = 10
 local LINE_RANGE = "Hotkey colour: the game withholds the range, so those hotkeys keep the game's colour."
-local LINE_WAIT = "Hotkey position: waits for the end of the fight."
+local LINE_WAIT = "Hotkey and count position: wait for the end of the fight."
 
 local weak = { __mode = "k" }
 -- Per button: { hotFaded, nameFaded = true while faded here, coloured = true while the own colour is set, placed = true while the position is
@@ -40,7 +45,12 @@ local state = { hooked = false, queued = false, place = false, waiting = false, 
 local pending = {}
 local DEFAULTS = {
 	hotkeyText = "game", hotkeyShow = "all", hotkeySize = 100, hotkeyOwn = false, hotkeyPoint = "topright", hotkeyX = 0, hotkeyY = 0,
-	nameShow = "all", nameSize = 100, countSize = 100, textOutline = "game",
+	nameShow = "all", nameSize = 100, countSize = 100, countColour = "ffffffff", countPoint = "bottomright", textOutline = "game",
+}
+-- Count position: the point of the button, the signs of the inset across and up, and the justification.
+local COUNT_SPOTS = {
+	bottomright = { "BOTTOMRIGHT", -1, 1, "RIGHT" }, bottomleft = { "BOTTOMLEFT", 1, 1, "LEFT" }, topleft = { "TOPLEFT", 1, -1, "LEFT" },
+	topright = { "TOPRIGHT", -1, -1, "RIGHT" }, bottom = { "BOTTOM", 0, 1, "CENTER" },
 }
 
 local function Opt(key)
@@ -332,6 +342,44 @@ local function Place(record, button, hotkey, custom, o)
 	end
 end
 
+-- Puts the count where Count position says, or back where the game had it (Bottom right). The game's anchor and justification are read the first time
+-- (record.countOrig, record.countJustify). Out of combat only.
+local function PlaceCount(record, button, count, custom, o)
+	if custom then
+		if record.countOrig == nil then
+			local ok, p1, rel, p2, x, y = pcall(count.GetPoint, count, 1)
+			if ok and Plain(p1) and type(p1) == "string" and Plain(rel) and Plain(p2) and Plain(x) and Plain(y) then
+				record.countOrig = { p1, rel, p2, x, y }
+			else
+				record.countOrig = false
+			end
+			local okJustify, justify = pcall(count.GetJustifyH, count)
+			record.countJustify = okJustify and Plain(justify) and type(justify) == "string" and justify or "RIGHT"
+		end
+		local orig = record.countOrig
+		-- The inset of the game's own bottom right anchor, else the template's 5 and 5.
+		local ix, iy = 5, 5
+		if orig and orig[1] == "BOTTOMRIGHT" and ns.Finite(orig[4]) and ns.Finite(orig[5]) then
+			ix, iy = math.abs(orig[4]), math.abs(orig[5])
+		end
+		local spot = COUNT_SPOTS[o.countPoint] or COUNT_SPOTS.bottomright
+		count:ClearAllPoints()
+		count:SetPoint(spot[1], button, spot[1], spot[2] * ix, spot[3] * iy)
+		pcall(count.SetJustifyH, count, spot[4])
+		record.countPlaced = true
+	elseif record.countPlaced then
+		local orig = record.countOrig
+		count:ClearAllPoints()
+		if orig then
+			count:SetPoint(orig[1], orig[2] or button, orig[3] or orig[1], orig[4] or 0, orig[5] or 0)
+		else
+			count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -5, 5)
+		end
+		pcall(count.SetJustifyH, count, record.countJustify or "RIGHT")
+		record.countPlaced = nil
+	end
+end
+
 -- A size above 100%: the hotkey or the macro name gets a box as tall as its text, and the height it had is kept (record[key]); at 100% that height
 -- goes back. The game sets the hotkey's height again in UpdateHotkeys (UPDATE_BINDINGS), so this runs with the position. Out of combat only.
 local function Tall(record, key, fontString, percent)
@@ -382,6 +430,12 @@ local function Pass()
 	end
 	local flags = Flags(o)
 	local custom = o.hotkeyPoint ~= "topright" or o.hotkeyX ~= 0 or o.hotkeyY ~= 0
+	local countCustom = o.countPoint ~= DEFAULTS.countPoint
+	local countTint = nil
+	if o.countColour ~= DEFAULTS.countColour then
+		local r, g, b = ns.Colour(KEY .. ".countColour")
+		countTint = { r, g, b }
+	end
 	local moduleOn = ns.Enabled(KEY) == true
 	pending = {}
 	state.noted = false
@@ -435,7 +489,22 @@ local function Pass()
 				end
 			end
 			if count ~= nil then
-				Style(count, styled, o.countSize, flags)
+				local look = nil
+				if styled then
+					look = { percent = o.countSize, flags = flags }
+					if countTint then
+						look.r, look.g, look.b = countTint[1], countTint[2], countTint[3]
+					end
+				end
+				ns.TextStyle(count, look)
+				local put = styled and countCustom
+				if placing and (put or record.countPlaced) then
+					if fight then
+						waits = true
+					else
+						PlaceCount(record, button, count, put, o)
+					end
+				end
 			end
 		end
 	end
@@ -575,7 +644,7 @@ end
 -- Config changed callback of every row of the Button text page.
 function ns.ButtonTextChanged(path)
 	if type(path) == "string" and (path:find("^" .. KEY .. "%.hotkey[PXY]") or path == KEY .. ".hotkeySize" or path == KEY .. ".nameSize"
-		or path == KEY .. ".hotkeyShow" or path == KEY .. ".nameShow") then
+		or path == KEY .. ".hotkeyShow" or path == KEY .. ".nameShow" or path == KEY .. ".countPoint") then
 		state.place = true
 	end
 	state.dirty = true

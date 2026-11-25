@@ -12,11 +12,18 @@ local _, ns = ...
 -- the spell's name), a macro whose spell it is and an item whose use spell it is (GetActionInfo and C_ActionBar.GetSpell, the game's rule): a flat
 -- fill in the cast bar's Cast colour rises from the bottom of the icon over the cast time (UnitCastingInfo, plain for the player) and, in its Channel
 -- colour, empties over a channel (UnitChannelInfo). A pushback (UNIT_SPELLCAST_DELAYED, UNIT_SPELLCAST_CHANNEL_UPDATE) reads the times again, so the
--- fill follows the real cast. It fades as the cast lands, and a red flash shows when the cast is interrupted. Aim highlight (on by default): while a
--- spell placed on the ground waits for its spot (UNIT_SPELLCAST_RETICLE_TARGET, as the game's buttons play their reticle, ActionButton.lua:1100-1103),
--- its buttons pulse in the cast bar's Cast colour, 15% to 50% and back every half second, until it is placed or cancelled (RETICLE_CLEAR, SENT and the
--- cast's own events). Only buttons that show light up: one the layout hid keeps its place over empty space. Only heights, alpha, colours, Show, Hide
--- and animations of these frames are set in a fight.
+-- fill follows the real cast. It fades as the cast lands, and a flash in the cast bar's Interrupted colour (castbars.interruptedColour, read at each
+-- interrupt) shows when the cast is interrupted. Aim highlight (on by default): while a spell placed on the ground waits for its spot
+-- (UNIT_SPELLCAST_RETICLE_TARGET, as the game's buttons play their reticle, ActionButton.lua:1100-1103), its buttons pulse in the cast bar's Cast
+-- colour, 15% to 50% and back every half second, until it is placed or cancelled: RETICLE_CLEAR, the start of any cast or channel, and SENT,
+-- SUCCEEDED, FAILED, STOP, INTERRUPTED and CHANNEL_STOP of that spell only (CAST.aimSpell), since the game sends a button only the events of its own
+-- spell (ActionButton.lua:320-339, the spell ID the fourth argument of SENT and the third of the others), so an Auto Shot or a wand shot meanwhile
+-- leaves the pulse on. Only buttons that show light up: one the layout hid keeps its place over empty space. Only heights, alpha, colours, Show,
+-- Hide and animations of these frames are set in a fight.
+-- Samples (ns.ButtonEffectsSample, out of combat): test mode (ActionBars.lua) plays the cast fill as a 2 s cast that lands, the interrupt flash and a
+-- 2 s aim on the first shown buttons of Flat UI's main bar, and a change of Cast fill animation, Interrupt flash or Aim highlight with the options
+-- window open plays that one on the first. A sample's spell is 0, which no event of the game's names, so a real cast or aim replaces it at once and
+-- the events of other spells leave it alone; a sample never replaces a real cast or aim that shows.
 
 local KEY = "actionbars"
 local PATH = KEY .. "."
@@ -159,10 +166,12 @@ local function Mark(button, mode)
 end
 
 -- The cast fill, the interrupt flash and the aim highlight of Flat UI's own buttons. frames[button] = { frame, fill, flash, group, aim, pulse } once
--- made, or false; lit: the buttons of the cast that shows; aimed: the buttons that pulse while a spell waits for its spot; spell: its spell ID; start
--- and finish: its times in seconds; channel: it empties; landed: when it landed (the fill fades for FADE seconds).
+-- made, or false; lit: the buttons of the cast that shows; aimed: the buttons that pulse while a spell waits for its spot; aimSpell: that spell's ID
+-- (0 for a sample); spell: the ID of the cast that shows (0 for a sample); start and finish: its times in seconds; channel: it empties; landed: when
+-- it landed (the fill fades for FADE seconds). sample: the token of the sample aim (aim) and the button of the interrupt sample (flashed);
+-- SAMPLE_TIME: how long the sample cast and the sample aim last.
 local CAST = { frames = setmetatable({}, WEAK), lit = {}, aimed = {}, pending = false, FADE = 0.2, ALPHA = 0.4, FLASH = 0.7, AIM_LOW = 0.15, AIM_HIGH = 0.5,
-	AIM_TIME = 0.5 }
+	AIM_TIME = 0.5, sample = { aim = 0 }, SAMPLE_TIME = 2 }
 
 local function CastMake(button)
 	local icon = button.icon
@@ -334,17 +343,18 @@ local function AimClear()
 			made.aim:SetAlpha(0)
 		end
 	end
-	CAST.aimed = {}
+	CAST.aimed, CAST.aimSpell = {}, nil
 end
 
--- A spell placed on the ground waits for its spot: its buttons pulse in the Cast colour until it is placed or cancelled.
-local function AimStart(spellID)
+-- The buttons pulse in the Cast colour while spellID waits for its spot (0 for a sample).
+local function AimLight(buttons, spellID)
 	AimClear()
 	if not (On() and Opt("aimAnim")) then
 		return
 	end
+	CAST.aimSpell = spellID
 	local r, g, b = ns.Colour("castbars.castColour")
-	for _, button in ipairs(CastButtons(spellID)) do
+	for _, button in ipairs(buttons) do
 		local made = CAST.frames[button]
 		if made and made.pulse then
 			made.aim:SetColorTexture(r, g, b, 1)
@@ -353,6 +363,11 @@ local function AimStart(spellID)
 			CAST.aimed[#CAST.aimed + 1] = button
 		end
 	end
+end
+
+-- A spell placed on the ground waits for its spot: its buttons pulse in the Cast colour until it is placed or cancelled.
+local function AimStart(spellID)
+	AimLight(CastButtons(spellID), spellID)
 end
 
 -- Each frame while a cast shows: the fill's height from the cast's times, or its fade once the cast landed.
@@ -370,6 +385,10 @@ local function CastStep()
 		if CAST.channel then
 			progress = 1 - progress
 		end
+		-- A sample cast lands by itself at its end.
+		if CAST.spell == 0 and now >= CAST.finish then
+			CAST.landed = now
+		end
 	end
 	for _, button in ipairs(CAST.lit) do
 		local made = CAST.frames[button]
@@ -382,6 +401,20 @@ local function CastStep()
 			end
 		end
 	end
+end
+
+-- The frame whose OnUpdate draws the fill while a cast shows, made the first time.
+local function CastDriver()
+	if not CAST.driver then
+		CAST.driver = CreateFrame("Frame")
+		ns.Own[CAST.driver] = true
+		CAST.driver:SetScript("OnUpdate", function()
+			if not pcall(CastStep) then
+				CastClear()
+			end
+		end)
+	end
+	return CAST.driver
 end
 
 -- A cast or a channel of the player started: the times are read from the game, in milliseconds.
@@ -410,16 +443,7 @@ local function CastStart(spellID, channel)
 		CAST.spell = nil
 		return
 	end
-	if not CAST.driver then
-		CAST.driver = CreateFrame("Frame")
-		ns.Own[CAST.driver] = true
-		CAST.driver:SetScript("OnUpdate", function()
-			if not pcall(CastStep) then
-				CastClear()
-			end
-		end)
-	end
-	CAST.driver:Show()
+	CastDriver():Show()
 	CastStep()
 end
 
@@ -435,11 +459,25 @@ local function CastTimes()
 	end
 end
 
-local function CastEvent(event, unit, _, spellID)
+-- The events after which the aim highlight of a spell goes, when they are of that spell (AIM_OWN) or of any (AIM_ANY).
+local AIM_OWN = { UNIT_SPELLCAST_SENT = true, UNIT_SPELLCAST_SUCCEEDED = true, UNIT_SPELLCAST_FAILED = true, UNIT_SPELLCAST_STOP = true,
+	UNIT_SPELLCAST_INTERRUPTED = true, UNIT_SPELLCAST_CHANNEL_STOP = true }
+local AIM_ANY = { UNIT_SPELLCAST_RETICLE_CLEAR = true, UNIT_SPELLCAST_START = true, UNIT_SPELLCAST_CHANNEL_START = true }
+
+local function CastEvent(event, ...)
+	local unit = ...
 	if unit ~= "player" then
 		return
 	end
-	-- The aim highlight: on while the spot is wanted, off as the spell is placed, cancelled, cast or fails (the game's rule, ActionButton.lua:1077-1103).
+	-- The spell ID by the game's rule (ActionButton.lua:320-339): the fourth argument of SENT (unit, target, castGUID, spellID), the third of the others.
+	local spellID
+	if event == "UNIT_SPELLCAST_SENT" then
+		spellID = select(4, ...)
+	else
+		spellID = select(3, ...)
+	end
+	-- The aim highlight: on while the spot is wanted; off as it is placed or cancelled, as another cast starts, or at an event of the aimed spell
+	-- itself (the game's rule, ActionButton.lua:1077-1103): an Auto Shot or a wand shot while aiming leaves it on.
 	if event == "UNIT_SPELLCAST_RETICLE_TARGET" then
 		if Plain(spellID, "number") then
 			AimStart(spellID)
@@ -447,7 +485,7 @@ local function CastEvent(event, unit, _, spellID)
 			AimClear()
 		end
 		return
-	elseif #CAST.aimed > 0 and event ~= "UNIT_SPELLCAST_DELAYED" and event ~= "UNIT_SPELLCAST_CHANNEL_UPDATE" then
+	elseif #CAST.aimed > 0 and (AIM_ANY[event] or (AIM_OWN[event] and CAST.aimSpell ~= nil and Plain(spellID, "number") and spellID == CAST.aimSpell)) then
 		AimClear()
 	end
 	if event == "UNIT_SPELLCAST_RETICLE_CLEAR" or event == "UNIT_SPELLCAST_SENT" or not Plain(spellID, "number") then
@@ -474,9 +512,11 @@ local function CastEvent(event, unit, _, spellID)
 			CastClear()
 		end
 		if On() and Opt("interruptAnim") then
+			local r, g, b = ns.Colour("castbars.interruptedColour")
 			for _, button in ipairs(CastButtons(spellID)) do
 				local made = CAST.frames[button]
 				if made then
+					made.flash:SetColorTexture(r, g, b, 1)
 					made.group:Stop()
 					made.group:Play()
 				end
@@ -486,6 +526,111 @@ local function CastEvent(event, unit, _, spellID)
 		-- STOP, CHANNEL_STOP and FAILED end the fill at once, unless the cast landed and the fill fades.
 		CastClear()
 	end
+end
+
+-- Samples, out of combat. Without force, a sample that still shows is not started again, so a row changed many times in a row plays it once. A
+-- real cast or aim that shows is never replaced.
+local function SampleCast(button, force)
+	local made = CAST.frames[button]
+	if not made or not Opt("castAnim") or (CAST.spell ~= nil and CAST.spell ~= 0) or (CAST.spell == 0 and not force) then
+		return
+	end
+	CastClear()
+	local now = GetTime()
+	CAST.lit, CAST.start, CAST.finish, CAST.channel, CAST.spell = { button }, now, now + CAST.SAMPLE_TIME, false, 0
+	local r, g, b = ns.Colour("castbars.castColour")
+	made.fill:SetColorTexture(r, g, b, 1)
+	CastDriver():Show()
+	CastStep()
+end
+
+local function SampleInterrupt(button, force)
+	local made = CAST.frames[button]
+	if not made or not Opt("interruptAnim") or (made.group:IsPlaying() and not force) then
+		return
+	end
+	local r, g, b = ns.Colour("castbars.interruptedColour")
+	made.flash:SetColorTexture(r, g, b, 1)
+	made.group:Stop()
+	made.group:Play()
+	CAST.sample.flashed = button
+end
+
+local function SampleAim(button, force)
+	local made = CAST.frames[button]
+	if not (made and made.pulse) or not Opt("aimAnim") or (CAST.aimSpell ~= nil and CAST.aimSpell ~= 0) or (CAST.aimSpell == 0 and not force) then
+		return
+	end
+	AimLight({ button }, 0)
+	CAST.sample.aim = CAST.sample.aim + 1
+	local token = CAST.sample.aim
+	if C_Timer and C_Timer.After then
+		C_Timer.After(CAST.SAMPLE_TIME, function()
+			if CAST.aimSpell == 0 and CAST.sample.aim == token then
+				AimClear()
+			end
+		end)
+	end
+end
+
+-- The samples of the cast fill, the interrupt flash and the aim highlight (test mode and a change of a row, ActionBars.lua): spec.cast fills as a cast
+-- of SAMPLE_TIME seconds that lands, spec.interrupt flashes in the Interrupted colour, spec.aim pulses for SAMPLE_TIME seconds, each a Flat UI button
+-- or nil and each only while its row is on. Out of combat only.
+function ns.ButtonEffectsSample(spec, force)
+	if type(spec) ~= "table" or InCombatLockdown() or not On() or not (type(ns.OwnOn) == "function" and ns.OwnOn()) then
+		return
+	end
+	CastPrepare()
+	if Plain(spec.cast, "table") then
+		SampleCast(spec.cast, force)
+	end
+	if Plain(spec.interrupt, "table") then
+		SampleInterrupt(spec.interrupt, force)
+	end
+	if Plain(spec.aim, "table") then
+		SampleAim(spec.aim, force)
+	end
+end
+
+-- The cast bar's colours changed while samples show: they take them at once (Flat UI's own textures).
+function ns.ButtonEffectsSampleLook()
+	local r, g, b = ns.Colour("castbars.castColour")
+	if CAST.spell == 0 then
+		for _, button in ipairs(CAST.lit) do
+			local made = CAST.frames[button]
+			if made then
+				made.fill:SetColorTexture(r, g, b, 1)
+			end
+		end
+	end
+	if CAST.aimSpell == 0 then
+		for _, button in ipairs(CAST.aimed) do
+			local made = CAST.frames[button]
+			if made then
+				made.aim:SetColorTexture(r, g, b, 1)
+			end
+		end
+	end
+	local made = CAST.sample.flashed and CAST.frames[CAST.sample.flashed]
+	if made then
+		local ir, ig, ib = ns.Colour("castbars.interruptedColour")
+		made.flash:SetColorTexture(ir, ig, ib, 1)
+	end
+end
+
+-- Test mode ends or pauses: the samples that show go.
+function ns.ButtonEffectsSampleOff()
+	if CAST.spell == 0 then
+		CastClear()
+	end
+	if CAST.aimSpell == 0 then
+		AimClear()
+	end
+	local made = CAST.sample.flashed and CAST.frames[CAST.sample.flashed]
+	if made then
+		made.group:Stop()
+	end
+	CAST.sample.flashed = nil
 end
 
 local Ask
@@ -645,10 +790,23 @@ if type(ns.OnOwnBuilt) == "function" then
 	ns.OnOwnBuilt(CastPrepare)
 end
 
--- The rows of the Glows and animations page call this.
-function ns.ButtonEffectsChanged()
+-- The rows of the Glows and animations page call this. Cast fill animation, Interrupt flash or Aim highlight turned on plays its sample once on the
+-- first shown button of Flat UI's main bar, out of combat while the options window shows and test mode is off (test mode plays them itself).
+local PREVIEW = { [PATH .. "castAnim"] = "cast", [PATH .. "interruptAnim"] = "interrupt", [PATH .. "aimAnim"] = "aim" }
+
+function ns.ButtonEffectsChanged(path)
 	Hook()
 	Ask()
+	local kind = PREVIEW[path]
+	local mode = ns.TestMode
+	if not kind or Opt(kind .. "Anim") ~= true or InCombatLockdown() or (mode and mode.IsOn()) or type(ns.PanelShown) ~= "function"
+		or not ns.PanelShown() or type(ns.ButtonSamples) ~= "function" then
+		return
+	end
+	local first = ns.ButtonSamples()[1]
+	if first then
+		ns.ButtonEffectsSample({ [kind] = first })
+	end
 end
 
 -- The buttons hold something else: Flat UI's buttons made after login, or the game's styled after them, are looked at again.

@@ -17,7 +17,12 @@ local _, ns = ...
 -- between them the page number (C_ActionBar.GetActionBarPage, as MainActionBar.lua:11 and 57 write it), a font string of Flat UI's own set again
 -- as the page changes. They are children of FlatUIBar1, so they move, hide and fade with it; they take the place and size of the game's own,
 -- read at each layout, and show while the row is on and the game's page number is shown, which Edit Mode's Hide bar scrolling turns off
--- (EditModeSystemTemplates.lua:1129-1130), read only. They are placed and shown out of combat, the buttons by the header.
+-- (EditModeSystemTemplates.lua:1129-1130), read only. They are placed and shown out of combat, the buttons by the header. They page on the left
+-- button only, play the game's scroll click as they page (SOUNDKIT.U_CHAT_SCROLL_BUTTON, as MainActionBar.lua:164-182), and say in a tooltip which
+-- way they page, the page you are on and the key of that command (NEXTACTIONPAGE, PREVIOUSACTIONPAGE, short as the hotkeys are with Hotkey text at
+-- Short): hooks of Flat UI's own buttons (HookScript), which only play the sound and draw the tooltip. A change of profile reaches the row through
+-- ActionBars.lua's Refresh (ns.OwnPagerChanged); the mouse over a shown arrow counts as over the main bar for Fading and the bar block
+-- (ns.OwnPagerOver).
 -- Quick Keybind Mode (the game's Key Bindings) works on the game's own buttons: while it is open the game's eight bars are given back where they
 -- are (alpha 1, the mouse on) and Flat UI's are hidden, out of combat; as it closes, or just before a fight starts, the game's bars are parked
 -- again and Flat UI's shown. A mode opened in a fight waits for its end. A fight that starts while the mode is open says so in one chat line: Flat
@@ -258,6 +263,71 @@ local function Atlas(button, which, atlas)
 	end
 end
 
+-- The tooltip of a page arrow: which way it pages, the page shown now and the key of that command.
+function F.PagerTip(button)
+	local tip = GameTooltip
+	local pager = S.pager
+	if tip == nil or not pager then
+		return
+	end
+	local up = rawequal(button, pager.Up)
+	tip:SetOwner(button, "ANCHOR_RIGHT")
+	tip:SetText(up and "Next page" or "Previous page", 1, 1, 1)
+	local get = C_ActionBar and C_ActionBar.GetActionBarPage or _G.GetActionBarPage
+	if type(get) == "function" then
+		local ok, page = pcall(get)
+		if ok and ns.Finite(page) then
+			tip:AddLine(("Page %d"):format(page), 1, 0.82, 0)
+		end
+	end
+	local keys = {}
+	if type(GetBindingKey) == "function" and type(GetBindingText) == "function" then
+		local short = ns.Enabled("actionbars") and ns.Get("actionbars.hotkeyText") == "short" and type(ns.HotkeyText) == "function"
+		local found = { pcall(GetBindingKey, up and "NEXTACTIONPAGE" or "PREVIOUSACTIONPAGE") }
+		for index = 2, found[1] == true and math.min(#found, 3) or 1 do
+			local key = found[index]
+			if type(key) == "string" and not ns.IsSecret(key) and key ~= "" then
+				local okText, text = pcall(GetBindingText, key, 1)
+				if okText and type(text) == "string" and not ns.IsSecret(text) then
+					keys[#keys + 1] = short and ns.HotkeyText(text) or text
+				end
+			end
+		end
+	end
+	if #keys > 0 then
+		tip:AddLine("Key: " .. table.concat(keys, ", "), 0.8, 0.8, 0.8)
+	end
+	tip:Show()
+end
+
+-- The hooks of a page arrow, once: the game's scroll click after a click that paged, and the tooltip.
+function F.HookPager(button)
+	local pager = S.pager
+	pager.hooked = pager.hooked or {}
+	if pager.hooked[button] then
+		return
+	end
+	pager.hooked[button] = true
+	button:HookScript("PostClick", function()
+		local sound = SOUNDKIT and SOUNDKIT.U_CHAT_SCROLL_BUTTON
+		if sound and type(PlaySound) == "function" then
+			pcall(PlaySound, sound)
+		end
+	end)
+	button:HookScript("OnEnter", function(self)
+		pcall(F.PagerTip, self)
+	end)
+	button:HookScript("OnLeave", function(self)
+		local tip = GameTooltip
+		if tip ~= nil then
+			local ok, owner = pcall(tip.GetOwner, tip)
+			if ok and not ns.IsSecret(owner) and rawequal(owner, self) then
+				pcall(tip.Hide, tip)
+			end
+		end
+	end)
+end
+
 -- The page arrows and the page number of bar 1, hidden until the layout places them.
 function F.MakePager()
 	local bar = S.bars[1]
@@ -267,7 +337,7 @@ function F.MakePager()
 		if def.dir then
 			local name = "FlatUIBar1Page" .. def.dir
 			local button = _G[name] or CreateFrame("Button", name, bar, "SecureActionButtonTemplate")
-			button:RegisterForClicks("AnyUp")
+			button:RegisterForClicks("LeftButtonUp")
 			button:SetSize(def.w, def.h)
 			button:SetFrameLevel(bar:GetFrameLevel() + 10)
 			Atlas(button, "Normal", def.atlas .. "-up")
@@ -275,6 +345,7 @@ function F.MakePager()
 			Atlas(button, "Highlight", def.atlas .. "-mouseover")
 			button:Hide()
 			pager[def.dir] = button
+			F.HookPager(button)
 			S.header:SetFrameRef("page" .. def.dir, button)
 		end
 	end
@@ -1027,6 +1098,28 @@ function ns.OwnBarOf(name)
 		end
 	end
 	return nil
+end
+
+-- True while the mouse is over one of the page arrows of the main bar that shows: Fading (its Main action bar row) and the bar block's fade count it as
+-- over the main bar, since the arrows sit left of the bar's rectangle. A withheld answer counts as over, as Fading's own reads do.
+function ns.OwnPagerOver()
+	local pager = S.pager
+	if not (S.built and pager) then
+		return false
+	end
+	for _, dir in ipairs({ "Up", "Down" }) do
+		local button = pager[dir]
+		if button then
+			local okShown, shown = pcall(button.IsVisible, button)
+			if okShown and not ns.IsSecret(shown) and shown == true then
+				local okOver, over = pcall(button.IsMouseOver, button)
+				if okOver and (ns.IsSecret(over) or over == true) then
+					return true
+				end
+			end
+		end
+	end
+	return false
 end
 
 -- Page arrows on the main bar changed: the arrows are placed, shown or hidden on the next check out of combat.
