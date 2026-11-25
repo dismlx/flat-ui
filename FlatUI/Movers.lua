@@ -283,12 +283,13 @@ local LIST = {
 	{ name = "FlatUIGearButton", label = "Compare gear button", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 112, height = 20,
 		x = 485, y = -1, from = "CharacterFrame", gate = "GearButtonShown", changed = "GearButtonMoved", start = "GearButtonStart" },
 	-- The Trinket queue window (TrinketQueueWindow.lua), which shows while /flatui queue, its row or a trinket slot's square has it open: its top left
-	-- corner is the top left corner of the box, 320 by 404, its fixed size. It starts at the Gear comparison window's corner, right of the Character
-	-- window (680, -120, as FlatUIGear above); both raise when they open, and a drag of either title bar gives it a spot of its own. It has a handle
-	-- while the trinket queue runs and its window part is not stopped, open or not (gate: ns.TrinketWindowShown), and a spot saved or put back is
-	-- told to the window (changed: ns.TrinketWindowMoved).
+	-- corner is the top left corner of the box, 320 by 404, its fixed size. With no spot saved it starts right of the Gear comparison window while
+	-- that shows, and its box right of that window's box while the movers are open, or 28 px right of and under that corner on a screen with no room
+	-- there (start: ns.TrinketWindowStart, 0.5.39), else at the Gear comparison window's corner, right of the Character window (680, -120, as
+	-- FlatUIGear above); a drag of its title bar gives it a spot of its own. It has a handle while the trinket queue runs and its window part is not
+	-- stopped, open or not (gate: ns.TrinketWindowShown), and a spot saved or put back is told to the window (changed: ns.TrinketWindowMoved).
 	{ name = "FlatUITrinkets", label = "Trinket queue", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 320, height = 404,
-		x = 680, y = -120, gate = "TrinketWindowShown", changed = "TrinketWindowMoved" },
+		x = 680, y = -120, gate = "TrinketWindowShown", changed = "TrinketWindowMoved", start = "TrinketWindowStart" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
