@@ -27,7 +27,8 @@ local _, ns = ...
 -- here; /flatui block facts still lists it.
 -- All of it is planned out of combat. A bar the game does not stack (Action bars 6 to 8) and a bar the player has placed in Edit Mode stay
 -- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
--- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours. Fade the block: the alpha of each
+-- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours, or with Own panel colour in Panel
+-- colour at Panel opacity (75% by default), set at once (ns.SetOutlineFill). Fade the block: the alpha of each
 -- held frame (SetAlpha, which the game allows in a fight) eases to the faded value over Fade time, once the block has not been wanted for Wait
 -- before fading, and back to full in a tenth of a second when it is: in a fight, under the mouse (over its own block, or over Flat UI's page arrows
 -- left of a main bar it holds, ns.OwnPagerOver), with a target (Full
@@ -728,7 +729,15 @@ local function Panel(block, on)
 			block.panel = CreateFrame("Frame", nil, UIParent)
 			ns.Own[block.panel] = true
 			block.panel:SetFrameStrata("BACKGROUND")
-			ns.Outline(block.panel, block.panel, true)
+		end
+		-- The outline is made once and given back after; Own panel colour gives it a fill of its own, else the general colour and opacity.
+		local outline = ns.Outline(block.panel, block.panel, true)
+		if Opt("backgroundOwn") == true then
+			local r, g, b = ns.Colour(KEY .. ".backgroundColour")
+			local alpha = Opt("backgroundAlpha")
+			ns.SetOutlineFill(outline, r, g, b, (ns.Finite(alpha) and alpha or 75) / 100)
+		else
+			ns.SetOutlineFill(outline, nil)
 		end
 		local pad = Opt("backgroundPad")
 		block.panel:ClearAllPoints()
