@@ -16,8 +16,10 @@ local _, ns = ...
 -- The value's place follows Threat Plates' layout of it (Constants.lua:2080-2103): outside the bar on the side of Threat value position, which
 -- Threat Plates sets with the point of the text opposite that side (Modules/Font.lua:94-104), moved by the two offsets, with Threat value outline
 -- and, while Threat value in the threat colour is off, Threat value colour (its CustomColor, Widgets/ThreatWidget.lua:398-406). Right of the bar
--- it sits after the level frame, as the enemy's target does, and the enemy's target then sits after it; above the bar it clears the name and below
--- it the cast bar, as Nameplates.lua places a class icon (PlaceIcon). Left of the bar it sits past the game's raid marker and its elite or rare icon:
+-- it sits after the level frame, as the enemy's target does, and the enemy's target then sits after it; above the bar it stands over the name and
+-- the row of the enemy's debuffs (on PlateOverpower.lua's guide, ns.PlateDebuffTop, so it rises as the row wraps, and over the name while the
+-- row is empty, hidden or faded), with an Above quest mark and the Overpower icon over it; below it clears the cast bar, as Nameplates.lua places a
+-- class icon (PlaceIcon). Left of the bar it sits past the game's raid marker and its elite or rare icon:
 -- it hangs from the left of the plate's ClassificationFrame, which hangs left of the RaidTargetFrame, which hangs left of the bar (past a class
 -- icon on the left, Nameplates.lua's Marker), both of which take no room while hidden (collapsesLayout, Blizzard_NamePlates.xml:186-199), so the
 -- value moves as a marker comes or goes, in a fight too, and keeps its height while Raid marker vertical offset moves the marker. A client whose
@@ -28,7 +30,8 @@ local _, ns = ...
 -- move as icons come and go, in a fight too; a row whose icons Nameplates.lua fades to nothing (Show auras Only on the target, on another plate)
 -- keeps no room, and the texts are placed again as the target changes.
 -- PlateQuest.lua's quest mark sits past both texts: ns.PlateThreatTexts gives it the value and the enemy's target of a plate, ns.PlateAuraRow the
--- row of aura icons on a side, and a text placed anew places the plate's quest mark again (ns.PlateQuestPlace).
+-- row of aura icons on a side, and a text placed anew places the plate's quest mark again (ns.PlateQuestPlace), and a value placed anew the plate's
+-- Overpower icon (ns.PlateOverpowerPlace). ns.PlateAurasSeen gives PlateOverpower.lua's guide the same rule for faded auras.
 
 local KEY = "nameplates"
 local EXTRA = ns.PlateExtra
@@ -341,6 +344,26 @@ local function QuestPlace(unitFrame)
 	end
 end
 
+-- The Overpower icon of a plate placed again (PlateOverpower.lua), after the value took a new anchor: at Above the icon stands over the value.
+local function OverpowerPlace(unitFrame)
+	if type(ns.PlateOverpowerPlace) == "function" then
+		pcall(ns.PlateOverpowerPlace, unitFrame)
+	end
+end
+
+-- The guide over a plate (PlateOverpower.lua, ns.PlateDebuffTop), whose top is the top of the enemy's debuffs while their row shows and is seen,
+-- else of the name, and true while its anchors wait for the end of a fight; nil while it has none.
+local function DebuffTop(unitFrame)
+	if type(ns.PlateDebuffTop) ~= "function" then
+		return nil, false
+	end
+	local ok, guide, stale = pcall(ns.PlateDebuffTop, unitFrame)
+	if not ok or type(guide) ~= "table" then
+		return nil, false
+	end
+	return guide, stale == true
+end
+
 -- True for a frame that says it takes no room while hidden (CollapsesLayout, SimpleScriptRegionAPIDocumentation.lua:60-70).
 local function Collapses(frame)
 	return frame ~= nil and Ask(frame.CollapsesLayout, frame) == true
@@ -398,7 +421,9 @@ end
 
 -- Anchors the value on the side Threat value position gives, moved by its offsets: left of the bar's raid marker and elite or rare icon (LeftEnd,
 -- else left of the bar) and aligned right (as Threat Plates has it, and as before), right of what ends the bar and aligned left, centred above
--- the name, or centred below the cast bar, whose frame the game keeps under the health bar (Blizzard_NamePlateUnitFrame.lua:699-700, 714-715).
+-- the name and the enemy's debuffs (on PlateOverpower.lua's guide, ns.PlateDebuffTop, so it rises as the debuff row wraps, in a fight too; over the
+-- name where no guide could be made), or centred below the cast bar, whose frame the game keeps under the health bar
+-- (Blizzard_NamePlateUnitFrame.lua:699-700, 714-715). The plate's quest mark and Overpower icon are placed again after (they stand over it at Above).
 -- Done again only when the place changes. The first anchors of a text just made follow the rule it was made by (Text); a text placed before keeps
 -- its anchors in a fight on a plate that may be protected, as the enemy's target does, until the fight ends.
 local function PlaceValue(unitFrame, rec, text)
@@ -426,12 +451,20 @@ local function PlaceValue(unitFrame, rec, text)
 		if cast then
 			frame, key = cast, "cast"
 		end
+	elseif place == "above" then
+		local guide, stale = DebuffTop(unitFrame)
+		if guide then
+			frame, key = guide, "guide"
+		else
+			lift = Lift()
+		end
+		-- A guide whose anchors wait for the end of a fight is asked again then, which anchors it anew.
+		if stale then
+			PlaceLater()
+		end
 	end
 	if frame == nil then
 		return
-	end
-	if place == "above" then
-		lift = Lift()
 	end
 	local wanted = ("%s:%s:%s:%s:%s"):format(place, x, y, key, lift)
 	if rec.valuePlace == wanted then
@@ -448,12 +481,22 @@ local function PlaceValue(unitFrame, rec, text)
 	elseif place == "right" then
 		text:SetPoint("LEFT", frame, "RIGHT", x + GapFrom(key), y)
 	elseif place == "above" then
-		text:SetPoint("BOTTOM", healthBar, "TOP", x, y + lift + GAP)
+		-- The guide's top is already over the name; the bar's top needs the name's height (lift).
+		text:SetPoint("BOTTOM", frame, "TOP", x, y + lift + GAP)
 	else
 		text:SetPoint("TOP", frame, "BOTTOM", x, y - GAP)
 	end
 	rec.valuePlace, rec.valueSide = wanted, place
 	QuestPlace(unitFrame)
+	OverpowerPlace(unitFrame)
+end
+
+-- A value at Above that shows or hides places the plate's quest mark and Overpower icon again, which stand over it only while it shows.
+local function StandsOver(unitFrame, rec)
+	if rec.valueSide == "above" then
+		QuestPlace(unitFrame)
+		OverpowerPlace(unitFrame)
+	end
 end
 
 -- Shown while the plate has a state, Threat value shows a number, the plate shows its health bar and Show threat value allows. The number is
@@ -466,7 +509,11 @@ local function ValuePart(unitFrame, rec, on, full)
 	local state = PT and SHOWN[mode] and StateOf(PT, unitFrame) or nil
 	local unit = unitFrame.unit
 	if not (state and Plain(unit, "string") and not NameOnly(unitFrame) and When()) then
+		local was = rec.valueShown == true
 		Clear(rec, "value")
+		if was then
+			StandsOver(unitFrame, rec)
+		end
 		return
 	end
 	local text = Text(unitFrame, rec, "value")
@@ -483,7 +530,11 @@ local function ValuePart(unitFrame, rec, on, full)
 	ValueColour(PT, rec, text, state)
 	Write(text, Number(mode, unit))
 	text:Show()
+	local was = rec.valueShown
 	rec.valueShown = true
+	if was ~= true then
+		StandsOver(unitFrame, rec)
+	end
 end
 
 -- The enemy's target -------------------------------------------------------------------------
@@ -761,6 +812,15 @@ function ns.PlateThreatTexts(unitFrame)
 		target = nil
 	end
 	return value, value and rec.valueSide or nil, target
+end
+
+-- False on a plate whose auras Nameplates.lua fades to nothing (AurasSeen), for PlateOverpower.lua's guide over the debuff row, so every row of a
+-- plate reads one rule.
+function ns.PlateAurasSeen(unitFrame)
+	if unitFrame == nil or ns.Forbidden(unitFrame) then
+		return true
+	end
+	return AurasSeen(unitFrame, Rec(unitFrame))
 end
 
 -- The row of the game's aura icons on one side of a plate, for PlateQuest.lua: left, the enemy's buffs; right, its crowd control. Nil while that row
