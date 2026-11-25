@@ -226,3 +226,9 @@ if type(ns.AddStatus) == "function" then
 end
 
 ns.TrackerGameSound = { Sync = Sync, Taken = Taken, Lines = Lines }
+
+-- The file of a sound by its saved word (raid, alarm, whisper), or nil for one that has none: for the game's sounds of other pages, as Sound
+-- when one lands of Defensives on you (Defensives.lua).
+function ns.TrackerSoundFile(word)
+	return FILES[word]
+end

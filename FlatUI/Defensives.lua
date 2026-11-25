@@ -9,7 +9,8 @@ local _, ns = ...
 -- player's buffs. The helpers are in one table, D, and the lines of /flatui check are Tracking.lua's.
 -- Buff tooltips (On by default, as on Your buffs) gives the game's buttons the game's own tooltip on hover and never a click, so clicks go
 -- through to the world; Out of combat only has the game hide it in a fight. The samples of test mode follow Icon border, Borderless and the
--- border colour as the real icons do, and with Caster's name on carry the names of test mode's party under them.
+-- border colour as the real icons do, and with Caster's name on carry the names of test mode's party under them. Sound when one lands (None by
+-- default) has the game play a sound as a listed defensive you do not know yourself comes on you, also in a fight (D.SyncSounds).
 
 local KEY = "defensives"
 -- The name of the row among the saved spots of the movers.
@@ -514,6 +515,7 @@ end
 
 -- Gives both lists of the container their new maps, once combat is over. Where the game made no container the next read has them.
 function D.ApplyLists()
+	D.QueueSounds()
 	if D.path == "reading" then
 		D.Queue()
 		return
@@ -893,6 +895,114 @@ function D.StopReading()
 	end
 end
 
+-- Sound when one lands ------------------------------------------------------------------------------------------------------------------
+
+-- Sound when one lands (None by default): the game plays a sound as a listed defensive comes on the player, also in a fight, where the buff
+-- cannot be read: a sound registered with the game plays even while it withholds the aura from addons (C_UnitAuras.AddAuraSound with trigger
+-- Added, UnitAuraDocumentation.lua:11-27), as the trackers' sounds do (TrackerSound.lua, whose files the three sounds are). One registration for
+-- each ID of the list that the player does not know as a spell (C_SpellBook.IsSpellKnown, else IsPlayerSpell), so a priest's own Power Word:
+-- Shield stays silent. AddAuraSound has restrictions, so the registrations change only out of combat and while aura values are open
+-- (C_Secrets.ShouldAurasBeSecret); a change that has to wait is tried again on a frame of this file's own at the end of a fight or of a
+-- restriction, also while the page is off, so the registrations go once it is turned off. sounds: by spell ID, { id, file }.
+D.sounds = {}
+
+function D.Knows(id)
+	local known = nil
+	if type(C_SpellBook) == "table" then
+		known = T.Ask(C_SpellBook.IsSpellKnown, id)
+	end
+	if type(known) ~= "boolean" then
+		known = T.Ask(IsPlayerSpell, id)
+	end
+	return known == true
+end
+
+function D.Withheld()
+	local call = type(C_Secrets) == "table" and C_Secrets.ShouldAurasBeSecret or nil
+	if type(call) ~= "function" then
+		return false
+	end
+	local ok, answer = pcall(call)
+	return ok and not IsSecret(answer) and answer == true
+end
+
+-- One D.SyncSounds out of combat, however often it is asked for meanwhile.
+function D.QueueSounds()
+	if D.soundQueued then
+		return
+	end
+	D.soundQueued = true
+	ns.OutOfCombat(function()
+		D.soundQueued = false
+		D.SyncSounds()
+	end)
+end
+
+-- The wait for aura values to be open: the frame hears the end of a fight, of a restriction and a loading screen only while a change waits.
+function D.SoundsWait(on)
+	if on == (D.soundWaiting == true) then
+		return
+	end
+	D.soundWaiting = on
+	if on and not D.soundFrame then
+		local frame = Own(CreateFrame("Frame"))
+		frame:SetScript("OnEvent", function()
+			if D.soundWaiting then
+				D.QueueSounds()
+			end
+		end)
+		D.soundFrame = frame
+	end
+	local frame = D.soundFrame
+	for _, event in ipairs(frame and { "PLAYER_REGEN_ENABLED", "ADDON_RESTRICTION_STATE_CHANGED", "PLAYER_ENTERING_WORLD" } or {}) do
+		pcall(on and frame.RegisterEvent or frame.UnregisterEvent, frame, event)
+	end
+end
+
+-- Makes the registrations match the page: drops the ones not wanted now or of another sound, adds the missing ones.
+function D.SyncSounds()
+	local auras = type(C_UnitAuras) == "table" and C_UnitAuras or {}
+	local add, remove = auras.AddAuraSound, auras.RemoveAuraSound
+	if type(add) ~= "function" then
+		return
+	end
+	if InCombatLockdown() or D.Withheld() then
+		D.SoundsWait(true)
+		return
+	end
+	D.SoundsWait(false)
+	local file = type(ns.TrackerSoundFile) == "function" and ns.TrackerSoundFile(Opt("sound")) or nil
+	local wanted = {}
+	if file and D.Capable() and ns.Enabled(KEY) and Opt("place") ~= "off" then
+		for id in pairs(D.Effective()) do
+			if Whole(id) and not D.Knows(id) then
+				wanted[id] = true
+			end
+		end
+	end
+	for id, made in pairs(D.sounds) do
+		if not wanted[id] or made.file ~= file then
+			D.sounds[id] = nil
+			if type(remove) == "function" then
+				pcall(remove, made.id)
+			end
+		end
+	end
+	local triggers = type(Enum) == "table" and Enum.UnitAuraSoundTrigger or nil
+	local trigger = type(triggers) == "table" and triggers.Added or nil
+	D.refused.sound = nil
+	for id in pairs(wanted) do
+		if not D.sounds[id] then
+			local ok, handle = pcall(add, trigger, { unitToken = "player", spellID = id, soundFileID = file, outputChannel = "Master", throttleSeconds = 1 })
+			if ok and Plain(handle, "number") then
+				D.sounds[id] = { id = handle, file = file }
+			else
+				D.refused.sound = true
+			end
+		end
+	end
+end
+
 -- Putting it all in place -------------------------------------------------------------------------------------------------------------
 
 -- True when the game has the call that reads a unit's buffs. Without it the module makes nothing.
@@ -902,6 +1012,7 @@ end
 
 function D.Sync()
 	local on = D.Capable() and ns.Enabled(KEY) and Opt("place") ~= "off"
+	D.QueueSounds()
 	if not on then
 		D.Held()
 		if D.holder and not D.testing then
@@ -1177,6 +1288,9 @@ function D.Status()
 	if D.refused.tips then
 		lines[#lines + 1] = NOTE_MOUSE
 	end
+	if D.refused.sound then
+		lines[#lines + 1] = "Defensives on you: the game refused its sound for a defensive landing, so Sound when one lands is silent for some of them."
+	end
 	if D.path == "reading" and Opt("tooltips") ~= "off" then
 		lines[#lines + 1] = NOTE_READING
 	end
@@ -1202,6 +1316,10 @@ ns.Register(KEY, {
 		end,
 		EDIT_MODE_LAYOUTS_UPDATED = function()
 			D.Refresh()
+		end,
+		-- A spell learnt is left out of Sound when one lands.
+		SPELLS_CHANGED = function()
+			D.QueueSounds()
 		end,
 	},
 	-- /flatui test, test on and test off are test mode's (Core.lua takes them first); test icons is the 8-second test of the icon rows.
