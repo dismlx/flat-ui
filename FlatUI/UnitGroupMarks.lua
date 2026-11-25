@@ -22,7 +22,8 @@ local _, ns = ...
 -- the game draws it again.
 -- With Sound for a debuff you can dispel (None by default), the first read of a party or raid frame's unit records whether it has such a debuff, and a later
 -- read that finds one where there was none plays the row's sound (ns.SOUNDS, ns.PlayKit), at most once every 2 seconds whatever frame finds it; an
--- answer the game would not give changes nothing, and a new unit on the frame starts again.
+-- answer the game would not give changes nothing, and a new unit on the frame starts again. Picking a sound in the options window plays it once, out of a
+-- fight (ns.DispelSoundPicked), as the cue sounds of CombatCues.lua do; that does not count towards the row's 2 seconds.
 --
 -- The game's raid frames have no raid marker (Shared/CompactUnitFrame.xml:3-111). The game gives the index of a marker to addons only withheld
 -- (GetRaidTargetIndex, RaidMarkersDocumentation.lua:55-69, SecretReturns), and SetSpriteSheetCell takes a withheld index (SimpleTextureBaseAPIDocumentation
@@ -436,6 +437,23 @@ local function Chime(rec)
 	end
 	if ns.PlayKit(sound[1]) then
 		lastSound = now
+	end
+end
+
+-- Picking a sound in the options window plays it once, so it can be chosen by ear: the changed handler of Sound for a debuff you can dispel (Config.lua).
+-- Only while the options window shows and out of a fight; None plays nothing. It leaves lastSound alone.
+function ns.DispelSoundPicked(path)
+	if type(path) ~= "string" or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
+		return
+	end
+	local okFight, fighting = pcall(InCombatLockdown)
+	if not okFight or IsSecret(fighting) or fighting == true then
+		return
+	end
+	local kit = KITS[ns.Get(path)]
+	local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
+	if sound and type(ns.PlayKit) == "function" then
+		ns.PlayKit(sound[1])
 	end
 end
 
