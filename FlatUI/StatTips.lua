@@ -144,6 +144,8 @@ local T = {
 	FAILED = "Explain the stats: the lines of %s failed: %s",
 	TAINT = "Explain the stats: waits while the game's taintLog is on, as hooks on its tables fail then.",
 }
+-- The words StatTipsMore.lua shares (0.5.36), so every stat has the same columns, the same mark between two values and the same line for a fight.
+ST.OLD, ST.COLUMNS, ST.COLUMN, ST.BOTH = T.OLD, T.COLUMNS, T.COLUMN, T.BOTH
 
 -- Reading ----------------------------------------------------------------------------------------------------------------------------------------
 

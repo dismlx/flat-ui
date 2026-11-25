@@ -37,15 +37,16 @@ local _, ns = ...
 --   Main hand, off hand and ranged damage: a hit on average, what attack power adds a second but for the off hand (14 attack power one damage a
 --   second, ATTACK_POWER_MAGIC_NUMBER, Camelot/PaperDollFrameStats.lua:11, which loads after Camelot/PaperDollFrame.lua:35; MELEE_ and
 --   RANGED_ATTACK_POWER_TOOLTIP, enUS.lua:14268, 18324), and for the player's swings the share that glances against an enemy of the player's
---   level and a raid boss (the hit table's model, below).
+--   level and a boss while Against names one (the hit table's model, below).
 --   Attack power and ranged attack power: what Strength and Agility give of it (GetAttackPowerForStat, GetRangedAttackPowerForStat, as the sheet
 --   asks them, Camelot/PaperDollFrameStats.lua:313-321), the rest, and the Strength or Agility one more damage a second takes. Nothing where
 --   attack power comes from spell power (GetOverrideAPBySpellPower above 0, :396).
---   Hit chance, Critical strike and Expertise: the chance to miss, to crit and to be dodged against an enemy of the player's level and a raid boss
---   three levels above, and the hit and expertise still wanted for none, from the hit table's model (ns.HitTableCalc: C.Inputs, C.Target,
+--   Hit chance, Critical strike and Expertise: the chance to miss, to crit and to be dodged against an enemy of the player's level and, while
+--   Against names a boss as for Defense (StatTips.lua; from level 60 at its first choice), a boss three levels above, under the same heads
+--   "Level 60  ·  Boss 63" as Defense's and with " · " between the two (0.5.36), and the hit and expertise still wanted for none, from the hit table's model (ns.HitTableCalc: C.Inputs, C.Target,
 --   C.Table and the need of each line, HitTableCalc.lua), from behind, with the Attacks and Hit cap against a boss of the Hit table page
 --   (hud.hitTableLines, hud.hitTableRules); the crit Agility and Intellect give (GetCritChanceFromStat, GetSpellCritChanceFromStat, as the sheet,
---   Camelot/PaperDollFrameStats.lua:277, 318); and where a swing's crit passes what a raid boss's table leaves it, that crit past it is lost.
+--   Camelot/PaperDollFrameStats.lua:277, 318); and where a swing's crit passes what a boss's table leaves it, that crit past it is lost.
 --   Haste: how often each weapon swings and shoots (UnitAttackSpeed, the hasted speeds, as the sheet reads them, Camelot/PaperDollFrame.lua:
 --   881-884), how often without the melee haste (GetMeleeHaste: attack speed up by that share, CR_HASTE_MELEE_TOOLTIP, enUS.lua:5527), and what
 --   a 3 sec cast takes with spell haste (UnitSpellHaste, CR_HASTE_SPELL_TOOLTIP, enUS.lua:5531).
@@ -91,8 +92,10 @@ local K = {
 	-- The lines of the hit table's model by id, as worded here, and the order they are shown in.
 	NAMES = { swing = "Weapon attacks", main = "Main hand swings", off = "Off hand swings", special = "Abilities", ranged = "Ranged",
 		spell = "Spells" },
-	HEADER = "In plain words", COLUMNS = "your level / raid boss",
-	OLD = "Numbers from before the fight: the game hides your stats in fights.",
+	-- The heads of the two columns, the mark between their values and the line for a fight are StatTips.lua's (ST.COLUMNS, ST.COLUMN, ST.BOTH,
+	-- ST.OLD; 0.5.36), so every stat of the sheet speaks alike.
+	HEADER = "In plain words", COLUMNS = ns.StatTips.COLUMNS or "Level %d  ·  Boss %d", COLUMN = ns.StatTips.COLUMN or "Level %d",
+	BOTH = ns.StatTips.BOTH or "%s  ·  %s", OLD = ns.StatTips.OLD or "From before the fight: the game hides your stats during one.",
 	-- The style when SpellModel.lua's is not there: its header gold, light grey label, white value and dim note (SpellModel.lua K.STYLE).
 	STYLE = { header = { 1, 0.82, 0 }, label = { 0.82, 0.82, 0.82 }, value = { 1, 1, 1 }, dim = { 0.66, 0.68, 0.62 } },
 }
@@ -290,11 +293,16 @@ local function Pair(left, right)
 	S.tip:AddDoubleLine(left, right, l[1], l[2], l[3], v[1], v[2], v[3])
 end
 
--- The heads of two columns, both in the label's colour.
-local function Columns(left)
+-- The heads of two columns, both in the label's colour: "Level 60  ·  Boss 63", or "Level 30" alone while Against names no boss.
+local function Columns(left, t)
 	Head()
 	local l = S.style.label
-	S.tip:AddDoubleLine(left, K.COLUMNS, l[1], l[2], l[3], l[1], l[2], l[3])
+	local level = t and t.inputs and t.inputs.level
+	local right = ""
+	if Finite(level) then
+		right = t.bossLevel and K.COLUMNS:format(level, t.bossLevel) or K.COLUMN:format(level)
+	end
+	S.tip:AddDoubleLine(left, right, l[1], l[2], l[3], l[1], l[2], l[3])
 end
 
 -- A dim note that wraps at the tooltip's width.
@@ -620,7 +628,8 @@ local function ById(read)
 end
 
 -- The hit table's inputs for kinds (nil: the Attacks of the Hit table page, hud.hitTableLines, by class and power type as C.Kinds counts them),
--- and its lines against an enemy of the player's level and a raid boss three levels above (C.Target "level" and "boss"), both from behind, with
+-- and its lines against an enemy of the player's level and, while Against names a boss (GearAvoid.lua's A.Against, as StatTips.lua asks it; at
+-- its first choice from level 60), a boss three levels above (C.Target "level" and "boss"; t.boss is nil without one), both from behind, with
 -- Hit cap against a boss (hud.hitTableRules). Nil while the game withholds a stat, false without the model.
 local function Tables(kinds)
 	local C = Calc()
@@ -650,15 +659,32 @@ local function Tables(kinds)
 		copy.target, copy.front = C.Target(against, inputs.level), false
 		return ById(C.Table(spec, copy))
 	end
-	return { inputs = inputs, level = Against("level"), boss = Against("boss"), rules = rules }
+	local bossLevel = nil
+	local avoid = ns.GearAvoid
+	if type(avoid) == "table" and type(avoid.Against) == "function" then
+		local okAt, at, isBoss = pcall(avoid.Against, inputs.level)
+		if okAt and Finite(at) and isBoss == true then
+			bossLevel = at
+		end
+	end
+	return { inputs = inputs, level = Against("level"), boss = bossLevel and Against("boss") or nil, bossLevel = bossLevel, rules = rules }
 end
 
--- A part of the line of an id against both enemies, as "5% / 9%", or nil while either is not known.
+-- Two values in the columns of Columns: "5%  ·  9%" with a boss, "5%" alone without one.
+local function Join(t, x, y)
+	if t.boss then
+		return K.BOTH:format(x, y)
+	end
+	return x
+end
+
+-- A part of the line of an id against both enemies, as "5%  ·  9%" (against the enemy of your level alone without a boss), or nil while one is
+-- not known.
 local function Both(t, id, part)
-	local a, b = t.level[id], t.boss[id]
+	local a, b = t.level[id], t.boss and t.boss[id]
 	local x, y = a and a.parts[part], b and b.parts[part]
-	if Finite(x) and Finite(y) then
-		return Pct(x) .. " / " .. Pct(y)
+	if Finite(x) and (Finite(y) or not t.boss) then
+		return Join(t, Pct(x), Finite(y) and Pct(y) or nil)
 	end
 	return nil
 end
@@ -703,14 +729,14 @@ local function HitOf(inputs, id)
 	return inputs.melee and inputs.melee.hit
 end
 
--- The hit still wanted on the line of an id against both enemies, as "0% / 3%", or nil.
+-- The hit still wanted on the line of an id against both enemies, as "0%  ·  3%" (one figure without a boss), or nil.
 local function Wanted(t, id)
 	local hit = HitOf(t.inputs, id)
-	local a, b = t.level[id], t.boss[id]
-	if not (Finite(hit) and a and b and Finite(a.need) and Finite(b.need)) then
+	local a, b = t.level[id], t.boss and t.boss[id]
+	if not (Finite(hit) and a and Finite(a.need) and (not t.boss or (b and Finite(b.need)))) then
 		return nil
 	end
-	return Pct(math.max(0, a.need - hit)) .. " / " .. Pct(math.max(0, b.need - hit))
+	return Join(t, Pct(math.max(0, a.need - hit)), b and Pct(math.max(0, b.need - hit)) or nil)
 end
 
 Entry("HITCHANCE", function(unit)
@@ -726,7 +752,7 @@ end, function(t)
 		local text = Both(t, id, "miss")
 		if text then
 			if not shown then
-				Columns("Chance to miss")
+				Columns("Chance to miss", t)
 				shown = true
 			end
 			Pair(Label(id, dual), text)
@@ -740,7 +766,7 @@ end, function(t)
 		local text = Wanted(t, id)
 		if text then
 			if not wanted then
-				Columns("Hit still wanted")
+				Columns("Hit still wanted", t)
 				wanted = true
 			end
 			Pair(Label(id, dual), text)
@@ -782,7 +808,7 @@ end, function(t)
 		local text = Both(t, id, "crit")
 		if text then
 			if not shown then
-				Columns("Chance to crit")
+				Columns("Chance to crit", t)
 				shown = true
 			end
 			Pair(Label(id, dual), text)
@@ -794,14 +820,14 @@ end, function(t)
 	if t.intellect then
 		Pair("From Intellect, for spells", Pct(t.intellect))
 	end
-	local swing = t.boss.swing or t.boss.main
+	local swing = t.boss and (t.boss.swing or t.boss.main)
 	if swing and swing.over and Finite(swing.parts.cap) then
-		Pair("Swings on a raid boss", "at most " .. Pct(swing.parts.cap) .. " crit")
+		Pair("Swings on a boss", "at most " .. Pct(swing.parts.cap) .. " crit")
 		Note("A swing is one roll: misses, dodges and glancing blows come first, so crit past what they leave is lost. Abilities, shots and "
 			.. "spells roll their crit apart.")
 	end
-	if weapon and t.boss[weapon] then
-		Note("A raid boss is three levels above you: its defense takes crit off your weapon attacks.")
+	if weapon and t.boss and t.boss[weapon] then
+		Note("A boss is three levels above you: its defense takes crit off your weapon attacks.")
 	end
 end)
 
@@ -818,7 +844,7 @@ end, function(t)
 		local text = Both(t, id, "dodge")
 		if text then
 			if not shown then
-				Columns("Chance to be dodged")
+				Columns("Chance to be dodged", t)
 				shown = true
 			end
 			Pair(Label(id, dual), text)
@@ -827,9 +853,10 @@ end, function(t)
 	if not shown then
 		return
 	end
-	local main = t.boss[order[1]]
-	if main and Finite(main.parts.dodge) then
-		Pair("Expertise still wanted, raid boss", Pct(main.parts.dodge))
+	-- Each 1% expertise takes 1% off the dodges, so what is still wanted is the main hand's chance to be dodged, in the same columns.
+	local wanted = Both(t, order[1], "dodge")
+	if wanted then
+		Pair("Expertise still wanted", wanted)
 	end
 	Note("Each 1% expertise takes 1% off dodges and parries. Only an enemy you face can parry, so from behind dodges are all that count.")
 end)
@@ -874,9 +901,9 @@ local function ReadWeapon(unit, hand)
 			return nil
 		elseif t then
 			local id = hand == "off" and "off" or (t.level.main and "main" or "swing")
-			local a, b = t.level[id], t.boss[id]
-			if a and b and Finite(a.parts.glance) and Finite(b.parts.glance) then
-				d.glance, d.label = Pct(a.parts.glance) .. " / " .. Pct(b.parts.glance), id == "swing" and "Swings" or K.NAMES[id]
+			local glance = Both(t, id, "glance")
+			if glance then
+				d.glance, d.label, d.table = glance, id == "swing" and "Swings" or K.NAMES[id], t
 			end
 		end
 	end
@@ -889,7 +916,7 @@ local function WriteWeapon(d)
 		Pair(d.hand == "ranged" and "Ranged attack power adds" or "Attack power adds", "+" .. Num(d.ap / K.AP_PER_DPS) .. " damage a second")
 	end
 	if d.glance then
-		Columns("Swings that glance")
+		Columns("Swings that glance", d.table)
 		Pair(d.label, d.glance)
 		Note("A glancing blow lands for less. Only your swings glance, never your abilities.")
 	end
