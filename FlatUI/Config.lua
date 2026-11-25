@@ -2382,6 +2382,15 @@ ns.PAGES = {
 			tip = "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy." },
 		{ key = "linkTips", kind = "bool", default = true, label = "Tooltips of chat links",
 			tip = "While the mouse is over an item, spell, achievement or quest link in a chat window, its tooltip shows. Not in a fight." },
+		-- ChatLinks.lua: a chat filter that colours the player's own name in other players' lines (0.5.36).
+		{ section = "Mentions" },
+		{ key = "mentions", kind = "bool", default = true, label = "Your name in chat",
+			tip = "Your name in what other players write in say, yell, emotes, party, raid, guild, officer and the numbered channels shows in a colour of its own. Not in whispers, and only the whole name." },
+		{ key = "mentionColour", kind = "colour", default = "ffff9933", label = "Your name colour", needs = "mentions" },
+		{ key = "mentionSound", kind = "choice", default = "none", label = "Sound when you are named", needs = "mentions",
+			tip = "Once for each line that names you, at most once a second.",
+			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
+				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
 	-- Tooltips, Spell tooltips and Gear comparison: rows of Chat and tooltips (saved as chat.*), each on a page of its own in the sidebar with the
 	-- switch of Chat and tooltips (Panel.lua, BuildModel).

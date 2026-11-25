@@ -883,6 +883,9 @@ ns.SETUP_STEPS = {
 		{ "chat.channelNames", "o", "behaviour", "Shortens the label of a numbered channel's lines to its number and name, as [2. Trade] for [2. Trade - City]." },
 		{ "chat.webLinks", "o", "behaviour", "Turns web addresses in chat into links that open a box to copy them." },
 		{ "chat.linkTips", "o", "behaviour", "Shows the tooltip of an item, spell, achievement or quest link in chat while the mouse is over it." },
+		{ "chat.mentions", "o", "behaviour", "Colours your name where other players write it in say, party, raid, guild and the numbered channels." },
+		{ "chat.mentionColour", "r", "behaviour", "Sets the colour your name takes in other players' chat lines." },
+		{ "chat.mentionSound", "o", "behaviour", "Plays a sound once for each chat line that names you." },
 	} },
 	{ id = "tips", area = "Tooltips", title = "Tooltips", draw = "mock-tooltip", built = true, rows = {
 		{ "chat.tooltips", "c", "mock-tooltip" },
