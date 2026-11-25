@@ -10,7 +10,8 @@ local _, ns = ...
 -- ns.IconFader is the Fade until you point at it of Group tools and the Ping bar: the icons of a row of buttons of the addon's own (never
 -- its secure buttons or its frame, so in a fight too) stay at 30% until held() says they must be full (the mouse over one of them, a
 -- ready check, a countdown or a waiting ping), come back to full at once and fade again over a quarter of a second, a second after
--- the last reason to be full went (a C_Timer.After wait, then a short C_Timer.NewTicker).
+-- the last reason to be full went (a C_Timer.After wait, then a short C_Timer.NewTicker). ns.IconCountdownHeight sizes the countdown numbers of
+-- an icon with the icon, for the rows whose numbers follow Icon size (Defensives on you, Your buffs).
 
 local I = {}
 
@@ -56,6 +57,51 @@ function ns.IconCountdownFont(icon, choice, frame)
 		if icon.cdGame and text then
 			pcall(text.SetFont, text, icon.cdGame[1], icon.cdGame[2], icon.cdGame[3])
 		end
+	end
+end
+
+-- The numbers on an icon follow its size. ns.IconFontHeight gives the height of a font object of the game by its name, read once (fallback
+-- where it cannot be read); ns.IconNumberHeight a height that is `height` at the row's default Icon size `base`, grown and shrunk with `size`,
+-- 8 to 24; and ns.IconCountdownHeight sets the countdown numbers of an icon of this file to that, from the game's own height of them, read
+-- once, so a row at its default size keeps the numbers it had.
+I.fontHeights = {}
+function ns.IconFontHeight(name, fallback)
+	local height = I.fontHeights[name]
+	if height == nil then
+		local font = _G[name]
+		local ok, _, read = false, nil, nil
+		if type(font) == "table" and type(font.GetFont) == "function" then
+			ok, _, read = pcall(font.GetFont, font)
+		end
+		height = ok and ns.Finite(read) and read > 0 and read or fallback
+		I.fontHeights[name] = height
+	end
+	return height
+end
+
+function ns.IconNumberHeight(height, size, base)
+	if not (ns.Finite(height) and ns.Finite(size) and ns.Finite(base) and base > 0) then
+		return height
+	end
+	return math.max(8, math.min(24, math.floor(height * size / base + 0.5)))
+end
+
+function ns.IconCountdownHeight(icon, size, base)
+	local cooldown = icon and icon.cooldown
+	if not cooldown then
+		return
+	end
+	local ok, text = pcall(cooldown.GetCountdownFontString, cooldown)
+	if not ok or IsSecret(text) or type(text) ~= "table" then
+		return
+	end
+	if icon.cdBase == nil then
+		local read, _, height = pcall(text.GetFont, text)
+		icon.cdBase = read and ns.Finite(height) and height > 0 and height or false
+	end
+	local height = icon.cdBase and ns.IconNumberHeight(icon.cdBase, size, base)
+	if height then
+		pcall(text.SetTextHeight, text, height)
 	end
 end
 
