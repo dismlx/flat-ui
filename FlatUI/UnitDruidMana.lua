@@ -16,9 +16,10 @@ local _, ns = ...
 -- 355-363). It hangs under the power bar (ManaBarArea.ManaBar, 124 by 10 at TOPLEFT 87,-61 of the frame, Camelot/PlayerFrame.lua:91-96) as wide
 -- as it. With Frame style Separate parts, or on a player frame Flat UI does not style, it hangs as far under it as the power bar hangs under the
 -- health bar there: the two borders, at least 1 unit (Gap, UnitFrameCells.lua), so wherever Flat UI or the game puts the power bar the three bars
--- look alike. In one frame (ns.UnitFrameExtra.joined, UnitFrames.lua) it hangs under the whole frame, outside it: the frame's margin (a border
--- thickness and Space between parts), its border, the space and the bar's own border, so three thicknesses and twice the space in pixels; with
--- the Power bar row off the frame ends at the health bar, and the bar hangs from that. Its frame is a frame of the addon's own on the frame that
+-- look alike; with the Power bar row off, whose bar is then transparent, it hangs that far under the health bar. In one frame
+-- (ns.UnitFrameExtra.joined, UnitFrames.lua) it hangs under the whole frame, outside it: the frame's margin (a border thickness and Space between
+-- parts), its border, the space and the bar's own border, so three thicknesses and twice the space in pixels; with the Power bar row off the frame
+-- ends at the health bar, and the bar hangs from that. Its frame is a frame of the addon's own on the frame that
 -- holds the bars (PlayerFrameContentMain), so it fades with the content of the frame, which Fading fades (Fade.lua:70), and stays when Power bar
 -- makes the power bar transparent (UnitParts.lua, Power). It is made and laid out out of
 -- combat, on a frame the game protects; it is no protected frame itself, so it shows and hides in a fight. It hears UNIT_POWER_UPDATE and
@@ -26,8 +27,10 @@ local _, ns = ...
 -- one member, so no other unit's power reaches Flat UI; UnitDocumentation.lua:4234-4243, 4406-4416, 4551-4561), and UPDATE_SHAPESHIFT_FORM
 -- (SpellBookDocumentation.lua:989-994), only while it is wanted. The value glides to each new one (the interpolation ExponentialEaseOut of SetValue, never
 -- withheld) where the client has it, but is set at once as the bar shows, or as it stops being the sample of test mode, since the mana it last had is
--- stale by then (nothing feeds a hidden bar). In test mode (TestMode.lua, TM.Watch) it shows for a druid in any form, at 60% in caster form, and is painted again as
--- the rows change; the real rule comes back as test mode ends. The game's player frame is not changed: no field written, no method called.
+-- stale by then (nothing feeds a hidden bar). It fades in over 0.15 seconds as it shows and out over 0.2 as the druid shifts to a form with mana, with
+-- Alpha animations of its own frame; the row going off, or the sample of test mode going, hides it at once. In test mode (TestMode.lua, TM.Watch) it
+-- shows for a druid in any form, at 60% in caster form, and is painted again as the rows change; the real rule comes back as test mode ends. The
+-- game's player frame is not changed: no field written, no method called.
 -- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLResourceBars/Init.lua:19, resourceBarsDruidFixedMana, a
 -- Forever and TBC option whose bar is not in the package; EnhanceQoLUnitFrames/UF_Helper.lua:1773-1823, a druid's second power is mana, shown
 -- while the main power is not): the mana of a druid in forms, here a bar under the game's player frame.
@@ -37,6 +40,8 @@ local KEY = "unitframes"
 local PART = "Druid mana"
 -- The power type of mana (Enum.PowerType.Mana) and its token, the height of the bar in screen pixels, and the fill of a solid bar.
 local MANA, TOKEN, HEIGHT_PX = 0, "MANA", 4
+-- The seconds of the fade as the bar shows and as it goes.
+local FADE_IN, FADE_OUT = 0.15, 0.2
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 -- The blue of a mana bar whose colour the game does not give (UnitFrames.lua, COLOUR.mana).
 local BLUE = { 0, 0, 1 }
@@ -76,16 +81,43 @@ local function File()
 	return file or WHITE
 end
 
--- The frame the bar hangs from: the outlined power bar of a styled frame, else the game's power bar. In one frame with no power cell (the frame's
--- Power bar row off, as FRAME.powerOn in UnitFrames.lua has it) the frame ends at the health bar, so the bar hangs from that and not from a power
--- bar that is transparent and lies outside the frame.
+-- The frame the bar hangs from: the outlined power bar of a styled frame, else the game's power bar. On a styled frame with the Power bar row off
+-- the power bar is transparent with no border (UnitParts.lua, Power), and in one frame the frame ends at the health bar (FRAME.powerOn in
+-- UnitFrames.lua), so in either Frame style the bar hangs from the health bar, the usual gap under it, and not under an invisible bar.
 local function Anchor(rec, joined)
 	local power = rec.byRole and rec.byRole.power
 	local health = rec.byRole and rec.byRole.health
-	if joined and health ~= nil and (power == nil or Opt("playerPowerBar") == false) then
+	if health ~= nil and (joined or X.active(rec) == true) and (power == nil or Opt("playerPowerBar") == false) then
 		return health.target
 	end
 	return power and power.target or rec.parts.power
+end
+
+-- The fades of the bar's frame: an Alpha animation from 0 to 1, and one from 1 to 0 that hides the frame as it ends and puts its opacity back, as the
+-- Healer mana list has them (HealerMana.lua Fades). Nil for each where the client makes none.
+local function Fades(frame)
+	local ok, fadeIn, fadeOut = pcall(function()
+		local come = frame:CreateAnimationGroup()
+		local rise = come:CreateAnimation("Alpha")
+		rise:SetFromAlpha(0)
+		rise:SetToAlpha(1)
+		rise:SetDuration(FADE_IN)
+		local go = frame:CreateAnimationGroup()
+		local fall = go:CreateAnimation("Alpha")
+		fall:SetFromAlpha(1)
+		fall:SetToAlpha(0)
+		fall:SetDuration(FADE_OUT)
+		pcall(go.SetToFinalAlpha, go, true)
+		go:SetScript("OnFinished", function()
+			frame:Hide()
+			frame:SetAlpha(1)
+		end)
+		return come, go
+	end)
+	if ok then
+		return fadeIn, fadeOut
+	end
+	return nil, nil
 end
 
 -- The frame, the bar, its outline and the mask that cuts its fill to the corners, made once out of combat. Nil when the player frame has no bar to hang it from, or when the game refuses the
@@ -101,6 +133,7 @@ local function Make(rec)
 	ns.Own[bar] = true
 	bar:SetAllPoints(holder)
 	local d = { holder = holder, bar = bar, shown = false, form = false }
+	d.fadeIn, d.fadeOut = Fades(holder)
 	local ok, done = pcall(bar.SetStatusBarTexture, bar, WHITE)
 	if not ok or (not IsSecret(done) and done == false) then
 		rec.druidRefused = true
@@ -228,15 +261,46 @@ local function InForm(d)
 	return d.form == true
 end
 
+-- Shows the frame of the bar, fading in, a fade out stopped at once; or hides it, fading out with fade and at once without (or with no fades).
+local function Showing(d, on, fade)
+	local holder, fadeIn, fadeOut = d.holder, d.fadeIn, d.fadeOut
+	local fading = fadeOut ~= nil and fadeOut:IsPlaying()
+	if on then
+		if fading then
+			pcall(fadeOut.Stop, fadeOut)
+		end
+		holder:SetAlpha(1)
+		holder:Show()
+		if fadeIn then
+			pcall(fadeIn.Stop, fadeIn)
+			pcall(fadeIn.Play, fadeIn)
+		end
+		return
+	end
+	if fadeIn and fadeIn:IsPlaying() then
+		pcall(fadeIn.Stop, fadeIn)
+	end
+	if not (fade and fadeOut and holder:IsShown()) then
+		if fading then
+			pcall(fadeOut.Stop, fadeOut)
+		end
+		holder:Hide()
+		holder:SetAlpha(1)
+	elseif not fading and not pcall(fadeOut.Play, fadeOut) then
+		holder:Hide()
+	end
+end
+
 -- Shows the bar while the druid's power is not mana, with the mana on it. In test mode it shows in any form, a sample at 60% in caster form (d.sample),
--- so the look rows can be seen on it; the real rule comes back as test mode ends.
+-- so the look rows can be seen on it; the real rule comes back as test mode ends. It fades in as it shows and out as the druid shifts to a form with
+-- mana; the row going off and the sample going hide it at once.
 local function Show(d)
 	local form = InForm(d)
 	local show = Wanted() and (form or Testing())
 	-- The bar was hidden or showed the sample: the mana on it is not the player's of now.
 	local fresh = not d.shown or d.sample == true
 	if d.shown ~= show then
-		d.holder:SetShown(show)
+		Showing(d, show, not show and not d.sample and Wanted() and not Testing())
 		d.shown = show
 	end
 	d.sample = show and not form or nil
@@ -311,7 +375,7 @@ local function DruidMana(rec)
 	local d = rec.druidMana
 	if not Wanted() then
 		if d then
-			d.holder:Hide()
+			Showing(d, false, false)
 			d.shown = false
 			Hear(d, false)
 		end

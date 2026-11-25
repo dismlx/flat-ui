@@ -6,7 +6,8 @@ local ADDON_NAME, ns = ...
 -- view of the setup it draws the draft. Nothing here calls a module or the draft layer. Every number shown is fixed (health 7,000 of 10,000, mana 4,200 of 6,000),
 -- since the real ones are secret values (AO/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:1526-1529); the player's power is that of their class at rest,
 -- so a warrior's rage shows empty and a rogue's energy full. While Low health border is on, Mara (the first party member) and the fifth raid cell are at 15%,
--- so that the border shows on them while the limit is above that (HealthColour.lua). The bars, picture, name row, level, text and icons follow UnitFrames.lua, UnitFrameLevel.lua,
+-- and with Also on target, focus and boss frames the target (Defias Pillager) too, so that the border shows on them while the limit is above that
+-- (HealthColour.lua); with Pulse the low health border it beats as the live one does. The bars, picture, name row, level, text and icons follow UnitFrames.lua, UnitFrameLevel.lua,
 -- UnitFrameLooks.lua, UnitFramePortrait.lua, UnitFrameCells.lua, UnitText.lua, UnitParts.lua and UnitExtras.lua, which style the game's frames; the layout is this
 -- file's own, since a module can style only the game's frames.
 -- With Frame style Separate parts (the default, and what any value but One frame means) each part has its own border and background. With One frame every
@@ -21,7 +22,8 @@ local ADDON_NAME, ns = ...
 -- Each scene stands on a ground of muted earth, so that a see-through background looks as it does in the world.
 -- ns.DrawUnits, at the end of the file, gives the same painters to the stand-ins of test mode (TestUnits.lua): a frame made for a kind and painted
 -- for a sample of its own, a raid cell of any size, and the marks those have in test mode (offline, the dispel border and type icon, raid markers,
--- leader and assistant icons, heal over time squares, the game's aura icons on a cell), which only its frames are made with.
+-- leader and assistant icons, heal over time squares, the game's aura icons on a cell), which only its frames are made with, but for the dispel border,
+-- its type icon and the heal over time squares of a party frame, which the setup's party frames draw too (Mara's Magic debuff, Bex's two squares).
 
 local KEY = "unitframes"
 local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
@@ -108,8 +110,10 @@ local KIND = {
 }
 -- The frames whose text sizes are those of the player (UnitFrames.lua:114).
 local LARGE = { player = true, target = true, focus = true }
--- The frames that take the low health border (HealthColour.lua LOW_KINDS): your own and your pet's, your party's and their pets', and your raid's.
+-- The frames that take the low health border (HealthColour.lua LOW_KINDS): your own and your pet's, your party's and their pets', and your raid's; and
+-- those that take it too with Also on target, focus and boss frames (HealthColour.lua ENEMY_KINDS).
 local LOW = { player = true, pet = true, party = true, partypet = true, raid = true }
+local ENEMY_LOW = { target = true, focus = true, boss = true }
 
 -- Helpers ---------------------------------------------------------------------------------------------------------------------------------
 
@@ -543,7 +547,10 @@ end
 
 -- The low health border of a frame or a raid cell (HealthColour.lua MakeLow and PaintLow): a frame over the health bar, above the bar's own border, with
 -- four edges of its own in the colour of Low health border colour just outside the bar, or the rounded line in place of them while the bar's own border
--- draws its rounded line (radius). It shows whatever Border says, as the game's does, and lies over the threat and debuff colour.
+-- draws its rounded line (radius). It shows whatever Border says, as the game's does, and lies over the threat and debuff colour. With Pulse the low health
+-- border it beats as the live one does (HealthColour.lua PULSE and Beat): Alpha animations of its own from 1 to 0.35 and back, 0.45 s each way, from the
+-- place of the clock in one whole beat, so that the borders of a drawing, and of test mode, beat together.
+local LOW_BEAT = { low = 0.35, time = 0.45 }
 local function MakeLow(root, bar, levels)
 	local frame = Above(Frame(root), root, levels)
 	frame:SetAllPoints(bar)
@@ -553,7 +560,17 @@ local function MakeLow(root, bar, levels)
 		return nil
 	end
 	ns.SetOutlineArea(outline, KEY)
-	return { frame = frame, outline = outline }
+	local okGroup, group = pcall(frame.CreateAnimationGroup, frame)
+	local made = okGroup and group ~= nil and pcall(group.SetLooping, group, "REPEAT")
+	for order, alphas in ipairs({ { 1, LOW_BEAT.low }, { LOW_BEAT.low, 1 } }) do
+		local okFade, fade = false, nil
+		if made then
+			okFade, fade = pcall(group.CreateAnimation, group, "Alpha")
+		end
+		made = okFade and fade ~= nil and pcall(fade.SetFromAlpha, fade, alphas[1]) and pcall(fade.SetToAlpha, fade, alphas[2])
+			and pcall(fade.SetDuration, fade, LOW_BEAT.time) and pcall(fade.SetOrder, fade, order)
+	end
+	return { frame = frame, outline = outline, beat = made and group or nil }
 end
 
 -- True while a styled frame of a kind that takes it shows the border: the row on, the unit neither dead nor offline, and its health under the limit.
@@ -561,11 +578,31 @@ local function LowShown(on, g, s, hp)
 	return on and g.lowHealth and not s.dead and not s.offline and hp * 100 < g.lowHealthAt
 end
 
-local function PaintLow(low, shown, radius, t)
+-- True for a kind of frame that takes the border with the settings g: your own and your group's always, the target, focus and boss frames with Also on
+-- target, focus and boss frames.
+local function LowKind(kind, g)
+	return LOW[kind] == true or (g.lowTarget == true and ENEMY_LOW[kind] == true)
+end
+
+-- pulse: Pulse the low health border is on, so the border beats while it shows; else it stands still at full alpha.
+local function PaintLow(low, shown, radius, t, pulse)
 	if low == nil then
 		return
 	end
 	low.frame:SetShown(shown and true or false)
+	local beat = low.beat
+	if beat ~= nil then
+		if shown and pulse then
+			local ok, playing = pcall(beat.IsPlaying, beat)
+			if not (ok and playing == true) and not pcall(beat.Play, beat, false, GetTime() % (2 * LOW_BEAT.time)) then
+				pcall(beat.Play, beat)
+			end
+		elseif low.beating ~= false then
+			pcall(beat.Stop, beat)
+			low.frame:SetAlpha(1)
+		end
+		low.beating = shown and pulse and true or false
+	end
 	if not shown then
 		return
 	end
@@ -591,8 +628,9 @@ local DISPEL = { px = 2, icon = 12, atlas = "RaidFrame-Icon-Debuff" }
 local TYPE_WORD = { magic = "Magic", curse = "Curse", disease = "Disease", poison = "Poison" }
 local HOT_CORNERS = { tl = { "TOPLEFT", 1, -1 }, tr = { "TOPRIGHT", -1, -1 }, bl = { "BOTTOMLEFT", 1, 1 }, br = { "BOTTOMRIGHT", -1, 1 } }
 
--- The marks of a party frame or a raid cell of test mode, on a frame above its parts: the four edges of the dispel border, its type icon and four
--- heal over time squares. Only ns.DrawUnits makes them, so the drawings of the setup have none.
+-- The marks of a party frame, of the setup or of test mode, or of a raid cell of test mode, on a frame above its parts: the four edges of the dispel
+-- border, its type icon and four heal over time squares. The setup's Mara carries a Magic debuff you can dispel and Bex two heals over time of yours
+-- (Sample), so their rows change the drawing.
 local function MakeMarks(root)
 	local m = { frame = Above(Frame(root), root, 5), edges = {}, squares = {} }
 	for index = 1, 4 do
@@ -688,6 +726,8 @@ local function Me()
 	return name or "Brennan", level or 20, class or "SHAMAN"
 end
 
+-- The colours of the two heals over time of yours on Bex in the setup's drawings: Renew green and Rejuvenation purple (UnitHots.lua HOTS).
+local SAMPLE_HOTS = { { 0.3, 0.9, 0.35 }, { 0.75, 0.3, 1 } }
 -- The party: five fixed names, one per class colour, each with a role.
 local PARTY = { { "Mara", "PALADIN", "tank" }, { "Bex", "MAGE", "healer" }, { "Cole", "HUNTER", "damage" }, { "Dru", "DRUID", "damage" }, { "Fay", "ROGUE", "damage" } }
 local PETS = { "Cat", "Boar", "Owl", "Wolf", "Bear" }
@@ -703,8 +743,9 @@ local function Sample(id)
 		return { kind = "player", cap = "Player", name = name, level = level, class = class, player = true, react = FRIENDLY, lcol = GOLD, state = COMBAT, leader = true,
 			flag = "PvP", timer = "3:05", own = true }
 	elseif id == "target" then
+		-- low: its health while Low health border and Also on target, focus and boss frames are on (E.bars).
 		return { kind = "target", cap = "Target", name = "Defias Pillager", level = 18, react = HOSTILE, lcol = { 1, 0.5, 0.25 }, rank = "elite", marker = 8,
-			face = "MAGE", auras = { { "buff", "none", true }, { "buff", "none" }, { "debuff", "magic" }, { "debuff", "poison" } } }
+			face = "MAGE", auras = { { "buff", "none", true }, { "buff", "none" }, { "debuff", "magic" }, { "debuff", "poison" } }, low = 0.15 }
 	elseif id == "focus" then
 		return { kind = "focus", cap = "Focus", name = "Gruff Swiftbite", level = 18, react = HOSTILE, lcol = { 0.25, 0.75, 0.25 }, rank = "rare",
 			face = BEAST .. "Wolf" }
@@ -723,10 +764,12 @@ local function Sample(id)
 	if number then
 		local member = PARTY[number]
 		local debuffed = number == 1 or number == 3
-		-- low: Mara's health while Low health border is on, so that the border shows (E.bars).
+		-- low: Mara's health while Low health border is on, so that the border shows (E.bars). dispel and hots: Mara's Magic debuff you can dispel and
+		-- the heals over time of yours on Bex (PaintMarks).
 		return { kind = "party", cap = number == 1 and "Party" or nil, name = member[1], level = 19, class = member[2], player = true, react = FRIENDLY, role = member[3],
 			leader = number == 1, number = number, away = number == 4, auras = debuffed and { { "debuff", number == 1 and "magic" or "poison", false, 3, "12" } } or nil,
-			debuff = number == 1 and TYPE.magic or nil, low = number == 1 and 0.15 or nil }
+			debuff = number == 1 and TYPE.magic or nil, low = number == 1 and 0.15 or nil, dispel = number == 1 and "magic" or nil,
+			hots = number == 2 and SAMPLE_HOTS or nil }
 	end
 	number = tonumber(id:match("^partypet(%d)$"))
 	if number then
@@ -791,9 +834,13 @@ function E.make(stage, id, given)
 	end
 	o.pred, o.shield, o.absorb = Tex(o.health, "ARTWORK", 1), Tex(o.health, "ARTWORK", 2), Tex(o.health, "ARTWORK", 3)
 	o.deadText = Text(o.healthTop, "GameFontHighlightSmall")
-	-- The low health border, above the health bar's own border and the name row on it.
-	if LOW[sample.kind] then
+	-- The low health border, above the health bar's own border and the name row on it: on the target, focus and boss frames too, for their row.
+	if LOW[sample.kind] or ENEMY_LOW[sample.kind] then
 		o.low = MakeLow(root, o.health, 4)
+	end
+	-- The marks of a party frame: the dispel border, its type icon and the heal over time squares.
+	if sample.kind == "party" then
+		o.marks = MakeMarks(root)
 	end
 	local row = Above(Frame(root), root, 3)
 	o.row = row
@@ -893,6 +940,7 @@ local function Settings(root)
 		auraNumbers = Get("auraNumbers") == true, lookShadow = Get("lookShadow") == true, radius = RADIUS[Get("corners")], fit = { tot = Get("totNameFit"), pet = Get("petNameFit"), party = Get("partyNameFit"), partypet = Get("partyNameFit"), boss = Get("bossNameFit") } }
 	g.t = ns.Pixels(root, ns.Get("general.thickness"))
 	g.lowHealth, g.lowHealthAt = Get("lowHealth") == true, tonumber(Get("lowHealthAt")) or 20
+	g.lowTarget, g.lowHealthPulse = Get("lowHealthTarget") == true, Get("lowHealthPulse") == true
 	-- Frame style: One frame only while it says One frame; any other value, or none, is Separate parts (UnitFrames.lua FRAME.want). The gap of One frame is
 	-- Border thickness and Space between parts (2 px while the row is not there), between the parts and round them (UnitFrames.lua FRAME.gap).
 	g.joined = Get("frameStyle") == "one"
@@ -1230,8 +1278,9 @@ function E.bars(o, g, L)
 	local size = L.size
 	-- The player's power at rest (REST): its colour, how full it is, and numbers to match. Every other frame shows mana at 70%, or the health, power
 	-- and power type a sample of test mode gives (s.health, s.power, s.powerType, shares of 1).
-	-- A sample with `low` has that health while Low health border is on, so that the border shows.
-	local given = s.health or (L.on and g.lowHealth and s.low) or nil
+	-- A sample with `low` has that health while Low health border is on (the target's with Also on target, focus and boss frames too), so that the
+	-- border shows.
+	local given = s.health or (L.on and g.lowHealth and (s.kind ~= "target" or g.lowTarget) and s.low) or nil
 	local hp, healthNumbers = given or FRACTION, given and Numbers(HEALTH.max, given) or HEALTH
 	local token, share, powerNumbers = s.powerType or "MANA", s.power or FRACTION, s.power and Numbers(POWER.max, s.power) or POWER
 	local rest = s.kind == "player" and REST[s.class] or nil
@@ -1306,7 +1355,7 @@ function E.bars(o, g, L)
 		Fill(fill, file, r, gr, b, 1)
 		CutFill(frame, fill, radius)
 	end
-	PaintLow(o.low, LOW[s.kind] and LowShown(L.on, g, s, hp), o.lowRadius, t)
+	PaintLow(o.low, LowKind(s.kind, g) and LowShown(L.on, g, s, hp), o.lowRadius, t, g.lowHealthPulse)
 	-- Heal prediction, absorb shield and heal absorb on the health bar (UnitExtras.lua:190-216).
 	local bar = size.bar
 	local segments = { { o.pred, hp, 0.12, g.healPrediction, 0.24, 0.86, 0.39, 0.75 }, { o.shield, hp + 0.12, 0.10, g.absorbShield, 1, 1, 1, 0.6 },
@@ -1805,7 +1854,7 @@ function E.draw(o, g)
 	E.row(o, g, L)
 	E.icons(o, g, L)
 	E.auras(o, g, L)
-	-- The marks of a party frame of test mode (ns.DrawUnits.Unit makes them; the setup's frames have none).
+	-- The marks of a party frame (E.make), of the setup or of test mode.
 	if o.marks then
 		PaintMarks(o.marks, o.health, o.root, L.on, o.s.dispel, Get("dispelIcon") == true, o.s.hots)
 	end
@@ -2052,7 +2101,7 @@ local function PaintCell(cell, s, width, height, g)
 	Fill(cell.hFill, file, r, gr, b, 1)
 	-- The low health border, kept with what it was painted for, so that FillCell shows it again as the health crosses the limit.
 	cell.g, cell.s, cell.on, cell.lowRadius = g, s, on, LowRadius(cell.hOutline, on and g.radius or nil)
-	PaintLow(cell.low, LowShown(on, g, s, hp), cell.lowRadius, t)
+	PaintLow(cell.low, LowShown(on, g, s, hp), cell.lowRadius, t, g.lowHealthPulse)
 	-- The power bar: thin and bordered with Raid cell look on, else the game's.
 	local pr, pg, pb = ns.PowerColour(s.powerType or "MANA")
 	if pr == nil then
@@ -2139,6 +2188,8 @@ local MARK = {
 	backdrop = { "player", "body" }, flat = { "player", "health" }, healthColour = { "player", "health" }, healthTexture = { "player", "health" },
 	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "boss", "health" },
 	lowHealth = { "party1", "health" }, lowHealthAt = { "party1", "health" }, lowHealthColour = { "party1", "health" }, hoverHighlight = { "player", "health" },
+	lowHealthTarget = { "target", "health" }, lowHealthPulse = { "party1", "health" }, dispelBorder = { "party1", "health" }, dispelIcon = { "party1", "health" },
+	hotSquares = { "party2", "health" }, hotCorner = { "party2", "health" }, hotSize = { "party2", "health" },
 	healPrediction = { "player", "pred" }, absorbShield = { "player", "shield" }, healAbsorb = { "player", "absorb" }, lookOwn = { "player", "health" },
 	lookBorder = { "player", "health" }, lookBack = { "player", "health" }, lookBackAlpha = { "player", "health" },
 	smallRow = { "pet", "row" }, levelPosition = { "target", "level" }, levelColour = { "player", "level" }, pvpWordColour = { "player", "level" }, levelSize = { "player", "level" },
@@ -2386,7 +2437,7 @@ local D = {}
 ns.DrawUnits = D
 
 -- The frames of one unit frame of a kind on a parent: party, partypet, target, focus, tot, pet, boss or totem. A party frame has the marks of
--- party frames too (MakeMarks). Nothing shows until PaintUnit.
+-- party frames too (MakeMarks, from E.make). Nothing shows until PaintUnit.
 function D.Unit(parent, kind)
 	if kind == "totem" then
 		return T.make(parent)
@@ -2395,11 +2446,7 @@ function D.Unit(parent, kind)
 	for index = 1, SLOTS[kind] or 0 do
 		auras[index] = { "buff", "none" }
 	end
-	local o = E.make(parent, kind, { kind = kind, name = "", level = 1, react = FRIENDLY, auras = auras })
-	if kind == "party" then
-		o.marks = MakeMarks(o.root)
-	end
-	return o
+	return E.make(parent, kind, { kind = kind, name = "", level = 1, react = FRIENDLY, auras = auras })
 end
 
 -- Lays out and paints a frame of Unit for a sample of its kind with the settings of Settings, at the top left of its root. sample.time is the time
@@ -2440,7 +2487,7 @@ function D.Fill(o, hp)
 		end
 	end
 	s.health = hp
-	PaintLow(o.low, LOW[s.kind] and LowShown(L.on, g, s, hp), o.lowRadius, L.t)
+	PaintLow(o.low, LowKind(s.kind, g) and LowShown(L.on, g, s, hp), o.lowRadius, L.t, g.lowHealthPulse)
 	if o.healthMode and o.healthText:IsShown() then
 		local words = Says(o.healthMode, Numbers(HEALTH.max, hp))
 		if words then
@@ -2463,7 +2510,7 @@ function D.FillCell(cell, hp, text)
 		Stretch(cell.hFill, cell.health, 0, cell.inner * hp, cell.health:GetHeight())
 	end
 	if cell.g and cell.s then
-		PaintLow(cell.low, LowShown(cell.on, cell.g, cell.s, hp), cell.lowRadius, cell.g.t)
+		PaintLow(cell.low, LowShown(cell.on, cell.g, cell.s, hp), cell.lowRadius, cell.g.t, cell.g.lowHealthPulse)
 	end
 	if text and cell.status:IsShown() then
 		cell.status:SetText(text)

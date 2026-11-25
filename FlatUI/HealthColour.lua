@@ -12,14 +12,19 @@ local _, ns = ...
 --
 -- Unit frames: UnitFrames.lua asks healthLeft while it sets a health fill. The fill is then an image in white (the bar texture of the page, or a white
 -- file) and a frame of the addon's own tints it every 0.1 s. Raid frames are left out. The fill record of ns.FlatFill is what puts the colour back.
--- Low health border of unit frames (off by default, All frames: bars and pictures): on the player, pet, party, party pet and raid frames, a frame of
--- the addon's own over the outlined health bar, one level above Flat UI's own outline of it, holds an inner frame of its own with four edges in the
+-- Low health border of unit frames (off by default, All frames: bars and pictures): on the player, pet, party, party pet and raid frames, and with
+-- Also on target, focus and boss frames (off by default) on those too, for Execute and Hammer of Wrath, a frame of the addon's own over the outlined
+-- health bar, one level above Flat UI's own outline of it, holds an inner frame of its own with four edges in the
 -- row's colour just outside the bar (and the rounded line in place of them while the bar's own outline is rounded), and takes the alpha of a step
 -- curve at its limit every 0.1 s, as a plate's does. With Pulse the low health border on (off by default) the inner frame beats: an Alpha animation of
 -- its own, from 1 to 0.35 and back every 0.45 s, plays while the border shows and stops, at full alpha, when it hides or the row goes off; above the
--- limit the curve's alpha of 0 hides it either way. It is made out of combat, on a frame the game protects; in a fight only its alpha, its colour,
--- whether it shows and whether its animation plays change (Play and Stop on a frame of the addon's own that is not protected). It hides while the
--- unit is plainly dead, a ghost or offline, and while the row, the frame or the part is off.
+-- limit the curve's alpha of 0 hides it either way. Every beat starts at the place of the clock in one whole beat (a play offset of GetTime), so all
+-- the borders on screen dim and brighten together, and a beat on a frame the game hid (IsVisible plainly false) stops until it shows. A beat on a frame
+-- above the limit cannot be stopped: its health is withheld (UnitHealth always is), and so is GetAlpha after a withheld SetAlpha
+-- (SimpleFrameAPIDocumentation.lua:276-288), so nothing tells it from a frame below; it plays unseen under the curve's alpha of 0. It is made out of
+-- combat, on a frame the game protects; in a fight only its alpha, its colour, whether it shows and whether its animation plays change (Play and Stop
+-- on a frame of the addon's own that is not protected). It hides while the unit is plainly dead, a ghost or offline, and while the row, the frame or
+-- the part is off.
 -- Nameplates: the game's CompactUnitFrame_UpdateHealthColor runs for each health change (Shared\CompactUnitFrame.lua:725-737, 645), and this file
 -- answers it in the same call unless PlateColours.lua paints the plate in a colour of its own (the target, threat or reaction colour).
 -- Personal resource display: the same frame tints its health bar, and Bars.lua leaves the health colour to it while the row is on.
@@ -229,6 +234,8 @@ local LOW_FRAMES = "Low health border"
 -- The kinds of frame that take it: your own and your pet's, your party's, their pets' and your raid's. The corner radius of each Corners choice
 -- (UnitFrames.lua ROUND). The beat of Pulse the low health border: the alpha it dips to and the time of one way.
 local LOW_KINDS = { player = true, pet = true, party = true, partypet = true, raid = true }
+-- The enemy frames that take it too while Also on target, focus and boss frames is on: for Execute and Hammer of Wrath.
+local ENEMY_KINDS = { target = true, focus = true, boss = true }
 local PULSE = { low = 0.35, time = 0.45 }
 local RADIUS = { slight = 1, soft = 2 }
 -- The records whose frame has a border.
@@ -239,9 +246,14 @@ local function Yes(ok, value)
 	return ok and not ns.IsSecret(value) and value == true
 end
 
+-- True for a frame of a kind that takes the border now: your own and your group's always, the target, focus and boss frames with their row.
+local function Takes(rec)
+	return LOW_KINDS[rec.kind] == true or (ENEMY_KINDS[rec.kind] == true and Get("unitframes.lowHealthTarget") == true)
+end
+
 -- True while a frame takes the border: the row on, the frame styled, the part not stopped and the curves working.
 local function LowOn(rec)
-	return LOW_KINDS[rec.kind] == true and rec.made == true and Get("unitframes.lowHealth") == true and X.active(rec)
+	return Takes(rec) and rec.made == true and Get("unitframes.lowHealth") == true and X.active(rec)
 		and not ns.PartStopped("unitframes", LOW_FRAMES) and Probe(false)
 end
 
@@ -269,15 +281,20 @@ local function MakeLow(rec)
 	local line = pulse:CreateTexture(nil, "OVERLAY", nil, 7)
 	ns.Own[line] = true
 	line:Hide()
+	-- The beat: down to PULSE.low and back up, one Alpha animation each in order, repeated, so that a play offset is a place in one whole beat.
 	local beat = nil
 	if type(pulse.CreateAnimationGroup) == "function" then
 		local okGroup, group = pcall(pulse.CreateAnimationGroup, pulse)
-		local okFade, fade = false, nil
-		if okGroup and group ~= nil then
-			okFade, fade = pcall(group.CreateAnimation, group, "Alpha")
+		local made = okGroup and group ~= nil and pcall(group.SetLooping, group, "REPEAT")
+		for order, alphas in ipairs({ { 1, PULSE.low }, { PULSE.low, 1 } }) do
+			local okFade, fade = false, nil
+			if made then
+				okFade, fade = pcall(group.CreateAnimation, group, "Alpha")
+			end
+			made = okFade and fade ~= nil and pcall(fade.SetFromAlpha, fade, alphas[1]) and pcall(fade.SetToAlpha, fade, alphas[2])
+				and pcall(fade.SetDuration, fade, PULSE.time) and pcall(fade.SetOrder, fade, order)
 		end
-		if okFade and fade ~= nil and pcall(fade.SetFromAlpha, fade, 1) and pcall(fade.SetToAlpha, fade, PULSE.low)
-			and pcall(fade.SetDuration, fade, PULSE.time) and pcall(group.SetLooping, group, "BOUNCE") then
+		if made then
 			beat = group
 		end
 	end
@@ -308,15 +325,24 @@ local function Rounded(rec, low)
 	return low.rounded == true
 end
 
--- Plays the beat of a border while `on`, or stops it with the inner frame at full alpha.
+-- Plays the beat of a border while `on` and the border can be seen, or stops it with the inner frame at full alpha. A beat starts at the place of the
+-- clock in a whole beat (GetTime, two PULSE.time), so every border on screen dims and brightens together, whenever each started; one on a frame the
+-- game hid stops, and starts again in step as the frame shows. A withheld answer about being seen keeps the beat.
 local function Beat(low, on)
 	local beat = low.beat
 	if beat == nil then
 		return
 	end
 	if on then
+		local okSeen, seen = pcall(low.holder.IsVisible, low.holder)
+		on = not (okSeen and not ns.IsSecret(seen) and seen == false)
+	end
+	if on then
 		if not Yes(pcall(beat.IsPlaying, beat)) then
-			pcall(beat.Play, beat)
+			local now = type(GetTime) == "function" and GetTime() or nil
+			if not (ns.Finite(now) and pcall(beat.Play, beat, false, now % (2 * PULSE.time))) then
+				pcall(beat.Play, beat)
+			end
 		end
 	elseif low.beating ~= false then
 		pcall(beat.Stop, beat)
@@ -375,7 +401,8 @@ end
 -- After each pass of the unit frames over a frame: the border made out of combat the first time the row asks, the driver shown, and the border painted.
 local ApplyLow
 function ApplyLow(rec, on)
-	if not LOW_KINDS[rec.kind] then
+	-- A target, focus or boss frame goes on while its row is off, so that a border it had hides.
+	if not (LOW_KINDS[rec.kind] or ENEMY_KINDS[rec.kind]) then
 		return
 	end
 	if not (on and LowOn(rec)) then

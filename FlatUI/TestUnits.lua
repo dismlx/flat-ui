@@ -80,8 +80,10 @@ local HOT_ON = { [2] = true, [5] = true, [12] = true }
 local DRIFT, DRIFT_BY = { 2, 10, 17 }, 0.15
 -- The power of a class that has no mana; a druid tank is in bear form.
 local POWER = { WARRIOR = "RAGE", ROGUE = "ENERGY" }
--- The colours of the player's heals over time by class (UnitHots.lua HOTS): Renew; Rejuvenation and Regrowth; Riptide.
-local HOTS = { PRIEST = { { 0.3, 0.9, 0.35 } }, DRUID = { { 0.75, 0.3, 1 }, { 0.3, 0.9, 0.35 } }, SHAMAN = { { 0.25, 0.55, 1 } } }
+-- The colours of the player's heals over time by class (UnitHots.lua HOTS): Renew, Power Word: Shield and Prayer of Mending; Rejuvenation and
+-- Regrowth; Riptide and Earth Shield.
+local HOTS = { PRIEST = { { 0.3, 0.9, 0.35 }, { 1, 1, 1 }, { 1, 0.85, 0.2 } }, DRUID = { { 0.75, 0.3, 1 }, { 0.3, 0.9, 0.35 } },
+	SHAMAN = { { 0.25, 0.55, 1 }, { 1, 0.55, 0.1 } } }
 
 local ROSTER = {}
 do
