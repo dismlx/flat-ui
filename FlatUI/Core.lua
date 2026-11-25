@@ -98,6 +98,12 @@ local ADDON_NAME, ns = ...
 -- opens every bag is on, it gives each key the player has for Toggle Backpack an override binding to Open All Bags (SetOverrideBinding, on a frame
 -- of its own, out of combat), so B opens the reagent bag too; ClearOverrideBindings takes them away when the row goes off, the player's bindings
 -- are never written, and the overrides end with the session.
+-- With Explain the stats on (StatTips.lua and StatTipsMore.lua, Item slots, on by default), Windows adds lines of its own to GameTooltip (AddLine,
+-- AddDoubleLine, then Show) after the game has written the tooltip of a row of the Character window's stats list, only while that row owns it
+-- (IsOwned, IsShown). To learn which stat a row shows it follows the Init of the rows' mixin (CharacterStatFrameScrollBoxBaseElementMixin) and
+-- the updateFunc of each stat of PAPERDOLL_STATCATEGORIES in PAPERDOLL_STATINFO with ns.FollowTable, reading only what they are given and the
+-- row's parents (GetParent), follows each row's OnEnter and OnLeave once with HookScript (which writes nothing on the row), and follows
+-- MovementSpeed_OnEnter with ns.FollowGlobal, as the game writes that row's tooltip again while it shows. It writes nothing else of the game's.
 -- Maximum camera distance, on the World and cursor page, writes the game's cameraDistanceMaxZoomFactor only when the player ticks or unticks it, out of
 -- combat: 2.6 when ticked, its text before that kept in FlatUIDB.cameraGame, and that text again (or the client's default) when unticked while
 -- the variable is still 2.6 or more. The cursor ring is a frame of the addon's own on UIParent that takes no mouse.

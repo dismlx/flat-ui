@@ -82,6 +82,8 @@ Items.lua
 ItemMarks.lua
 CharacterDurability.lua
 CharacterThorns.lua
+StatTips.lua
+StatTipsMore.lua
 UnitFrames.lua
 UnitFramePortrait.lua
 UnitFrameLevel.lua

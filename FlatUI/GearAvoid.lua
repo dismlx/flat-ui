@@ -78,6 +78,14 @@ local _, ns = ...
 -- up when they are built): a gold header only where more than one line follows, a double line a figure (the label light grey, the change green or
 -- red with its sign, the total white, ~ before an estimate), and the notes dim, joined in one line at Compact (chat.tipDetail) and one a line at
 -- Full; the table to two decimals, armor's share and damage taken to one, block value whole with commas.
+--
+-- For the stat tooltips of the Character window (StatTips.lua, 0.5.35), three small calls on the same snapshot and rules, which change nothing
+-- above: A.Sheet() gives { snap (a copy of the snapshot), cap (5 defense a level of the player's), level (the table of an enemy of the player's
+-- level, as Work makes it), boss (the table of the boss Against names, three levels above, or nil while Against names none), old } or nil and why;
+-- it asks SpellModel for a plain read first (M.Stats, whose read runs AfterRead), so the snapshot is the last plain one, and old is true in a
+-- fight, while the stats SpellModel holds are from before one, or while C_Secrets.ShouldUnitStatsBeSecret() answers true. A.Against(level) gives
+-- the level of the enemy Against names and whether it is a boss (Attacker), and A.ArmorPct(armor, attacker level) the share armor takes off, in
+-- percent (C_PaperDollInfo.GetArmorEffectiveness), or nil.
 
 local A = {}
 ns.GearAvoid = A
@@ -904,6 +912,44 @@ function A.Now()
 	local stats = M and Table(Ask(M.Stats))
 	held.now.old = InCombat() or (stats ~= nil and stats.old == true)
 	return held.now
+end
+
+-- The sheet's numbers for the stat tooltips of the Character window (header): { snap, cap, level, boss, old }, or nil and why. The stats are read
+-- anew first where the game gives them plainly, so the snapshot is the last plain read, never one of this moment's secret answers.
+function A.Sheet()
+	Register()
+	local M = Model()
+	local stats = M and Table(Ask(M.Stats))
+	local s = Snapshot()
+	if not s then
+		return nil, T.NO_STATS
+	elseif not (s.defense and s.level) then
+		return nil, T.NO_DEFENSE
+	end
+	local attacker, boss = Attacker(s.level)
+	local secret = Call(Api("C_Secrets", "ShouldUnitStatsBeSecret"))
+	local out = { snap = Copy(s), cap = s.level * K.PER_LEVEL, level = Work(s, s.level),
+		old = InCombat() or (stats ~= nil and stats.old == true) or (secret ~= nil and secret[1] == true) }
+	if boss then
+		out.boss = Work(s, attacker)
+	end
+	return out
+end
+
+-- The level of the enemy Against names for a player of this level, and whether it is a boss (Attacker); nil for no level.
+function A.Against(level)
+	if not Num(level) then
+		return nil, false
+	end
+	return Attacker(level)
+end
+
+-- The share of physical damage an armor takes off against an attacker of a level, in percent, or nil (ArmorPct).
+function A.ArmorPct(armor, attacker)
+	if not (Num(armor) and Num(attacker)) then
+		return nil
+	end
+	return ArmorPct(armor, attacker)
 end
 
 -- Whether avoidance shows: Avoidance (chat.gearAvoid) at Always, or at For tanks while ns.PlayerRole's first answer is tank.

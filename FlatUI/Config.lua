@@ -1566,6 +1566,9 @@ ns.PAGES = {
 			tip = "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below. Point at it for each item, lowest first, and about what a repair costs." },
 		{ key = "thorns", kind = "bool", default = true, label = "Show thorns",
 			tip = "The damage an attacker takes each time it strikes you in melee, one total under the right column of slots: Thorns, Retribution Aura, Fire Shield, items and shield spikes (on a block). Point at it for each source and school." },
+		-- StatTips.lua and StatTipsMore.lua: plain lines after the game's own in the tooltip of each stat of the Character window's stats list.
+		{ key = "statTips", kind = "bool", default = true, label = "Explain the stats", changed = "StatTipsChanged",
+			tip = "Point at a stat on the Character window for a few plain lines under the game's own, in your numbers now: what it does for you, against an enemy of your level and a boss three levels above (from level 60, or as Against on the Gear comparison page names one), and what to aim for. Defense shows what 100 melee swings of each do to you (missed, dodged, parried, blocked, crits, crushing blows and normal hits) and how far you are from 440 defense, for no crits from a raid boss, and from 100% avoided, for no crushing blows. Block says how much one block stops and where it comes from; armor and resistances what share of the damage they take off. In a fight, the numbers from before it." },
 	},
 	-- Bags.lua and the Bags*.lua files: a bag window and a bank window of Flat UI's own in place of the game's, with sections, a search and the bags
 	-- and bank of your other characters. On by default for every character since 0.5.19 (a profile saved before then with every module that is on
