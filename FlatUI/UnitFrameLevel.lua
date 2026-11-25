@@ -4,6 +4,11 @@ local ADDON_NAME, ns = ...
 -- size of the level are in UnitFrames.lua, in the functions that lay out and write the name row; a frame that shows no picture of Flat UI's has its
 -- level at the end of the row there. On a round picture the number moves in from the corner of the square onto the circle. This file adds its work after
 -- the steps of that file through ns.UnitFrameExtra: a part that stops on errors counts as off here, and every function can run twice with the same result.
+-- As you level (PLAYER_LEVEL_UP, read 0.2 seconds later, once the row has written the new level from UnitEffectiveLevel), the level of the player frame
+-- pops: the number in the name row, and on the portrait with On the portrait, grows to 180% and settles back over 0.45 seconds while it fades up from
+-- 40%, from its own end of the row (the right with End of the name row, the left with Before the name) or the portrait's corner, as the experience bar
+-- lights in gold (Hud.lua). It is a Scale and an Alpha animation of a font string of the addon's own, made once, so it plays in a fight too; nothing
+-- plays on a level that does not show, and no row of its own turns it on or off.
 
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
@@ -124,3 +129,87 @@ table.insert(X.after.colour, { part = PART, fn = Update })
 table.insert(X.after.apply, { part = PART, fn = Update })
 table.insert(X.after.layout, { part = PART, fn = Update })
 table.insert(X.after.picture, { part = PART, fn = Update })
+
+-- The pop as you level --------------------------------------------------------------------------------------------------------------------------
+
+-- The wait after PLAYER_LEVEL_UP, the size the number pops to, the seconds it settles over and the opacity it fades up from.
+local POP = { wait = 0.2, scale = 1.8, time = 0.45, alpha = 0.4 }
+-- The pop of each font string, made once; false where the client will not make it.
+local pops = setmetatable({}, { __mode = "k" })
+
+-- A Scale animation from POP.scale back to whole (a font string scales by its vertices, as PlateQuest.lua pops its kill count) and an Alpha one from
+-- POP.alpha to full, together. Its origin is set as it plays.
+local function PopOf(text)
+	local pop = pops[text]
+	if pop ~= nil then
+		return pop
+	end
+	pop = false
+	local ok, group, grow = pcall(function()
+		local modes = Enum and Enum.FontStringScaleAnimationMode
+		pcall(text.SetScaleAnimationMode, text, modes and modes.Vertex or 1)
+		local made = text:CreateAnimationGroup()
+		ns.Own[made] = true
+		local scale = made:CreateAnimation("Scale")
+		ns.Own[scale] = true
+		scale:SetScaleFrom(POP.scale, POP.scale)
+		scale:SetScaleTo(1, 1)
+		scale:SetDuration(POP.time)
+		pcall(scale.SetSmoothing, scale, "OUT")
+		local fade = made:CreateAnimation("Alpha")
+		ns.Own[fade] = true
+		fade:SetFromAlpha(POP.alpha)
+		fade:SetToAlpha(1)
+		fade:SetDuration(POP.time)
+		return made, scale
+	end)
+	if ok and type(group) == "table" and type(grow) == "table" then
+		pop = { group = group, grow = grow }
+	end
+	pops[text] = pop
+	return pop
+end
+
+-- Pops a number that shows, from the point origin of it.
+local function Pop(text, origin)
+	if text == nil then
+		return
+	end
+	local okShown, shown = pcall(text.IsVisible, text)
+	if not okShown or ns.IsSecret(shown) or shown ~= true then
+		return
+	end
+	local pop = PopOf(text)
+	if not pop then
+		return
+	end
+	pcall(pop.grow.SetOrigin, pop.grow, origin, 0, 0)
+	pcall(pop.group.Stop, pop.group)
+	pcall(pop.group.Play, pop.group)
+end
+
+-- The level of the player frame as you level: in the name row, from the end the row puts it at, and on the portrait, from its corner.
+local function LevelUp()
+	local rec = X.known(_G.PlayerFrame)
+	if rec == nil or ns.PartStopped(KEY, PART) then
+		return
+	end
+	local row = rec.row
+	if row ~= nil and row.level ~= nil and row.levelOn == true then
+		local ok, justify = pcall(row.level.GetJustifyH, row.level)
+		Pop(row.level, ok and justify == "LEFT" and "LEFT" or "RIGHT")
+	end
+	local pic = rec.pic
+	if pic ~= nil and pic.levelText ~= nil then
+		Pop(pic.levelText, "BOTTOMRIGHT")
+	end
+end
+
+ns.AddEvent(KEY, "PLAYER_LEVEL_UP", function()
+	local function Run()
+		X.run(PART, LevelUp)
+	end
+	if not (type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, POP.wait, Run)) then
+		Run()
+	end
+end)

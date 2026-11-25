@@ -6,8 +6,8 @@ local ADDON_NAME, ns = ...
 -- view of the setup it draws the draft. Nothing here calls a module or the draft layer. Every number shown is fixed (health 7,000 of 10,000, mana 4,200 of 6,000),
 -- since the real ones are secret values (AO/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:1526-1529); the player's power is that of their class at rest,
 -- so a warrior's rage shows empty and a rogue's energy full. While Low health border is on, Mara (the first party member) and the fifth raid cell are at 15%,
--- and with Also on target, focus and boss frames the target (Defias Pillager) too, so that the border shows on them while the limit is above that
--- (HealthColour.lua); with Pulse the low health border it beats as the live one does. The bars, picture, name row, level, text and icons follow UnitFrames.lua, UnitFrameLevel.lua,
+-- and with Also on target, focus, boss and target of target frames the target (Defias Pillager) too, so that the border shows on them while the limit
+-- is above that (HealthColour.lua): Low health below for Mara and the raid cell, Enemies below for a hostile target, focus, boss or target of target; with Pulse the low health border it beats as the live one does. The bars, picture, name row, level, text and icons follow UnitFrames.lua, UnitFrameLevel.lua,
 -- UnitFrameLooks.lua, UnitFramePortrait.lua, UnitFrameCells.lua, UnitText.lua, UnitParts.lua and UnitExtras.lua, which style the game's frames; the layout is this
 -- file's own, since a module can style only the game's frames.
 -- With Frame style Separate parts (the default, and what any value but One frame means) each part has its own border and background. With One frame every
@@ -23,7 +23,14 @@ local ADDON_NAME, ns = ...
 -- ns.DrawUnits, at the end of the file, gives the same painters to the stand-ins of test mode (TestUnits.lua): a frame made for a kind and painted
 -- for a sample of its own, a raid cell of any size, and the marks those have in test mode (offline, the dispel border and type icon, raid markers,
 -- leader and assistant icons, heal over time squares, the game's aura icons on a cell), which only its frames are made with, but for the dispel border,
--- its type icon and the heal over time squares of a party frame, which the setup's party frames draw too (Mara's Magic debuff, Bex's two squares).
+-- its type icon and the heal over time squares of a party frame, which the setup's party frames draw too (Mara's Magic debuff, Bex's squares in the
+-- colours and places of your class's heals over time, or two sample squares for a class with none). The setup's party frames show Mara's Star with
+-- Raid marker on party frames, and its raid cells the marks of their rows: Aria's Skull (Raid marker on raid frames), her leader crown and Dru's
+-- assistant icon (Leader and assistant icons on raid frames), and Cole as your target, with the border of Border for your target in the game's white or
+-- Target border colour (UnitFrames.lua Colour).
+-- Right of the setup's pet (Wolf), while Pet target frame is on, the pet target frame of UnitPetTarget.lua is drawn as test mode draws its sample:
+-- Training Dummy at 65% in the hostile colour, Pet target width wide, a Skull left of it with Raid marker on target, focus, boss and pet target frames,
+-- and its border in Not your target colour with Border while it is not your target.
 
 local KEY = "unitframes"
 local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
@@ -111,9 +118,9 @@ local KIND = {
 -- The frames whose text sizes are those of the player (UnitFrames.lua:114).
 local LARGE = { player = true, target = true, focus = true }
 -- The frames that take the low health border (HealthColour.lua LOW_KINDS): your own and your pet's, your party's and their pets', and your raid's; and
--- those that take it too with Also on target, focus and boss frames (HealthColour.lua ENEMY_KINDS).
+-- those that take it too with Also on target, focus, boss and target of target frames (HealthColour.lua ENEMY_KINDS).
 local LOW = { player = true, pet = true, party = true, partypet = true, raid = true }
-local ENEMY_LOW = { target = true, focus = true, boss = true }
+local ENEMY_LOW = { target = true, focus = true, boss = true, tot = true }
 
 -- Helpers ---------------------------------------------------------------------------------------------------------------------------------
 
@@ -573,13 +580,15 @@ local function MakeLow(root, bar, levels)
 	return { frame = frame, outline = outline, beat = made and group or nil }
 end
 
--- True while a styled frame of a kind that takes it shows the border: the row on, the unit neither dead nor offline, and its health under the limit.
+-- True while a styled frame of a kind that takes it shows the border: the row on, the unit neither dead nor offline, and its health under the limit:
+-- Enemies below for a hostile target, focus, boss or target of target, Low health below for any other (HealthColour.lua PaintLow).
 local function LowShown(on, g, s, hp)
-	return on and g.lowHealth and not s.dead and not s.offline and hp * 100 < g.lowHealthAt
+	local limit = (ENEMY_LOW[s.kind] and s.react == HOSTILE) and g.lowTargetAt or g.lowHealthAt
+	return on and g.lowHealth and not s.dead and not s.offline and hp * 100 < limit
 end
 
--- True for a kind of frame that takes the border with the settings g: your own and your group's always, the target, focus and boss frames with Also on
--- target, focus and boss frames.
+-- True for a kind of frame that takes the border with the settings g: your own and your group's always, the target, focus, boss and target of target
+-- frames with Also on target, focus, boss and target of target frames.
 local function LowKind(kind, g)
 	return LOW[kind] == true or (g.lowTarget == true and ENEMY_LOW[kind] == true)
 end
@@ -704,6 +713,36 @@ local function PaintMarks(m, bar, root, on, dispel, typeIcon, hots)
 	end
 end
 
+-- The pet target frame ------------------------------------------------------------------------------------------------------------------
+
+-- The pet target frame of the setup's pet (UnitPetTarget.lua): its height, the room between its edge and its words, the room left of it, which holds its
+-- raid marker, and the sample of test mode (Training Dummy at 65%, with a Skull, UnitPetTarget.lua SAMPLE) in the game's hostile colour.
+local PET_TARGET = { height = 20, inset = 4, gap = 22, name = "Training Dummy", share = 0.65, marker = 8, hostile = { 1, 0, 0 } }
+
+-- The frames of the pet target frame on the pet's root: the bar with its border, background and fill, its name and percent, the raid marker left of it,
+-- and a frame over it with edges of its own for Border while it is not your target.
+local function MakePetTarget(root)
+	local p = { frame = Above(Frame(root), root, 2) }
+	p.outline = ns.Outline(p.frame, p.frame)
+	ns.SetOutlineArea(p.outline, KEY)
+	p.fill = Tex(p.frame, "ARTWORK", 0)
+	p.top = Above(Frame(p.frame), root, 4)
+	p.top:SetAllPoints(p.frame)
+	p.name, p.pct = Text(p.top, "GameFontHighlightSmall"), Text(p.top, "GameFontHighlightSmall")
+	p.name:SetJustifyH("LEFT")
+	p.pct:SetJustifyH("RIGHT")
+	p.marker = Tex(p.top, "OVERLAY", 3)
+	p.warn = Above(Frame(root), root, 4)
+	p.warn:SetAllPoints(p.frame)
+	p.warnOutline = ns.Outline(p.warn, p.warn)
+	if p.warnOutline then
+		ns.SetOutlineArea(p.warnOutline, KEY)
+	end
+	p.frame:Hide()
+	p.warn:Hide()
+	return p
+end
+
 -- Samples ---------------------------------------------------------------------------------------------------------------------------------
 
 -- The name, level and class of the player, which are plain values for the player's own unit.
@@ -726,8 +765,22 @@ local function Me()
 	return name or "Brennan", level or 20, class or "SHAMAN"
 end
 
--- The colours of the two heals over time of yours on Bex in the setup's drawings: Renew green and Rejuvenation purple (UnitHots.lua HOTS).
+-- The colours of the heals over time of yours on Bex in the setup's drawings: those of your class, in their places (UnitHots.lua HOTS, through
+-- ns.UnitFrameExtra.hotColours), at most the four squares MakeMarks makes; a class without one keeps these two, Renew green and Rejuvenation purple,
+-- so Square corner and Square size still show something.
 local SAMPLE_HOTS = { { 0.3, 0.9, 0.35 }, { 0.75, 0.3, 1 } }
+
+local function SampleHots(class)
+	local X = ns.UnitFrameExtra
+	local colours = type(X) == "table" and type(X.hotColours) == "function" and X.hotColours(class) or nil
+	if type(colours) ~= "table" or #colours == 0 then
+		return SAMPLE_HOTS
+	end
+	while #colours > 4 do
+		colours[#colours] = nil
+	end
+	return colours
+end
 -- The party: five fixed names, one per class colour, each with a role.
 local PARTY = { { "Mara", "PALADIN", "tank" }, { "Bex", "MAGE", "healer" }, { "Cole", "HUNTER", "damage" }, { "Dru", "DRUID", "damage" }, { "Fay", "ROGUE", "damage" } }
 local PETS = { "Cat", "Boar", "Owl", "Wolf", "Bear" }
@@ -743,7 +796,7 @@ local function Sample(id)
 		return { kind = "player", cap = "Player", name = name, level = level, class = class, player = true, react = FRIENDLY, lcol = GOLD, state = COMBAT, leader = true,
 			flag = "PvP", timer = "3:05", own = true }
 	elseif id == "target" then
-		-- low: its health while Low health border and Also on target, focus and boss frames are on (E.bars).
+		-- low: its health while Low health border and Also on target, focus, boss and target of target frames are on (E.bars).
 		return { kind = "target", cap = "Target", name = "Defias Pillager", level = 18, react = HOSTILE, lcol = { 1, 0.5, 0.25 }, rank = "elite", marker = 8,
 			face = "MAGE", auras = { { "buff", "none", true }, { "buff", "none" }, { "debuff", "magic" }, { "debuff", "poison" } }, low = 0.15 }
 	elseif id == "focus" then
@@ -765,11 +818,11 @@ local function Sample(id)
 		local member = PARTY[number]
 		local debuffed = number == 1 or number == 3
 		-- low: Mara's health while Low health border is on, so that the border shows (E.bars). dispel and hots: Mara's Magic debuff you can dispel and
-		-- the heals over time of yours on Bex (PaintMarks).
+		-- the heals over time of yours on Bex (PaintMarks). marker: Mara's Star, with Raid marker on party frames (E.icons).
 		return { kind = "party", cap = number == 1 and "Party" or nil, name = member[1], level = 19, class = member[2], player = true, react = FRIENDLY, role = member[3],
 			leader = number == 1, number = number, away = number == 4, auras = debuffed and { { "debuff", number == 1 and "magic" or "poison", false, 3, "12" } } or nil,
-			debuff = number == 1 and TYPE.magic or nil, low = number == 1 and 0.15 or nil, dispel = number == 1 and "magic" or nil,
-			hots = number == 2 and SAMPLE_HOTS or nil }
+			debuff = number == 1 and TYPE.magic or nil, low = number == 1 and 0.15 or nil, dispel = number == 1 and "magic" or nil, marker = number == 1 and 1 or nil,
+			hots = number == 2 and SampleHots(class) or nil }
 	end
 	number = tonumber(id:match("^partypet(%d)$"))
 	if number then
@@ -842,6 +895,10 @@ function E.make(stage, id, given)
 	if sample.kind == "party" then
 		o.marks = MakeMarks(root)
 	end
+	-- The pet target frame right of the setup's pet (E.petTarget); test mode draws its own (UnitPetTarget.lua).
+	if sample.kind == "pet" and given == nil then
+		o.petTarget = MakePetTarget(root)
+	end
 	local row = Above(Frame(root), root, 3)
 	o.row = row
 	o.rBase, o.rGrad, o.rFill = Tex(row, "BACKGROUND", -8), Tex(row, "BACKGROUND", 0), Tex(row, "BACKGROUND", 0)
@@ -876,7 +933,8 @@ function E.make(stage, id, given)
 	o.parts = { root = root, body = o.box, pic = o.pic, health = o.health, power = o.power, row = row, name = o.name, level = o.level, healthText = o.healthText,
 		powerText = o.powerText, pred = o.pred, shield = o.shield, absorb = o.absorb, kmark = o.kmark, kword = o.kword, kline = o.rLine, plate = o.plateIcon,
 		flag = o.flag, leader = o.leader, role = o.role, marker = o.marker, attack = o.attack, happy = o.happy, dead = o.deadText, aura = o.auras[1] and o.auras[1].frame,
-		count = o.auras[1] and o.auras[1].count, time = o.auras[1] and o.auras[1].time, picLevel = o.picLevel, timer = o.pvpTimer, shadow = o.shadow }
+		count = o.auras[1] and o.auras[1].count, time = o.auras[1] and o.auras[1].time, picLevel = o.picLevel, timer = o.pvpTimer, shadow = o.shadow,
+		petTarget = o.petTarget and o.petTarget.frame }
 	return o
 end
 
@@ -941,6 +999,7 @@ local function Settings(root)
 	g.t = ns.Pixels(root, ns.Get("general.thickness"))
 	g.lowHealth, g.lowHealthAt = Get("lowHealth") == true, tonumber(Get("lowHealthAt")) or 20
 	g.lowTarget, g.lowHealthPulse = Get("lowHealthTarget") == true, Get("lowHealthPulse") == true
+	g.lowTargetAt = tonumber(Get("lowHealthTargetAt")) or 20
 	-- Frame style: One frame only while it says One frame; any other value, or none, is Separate parts (UnitFrames.lua FRAME.want). The gap of One frame is
 	-- Border thickness and Space between parts (2 px while the row is not there), between the parts and round them (UnitFrames.lua FRAME.gap).
 	g.joined = Get("frameStyle") == "one"
@@ -1278,7 +1337,7 @@ function E.bars(o, g, L)
 	local size = L.size
 	-- The player's power at rest (REST): its colour, how full it is, and numbers to match. Every other frame shows mana at 70%, or the health, power
 	-- and power type a sample of test mode gives (s.health, s.power, s.powerType, shares of 1).
-	-- A sample with `low` has that health while Low health border is on (the target's with Also on target, focus and boss frames too), so that the
+	-- A sample with `low` has that health while Low health border is on (the target's with Also on target, focus, boss and target of target frames too), so that the
 	-- border shows.
 	local given = s.health or (L.on and g.lowHealth and (s.kind ~= "target" or g.lowTarget) and s.low) or nil
 	local hp, healthNumbers = given or FRACTION, given and Numbers(HEALTH.max, given) or HEALTH
@@ -1807,6 +1866,71 @@ function E.auras(o, g, L)
 end
 
 -- Draws one frame at the top left corner of its root. Sets o.width and o.height.
+-- The pet target frame right of the pet's bars while Pet target frame is on, as test mode draws its sample (UnitPetTarget.lua Children, Paint and
+-- SampleFill): Pet target width units wide, the bar at 65% in the hostile colour (the Colours page's own with Custom reaction colours) in the fill, border,
+-- background and Corners of the unit frames, Training Dummy in the name rows' face and 65% in the bar text rows', a Skull left of it with Raid marker on
+-- target, focus, boss and pet target frames, and with Border while it is not your target its border in Not your target colour. Returns the right edge of
+-- the frame in units of the pet's root, or nil while it is off.
+function E.petTarget(o, g, L)
+	local p = o.petTarget
+	local shown = g.enabled and Get("petTarget") == true
+	p.frame:SetShown(shown)
+	p.warn:SetShown(shown and Get("petTargetWarn") == true)
+	if not shown then
+		return nil
+	end
+	local width = tonumber(Get("petTargetWidth"))
+	width = width and width > 0 and width or 120
+	local height, radius = PET_TARGET.height, g.radius
+	local x = L.width + PET_TARGET.gap
+	local y = math.max(0, L.healthTop + (L.size.health - height) / 2)
+	Box(p.frame, o.root, x, y, width, height)
+	EdgePaint(p.outline, true, g.backdrop, nil, nil, true)
+	Round(p.outline, radius, L.t)
+	local r, gr, b = PET_TARGET.hostile[1], PET_TARGET.hostile[2], PET_TARGET.hostile[3]
+	if ns.Get("general.reactionOwn") == true then
+		r, gr, b = ns.Colour("general.reactionHostile")
+	end
+	r, gr, b = Mute(r, gr, b)
+	Stretch(p.fill, p.frame, 0, width * PET_TARGET.share, height)
+	Fill(p.fill, FileOf("health"), r, gr, b, 1)
+	CutFill(p.frame, p.fill, radius)
+	local formats = ns.UnitFrameExtra and ns.UnitFrameExtra.formats
+	p.pct:SetText(((formats and formats.pct) or "%.0f%%"):format(PET_TARGET.share * 100))
+	p.pct:ClearAllPoints()
+	p.pct:SetPoint("RIGHT", p.frame, "RIGHT", -PET_TARGET.inset, 0)
+	p.name:SetText(PET_TARGET.name)
+	p.name:ClearAllPoints()
+	p.name:SetPoint("LEFT", p.frame, "LEFT", PET_TARGET.inset, 0)
+	p.name:SetPoint("RIGHT", p.pct, "LEFT", -PET_TARGET.inset, 0)
+	local nameSpec = { percent = g.nameSize, flags = FLAGS[g.nameOutline], face = g.nameFace ~= "default" and ns.FontFile(g.nameFace) or nil }
+	local pctSpec = { percent = 100, flags = FLAGS[g.barTextOutline], face = g.barTextFace ~= "default" and ns.FontFile(g.barTextFace) or nil }
+	if g.barTextOwn then
+		pctSpec.r, pctSpec.g, pctSpec.b = ns.Colour(KEY .. ".barTextColour")
+	end
+	Style(p.name, nameSpec)
+	Style(p.pct, pctSpec)
+	p.marker:SetShown(g.raidMarker)
+	if g.raidMarker then
+		local index = PET_TARGET.marker - 1
+		p.marker:SetTexture(MARKER)
+		p.marker:SetVertexColor(1, 1, 1, 1)
+		p.marker:SetTexCoord((index % 4) * 0.25, (index % 4) * 0.25 + 0.25, math.floor(index / 4) * 0.25, math.floor(index / 4) * 0.25 + 0.25)
+		p.marker:ClearAllPoints()
+		p.marker:SetSize(height - 2, height - 2)
+		p.marker:SetPoint("RIGHT", p.frame, "LEFT", -2, 0)
+	end
+	if Get("petTargetWarn") == true and p.warnOutline then
+		local wr, wg, wb = ns.Colour(KEY .. ".petTargetWarnColour")
+		ns.SetOutline(p.warnOutline, true, false)
+		ns.SetOutlineColour(p.warnOutline, wr, wg, wb)
+		ns.SetOutlineEdges(p.warnOutline, true)
+		ns.SetOutlineThickness(p.warnOutline, ns.Get("general.thickness"))
+		Round(p.warnOutline, LowRadius(p.outline, radius), L.t)
+	end
+	return x + width
+end
+
 function E.draw(o, g)
 	local L = Layout(o, g)
 	o.root:SetSize(L.width, L.height)
@@ -1861,6 +1985,11 @@ function E.draw(o, g)
 	o.g = g
 	o.width, o.height = L.width, L.height
 	o.root:SetSize(L.width, L.height)
+	-- The pet target frame right of the pet widens its place in the scene, so the next frame moves over.
+	local right = o.petTarget and E.petTarget(o, g, L)
+	if right then
+		o.width = math.max(o.width, right)
+	end
 	o.layout = L
 	return k
 end
@@ -1938,7 +2067,12 @@ local CELL_MARK = { marker = 14, lead = 10, leadIn = 3, leadDown = 16, aura = 11
 	leader = "UI-HUD-UnitFrame-Player-Group-LeaderIcon", leaderFile = "Interface\\GroupFrame\\UI-Group-LeaderIcon",
 	assistant = "Interface\\GroupFrame\\UI-Group-AssistantIcon" }
 
--- The frames of one raid cell on a parent. extra: the marks of test mode as well (ns.DrawUnits.Cell), which the setup's cells do not have.
+-- The game's white of the selection highlight it lights on the raid frame of your target (Shared/CompactUnitFrame.lua:893-905), which Flat UI gives the
+-- cell's health bar border with Border for your target at As the game has it (UnitFrames.lua Colour).
+local SELECT = { 1, 1, 1 }
+
+-- The frames of one raid cell on a parent. extra: the marks of test mode as well (ns.DrawUnits.Cell); "marks" for the setup's cells, which have the
+-- raid marker, the leader and assistant icons and the dispel and heal over time marks, but not the game's aura icons.
 local function MakeCell(parent, extra)
 	local cell = {}
 	cell.frame = Frame(parent)
@@ -1961,7 +2095,7 @@ local function MakeCell(parent, extra)
 		cell.marks = MakeMarks(cell.frame)
 		cell.marker, cell.lead, cell.gameType = Tex(cell.marks.frame, "OVERLAY", 7), Tex(cell.marks.frame, "OVERLAY", 6), Tex(cell.marks.frame, "OVERLAY", 6)
 		cell.icons = {}
-		for index = 1, 2 * CELL_MARK.auras do
+		for index = 1, extra == true and 2 * CELL_MARK.auras or 0 do
 			cell.icons[index] = ns.IconNew(cell.marks.frame)
 		end
 	end
@@ -1974,17 +2108,18 @@ function R.make(stage, count, columns)
 	o.sample = { cap = "Raid" }
 	for index = 1, count do
 		local data = RAID[index]
-		local cell = MakeCell(o.root)
+		local cell = MakeCell(o.root, "marks")
 		cell.data, cell.index = data, index
-		-- The fixed sample of the setup: the seventh is dead, the eighth out of range and the third has threat; the fifth is low on health while Low
-		-- health border is on.
+		-- The fixed sample of the setup: the seventh is dead, the eighth out of range and the third has threat and is your target; the fifth is low on
+		-- health while Low health border is on; the first leads with a Skull on, and the fourth assists.
 		cell.sample = { name = data[1], class = data[2], role = data[3], dead = index == 7, away = index == 8, threat = index == 3,
-			low = index == 5 and 0.15 or nil }
+			low = index == 5 and 0.15 or nil, target = index == 3, marker = index == 1 and 8 or nil, leader = index == 1, assist = index == 4 }
 		o.cells[index] = cell
 	end
-	local first = o.cells[1]
+	local first, aimed = o.cells[1], o.cells[3]
 	o.parts = { root = o.root, cell = first and first.frame, health = first and first.health, power = first and first.power, name = first and first.name,
-		status = first and first.status, role = first and first.role }
+		status = first and first.status, role = first and first.role, marker = first and first.marker, lead = first and first.lead,
+		target = aimed and aimed.health }
 	return o
 end
 
@@ -2036,7 +2171,7 @@ local function CellMarks(cell, s, width, height, g, on, powerHeight)
 	local styled = on and g.auras
 	local crop = styled and g.auraCrop / 100 or 0
 	local up = CELL_MARK.auraUp + powerHeight
-	for index, icon in ipairs(cell.icons) do
+	for index, icon in ipairs(cell.icons or {}) do
 		local buff = index > CELL_MARK.auras
 		local slot = buff and index - CELL_MARK.auras or index
 		local aura = buff and (s.buffs or 0) >= slot or (not buff and s.debuffs and s.debuffs[slot])
@@ -2093,7 +2228,16 @@ local function PaintCell(cell, s, width, height, g)
 		r, gr, b = 0.5, 0.5, 0.5
 	end
 	local file = on and g.flat and FileOf("health") or ns.BarFile("game")
-	EdgePaint(cell.hOutline, on, g.backdrop, threat and g.threat and on and THREAT or nil, nil, true)
+	-- Your target (the setup's Cole): its border in the game's white with Border for your target at As the game has it, in Target border colour with Own
+	-- colour, over threat; with Off the threat colour shows (UnitFrames.lua Colour).
+	local edge = threat and g.threat and on and THREAT or nil
+	local aim = s.target and on and Get("targetBorder") or "off"
+	if aim == "own" then
+		edge = { ns.Colour(KEY .. ".targetColour") }
+	elseif aim ~= "off" then
+		edge = SELECT
+	end
+	EdgePaint(cell.hOutline, on, g.backdrop, edge, nil, true)
 	Round(cell.hOutline, on and g.radius or nil, t)
 	cell.inner = width - 2 * inset
 	local hp = s.health or (on and g.lowHealth and s.low) or FRACTION
@@ -2188,7 +2332,8 @@ local MARK = {
 	backdrop = { "player", "body" }, flat = { "player", "health" }, healthColour = { "player", "health" }, healthTexture = { "player", "health" },
 	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "boss", "health" },
 	lowHealth = { "party1", "health" }, lowHealthAt = { "party1", "health" }, lowHealthColour = { "party1", "health" }, hoverHighlight = { "player", "health" },
-	lowHealthTarget = { "target", "health" }, lowHealthPulse = { "party1", "health" }, dispelBorder = { "party1", "health" }, dispelIcon = { "party1", "health" },
+	petTarget = { "pet", "petTarget" }, petTargetWidth = { "pet", "petTarget" }, petTargetWarn = { "pet", "petTarget" }, petTargetWarnColour = { "pet", "petTarget" },
+	lowHealthTarget = { "target", "health" }, lowHealthTargetAt = { "target", "health" }, lowHealthPulse = { "party1", "health" }, dispelBorder = { "party1", "health" }, dispelIcon = { "party1", "health" },
 	hotSquares = { "party2", "health" }, hotCorner = { "party2", "health" }, hotSize = { "party2", "health" },
 	healPrediction = { "player", "pred" }, absorbShield = { "player", "shield" }, healAbsorb = { "player", "absorb" }, lookOwn = { "player", "health" },
 	lookBorder = { "player", "health" }, lookBack = { "player", "health" }, lookBackAlpha = { "player", "health" },
@@ -2221,6 +2366,8 @@ local MARK = {
 	bossName = { "boss", "name" }, bossNameFit = { "boss", "name" }, bossPowerText = { "boss", "powerText" }, bossLevel = { "boss", "level" }, bossHealthBy = { "boss", "health" }, bossHealthText = { "boss", "healthText" },
 	bossPowerBar = { "boss", "power" },
 	raidRangeAlpha = { "raid", "cell" }, raidRoleIcon = { "raid", "role" }, raidName = { "raid", "name" }, raidStatusText = { "raid", "status" },
+	raidFrameMarker = { "raid", "marker" }, raidLeaderIcon = { "raid", "lead" }, targetBorder = { "raid", "target" }, targetColour = { "raid", "target" },
+	partyFrameMarker = { "party1", "marker" },
 }
 
 -- Builds a scene: the frames of a list of items on a root frame, with a caption under each. make: the function for an item that is not a unit frame.

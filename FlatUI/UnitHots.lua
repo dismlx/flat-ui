@@ -22,9 +22,12 @@ local _, ns = ...
 -- the player (or the player's pet) cast on the member (AuraUtil.lua:272-274) and carries no secret predicate (UnitAuraDocumentation.lua:304-322);
 -- GetAuraDataBySlot is withheld while auras are restricted (SecretWhenUnitAuraRestricted, UnitAuraDocumentation.lua:227-243): in a fight, an
 -- encounter, a challenge mode or a PvP match, unless the game flags the spell as never secret (SecretPredicatesDocumentation.lua:80-82). A withheld
--- aura, or one whose spell ID is withheld, shows nothing and is never read further; the member is read again when the fight or the restriction ends
+-- aura, or one whose spell ID is withheld, is never read further; the member is read again when the fight or the restriction ends
 -- (PLAYER_REGEN_ENABLED, and ADDON_RESTRICTION_STATE_CHANGED with Inactive, RestrictedActionsDocumentation.lua:96-107), as UnitGroupMarks.lua reads
--- its debuffs again. A square read before the fight stays while the member's auras do not change, since each change sends UNIT_AURA. Each frame
+-- its debuffs again. The number of slots GetAuraSlots gives is a plain answer too, so in a fight, where the game hides which aura is which, the squares
+-- of the last plain read stay while the member has at least as many auras of yours as then: a Sunder, a debuff or another healer's buff changes
+-- nothing. When the number drops one of yours ended, and as the game does not say which, the squares it hides go and only those read plainly now
+-- stay; a new heal over time cast in the fight waits for its end. Each frame
 -- hears UNIT_AURA for its own unit on a frame of the addon's own (RegisterUnitEvent), whose payload is never read; a burst is read once, a moment
 -- after the first. A frame the game hid hears nothing until the game draws it again, through the same calls UnitGroupMarks.lua follows.
 --
@@ -53,9 +56,22 @@ local HOTS = {
 		{ id = 408124, colour = { 1, 0.85, 0.2 }, word = "yellow" }, { id = 408120, colour = { 0.2, 0.8, 0.9 }, word = "teal" } },
 	SHAMAN = { { id = 408521, colour = { 0.25, 0.55, 1 }, word = "blue" }, { id = 408514, colour = { 1, 0.55, 0.1 }, word = "orange" } },
 }
+-- The colours of the squares of a class file in the order of their places, for the setup's drawing of Bex (SetupDrawUnits.lua Sample), or nil for a
+-- class with none. A new list each time, so the drawing cannot change HOTS.
+function X.hotColours(class)
+	local list = HOTS[class]
+	if list == nil then
+		return nil
+	end
+	local colours = {}
+	for index, spec in ipairs(list) do
+		colours[index] = { spec.colour[1], spec.colour[2], spec.colour[3] }
+	end
+	return colours
+end
 -- The point of the health bar each Square corner puts the first square on, and the signs of its offsets across and up, which keep the row inside.
 local CORNERS = { tl = { "TOPLEFT", 1, -1 }, tr = { "TOPRIGHT", -1, -1 }, bl = { "BOTTOMLEFT", 1, 1 }, br = { "BOTTOMRIGHT", -1, 1 } }
-local NOTE_KEPT = "Unit frames: Heal over time squares: the game keeps your auras on a member from addons now, so its squares wait for the end of the fight."
+local NOTE_KEPT = "Unit frames: Heal over time squares: the game keeps your auras on a member from addons now, so a square read before stays until one of your buffs there ends, and a new one waits for the end of the fight."
 
 local IsSecret = ns.IsSecret
 
@@ -163,13 +179,14 @@ local function KindOfSlot(unit, slot)
 end
 
 -- The slots of one answer of GetAuraSlots: its continuation token first, then the slots (AuraUtil.lua:93-114). Marks the heals over time found and
--- returns the token to ask with again (nil when the answer was the last) and whether one aura was withheld.
+-- returns the token to ask with again (nil when the answer was the last), whether one aura was withheld, and how many slots the answer gave, nil when
+-- the game gave no answer. The number of slots is plain: the call carries no secret predicate.
 local function Batch(found, unit, ok, token, ...)
 	if not ok or IsSecret(token) then
-		return nil, true
+		return nil, true, nil
 	end
-	local withheld = false
-	for index = 1, select("#", ...) do
+	local withheld, count = false, select("#", ...)
+	for index = 1, count do
 		local kind = KindOfSlot(unit, (select(index, ...)))
 		if kind == nil then
 			withheld = true
@@ -180,21 +197,23 @@ local function Batch(found, unit, ok, token, ...)
 	if not ns.Finite(token) then
 		token = nil
 	end
-	return token, withheld
+	return token, withheld, count
 end
 
--- The heals over time of the player's on a unit, by place, and whether the game withheld any of the player's auras there.
+-- The heals over time of the player's on a unit, by place, whether the game withheld any of the player's auras there, and how many auras of the
+-- player's the unit has (nil when the game would not say).
 local function Scan(unit)
-	local found, withheld, token = {}, false, nil
+	local found, withheld, token, count = {}, false, nil, 0
 	for _ = 1, MOST_ASKS do
-		local more
-		token, more = Batch(found, unit, pcall(C_UnitAuras.GetAuraSlots, unit, FILTER, nil, token))
+		local more, slots
+		token, more, slots = Batch(found, unit, pcall(C_UnitAuras.GetAuraSlots, unit, FILTER, nil, token))
 		withheld = withheld or more
+		count = count and slots and count + slots or nil
 		if token == nil then
 			break
 		end
 	end
-	return found, withheld
+	return found, withheld, count
 end
 
 -- A line for /flatui status while a frame waits for auras the game withheld: the frames it holds for.
@@ -302,8 +321,20 @@ local function Draw(h, found)
 end
 
 local function Clear(h)
-	h.withheld = nil
+	h.withheld, h.kept, h.count = nil, nil, nil
 	Draw(h, {})
+end
+
+-- The heals over time found, with those kept from the last plain read where the game withheld an aura.
+local function Merged(found, kept)
+	local all = {}
+	for index in pairs(kept) do
+		all[index] = true
+	end
+	for index in pairs(found) do
+		all[index] = true
+	end
+	return all
 end
 
 local Hear
@@ -320,9 +351,22 @@ local function Read(rec)
 		Say(rec, false)
 		return
 	end
-	local found, withheld = Scan(h.unit)
+	local found, withheld, count = Scan(h.unit)
 	h.withheld = withheld or nil
 	Say(rec, withheld)
+	-- A plain read is what the member has, and is kept. Where the game withheld an aura of yours, the squares kept stay while the member has as many
+	-- auras of yours as at the last read: one fewer means one ended, and the game does not say which, so only those read plainly now stay. With no
+	-- answer at all nothing changes.
+	if not withheld then
+		h.kept, h.count = found, count
+	elseif count == nil then
+		found = Merged(found, h.kept or {})
+	elseif h.kept and h.count and count >= h.count then
+		found = Merged(found, h.kept)
+		h.count = count
+	else
+		h.kept, h.count = found, count
+	end
 	Draw(h, found)
 end
 
@@ -366,6 +410,10 @@ function Hear(rec, h, unit)
 		h.ear = ear
 	end
 	pcall(ear.UnregisterAllEvents, ear)
+	if h.unit ~= unit then
+		-- A new member, or none: nothing read of the last one is kept.
+		h.kept, h.count = nil, nil
+	end
 	h.unit, h.heard = unit, nil
 	if unit == nil then
 		return

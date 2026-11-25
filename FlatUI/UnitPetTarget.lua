@@ -39,8 +39,10 @@ local _, ns = ...
 -- it, but is set at once for a new unit and after a dead one, so the bar never slides from the last unit's health. They are written at once when the
 -- frame shows, when the pet changes its target (UNIT_TARGET for pet) and when the player's pet changes (UNIT_PET for player; UnitDocumentation.lua:
 -- 4448-4457, 4868-4877), and gliding on a step of 0.2 seconds while it shows, since the game sends no health event for pettarget; the step stops when
--- the frame hides. As the game shows the button, its bar and words fade in over 0.15 seconds (an Alpha animation of the bar of the addon's own, which
--- plays in a fight too); the game still shows and hides the button itself at once.
+-- the frame hides. As the game shows the button, the whole frame fades in as one over 0.15 seconds: its bar and words, its border and background, and
+-- the border of Border while it is not your target, each through an Alpha animation of a frame of the addon's own (the bar; a frame under it that holds
+-- the outline, which is drawn on it and not on the button; a frame inside the one whose opacity SetAlphaFromBoolean sets), so it plays in a fight too.
+-- The secure button itself is never animated, and the game still shows and hides it at once.
 -- Test mode (TestMode.lua, TM.Register): a sample of the frame, a plain frame of the addon's own on UIParent that takes no mouse, with the same children,
 -- painted and placed as the button is and filled with fixed values (Training Dummy at 65% in the hostile colour, with a Skull), shows while test mode is on, the row is
 -- on and the game does not show the button; the button wins as soon as the game shows it. Nothing of it touches the secure button.
@@ -299,11 +301,10 @@ local function Tick(on)
 	end
 end
 
--- The bar and its words fade in as the game shows the button: the Alpha animation of the bar of the addon's own (Children), which is no protected
--- frame, so it plays in a fight too.
+-- The whole frame fades in as the game shows the button: the Alpha animations of the bar, of the frame of its outline and of the inner frame of the
+-- border of Border while it is not your target (Children), together. None is a protected frame, so they play in a fight too.
 local function FadeIn(t)
-	local group = t.fadeIn
-	if group ~= nil then
+	for _, group in ipairs(t.fades or {}) do
 		pcall(group.Stop, group)
 		pcall(group.Play, group)
 	end
@@ -362,8 +363,22 @@ local function OnLeave(self)
 	end
 end
 
--- The children of the button or of the sample, on frame, into t: the bar, the percent at its right end, the name left of it, the outline, the mask that
--- cuts the fill to the corners, the raid marker left of the frame and the layer of Highlight under the mouse. Raises when the game refuses one.
+-- The fade of a frame of the addon's own as the button shows (FadeIn): from 0 to 1, nil where the client makes no animation.
+local function FadeOf(region)
+	local okGroup, group = pcall(region.CreateAnimationGroup, region)
+	local okFade, fade = false, nil
+	if okGroup and group ~= nil then
+		okFade, fade = pcall(group.CreateAnimation, group, "Alpha")
+	end
+	if okFade and fade ~= nil and pcall(fade.SetFromAlpha, fade, 0) and pcall(fade.SetToAlpha, fade, 1) and pcall(fade.SetDuration, fade, FADE_IN) then
+		return group
+	end
+	return nil
+end
+
+-- The children of the button or of the sample, on frame, into t: the bar, the percent at its right end, the name left of it, the outline on a frame of
+-- its own under the bar, the mask that cuts the fill to the corners, the raid marker left of the frame and the layer of Highlight under the mouse, and the
+-- fades of the frames that fade in as one (t.fades). Raises when the game refuses one.
 local function Children(frame, t)
 	local bar = CreateFrame("StatusBar", nil, frame)
 	ns.Own[bar] = true
@@ -381,16 +396,14 @@ local function Children(frame, t)
 	name:SetPoint("LEFT", bar, "LEFT", INSET, 0)
 	name:SetPoint("RIGHT", pct, "LEFT", -INSET, 0)
 	t.frame, t.bar, t.name, t.pct, t.file = frame, bar, name, pct, WHITE
-	-- The fade of the bar and its words as the button shows (FadeIn): from 0 to 1, none where the client makes no animation.
-	local okGroup, group = pcall(bar.CreateAnimationGroup, bar)
-	local okFade, fade = false, nil
-	if okGroup and group ~= nil then
-		okFade, fade = pcall(group.CreateAnimation, group, "Alpha")
-	end
-	if okFade and fade ~= nil and pcall(fade.SetFromAlpha, fade, 0) and pcall(fade.SetToAlpha, fade, 1) and pcall(fade.SetDuration, fade, FADE_IN) then
-		t.fadeIn = group
-	end
-	t.outline = ns.Outline(frame, frame, true)
+	t.fades = {}
+	t.fades[#t.fades + 1] = FadeOf(bar)
+	-- The border and background of the frame, drawn on a frame of the addon's own at the button's level, under the bar, so that they fade with it.
+	local level = frame:GetFrameLevel()
+	local skin = X.frame(frame, X.number(level) and level or nil)
+	skin:SetAllPoints(frame)
+	t.outline = ns.Outline(skin, frame, true)
+	t.fades[#t.fades + 1] = FadeOf(skin)
 	if type(bar.CreateMaskTexture) == "function" then
 		local mask = bar:CreateMaskTexture()
 		ns.Own[mask] = true
@@ -412,21 +425,23 @@ local function Children(frame, t)
 	lit:SetVertexColor(1, 1, 1, X.hoverAlpha or 0.12)
 	lit:Hide()
 	t.lit = lit
-	-- The border of Border while it is not your target: a frame over the bar with edges of its own (no background) just outside the frame, and a
-	-- texture for the rounded line of Corners in their place, at alpha 0 until Warn sets it.
-	local level = frame:GetFrameLevel()
+	-- The border of Border while it is not your target: a frame over the bar, at alpha 0 until Warn sets it, and inside it a frame of its own that
+	-- fades in with the rest, with edges of its own (no background) just outside the frame and a texture for the rounded line of Corners in their place.
 	local warn = X.frame(frame, X.number(level) and level + 2 or nil)
 	warn:SetAllPoints(frame)
 	warn:SetAlpha(0)
-	local edges = ns.Outline(warn, warn)
+	local inner = X.frame(warn)
+	inner:SetAllPoints(warn)
+	local edges = ns.Outline(inner, inner)
 	if edges ~= nil then
 		ns.SetOutlineArea(edges, KEY)
 		ns.SetOutline(edges, true, false)
 	end
-	local line = warn:CreateTexture(nil, "OVERLAY", nil, 7)
+	local line = inner:CreateTexture(nil, "OVERLAY", nil, 7)
 	ns.Own[line] = true
 	line:Hide()
 	t.warn, t.warnOutline, t.warnLine = warn, edges, line
+	t.fades[#t.fades + 1] = FadeOf(inner)
 end
 
 -- Made once, out of combat: the button, its bar, the name and the percent on it and the outline. False when the game refuses it, which is not tried again.
