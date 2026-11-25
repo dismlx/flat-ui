@@ -481,12 +481,13 @@ local function StyleAura(item, on, look)
 end
 
 -- The opacity of the icons of one plate: the row's, or none for a plate that is not the target while Show auras says only the target has them.
+-- The target's plate is compared as a frame, as MarkTargets does, since the game's isTarget comes from a unit comparison the client can withhold.
 local function AurasAlpha(unitFrame, aurasFrame, styled)
 	local own = known[unitFrame]
 	local alpha = 1
 	if styled then
 		alpha = Opt("auraOpacity") / 100
-		if Opt("aurasWhen") == "target" and not (Plain(unitFrame.isTarget, "boolean") and unitFrame.isTarget) then
+		if Opt("aurasWhen") == "target" and UnitFrameOf("target") ~= unitFrame then
 			alpha = 0
 		end
 	end
@@ -759,8 +760,56 @@ end
 -- TOPLEFT and BOTTOMLEFT to the health bar, 5 past its end (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8): those anchors set its height and
 -- keep no room, so they are cleared first. When the part turns off, the anchors the game gave the frame, its size (:239), and the health bar
 -- end and the aura offsets UpdateAnchors gives those anchors go back.
+-- Level box Hidden only fades the level frame, which stays shown, and the game hangs the row of crowd control icons and the loss of control icon
+-- past it (UpdateControlAnchors, Blizzard_NamePlateUnitFrame.lua:892-907). While Hidden is on, those two start 5 past the bar's end instead (past
+-- a class icon on the right), so what hangs after them (the threat value at Right, the enemy's target, a Right quest mark) sits at the bar.
+-- UpdateAnchors puts the game's anchor back on every layout, so this is done on every pass; when Hidden goes off, the game's anchor goes back.
 local LEVEL_KEPT = "Level box: the game keeps its own box width."
-local function LevelBox(unitFrame, own, on, fresh)
+local function HiddenControl(unitFrame, own, on)
+	local options = Setup()
+	local level, container = Usable(unitFrame.PlayerLevelDiffFrame), Usable(unitFrame.HealthBarsContainer)
+	local auras = Usable(unitFrame.AurasFrame)
+	local control, lost = Usable(auras and auras.CrowdControlListFrame), Usable(auras and auras.LossOfControlFrame)
+	if not (options and level and container and (control or lost)) then
+		return
+	end
+	local ok, shown = pcall(level.IsShown, level)
+	shown = ok and Plain(shown, "boolean") and shown
+	-- The Classic style draws the level frame inside the bar's art, and name-only mode has no bar.
+	local classic, only = options.useClassicHealthBar, unitFrame.showOnlyName
+	local want = on and Opt("level") == "hidden" and shown and not (Plain(classic, "boolean") and classic) and not (Plain(only, "boolean") and only)
+	if not (want or own.controlMoved) then
+		return
+	end
+	if not CanResize("Level box", control or level, lost or level) then
+		return
+	end
+	if want then
+		local room = 5 + ClassRoom(own, "right")
+		own.controlMoved = true
+		if control then
+			control:SetPoint("LEFT", container, "RIGHT", room, 0)
+		end
+		if lost then
+			lost:SetPoint("LEFT", container, "RIGHT", room, 0)
+		end
+		return
+	end
+	-- The game's anchor, as UpdateControlAnchors makes it: past the level frame while it shows, else past the bars. The square box sets its own.
+	own.controlMoved = nil
+	if own.levelBox then
+		return
+	end
+	local to = shown and level or container
+	if control then
+		control:SetPoint("LEFT", to, "RIGHT", 5, 0)
+	end
+	if lost then
+		lost:SetPoint("LEFT", to, "RIGHT", 5, 0)
+	end
+end
+
+local function SquareBox(unitFrame, own, on, fresh)
 	local options = Setup()
 	local level, container, cast = Usable(unitFrame.PlayerLevelDiffFrame), Usable(unitFrame.HealthBarsContainer), Usable(unitFrame.CastBarsContainer)
 	if not (options and level and container and cast) then
@@ -845,6 +894,12 @@ local function LevelBox(unitFrame, own, on, fresh)
 		end
 	end
 	own.levelBox = nil
+end
+
+-- The square box, then the crowd control row while Level box is Hidden.
+local function LevelBox(unitFrame, own, on, fresh)
+	SquareBox(unitFrame, own, on, fresh)
+	HiddenControl(unitFrame, own, on)
 end
 
 -- Size and place of the raid marker. The game sets its anchor in UpdateAnchors, above the name in name-only mode, and that one is not moved.

@@ -6,8 +6,10 @@ local _, ns = ...
 -- here does nothing.
 -- The ring is a frame of Flat UI's own on the health bar with an outline of its own (ns.Outline), made and anchored out of combat on a plate the game
 -- may protect, as the low health border is (HealthColour.lua); in a fight only its colour and visibility change, which are texture calls, and its
--- flash plays: with Flash the ring when threat goes wrong (on by default) the ring flashes twice as an enemy's threat turns to threat you do not want
--- (it turns to you, or away from you while you tank), an animation of the ring's own frame (ns.PlateRingFlash).
+-- flash and eases play: with Flash the ring when threat goes wrong (on by default) the ring flashes twice as an enemy's threat turns to threat you do
+-- not want (it turns to you, or away from you while you tank), an animation of the ring's own frame (ns.PlateRingFlash); any other ring fades in
+-- over RING_EASE seconds as it comes, and a ring fades out over RING_EASE as it goes on a plate that stays (ns.PlateRingEase), so the rings of a big
+-- pull do not blink. A plate that leaves, a change of the rows and a part that stops clear the ring at once.
 -- The border is a slot of the plate's border colour in Nameplates.lua (ns.PlateThreatBorder): below the target, the focus and the mouseover, above
 -- the colours of Elite, Rare and Boss.
 -- The fade is the alpha of the game's nameplate unit frame (SetAlpha: not a protected function, and it takes withheld values from addons,
@@ -34,8 +36,9 @@ local RING, BORDER, BACK, FADE = "threat ring", "threat border", "threat backgro
 local HOOK = "CompactUnitFrame_UpdateCenterStatusIcon"
 -- The edges of the ring in screen pixels, and its gap from the health bar beyond the border thickness, which clears the 2 px border of an Elite or a Rare.
 local RING_PX, GAP_PX = 2, 2
--- The flash of the ring as threat goes wrong: FLASHES times down to FLASH_LOW of its opacity and back, FLASH_SECONDS each way.
-local FLASHES, FLASH_LOW, FLASH_SECONDS = 2, 0.2, 0.15
+-- The flash of the ring as threat goes wrong: FLASHES times down to FLASH_LOW of its opacity and back, FLASH_SECONDS each way. RING_EASE: the
+-- seconds a ring fades in as it comes and out as it goes.
+local FLASHES, FLASH_LOW, FLASH_SECONDS, RING_EASE = 2, 0.2, 0.15, 0.15
 -- The share of the threat colour's brightness the background has. Threat Plates draws the bar's colour behind it at 30% opacity (its background
 -- opacity of 70%, Constants.lua:624-626); here it is a dark shade of the colour at the opacity the background already has, so the empty part of
 -- the bar stays apart from the full part.
@@ -46,9 +49,9 @@ local HEALTH_HOOK = "CompactUnitFrame_UpdateHealthColor"
 local EASE_SECONDS = 0.2
 
 -- Per unit frame: levelBox (Flat UI's square level box sits beside the bar, from the layout hook), ring ({ frame, outline, right: the frame its right
--- side follows, d: its gap, shown, flash: its animation group, nil on a client without it }), want (the want of the state the ring last drew),
--- waiting (the plate waits for the end of a fight), border (the colour given to Nameplates.lua), back ({ r, g, b, a, outline: the fill given to the
--- outline of the health bar }) and fade ({ orig: the alpha the frame had, sent: the alpha written, goal: the
+-- side follows, d: its gap, shown, flash, appear and vanish: its animation groups, nil on a client without them }), want (the want of the state
+-- the ring last drew), waiting (the plate waits for the end of a fight), border (the colour given to Nameplates.lua), back ({ r, g, b, a,
+-- outline: the fill given to the outline of the health bar }) and fade ({ orig: the alpha the frame had, sent: the alpha written, goal: the
 -- alpha it eases to, back: it eases back to orig and ends there }). A record is kept when the plate leaves, so its ring is made once.
 local recs = setmetatable({}, { __mode = "k" })
 -- What Nameplates.lua keeps of each plate, from its show and layout hooks: own.health is its outline of the health bar.
@@ -234,6 +237,58 @@ function ns.PlateRingFlash(holder)
 	return ok and type(group) == "table" and group or nil
 end
 
+-- The ease of a ring: an Alpha animation of the ring's own frame from nothing to whole as it comes, and one from whole to nothing that keeps its end
+-- as it goes, each over RING_EASE seconds; as the second ends, gone runs (it hides the outline) and the frame takes its whole alpha back. Not
+-- protected on a frame of Flat UI's own, so they play in a fight. Nil, nil when the client will not make them. Also the ease of the threat ring of
+-- setup's sample plate (SetupDrawPlates.lua's P.Threat).
+function ns.PlateRingEase(holder, gone)
+	local ok, appear, vanish = pcall(function()
+		local come = holder:CreateAnimationGroup()
+		ns.Own[come] = true
+		local up = come:CreateAnimation("Alpha")
+		ns.Own[up] = true
+		up:SetFromAlpha(0)
+		up:SetToAlpha(1)
+		up:SetDuration(RING_EASE)
+		local go = holder:CreateAnimationGroup()
+		ns.Own[go] = true
+		local down = go:CreateAnimation("Alpha")
+		ns.Own[down] = true
+		down:SetFromAlpha(1)
+		down:SetToAlpha(0)
+		down:SetDuration(RING_EASE)
+		pcall(go.SetToFinalAlpha, go, true)
+		go:SetScript("OnFinished", function()
+			pcall(gone)
+			holder:SetAlpha(1)
+		end)
+		return come, go
+	end)
+	if ok and type(appear) == "table" and type(vanish) == "table" then
+		return appear, vanish
+	end
+	return nil, nil
+end
+
+-- True while an animation group plays.
+local function Playing(group)
+	if not group then
+		return false
+	end
+	local ok, playing = pcall(group.IsPlaying, group)
+	return ok and playing == true
+end
+
+-- The ring's eases stop, and its frame shows whole.
+local function StopEase(ring)
+	if ring.appear then
+		pcall(ring.appear.Stop, ring.appear)
+	end
+	if ring.vanish then
+		pcall(ring.vanish.Stop, ring.vanish)
+	end
+end
+
 -- The ring of a plate, made the first time the plate needs one. In a fight on a plate the game may protect, it waits for the end of the fight.
 local function Make(frame, rec)
 	local bar = Bar(frame)
@@ -258,6 +313,11 @@ local function Make(frame, rec)
 	ns.KeepOutline(outline)
 	ns.SetOutline(outline, false, false)
 	ring.flash = ns.PlateRingFlash(holder)
+	ring.appear, ring.vanish = ns.PlateRingEase(holder, function()
+		if not ring.shown then
+			ns.SetOutline(outline, false, false)
+		end
+	end)
 	return ring
 end
 
@@ -278,13 +338,28 @@ local function Place(frame, rec)
 	Anchor(ring, bar, right)
 end
 
-local function HideRing(_, rec)
+-- soft: the ring eases out (a plate that stays loses its ring); every other caller (a plate that leaves, a change of the rows, a part that stops)
+-- hides it at once, which also cuts short an ease out still running.
+local function HideRing(_, rec, soft)
 	local ring = rec.ring
-	if ring ~= nil and ring.shown then
+	if ring == nil then
+		return
+	end
+	if ring.shown then
 		ring.shown = nil
 		if ring.flash then
 			pcall(ring.flash.Stop, ring.flash)
 		end
+		if ring.appear then
+			pcall(ring.appear.Stop, ring.appear)
+		end
+		if soft and ring.vanish and pcall(ring.vanish.Play, ring.vanish) then
+			return
+		end
+		StopEase(ring)
+		ns.SetOutline(ring.outline, false, false)
+	elseif not soft and Playing(ring.vanish) then
+		StopEase(ring)
 		ns.SetOutline(ring.outline, false, false)
 	end
 end
@@ -296,18 +371,21 @@ local function Rings(state)
 end
 
 -- With Flash the ring when threat goes wrong, the ring of a plate whose threat has just turned to threat you do not want (from another state, or from
--- none as the pull starts or the plate shows) flashes, in a fight too.
+-- none as the pull starts or the plate shows) flashes, in a fight too; its eases stop first. True when it flashed.
 local function Flash(ring, rec, want)
 	local was = rec.want
 	rec.want = want
 	if want == "bad" and was ~= "bad" and ring.flash and Opt("threatFlash") == true then
+		StopEase(ring)
 		pcall(ring.flash.Stop, ring.flash)
-		pcall(ring.flash.Play, ring.flash)
+		return pcall(ring.flash.Play, ring.flash)
 	end
+	return false
 end
 
--- place: anchor the ring again first where needed.
-local function Ring(frame, rec, state, place)
+-- place: anchor the ring again first where needed. snap: a ring that goes hides at once (a plate that leaves, a change of the rows), else it eases
+-- out; a ring that comes eases in unless it flashes.
+local function Ring(frame, rec, state, place, snap)
 	if place then
 		Place(frame, rec)
 	end
@@ -316,7 +394,7 @@ local function Ring(frame, rec, state, place)
 		r, g, b = StateColour(state)
 	end
 	if r == nil then
-		HideRing(frame, rec)
+		HideRing(frame, rec, not snap)
 		rec.want = state ~= nil and state.want or nil
 		return
 	end
@@ -340,11 +418,17 @@ local function Ring(frame, rec, state, place)
 		end
 	end
 	ns.SetOutlineColour(ring.outline, r, g, b)
-	if not ring.shown then
+	local first = not ring.shown
+	if first then
 		ring.shown = true
 		ns.SetOutline(ring.outline, true, false)
 	end
-	Flash(ring, rec, state.want)
+	if not Flash(ring, rec, state.want) and first then
+		StopEase(ring)
+		if ring.appear and not snap then
+			pcall(ring.appear.Play, ring.appear)
+		end
+	end
 end
 
 -- After a fight: the ring a plate waited for is made while Threat glow still asks for rings, so it is there in the next fight, and anchored again.
@@ -690,7 +774,7 @@ end
 
 -- The four parts of one plate from its state. No state puts each back. snap: the fade goes to its new opacity at once.
 local function Draw(frame, rec, state, marks, place, snap)
-	RunPart(RING, Ring, frame, rec, state, place)
+	RunPart(RING, Ring, frame, rec, state, place, snap)
 	RunPart(BORDER, Border, frame, rec, state)
 	RunPart(BACK, Back, frame, rec, state, marks)
 	RunPart(FADE, Fade, frame, rec, state, marks, false, snap)

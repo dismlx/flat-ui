@@ -16,20 +16,27 @@ local _, ns = ...
 --   past the level frame while it shows and Level box is not Hidden (which only fades it), else past the health bar.
 --   Above, over the row of the enemy's debuffs while the game shows it, else over the name (the top of the health bars while the name is inside
 --   them), on the guide frame PlateOverpower.lua keeps on each plate (ns.PlateDebuffTop), so the mark rises as the row wraps, in a fight too, and
---   leaves the debuffs clear; the Overpower icon (a level above) stands there too.
--- A text of PlateThreatText.lua that takes a new anchor places the mark again (ns.PlateQuestPlace), so a text made after the mark still has it clear.
+--   leaves the debuffs clear; over the threat value while it shows above the plate (it stands on that guide too); and over the Overpower icon while
+--   it shows or fades on the plate (ns.PlateOverpowerIcon), dropping back once it has faded.
+-- Quest mark horizontal and vertical offset move the mark and its count from there.
+-- A text of PlateThreatText.lua that takes a new anchor, and the Overpower icon as it shows and once it has gone, place the mark again
+-- (ns.PlateQuestPlace), so a text made after the mark still has it clear.
 -- With Kill count beside the quest mark (on by default) a small gold count such as 3/8 sits beside the mark (left of it at Left, right of it at
 -- Right and Above) on an enemy a kill objective of the log names: the objectives are read again with the quest log (C_QuestLog.GetNumQuestLogEntries,
 -- GetQuestIDForLogIndex and GetQuestObjectives, QuestLogDocumentation.lua:1581-1592), and the unfinished "monster" objective whose text starts
 -- with the enemy's name (UnitName, which is withheld only while the unit's identity is, UnitDocumentation.lua:2489-2504; the game writes
 -- "Name slain: 3/8" in every language) gives its count: of several, the one with no letter right after the name and the shortest rest, so one
 -- enemy's name that starts another's ("Plaguehound" and "Plaguehound Runt") takes its own objective. An enemy that only drops a quest item, or
--- whose name is withheld, shows the mark alone.
+-- whose name is withheld, shows the mark alone. The finished kill objectives are kept too: as the last kill counts, the marks of the other plates
+-- of that enemy read need/need (8/8) in green and pop before they fade (the fade waits for the pop to settle), and a mark the game still shows for
+-- another objective of the quest keeps its green 8/8; an unfinished objective of the same name comes first.
 -- The count is a font string of the mark's frame, outlined, in Text font, at 0.8 of Quest mark size. As a kill counts, the count on every other
--- plate of that enemy pops (grows to 1.6 of its size and settles back over 0.3 seconds, white until it ends, then gold, or grey on a tapped enemy).
+-- plate of that enemy pops (grows to 1.6 of its size and settles back over 0.3 seconds, white until it ends, then gold, green once the objective is
+-- done, or grey on a tapped enemy).
 -- On an enemy someone else has tapped (UnitIsTapDenied and not UnitPlayerControlled, as PlateThreat.lua and the game's CompactUnitFrame read it)
 -- the mark and its count are grey and faint, and bright again once the tap drops (UNIT_FACTION, which the game's plate also hears for it).
--- A mark fades in over FADE_IN seconds and out over FADE_OUT as its objective is done; a plate that leaves or is handed out again clears at once.
+-- A mark fades in over FADE_IN seconds and out over FADE_OUT as its objective is done (after the pop of its finished count); a plate that leaves or
+-- is handed out again clears at once.
 -- No mark shows on a plate in name-only or widgets-only mode, nor on a unit the player cannot attack (UnitCanAttack). The game is asked again as a
 -- plate shows and, merged onto the next frame, on QUEST_LOG_UPDATE and the player's UNIT_QUEST_LOG_CHANGED, over every plate (ns.EachPlate): a mark
 -- goes once that objective is done. With Leave quest marks to Questie (on by default) the part stands down while Questie is loaded and draws its own
@@ -54,29 +61,33 @@ end
 -- SIZE: the mark when the row gives no size. GAP: nameplate units between the mark and what it stands beside, ROW_GAP beside a row of the game's
 -- aura icons (which keeps 5 of its own from what it hangs on). LEVEL: frame levels above the plate's unit frame, under the Overpower icon's. ATLAS
 -- and FILE: the mark's art, the atlas first. EVENTS: what makes the plates be asked again (UNIT_FACTION only for the plate of its unit). COUNT: the
--- count's size, a share of the mark's; COUNT_GAP: units between the two; GOLD and GREY: its colours, WHITE its colour as it pops, and POP and
--- POP_SECONDS the pop of a count that goes up (from POP of its size back to whole). TAPPED: the opacity of a tapped enemy's mark. FADE_IN and
--- FADE_OUT: the seconds a mark fades in and out. ENTRIES: the most quest log lines read. ADDON: the folder of Questie.
+-- count's size, a share of the mark's; COUNT_GAP: units between the two; GOLD and GREY: its colours, GREEN its colour once the objective is done,
+-- WHITE its colour as it pops, and POP and POP_SECONDS the pop of a count that goes up (from POP of its size back to whole). TAPPED: the opacity
+-- of a tapped enemy's mark. FADE_IN and FADE_OUT: the seconds a mark fades in and out. ENTRIES: the most quest log lines read. ADDON: the folder
+-- of Questie.
 local K = {
 	SIZE = 14, GAP = 2, ROW_GAP = 1, LEVEL = 15,
 	ATLAS = "QuestNormal", FILE = "Interface\\GossipFrame\\AvailableQuestIcon",
 	EVENTS = { "QUEST_LOG_UPDATE", "UNIT_FACTION" },
-	COUNT = 0.8, COUNT_GAP = 1, GOLD = { 1, 0.82, 0 }, GREY = { 0.6, 0.6, 0.6 }, WHITE = { 1, 1, 1 }, POP = 1.6, POP_SECONDS = 0.3, TAPPED = 0.4,
+	COUNT = 0.8, COUNT_GAP = 1, GOLD = { 1, 0.82, 0 }, GREY = { 0.6, 0.6, 0.6 }, GREEN = { 0.3, 0.9, 0.35 }, WHITE = { 1, 1, 1 }, POP = 1.6,
+	POP_SECONDS = 0.3, TAPPED = 0.4,
 	FADE_IN = 0.15, FADE_OUT = 0.3, ENTRIES = 100, ADDON = "Questie",
 }
 
 -- recs[unitFrame]: holder (the mark's frame), icon (its texture), count (its kill count), countBase (the font object's file), countFont and
 -- countText (what the count was given), countPop (the count's pop, nil on a client without it) and popping (it plays), fade and fadeAnim (the
 -- fade's animation group and its Alpha animation, nil on a client without them) and fadeTo (the alpha it ends at),
--- to, point, relative, size and side (what it was anchored to, by which points, its size and the count's side), tapped (the grey look is on),
--- shown, waiting (for the end of a fight). Kept when the plate leaves, so a plate's mark is made once.
+-- to, point, relative, size, side, ox and oy (what it was anchored to, by which points, its size, the count's side and the two offsets), tapped
+-- (the grey look is on), complete (the count reads a finished objective, green), shown, waiting (for the end of a fight). Kept when the plate
+-- leaves, so a plate's mark is made once.
 local recs = setmetatable({}, { __mode = "k" })
 -- owns[unitFrame]: what Nameplates.lua keeps of the plate (its show and layout hooks pass it), for Level box Hidden (own.levelFade).
 local owns = setmetatable({}, { __mode = "k" })
 -- S: frame (the file's own, false when it could not be made), on (the events are heard), queued (a look at every plate waits for the next frame),
--- atlas (the atlas exists, nil before it is asked), counts (the unfinished kill objectives of the log, { text, have, need }, nil while Kill count
--- beside the quest mark is off), and the count of plates that waited for the end of a fight, for /flatui status.
-local S = { frame = nil, on = false, queued = false, atlas = nil, counts = nil, waited = 0 }
+-- atlas (the atlas exists, nil before it is asked), counts (the unfinished kill objectives of the log, { text, have, need }) and done (the finished
+-- ones, { text, have = need, need, done = true }), both nil while Kill count beside the quest mark is off, and the count of plates that waited for
+-- the end of a fight, for /flatui status.
+local S = { frame = nil, on = false, queued = false, atlas = nil, counts = nil, done = nil, waited = 0 }
 local Draw
 
 local function Opt(key)
@@ -225,19 +236,30 @@ local function DebuffTop(unitFrame)
 	return guide, stale == true
 end
 
+-- The Overpower icon of a plate while it shows or fades (PlateOverpower.lua, ns.PlateOverpowerIcon), or nil.
+local function OverpowerIcon(unitFrame)
+	if type(ns.PlateOverpowerIcon) ~= "function" then
+		return nil
+	end
+	local ok, icon = pcall(ns.PlateOverpowerIcon, unitFrame)
+	return ok and type(icon) == "table" and icon or nil
+end
+
 -- What the mark stands beside, the point of the mark and the point of that region, and the offsets, for a position; for Above also true while the
--- guide it stands on waits for the end of a fight.
+-- guide it stands on waits for the end of a fight. Above stands over the Overpower icon while it shows, else over the threat value while it shows
+-- above the plate (it stands on the guide too), else on the guide.
 local function Target(unitFrame, place)
 	local bars = Region(unitFrame, "HealthBarsContainer")
+	local value, side, target = Texts(unitFrame)
 	if place == "above" then
 		local guide, stale = DebuffTop(unitFrame)
-		if guide then
-			return guide, "BOTTOM", "TOP", 0, K.GAP, stale
+		local over = OverpowerIcon(unitFrame) or (side == "above" and Ask(value.IsShown, value) == true and value) or guide
+		if over then
+			return over, "BOTTOM", "TOP", 0, K.GAP, stale
 		end
 		local name = Region(unitFrame, "name")
 		return (NameInside() and bars or name) or bars, "BOTTOM", "TOP", 0, K.GAP, stale
 	end
-	local value, side, target = Texts(unitFrame)
 	if place == "right" then
 		local after = target or (side == "right" and value) or nil
 		if after then
@@ -285,11 +307,12 @@ local function Wait(unitFrame)
 	end)
 end
 
--- The count's colour: grey on an enemy someone else has tapped, else gold, and white while its pop plays.
+-- The count's colour: white while its pop plays, else green once it reads a finished objective, else grey on an enemy someone else has tapped,
+-- else gold.
 local function CountColour(rec)
 	local count = rec.count
 	if count then
-		local colour = rec.popping and K.WHITE or (rec.tapped and K.GREY or K.GOLD)
+		local colour = rec.popping and K.WHITE or (rec.complete and K.GREEN or (rec.tapped and K.GREY or K.GOLD))
 		count:SetTextColor(colour[1], colour[2], colour[3], 1)
 	end
 end
@@ -409,18 +432,22 @@ local function CountFont(rec)
 	end
 end
 
--- Sizes and anchors the mark when its size, its position or what it stands beside changed, out of combat on a plate that may be protected. The
--- count goes on the far side of the mark from the bar: left of it at Left, right of it at Right and Above.
+-- Sizes and anchors the mark when its size, its position, its offsets or what it stands beside changed, out of combat on a plate that may be
+-- protected. Quest mark horizontal and vertical offset move it, and the count with it. The count goes on the far side of the mark from the bar:
+-- left of it at Left, right of it at Right and Above.
 local function Place(unitFrame, rec)
 	local size = Opt("questMarkSize")
 	size = type(size) == "number" and size > 0 and size or K.SIZE
 	local place = Opt("questMarkPlace")
+	local ox, oy = Opt("questMarkX"), Opt("questMarkY")
+	ox, oy = ns.Finite(ox) and ox or 0, ns.Finite(oy) and oy or 0
 	local to, point, relative, x, y, stale = Target(unitFrame, place)
 	local side = place == "left" and "left" or "right"
 	if stale then
 		Wait(unitFrame)
 	end
-	if to == nil or (rec.to == to and rec.point == point and rec.relative == relative and rec.size == size and rec.side == side) then
+	local moved = rec.to ~= to or rec.point ~= point or rec.relative ~= relative or rec.ox ~= ox or rec.oy ~= oy
+	if to == nil or not (moved or rec.size ~= size or rec.side ~= side) then
 		return
 	end
 	if Locked(unitFrame) then
@@ -429,9 +456,9 @@ local function Place(unitFrame, rec)
 	end
 	local holder = rec.holder
 	holder:SetSize(size, size)
-	if rec.to ~= to or rec.point ~= point or rec.relative ~= relative then
+	if moved then
 		holder:ClearAllPoints()
-		holder:SetPoint(point, to, relative, x, y)
+		holder:SetPoint(point, to, relative, x + ox, y + oy)
 	end
 	local count = rec.count
 	if count and rec.side ~= side then
@@ -446,7 +473,7 @@ local function Place(unitFrame, rec)
 	if type(level) == "number" then
 		pcall(holder.SetFrameLevel, holder, level + K.LEVEL)
 	end
-	rec.to, rec.point, rec.relative, rec.size, rec.side = to, point, relative, size, side
+	rec.to, rec.point, rec.relative, rec.size, rec.side, rec.ox, rec.oy = to, point, relative, size, side, ox, oy
 end
 
 -- True for a plate whose unit is an enemy that is no player, outside name-only and widgets-only mode, that the game says a quest of the log needs.
@@ -466,9 +493,10 @@ local function Needed(unitFrame)
 	return Plain(quests, "table") and Ask(quests.UnitIsRelatedToActiveQuest, unit) == true
 end
 
--- The mark faded in or out over FADE_IN or FADE_OUT seconds, or set at once (now, or a client without the animation). A fade still running stops
--- first; the animation ends at the alpha it was played for, and OnFinished sets that alpha too.
-local function Fade(rec, show, now)
+-- The mark faded in or out over FADE_IN or FADE_OUT seconds, or set at once (now, or a client without the animation). late: a fade out waits
+-- POP_SECONDS first, so a finished count's pop settles before the mark goes; every other fade starts at once. A fade still running stops first;
+-- the animation ends at the alpha it was played for, and OnFinished sets that alpha too.
+local function Fade(rec, show, now, late)
 	local holder, group, anim = rec.holder, rec.fade, rec.fadeAnim
 	local alpha = show and 1 or 0
 	rec.fadeTo = alpha
@@ -482,20 +510,26 @@ local function Fade(rec, show, now)
 	pcall(anim.SetFromAlpha, anim, 1 - alpha)
 	pcall(anim.SetToAlpha, anim, alpha)
 	pcall(anim.SetDuration, anim, show and K.FADE_IN or K.FADE_OUT)
+	pcall(anim.SetStartDelay, anim, (late and not show) and K.POP_SECONDS or 0)
 	holder:SetAlpha(1 - alpha)
 	if not pcall(group.Play, group) then
 		holder:SetAlpha(alpha)
 	end
 end
 
--- now: at once, for a plate that leaves or a part that stands down, which also cuts short a fade out still running.
-local function Hide(rec, now)
+-- now: at once, for a plate that leaves or a part that stands down, which also cuts short a fade out still running, and forgets a finished count.
+-- late: the fade waits for the pop of a finished count (Fade).
+local function Hide(rec, now, late)
 	if not rec.holder then
 		return
 	end
+	if now and rec.complete then
+		rec.complete = nil
+		CountColour(rec)
+	end
 	if rec.shown then
 		rec.shown = nil
-		Fade(rec, false, now)
+		Fade(rec, false, now, late)
 	elseif now then
 		Fade(rec, false, true)
 	end
@@ -518,39 +552,49 @@ local function Tapped(rec, unit)
 	end
 end
 
--- The unfinished kill objective that names this enemy, of those whose text starts with its name: one where no letter follows the name first (a
--- space or a colon: "Plaguehound slain" for a Plaguehound, not "Plaguehounds"), then the one whose rest, without its count and punctuation, is the
--- shortest (" slain" before " Runt slain", so a Plaguehound is not counted on the Plaguehound Runts' objective), the first in the log on a tie.
-local function Objective(list, name)
+-- The kill objective that names this enemy, unfinished (S.counts) or finished (S.done), of those whose text starts with its name: one where no
+-- letter follows the name first (a space or a colon: "Plaguehound slain" for a Plaguehound, not "Plaguehounds"), then the one whose rest, without
+-- its count and punctuation, is the shortest (" slain" before " Runt slain", so a Plaguehound is not counted on the Plaguehound Runts' objective),
+-- the first in the log on a tie, an unfinished one before a finished one. Nil while Kill count is off or the enemy's name is withheld.
+local function Objective(unit)
+	local counts, done = S.counts, S.done
+	if Opt("questMarkCount") ~= true or not ((counts and #counts > 0) or (done and #done > 0)) then
+		return nil
+	end
+	local name = Ask(UnitName, unit)
+	if not (Plain(name, "string") and name ~= "") then
+		return nil
+	end
 	local best, bestLetter, bestLength
-	for _, entry in ipairs(list) do
-		local words = entry.text
-		if words:find(name, 1, true) == 1 then
-			local rest = words:sub(#name + 1)
-			local letter = rest:find("^%a") ~= nil
-			local length = #(rest:gsub("[%s%d/:]+$", ""))
-			if best == nil or (bestLetter and not letter) or (letter == bestLetter and length < bestLength) then
-				best, bestLetter, bestLength = entry, letter, length
+	for _, list in ipairs({ counts or {}, done or {} }) do
+		for _, entry in ipairs(list) do
+			local words = entry.text
+			if words:find(name, 1, true) == 1 then
+				local rest = words:sub(#name + 1)
+				local letter = rest:find("^%a") ~= nil
+				local length = #(rest:gsub("[%s%d/:]+$", ""))
+				if best == nil or (bestLetter and not letter) or (letter == bestLetter and length < bestLength) then
+					best, bestLetter, bestLength = entry, letter, length
+				end
 			end
 		end
 	end
 	return best
 end
 
--- The kill count of the unfinished kill objective that names the enemy (Objective), or nothing.
-local function Count(rec, unit)
+-- The kill count of the objective that names the enemy (Objective, or the one given), or nothing: have/need while it is unfinished, need/need in
+-- green once it is done.
+local function Count(rec, unit, entry)
 	local count = rec.count
 	if not count then
 		return
 	end
-	local text = ""
-	local list = Opt("questMarkCount") == true and S.counts or nil
-	local name = list and #list > 0 and Ask(UnitName, unit) or nil
-	if Plain(name, "string") and name ~= "" then
-		local entry = Objective(list, name)
-		if entry then
-			text = ("%d/%d"):format(entry.have, entry.need)
-		end
+	entry = entry or Objective(unit)
+	local text = entry and ("%d/%d"):format(entry.have, entry.need) or ""
+	local complete = entry and entry.done or nil
+	if rec.complete ~= complete then
+		rec.complete = complete
+		CountColour(rec)
 	end
 	if rec.countText ~= text then
 		-- A count that changes on a mark that shows is a kill that counted: it pops. Not as it first comes, nor as it goes.
@@ -564,7 +608,8 @@ local function Count(rec, unit)
 end
 
 -- One plate: its mark made and placed out of combat on every plate that is no player's, so a later enemy on it has one in a fight, and shown while
--- the game says a quest needs the enemy.
+-- the game says a quest needs the enemy. A mark that goes as its kill objective is done first reads need/need in green and pops, and fades once the
+-- pop settles.
 function Draw(unitFrame)
 	if not S.on or ns.Forbidden(unitFrame) then
 		return
@@ -588,18 +633,25 @@ function Draw(unitFrame)
 			Fade(rec, true)
 		end
 	else
-		Hide(rec)
+		local entry = rec.shown and rec.count and Objective(unit) or nil
+		if entry and entry.done then
+			Count(rec, unit, entry)
+			Hide(rec, false, true)
+		else
+			Hide(rec)
+		end
 	end
 end
 
--- The unfinished kill objectives of the quest log, read again while Kill count beside the quest mark is on. A header line has no quest (0 or nil).
+-- The kill objectives of the quest log, unfinished and finished, read again while Kill count beside the quest mark is on. A header line has no
+-- quest (0 or nil).
 local function Objectives()
 	local quests = C_QuestLog
 	if Opt("questMarkCount") ~= true or not Plain(quests, "table") then
-		S.counts = nil
+		S.counts, S.done = nil, nil
 		return
 	end
-	local list = {}
+	local list, done = {}, {}
 	local entries = Ask(quests.GetNumQuestLogEntries)
 	entries = ns.Finite(entries) and math.min(entries, K.ENTRIES) or 0
 	for index = 1, entries do
@@ -607,15 +659,19 @@ local function Objectives()
 		local objectives = ns.Finite(id) and id > 0 and Ask(quests.GetQuestObjectives, id) or nil
 		if Plain(objectives, "table") then
 			for _, objective in ipairs(objectives) do
-				if Plain(objective, "table") and Plain(objective.type, "string") and objective.type == "monster"
-					and not (Plain(objective.finished, "boolean") and objective.finished) and Plain(objective.text, "string")
-					and ns.Finite(objective.numFulfilled) and ns.Finite(objective.numRequired) and objective.numRequired > 0 then
+				local kill = Plain(objective, "table") and Plain(objective.type, "string") and objective.type == "monster"
+					and Plain(objective.text, "string") and ns.Finite(objective.numRequired) and objective.numRequired > 0
+				local finished = kill and Plain(objective.finished, "boolean") and objective.finished
+				if finished then
+					local need = math.floor(objective.numRequired)
+					done[#done + 1] = { text = objective.text, have = need, need = need, done = true }
+				elseif kill and ns.Finite(objective.numFulfilled) then
 					list[#list + 1] = { text = objective.text, have = math.floor(objective.numFulfilled), need = math.floor(objective.numRequired) }
 				end
 			end
 		end
 	end
-	S.counts = list
+	S.counts, S.done = list, done
 end
 
 -- Every plate asked again: the quest log changed.
