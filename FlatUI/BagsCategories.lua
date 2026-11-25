@@ -13,7 +13,9 @@ local _, ns = ...
 -- them with the numbers of Forever's Enum.ItemClass and Enum.ItemMiscellaneousSubclass (wowless, data/products/wowf/enums.yaml:4630-4651 and
 -- 5009-5016). An item in an equipment set (the record's set, from C_Container.GetContainerItemEquipmentSetInfo) and a quest item (class 12, or the
 -- record's quest and questStart, from C_Container.GetContainerItemQuestInfo, ContainerDocumentation.lua:281-295) are read by BagsData. With
--- Equipment set to Weapons, armour and jewellery, Equipment is three sections. The sections are shown in an order of their own (LIST), which is
+-- Equipment set to Weapons, armour and jewellery, Equipment is three sections, and with Consumables set to By kind, Consumables is Food and drink
+-- (subclass 5), Potions and elixirs (potions, elixirs and flasks, subclasses 1 to 3) and Consumables for the rest (bandages, scrolls and others).
+-- The sections are shown in an order of their own (LIST), which is
 -- not the order their rules are tried in: New items first, Keep in place next, Junk and Free slots last; the player may move every section but
 -- New items and Free slots (BagsOrder.lua), which changes the order they are shown in and never where an item is filed.
 --
@@ -88,6 +90,8 @@ local SECTIONS = {
 	{ key = "armour", label = "Armour" },
 	{ key = "jewel", label = "Jewellery" },
 	{ key = "consumable", label = "Consumables" },
+	{ key = "food", label = "Food and drink" },
+	{ key = "potion", label = "Potions and elixirs" },
 	{ key = "quest", label = "Quest items" },
 	{ key = "trade", label = "Trade goods" },
 	{ key = "reagent", label = "Reagents" },
@@ -101,8 +105,13 @@ local SECTIONS = {
 }
 -- The rules after New items, Junk and placement, in the order they are tried; Other takes the rest.
 local PRIORITY = { "set", "quest", "gear", "consumable", "trade", "reagent", "recipe", "ammo", "bag", "key" }
--- The sections of the Equipment family, which the Equipment row shows as one or as three.
+-- The sections of the Equipment family, which the Equipment row shows as one or as three, and of the Consumables family, which the Consumables row
+-- shows as one or as three.
 local GEAR = { gear = true, weapon = true, armour = true, jewel = true }
+local CONSUME = { consumable = true, food = true, potion = true }
+-- With Consumables split, by Enum.ItemConsumableSubclass (enums.yaml:4694-4711, as BagsSearch.lua reads them): food and drink, and potions,
+-- elixirs and flasks; the rest (bandages, scrolls, others) stays in Consumables.
+local FOOD_SUB, POTION_SUBS = 5, { [1] = true, [2] = true, [3] = true }
 -- With Equipment split: the slots that go with the weapons besides class 2, and the jewellery.
 local WEAPON_SLOTS = { INVTYPE_SHIELD = true, INVTYPE_HOLDABLE = true, INVTYPE_RANGED = true, INVTYPE_RANGEDRIGHT = true, INVTYPE_THROWN = true,
 	INVTYPE_RELIC = true }
@@ -269,6 +278,16 @@ function TESTS.consumable(record)
 	return Class(record) == CONSUMABLE
 end
 
+function TESTS.food(record)
+	local class, subclass = Kind(record)
+	return class == CONSUMABLE and subclass == FOOD_SUB
+end
+
+function TESTS.potion(record)
+	local class, subclass = Kind(record)
+	return class == CONSUMABLE and subclass ~= nil and POTION_SUBS[subclass] == true
+end
+
 function TESTS.trade(record)
 	local class = Class(record)
 	return class == TRADEGOODS or class == GEM or class == ITEM_ENHANCEMENT or class == PROFESSION
@@ -310,8 +329,28 @@ local function Split(record)
 	return "armour"
 end
 
--- A section of the Equipment family as the Equipment row shows it: one section, or the record's own of the three. Other sections stay.
-local function Fit(key, record)
+-- A section of the Consumables family as the Consumables row shows it: one section, or the record's own of the three (By kind). placed: the
+-- section an item was placed in by hand, which it keeps while the row shows that section (a potion dropped on Consumables stays there).
+local function FitConsumable(key, record, placed)
+	if Opt("consumables") ~= "kind" then
+		return "consumable"
+	end
+	if key == "consumable" and not placed then
+		if TESTS.food(record) then
+			return "food"
+		elseif TESTS.potion(record) then
+			return "potion"
+		end
+	end
+	return key
+end
+
+-- A section of the Equipment family as the Equipment row shows it: one section, or the record's own of the three; of the Consumables family as the
+-- Consumables row shows it (FitConsumable; placed: a placement by hand). Other sections stay.
+local function Fit(key, record, placed)
+	if CONSUME[key] then
+		return FitConsumable(key, record, placed)
+	end
 	if not GEAR[key] then
 		return key
 	end
@@ -533,7 +572,7 @@ local function PlacedIn(record)
 	if type(key) ~= "string" or not PLACEABLE[key] then
 		return nil
 	end
-	return Fit(key, record)
+	return Fit(key, record, true)
 end
 
 -- The placements of the account: a new table { [itemID] = section key } of every valid one.
@@ -909,7 +948,7 @@ local PLACED_NONE = "No item is placed by hand. Drop an item from your bags on a
 function ns.BagsPlacedLines()
 	local lines = {}
 	for id, key in pairs(Categories.Placed()) do
-		lines[#lines + 1] = { id, ("%s: %s"):format(Named(id), Categories.Label(Fit(key, { id = id }))) }
+		lines[#lines + 1] = { id, ("%s: %s"):format(Named(id), Categories.Label(Fit(key, { id = id }, true))) }
 	end
 	if #lines == 0 then
 		return { { "none", PLACED_NONE } }

@@ -42,9 +42,9 @@ local _, ns = ...
 -- title alone, as the empty Junk title is, with a + after its count, while its items keep their cells, so an item that changes in a folded section
 -- stays there and does not go to the top shelf; while a search is typed the title says how many of its items match, and its tooltip lists what it
 -- holds (BagsLayout.lua). The menu's Fold or Unfold, Fold every section, Unfold every section and the row Folded sections on the Bags page
--- (ns.BagsFoldLines, ns.BagsFoldPick) do the same. Folding works in a fight too, as a move does. A fold or an unfold clicked in a window (its title,
--- a Shift-click or its menu) keeps that window's height while it stays open (B.Window.KeepHeight), so the title clicked stays under the mouse and
--- its tooltip, drawn again by BagsLayout.lua, says what the next click does.
+-- (ns.BagsFoldLines, ns.BagsFoldPick) do the same. Folding works in a fight too, as a move does. A fold or an unfold clicked in the bag window (its
+-- title, a Shift-click or its menu) keeps that window's height while the mouse stays on it (B.Window.KeepHeight), so the title clicked stays under
+-- the mouse and its tooltip, drawn again by BagsLayout.lua, says what the next click does; the bank window, which hangs from its top left, shrinks.
 
 local B = ns.Bags
 local Order = B.Order
@@ -117,8 +117,8 @@ local function Request()
 end
 
 -- The window the player clicked a fold in keeps its height at that layout (B.Window.KeepHeight, BagsWindow.lua), so the title stays under the mouse:
--- the bag window hangs from its bottom right corner and would otherwise move the title by the height of the rows that folded. Asked before the
--- layout only when the folds changed.
+-- the bag window hangs from its bottom right corner and would otherwise move the title by the height of the rows that folded. BagsWindow.lua keeps
+-- it for the bag window alone, until the mouse leaves it. Asked before the layout only when the folds changed.
 local function Keep(st)
 	if type(st) == "table" then
 		Call(B.Window, "KeepHeight", st.which)

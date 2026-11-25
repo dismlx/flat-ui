@@ -68,7 +68,8 @@ local _, ns = ...
 -- click with an item on the cursor (CursorHasItem), calls C_Container.PickupContainerItem(-2, n), as the game's own bag slot does
 -- (BankFrame.lua:378-395), out of combat. A plain click on a bought slot that holds a bag keeps that bag lit in the bank window (B.Layout.Stick with
 -- its container, as the bag window's row does with its bags; B.Layout.Closed lets it go when the window closes), its edge in the Highlight colour
--- (SetOutlineColour), and a click on it again gives every bag back; that touches frames of Flat UI's own only, so it works in a fight too. The
+-- (SetOutlineColour), and a click on it again gives every bag back; that touches frames of Flat UI's own only, so it works in a fight too. A bag
+-- lifted out of that slot, or swapped for a bag dropped on it, lets that go, so the next bag there shows like any other. The
 -- tooltip is the game's for the bag (GameTooltip:SetOwner, SetBagItem, Show) out of combat, as the game's slot shows it (BankFrame.lua:329-342), and
 -- plain lines (SetText, AddLine) in a fight or for an empty or unbought slot, with the bag's free and total slots
 -- (C_Container.GetContainerNumFreeSlots and GetContainerNumSlots of its container, tab TAB_OF_SLOT + n) and what the clicks do, drawn again after a
@@ -580,19 +581,6 @@ local function Hover(button)
 	hover:SetColorTexture(HOVER[1], HOVER[2], HOVER[3], HOVER[4])
 end
 
--- A drag or a drop on bank bag slot n, or a click with an item on the cursor: the game's pickup, which lifts the bag or puts the one on the cursor
--- there.
-local function Pickup(n)
-	if not Bank.Live() or n > Bought() then
-		return
-	end
-	if E.Fighting() then
-		print("Flat UI: the bank's bag slots take no clicks in a fight.")
-		return
-	end
-	E.Call(Container("PickupContainerItem"), BANK_BAGS, n)
-end
-
 -- The free and total slots of the bag in bank bag slot n, or nil when the client does not say.
 local function Room(n)
 	local free = E.Ask(Container("GetContainerNumFreeSlots"), n + TAB_OF_SLOT)
@@ -631,6 +619,32 @@ local function Edge(slot, n)
 	else
 		ns.SetOutlineColour(slot.box, nil, nil, nil)
 	end
+end
+
+-- A drag or a drop on bank bag slot n, or a click with an item on the cursor: the game's pickup, which lifts the bag or puts the one on the cursor
+-- there. The bag a click keeps lit lets that go as it leaves its slot, lifted or swapped for a bag on the cursor, so the next bag in that slot
+-- shows like any other, its edge at once.
+local function Pickup(n)
+	if not Bank.Live() or n > Bought() then
+		return
+	end
+	if E.Fighting() then
+		print("Flat UI: the bank's bag slots take no clicks in a fight.")
+		return
+	end
+	local layout = B.Layout
+	if Stuck() == n and Usable(layout) and type(layout.Stick) == "function" then
+		local kind, id = E.Ask(GetCursorInfo)
+		local api = C_Item
+		local equip = kind == "item" and ns.Finite(id) and Usable(api) and select(4, E.Ask(api.GetItemInfoInstant, id)) or nil
+		if E.Ask(CursorHasItem) ~= true or equip == "INVTYPE_BAG" then
+			B.Part("layout", layout.Stick, "bank", nil)
+			for other, slot in pairs(row and row.slots or {}) do
+				Edge(slot, other)
+			end
+		end
+	end
+	E.Call(Container("PickupContainerItem"), BANK_BAGS, n)
 end
 
 -- A click on bank bag slot n: with an item on the cursor the game's pickup puts it there; else, on a bought slot that holds a bag, that bag stays
