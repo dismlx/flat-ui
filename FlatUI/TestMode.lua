@@ -15,8 +15,10 @@ local _, ns = ...
 -- this file loads; a frame after the fight ends it comes back while what turned it on is still open (the options window shown or held hidden by
 -- /flatui move, /flatui move open again), or for "slash" and "key" always, and ends otherwise.
 --
--- The bar (BuildBar) picks the group and Moving, opens Bags, Bank, Gear, Finder and Move (/flatui move, with the samples kept on) and has End. It
--- stands above or under the options window (BarSpot); dragged, it stays where it was dropped until a double-click on its title puts it back.
+-- The bar (BuildBar) picks the group and Moving, opens Bags, Bank, Gear, Finder, Queue (the Trinket queue window) and Move (/flatui move, with the
+-- samples kept on) and has End. It stands above or under the options window (BarSpot); dragged, it stays where it was dropped until a
+-- double-click on its title puts it back. The bar is 1044 wide since Queue joined it (the controls end at 956 of a live strip 968 wide, End at
+-- 976).
 --
 -- A stand-in reads of the game frame it stands in for only its place and size (ns.MoverRect), its effective scale against UIParent's, its strata,
 -- its level (at most 300 in HIGH, so that it lies under the options window and the welcome screen there) and its shown flag
@@ -85,7 +87,7 @@ local POLL, BAR_EVERY = 0.25, 0.5
 -- SetupWelcome.lua), so it and its drawing stay under both. A game frame there can stand at any level: the player's cast bar is a toplevel frame
 -- of HIGH, which the game raises above the others (Blizzard_UIPanels_Game/Mainline/CastingBarFrame.xml:468), and its stand-in drew over the window.
 local UNDER_PANEL = 300
-local BAR_W, BAR_H, TOP = 990, 40, -8
+local BAR_W, BAR_H, TOP = 1044, 40, -8
 -- The most time between the two clicks of a double-click on the bar's title, in seconds.
 local DOUBLE = 0.3
 local SOURCES = { panel = "options", movers = "/flatui move", slash = "/flatui test", key = "key" }
@@ -116,6 +118,7 @@ local TIPS = {
 	Bank = { "Bank", "Opens or closes your bank window, as /flatui bank: live at the banker, else as you last left it." },
 	Gear = { "Gear", "Opens or closes the Gear comparison window, as /flatui gear." },
 	Finder = { "Finder", "Opens or closes the item finder, as the Find button of the Gear comparison window." },
+	Queue = { "Queue", "Opens or closes the Trinket queue window, as /flatui queue." },
 	Move = { "Move", "Opens /flatui move with these samples, so each frame can be placed where it shows. Press it again to close it." },
 	Title = { "Test mode bar", "Drag the bar to move it; double-click here to put it back." },
 	End = { "End", "Turns test mode off. Nothing was saved." },
@@ -727,7 +730,8 @@ local function BuildBar()
 	-- Move opens /flatui move (Movers' word, as the options window's Move frames runs it); the options window that turned test mode on is held
 	-- hidden there (MoversMode's Holding), so test mode stays on.
 	for _, button in ipairs({ { "Bags", 50, function() Word("bags") end }, { "Bank", 50, function() Word("bank") end },
-		{ "Gear", 50, function() Word("gear") end }, { "Finder", 60, Finder }, { "Move", 54, function() Word("move") end } }) do
+		{ "Gear", 50, function() Word("gear") end }, { "Finder", 60, Finder }, { "Queue", 50, function() Word("queue") end },
+		{ "Move", 54, function() Word("move") end } }) do
 		local made = kit.Button(live, button[1], button[2], button[3])
 		made:SetPoint("LEFT", live, "LEFT", x, 0)
 		Tipped(made, button[1])

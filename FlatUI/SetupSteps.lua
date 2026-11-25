@@ -981,6 +981,17 @@ ns.SETUP_STEPS = {
 		{ "chat.gearFindLevel", "r", "behaviour", "Chooses whether the item finder starts on items near your level or at any level." },
 		{ "chat.gearFindUsable", "r", "behaviour", "Starts the item finder on only the armor and weapons your class can wear." },
 	} },
+	-- The trinket queue swaps by itself only once a slot's Auto queue is ticked, so its step shows the screen; every row describes itself.
+	{ id = "trinkets", area = "Character and gear", title = "Trinket queue", draw = "mock-screen", built = false, rows = {
+		{ "trinkets.enabled", "c", "behaviour", "Keeps a list of your trinkets for each trinket slot and opens it from the Character window or /flatui queue." },
+		{ "trinkets.autoTop", "c", "behaviour", "Swaps your top trinket by its list out of combat: the best one you carry that is ready." },
+		{ "trinkets.autoBottom", "c", "behaviour", "Swaps your bottom trinket by its list out of combat: the best one you carry that is ready." },
+		{ "trinkets.ready", "o", "behaviour", "Counts a trinket as ready with this many seconds or fewer of its cooldown left." },
+		{ "trinkets.window", "o", "behaviour", "Opens the trinket queue window on the top or bottom slot's list." },
+		{ "trinkets.say", "o", "behaviour", "Says each trinket swap in chat." },
+		{ "trinkets.sound", "r", "behaviour", "Plays a sound on each trinket swap." },
+		{ "trinkets.slotButtons", "o", "behaviour", "Puts a small square beside each trinket slot on the Character window that shows the queue's state and opens its window." },
+	} },
 	-- The hit table hangs under the player frame, so its step shows the player's frame (mock-player, SetupDrawUnits.lua); every row describes itself.
 	{ id = "hud-hittable", area = "Character and gear", title = "Hit table", draw = "mock-player", built = true, rows = {
 		{ "hud.hitTable", "c", "behaviour", "Shows under your player frame your chances to miss, be dodged, parried or blocked, glance, crit and hit against your target, and the share of a spell's damage resisted with your Spell Piercing, while you are a tank or a damage dealer, or always." },
