@@ -12,7 +12,8 @@ local _, ns = ...
 --   The target's, the focus's and the pet's at TargetFrameSpellBar, FocusFrameSpellBar and PetCastingBarFrame, and the first boss's at
 --   Boss1TargetFrameSpellBar, each only while the stand-in of its unit shows (TM.Shown of "target", "focus", "pet" and "boss", TestUnits.lua): an enemy
 --   cast, the target's and the focus's in the colour of the player's interrupt while Interrupt readiness on enemy casts and Flat fill are on (the
---   target's ready, the focus's ready but out of range), then one that cannot be interrupted, a little later than the player's. Each bar takes the size of the game's frame. The boss bar keeps the game's look, as Bars.lua
+--   target's ready, the focus's ready but out of range), then one that cannot be interrupted, a little later than the player's, each with "> You"
+--   past its end while Target of enemy casts is on. Each bar takes the size of the game's frame. The boss bar keeps the game's look, as Bars.lua
 --   styles no boss bar, and hangs on the unit frames' module, whose boss stand-in it follows.
 --   Swing timers: at SwingTimerMainHandFrame for every class, SwingTimerOffHandFrame for a warrior and a rogue with an off-hand weapon,
 --   SwingTimerRangedFrame for a hunter with a ranged weapon (UnitAttackSpeed, as the game's HasOffHandWeapon and HasRangedWeapon), while the game's
@@ -60,14 +61,15 @@ end
 
 -- The cast bars: their stand-in, game frame, module, place on the Cast bars page (opt), the stand-in of their unit, how much later their round
 -- starts, and their spell names by state. kick: the interrupt colour an enemy bar shows, ready on the target's and out of range on the focus's (the
--- setup picture shows on cooldown); the boss bar keeps the game's look, which takes none.
+-- setup picture shows on cooldown); the boss bar keeps the game's look, which takes none. aim: the sample name of the cast's target past the end of
+-- the target's and the focus's bars while Target of enemy casts is on (CastTime.lua).
 local CASTS = {
 	{ id = "castPlayer", game = "PlayerCastingBarFrame", module = "castbars", opt = "player", label = "Cast bar", offset = 0, ticks = 5,
 		names = { channel = "Drain Life" } },
 	{ id = "castTarget", game = "TargetFrameSpellBar", module = "castbars", opt = "target", label = "Target cast bar", unit = "target", offset = 0.8,
-		small = true, kick = "ready", names = { cast = "Fireball", shield = "Polymorph" } },
+		small = true, kick = "ready", aim = "> You", names = { cast = "Fireball", shield = "Polymorph" } },
 	{ id = "castFocus", game = "FocusFrameSpellBar", module = "castbars", opt = "focus", label = "Focus cast bar", unit = "focus", offset = 1.6,
-		small = true, kick = "far", names = { cast = "Frostbolt", shield = "Fear" } },
+		small = true, kick = "far", aim = "> You", names = { cast = "Frostbolt", shield = "Fear" } },
 	{ id = "castPet", game = "PetCastingBarFrame", module = "castbars", opt = "pet", label = "Pet cast bar", unit = "pet", offset = 2.4,
 		round = "pet", names = { cast = "Firebolt" } },
 	{ id = "castBoss", game = "Boss1TargetFrameSpellBar", module = "unitframes", opt = "boss", label = "Boss cast bar", unit = "boss", offset = 1.2,
@@ -182,7 +184,7 @@ local function CastStandIn(spec)
 		Build = function(holder)
 			holder.row = ns.DrawCasts.Cast(holder, { opt = spec.opt, small = spec.small, shield = true, time = "",
 				name = spec.opt == "player" and "Shadow Bolt" or spec.names.cast, rank = spec.opt == "player" and "Rank 3" or nil,
-				ticks = spec.ticks })
+				ticks = spec.ticks, aim = spec.aim })
 			holder.row.bar:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
 		end,
 		Paint = function(holder, w, h)

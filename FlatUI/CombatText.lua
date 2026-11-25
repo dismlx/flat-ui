@@ -11,6 +11,8 @@ local _, ns = ...
 -- Self (enableFloatingCombatText) is written "0" as well, again whenever the game or anyone else turns it on, and through the game's own
 -- setting while the game's text is loaded (OwnSwitch). A hit on you shows there alone: the other tokens that name you (your raid token, your
 -- own nameplate, the target while you target yourself) show no copy of it (Yourself).
+-- The numbers on you take Damage on you colour and Healing on you colour (0.5.39, the game's red and green at first), and with Healing on you off
+-- no heal on you shows there, so a column under five healers shows only what hurts (DescribeOwn).
 -- Numbers over friendly units come from the same event, for the party and raid tokens and the pet token and for friendly nameplates. They
 -- are drawn over the plate or over the unit's party or raid frame, and while they show the game's healing row is written "0".
 -- The combat alerts of the page, No target and +Combat and -Combat, are CombatCues.lua.
@@ -959,9 +961,10 @@ local function KindSize(flag, name)
 end
 
 -- What a hit report for the player's own character shows, in the form Describe gives, with the format of the amount in place of what
--- follows it. level is Combat text for you: take shows the damage and the healing, more adds the words and the gains. The colours are
--- the game's own for damage and healing (CombatTextConstants.lua:28, 38, 57; red for a physical hit or a school that is not known, purple
--- for any other school, or with Colour by school of magic on the colour of a single school, SCHOOLS, the school mask of UNIT_COMBAT being plain)
+-- follows it. level is Combat text for you: take shows the damage and the healing, more adds the words and the gains; a heal shows only while
+-- Healing on you is on (0.5.39). The colours are Damage on you colour and Healing on you colour (0.5.39; at first the game's own, red and green,
+-- CombatTextConstants.lua:28, 38, 57) for a physical hit or a school that is not known and for a heal, the game's purple for any other school,
+-- or with Colour by school of magic on the colour of a single school, SCHOOLS, the school mask of UNIT_COMBAT being plain)
 -- and white for a word (:29-37 colour a missed swing red and :39-45 a missed spell white; the report does not say
 -- which it was). A gain has the colour of the portrait's (CombatFeedback.lua:78-80): the game's combat text colours it by power
 -- (CombatTextUtil.lua:44-49) and the report does not name the power.
@@ -985,12 +988,14 @@ local function DescribeOwn(level, event, flag, amount, none, school)
 			end
 			return "amount", amount, "-%s", crit, 0.79, 0.3, 0.85
 		end
-		return "amount", amount, "-%s", crit, 1, 0.1, 0.1
+		local r, g, b = ns.Colour(KEY .. ".ownDamageColour")
+		return "amount", amount, "-%s", crit, r, g, b
 	elseif event == "HEAL" then
-		if none then
+		if none or Opt("ownHeal") ~= true then
 			return nil
 		end
-		return "amount", amount, "+%s", flag == "CRITICAL", 0.1, 1, 0.1
+		local r, g, b = ns.Colour(KEY .. ".ownHealColour")
+		return "amount", amount, "+%s", flag == "CRITICAL", r, g, b
 	elseif event == "ENERGIZE" then
 		if not more or none or (Plain(amount, "number") and amount < 0) then
 			return nil

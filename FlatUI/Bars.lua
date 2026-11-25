@@ -7,7 +7,9 @@ local _, ns = ...
 -- texture laid over the game's fill. The chosen bar texture is an image file in place of the solid colour. While Heroic Strike, Cleave, Maul
 -- or Raptor Strike waits for the next swing, a texture of the addon's own lays Queued ability colour over the main hand timer's fill (Q, below).
 -- With Flat fill off, a thin strip of the addon's own along the bottom of the target and focus bars takes the colour of the player's interrupt
--- for an enemy cast that can be interrupted (Interrupt strip, below).
+-- for an enemy cast that can be interrupted (Interrupt strip, below), Interrupt strip height thick.
+-- The spell icon of the player and pet bars and the latency zone of the player bar show with or without Flat fill: on the cover's marks with it
+-- (PaintMarks), and on a set of the addon's own without it (Cast marks without Flat fill, below).
 -- The names and numbers on the bars are sized and hidden with the font and the alpha of their font strings.
 
 local BAR_BACKGROUND = "UI-HUD-CoolDownManager-Bar-BG"
@@ -1872,8 +1874,9 @@ local function ApplyCastFill(bar)
 end
 
 -- Interrupt strip (0.5.37): with Flat fill off there is no cover to colour, so while Interrupt readiness on enemy casts is on and an interrupt is
--- known (ns.InterruptKnown, Interrupt.lua), the target and focus bars get a thin strip of the addon's own along their bottom edge (2 screen
--- pixels, OVERLAY), made and anchored out of a fight, since these bars hang from protected unit frames (ns.MaybeProtected, as ApplyCastIcon
+-- known (ns.InterruptKnown, Interrupt.lua), the target and focus bars get a thin strip of the addon's own along their bottom edge (Interrupt strip
+-- height, 1 to 6 screen pixels, 2 at first, set out of a fight only: a change in one waits for its end; OVERLAY), made and anchored out of a
+-- fight, since these bars hang from protected unit frames (ns.MaybeProtected, as ApplyCastIcon
 -- waits). A frame of its own looks at the two bars every 0.1 s while the strip is wanted (ns.CastKickSync, called by Interrupt.lua's Sync, which
 -- the refresh of the cast bars and the interrupt row run): the strip shows while the bar's casting or channeling is a plain true and
 -- ns.InterruptReady answers for its unit, in Interrupt ready colour, Interrupt out of range colour or Interrupt on cooldown colour as CastColour
@@ -1882,10 +1885,21 @@ end
 -- and no strip shows. Only Show, Hide, SetColorTexture, SetAlpha and SetAlphaFromBoolean reach it in a fight.
 do
 	local KICK_BARS = { { "TargetFrameSpellBar", "target" }, { "FocusFrameSpellBar", "focus" } }
+	-- KICK_PX: the height of the strip in screen pixels when Interrupt strip height has no number.
 	local KICK_EVERY, KICK_PX = 0.1, 2
-	-- strips: per bar, its strip { tex, hex, alpha, shown }, or false when the game refused it. queued: a make waits for the end of the fight.
+	-- strips: per bar, its strip { tex, hex, alpha, shown, px }, or false when the game refused it. queued: a make waits for the end of the fight.
+	-- resized: a new height waits for the end of the fight.
 	local strips, queued = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
-	local kickFrame, kickClock, kicking = nil, 0, false
+	local kickFrame, kickClock, kicking, resized = nil, 0, false, false
+
+	-- Interrupt strip height (0.5.39, 1 to 6 screen pixels, 2 at first).
+	local function StripPx()
+		local px = ns.Get("castbars.interruptStrip")
+		if ns.Finite(px) and px >= 1 and px <= 6 then
+			return px
+		end
+		return KICK_PX
+	end
 
 	local function KickWanted()
 		return ns.Enabled("castbars") and ns.Get("castbars.interrupt") == true and ns.Get("castbars.flat") ~= true
@@ -1923,14 +1937,15 @@ do
 		ns.Own[tex] = true
 		tex:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
 		tex:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
-		tex:SetHeight(ns.Pixels(bar, KICK_PX))
+		local px = StripPx()
+		tex:SetHeight(ns.Pixels(bar, px))
 		tex:Hide()
 		if not Anchored(tex) then
 			strips[bar] = false
 			ns.Note("castbars", "Cast bars: the game refused the interrupt strip on a target or focus bar, so it does not show there.")
 			return nil
 		end
-		strip = { tex = tex, shown = false }
+		strip = { tex = tex, shown = false, px = px }
 		strips[bar] = strip
 		return strip
 	end
@@ -2018,8 +2033,17 @@ do
 			if bar ~= nil and not ns.IsSecret(bar) and not ns.Forbidden(bar) then
 				if wanted then
 					local strip = MakeStrip(bar)
+					local px = StripPx()
 					if strip and not InCombatLockdown() then
-						pcall(strip.tex.SetHeight, strip.tex, ns.Pixels(bar, KICK_PX))
+						pcall(strip.tex.SetHeight, strip.tex, ns.Pixels(bar, px))
+						strip.px = px
+					elseif strip and strip.px ~= px and not resized then
+						-- A height changed in a fight is set as it ends, once however many changes asked.
+						resized = true
+						ns.OutOfCombat(function()
+							resized = false
+							pcall(ns.CastKickSync)
+						end)
 					end
 				else
 					HideStrip(strips[bar])
@@ -2039,6 +2063,206 @@ do
 	end
 end
 
+-- Cast marks without Flat fill (0.5.39): with Flat fill off there is no cover, so PaintMarks never runs. While the page is on, Flat fill is off and
+-- Latency zone on the player bar or Spell icon on player and pet bars is on, the player bars (PlayerCastingBarFrame, OverlayPlayerCastingBarFrame)
+-- and the pet bar get a set of marks of the addon's own each: the spell icon 5 units left of the bar, and on the player bars two latency zones,
+-- one hung on the bar's right edges for a cast and one on its left edges for a channel, so that no anchor changes in a fight (Lock to player
+-- frame hangs the player bar on the protected player frame). They are made and anchored out of a fight (ns.MaybeProtected, as the strip above):
+-- at every refresh of the cast bars (ns.CastMarksSync) and at the end of a fight while some are missing. A frame of its own looks at the three
+-- bars every 0.05 s while the marks are wanted and does what Marks does for a cover: UnitCastingInfo, else UnitChannelInfo, of the player or the
+-- pet, each answer tested before it is used; the zone of the cast's side shows, as wide a share of the bar as the world latency (GetNetStats)
+-- is of the cast, and the icon takes the spell's texture and the bar's height. Only Show, Hide, SetWidth, SetTexture and SetSize reach them in
+-- a fight. With Flat fill on, the cover's PaintMarks does this and these stay hidden.
+do
+	local MARK_BARS = { { "PlayerCastingBarFrame", "player" }, { "OverlayPlayerCastingBarFrame", "player" }, { "PetCastingBarFrame", "pet" } }
+	local MARK_EVERY, MARK_PART, MARK_NAMES = 0.05, "cast marks", { "icon", "cast", "channel" }
+	-- sets: per bar, { unit, icon, cast, channel (the zones, none on the pet bar), shown and widths (per mark), file, size }, or false when the game
+	-- refused them. queued: a make waits for the end of the fight.
+	local sets, queued = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
+	local markFrame, markClock, marking = nil, 0, false
+
+	local function MarksWanted()
+		return ns.Enabled("castbars") and ns.Get("castbars.flat") ~= true and not ns.PartStopped("castbars", MARK_PART)
+			and (ns.Get("castbars.latency") == true or ns.Get("castbars.playerIcon") == true)
+	end
+
+	local function ShowMark(set, name, show)
+		local mark = set[name]
+		if mark and (set.shown[name] == true) ~= show then
+			if show then
+				mark:Show()
+			else
+				mark:Hide()
+			end
+			set.shown[name] = show or nil
+		end
+	end
+
+	local function HideSet(set)
+		if set then
+			for _, name in ipairs(MARK_NAMES) do
+				pcall(ShowMark, set, name, false)
+			end
+		end
+	end
+
+	-- A texture of the addon's own on a bar, placed by place; nil when the game refused it or its anchor.
+	local function NewMark(bar, sublevel, place)
+		local ok, mark = pcall(bar.CreateTexture, bar, nil, "OVERLAY", nil, sublevel)
+		if not ok or ns.IsSecret(mark) or type(mark) ~= "table" then
+			return nil
+		end
+		ns.Own[mark] = true
+		if not pcall(place, mark) then
+			return nil
+		end
+		mark:Hide()
+		return Anchored(mark) and mark or nil
+	end
+
+	-- A latency zone hung on one side of the bar, which only its width changes after.
+	local function NewZone(bar, side)
+		return NewMark(bar, 0, function(mark)
+			mark:SetColorTexture(1, 0, 0, 0.6)
+			mark:SetPoint("TOP" .. side, bar, "TOP" .. side, 0, 0)
+			mark:SetPoint("BOTTOM" .. side, bar, "BOTTOM" .. side, 0, 0)
+			mark:SetWidth(0.01)
+		end)
+	end
+
+	-- The set of a bar, made once out of a fight; nil while it cannot be made.
+	local function MakeSet(bar, unit)
+		local set = sets[bar]
+		if set ~= nil then
+			return set or nil
+		end
+		if InCombatLockdown() and ns.MaybeProtected(bar) then
+			if not queued[bar] then
+				queued[bar] = true
+				ns.OutOfCombat(function()
+					queued[bar] = nil
+					pcall(ns.CastMarksSync)
+				end)
+			end
+			return nil
+		end
+		local icon = NewMark(bar, 1, function(mark)
+			mark:SetPoint("RIGHT", bar, "LEFT", -5, 0)
+			mark:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+		end)
+		local cast = unit == "player" and NewZone(bar, "RIGHT") or nil
+		local channel = unit == "player" and NewZone(bar, "LEFT") or nil
+		if not icon or (unit == "player" and not (cast and channel)) then
+			sets[bar] = false
+			ns.Note("castbars", "Cast bars: the game refused a mark on one cast bar, which keeps its default look.")
+			return nil
+		end
+		set = { unit = unit, icon = icon, cast = cast, channel = channel, shown = {}, widths = {} }
+		sets[bar] = set
+		return set
+	end
+
+	-- One look at one bar, as Marks does it for a cover.
+	local function PaintSet(bar, set, wantIcon, wantLatency)
+		local name, _, texture, startMs, endMs = UnitCastingInfo(set.unit)
+		local channel = false
+		if not ns.IsSecret(name) and name == nil then
+			name, _, texture, startMs, endMs = UnitChannelInfo(set.unit)
+			channel = true
+		end
+		if ns.IsSecret(name) or name == nil then
+			HideSet(set)
+			return
+		end
+		local height = PlainNumber(bar:GetHeight())
+		if wantIcon and not ns.IsSecret(texture) and (type(texture) == "number" or type(texture) == "string") and height and height > 0 then
+			local icon = set.icon
+			if set.file ~= texture then
+				icon:SetTexture(texture)
+				set.file = texture
+			end
+			if set.size ~= height then
+				icon:SetSize(height, height)
+				set.size = height
+			end
+			ShowMark(set, "icon", true)
+		else
+			ShowMark(set, "icon", false)
+		end
+		if not set.cast then
+			return
+		end
+		local side = channel and "channel" or "cast"
+		ShowMark(set, channel and "cast" or "channel", false)
+		local width = PlainNumber(bar:GetWidth())
+		startMs, endMs = PlainNumber(startMs), PlainNumber(endMs)
+		local world = wantLatency and type(GetNetStats) == "function" and PlainNumber(select(4, GetNetStats())) or nil
+		if world and startMs and endMs and endMs > startMs and width and width > 0 then
+			local zone = math.min(1, math.max(0, world) / (endMs - startMs)) * width
+			if set.widths[side] ~= zone then
+				set[side]:SetWidth(math.max(zone, 0.01))
+				set.widths[side] = zone
+			end
+			ShowMark(set, side, true)
+		else
+			ShowMark(set, side, false)
+		end
+	end
+
+	local function MarkTick(_, elapsed)
+		markClock = markClock + elapsed
+		if markClock < MARK_EVERY then
+			return
+		end
+		markClock = 0
+		-- A row, the page or Flat fill changed since: the marks hide and the look stops.
+		if not MarksWanted() then
+			pcall(ns.CastMarksSync)
+			return
+		end
+		local wantIcon, wantLatency = ns.Get("castbars.playerIcon") == true, ns.Get("castbars.latency") == true
+		for _, entry in ipairs(MARK_BARS) do
+			local bar = _G[entry[1]]
+			local set = bar ~= nil and sets[bar]
+			if set then
+				local ok, err = ns.EachPart("castbars", MARK_PART, PaintSet, bar, set, wantIcon, wantLatency)
+				if not ok then
+					HideSet(set)
+					if err then
+						sets[bar] = false
+						ns.Note("castbars", "Cast bars: the spell icon or latency zone of one cast bar failed, so it no longer shows there. " .. err)
+					end
+				end
+			end
+		end
+	end
+
+	-- The sets are made while they are wanted and hidden while they are not, and the look runs only while they are wanted.
+	function ns.CastMarksSync()
+		local wanted = MarksWanted()
+		for _, entry in ipairs(MARK_BARS) do
+			local bar = _G[entry[1]]
+			if bar ~= nil and not ns.IsSecret(bar) and not ns.Forbidden(bar) then
+				if wanted then
+					MakeSet(bar, entry[2])
+				else
+					HideSet(sets[bar])
+				end
+			end
+		end
+		if wanted ~= marking then
+			if wanted and markFrame == nil then
+				markFrame = CreateFrame("Frame")
+				ns.Own[markFrame] = true
+			end
+			if markFrame then
+				markFrame:SetScript("OnUpdate", wanted and MarkTick or nil)
+			end
+			marking = wanted
+		end
+	end
+end
+
 local function RefreshCastBars()
 	for _, entry in ipairs(CAST_BARS) do
 		local bar = _G[entry[1]]
@@ -2053,6 +2277,7 @@ local function RefreshCastBars()
 	if ns.CastTicksSync then ns.CastTicksSync() end
 	if ns.CastRankSync then ns.CastRankSync() end
 	if ns.InterruptSync then ns.InterruptSync() end
+	pcall(ns.CastMarksSync)
 end
 
 ns.Register("castbars", { label = "Cast bars", Start = RefreshCastBars, Refresh = RefreshCastBars })
