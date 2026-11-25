@@ -38,6 +38,10 @@ local _, ns = ...
 -- standing of the same faction in the fill of that standing, fading over EASE_FLASH seconds as the fill drops to its new value (F.Rose,
 -- F.Flash); the first drawing after login or after the bar showed again, a sample and a bar off the screen never flash. One frame of Flat UI's
 -- own per bar runs the ease, shown only while it runs, so this goes on in a fight too.
+-- With Gains over the bar (hud.xpGainText, on by default) each gain rises as "+1,240" from the end of the fill, FLOAT_RISE px over FLOAT_TIME
+-- seconds as it fades, white for experience and in the fill's colour on the reputation bar (F.Float); a quick second gain starts it again with the
+-- new amount. Only a gain on the same level or faction counts, so the first drawing, a bar that shows again, a new level or standing (which
+-- flash), another faction, a sample and a bar off the screen show none. Its frame is Flat UI's own too, so it shows in a fight.
 -- In test mode (TestMode.lua, entry "xpbar") a bar that Bars shown asks for and that has nothing to show, as at the top level or with no faction
 -- watched, shows a sample (experience at 45% with rested and quest stretches, Stormwind at Honored), drawn with every row; samples are kept apart
 -- from what the game gave (F.Data), are never put in chat, and give XpStats.lua nothing to count (ns.XpRepNow).
@@ -53,6 +57,8 @@ local QUEST_ALPHA = 0.6
 local EASE_FILL, EASE_GLOW, GLOW_ALPHA, EASE_LEAST = 0.4, 0.8, 0.5, 0.0005
 -- The flash of a new level or standing over the whole bar: the seconds it fades over, its opacity at the start, and the gold of a new level.
 local EASE_FLASH, FLASH_ALPHA, FLASH_GOLD = 1.0, 0.6, { 1, 0.82, 0 }
+-- Gains over the bar: the seconds the "+1,240" rises and fades over, how far it rises, and how close to an end of the bar it may stand.
+local FLOAT_TIME, FLOAT_RISE, FLOAT_EDGE = 1.2, 10, 16
 -- The chat line of a click on the reputation bar in a fight.
 local LATER_REP = "Flat UI: your reputations open when the fight ends."
 local MANAGER = "StatusTrackingBarManager"
@@ -475,9 +481,9 @@ function F.Unpark()
 	if S.frame then
 		S.frame:Hide()
 	end
-	-- The bar comes back with its fill set at once, and without a flash.
+	-- The bar comes back with its fill set at once, and without a flash or a gain over it.
 	for _, bar in pairs(S.bars) do
-		bar.ratio, bar.key = nil, nil
+		bar.ratio, bar.key, bar.raw = nil, nil, nil
 		bar.level, bar.repId, bar.reaction = nil, nil, nil
 	end
 end
@@ -1003,7 +1009,67 @@ function F.Value(bar, ratio, key, sample, width, flash)
 	bar.ratio, bar.key = ratio, key
 end
 
--- The value of a bar, its fill colour and the stretch of rested experience.
+-- One frame of a gain over the bar: it rises FLOAT_RISE px, easing out, and fades over FLOAT_TIME seconds, then hides.
+function F.FloatStep(bar, elapsed)
+	bar.floatT = bar.floatT + (ns.Finite(elapsed) and elapsed or 0)
+	local done = math.min(bar.floatT / FLOAT_TIME, 1)
+	bar.float:SetPoint("BOTTOM", bar.frame, "TOPLEFT", bar.floatX, 2 + FLOAT_RISE * (1 - (1 - done) ^ 2))
+	bar.float:SetAlpha(1 - done * done)
+	if done >= 1 then
+		bar.floatAnim:Hide()
+	end
+end
+
+-- Gains over the bar (hud.xpGainText): "+1,240" rises from the end of the fill at ratio of the bar's width, white for experience and in the
+-- fill's colour for reputation, in the bar text's size. A font string of Flat UI's own on bar.over and one frame of Flat UI's own per bar that
+-- runs it, shown only while it runs; a second gain starts it again with the new amount. Nothing on a bar that is not on the screen.
+function F.Float(bar, gained, ratio, width)
+	local okSeen, seen = pcall(bar.frame.IsVisible, bar.frame)
+	if not (okSeen and seen == true) then
+		return
+	end
+	if not bar.float then
+		bar.float = ns.OwnText(bar.over, "OVERLAY", "GameFontHighlightSmall")
+		if not bar.float then
+			return
+		end
+		bar.float:Hide()
+		local anim = CreateFrame("Frame", nil, bar.frame)
+		ns.Own[anim] = true
+		anim:Hide()
+		anim:SetScript("OnUpdate", function(_, elapsed)
+			F.FloatStep(bar, elapsed)
+		end)
+		-- The bar hid, or the gain ran out: the text goes with it.
+		anim:SetScript("OnHide", function()
+			bar.float:Hide()
+		end)
+		bar.floatAnim = anim
+	end
+	local text, size = bar.float, Opt("xpTextSize")
+	if bar.floatSize ~= size then
+		bar.floatSize = size
+		ns.TextStyle(text, { percent = size, flags = "OUTLINE" })
+	end
+	if bar.id == "xp" then
+		text:SetTextColor(1, 1, 1, 1)
+	else
+		local r, g, b = F.Colour(bar)
+		text:SetTextColor(r, g, b, 1)
+	end
+	text:SetText("+" .. Grouped(gained))
+	bar.floatX = math.max(math.min(ratio * width, width - FLOAT_EDGE), math.min(FLOAT_EDGE, width / 2))
+	bar.floatT = 0
+	text:ClearAllPoints()
+	text:SetPoint("BOTTOM", bar.frame, "TOPLEFT", bar.floatX, 2)
+	text:SetAlpha(1)
+	text:Show()
+	bar.floatAnim:Show()
+end
+
+-- The value of a bar, its fill colour and the stretch of rested experience. A gain on the same level or faction (bar.raw keeps the value drawn
+-- last; cleared with bar.ratio and bar.key) rises over the bar with Gains over the bar on, so the first drawing after login, a bar that shows
+-- again, a new level or standing, another faction and a sample never show one.
 function F.Fill(bar, width)
 	local data, sample = F.Data(bar)
 	local ratio = 0
@@ -1011,9 +1077,16 @@ function F.Fill(bar, width)
 		local total = bar.id == "xp" and data.total or data.total
 		ratio = total > 0 and math.max(0, math.min(data.value / total, 1)) or 0
 	end
-	F.Value(bar, ratio, F.Key(bar, data, sample), sample, width, F.Rose(bar, data, sample))
+	local key = F.Key(bar, data, sample)
+	local real = data ~= nil and not sample and ns.Finite(data.value)
+	local gained = real and bar.key == key and ns.Finite(bar.raw) and data.value > bar.raw and math.floor(data.value - bar.raw) or 0
+	bar.raw = real and data.value or nil
+	F.Value(bar, ratio, key, sample, width, F.Rose(bar, data, sample))
 	local r, g, b = F.Colour(bar)
 	bar.frame:SetStatusBarColor(r, g, b, 1)
+	if gained > 0 and Opt("xpGainText") == true then
+		F.Float(bar, gained, ratio, width)
+	end
 	local stretch = bar.rested
 	local xp = bar.id == "xp" and data or nil
 	if bar.id == "xp" and Opt("xpRested") and xp and xp.rested > 0 and xp.total > 0 then
@@ -1119,7 +1192,7 @@ function F.Update(layout)
 			F.EaseEnd(bar, true)
 			bar.frame:Hide()
 			bar.hover = false
-			bar.ratio, bar.key = nil, nil
+			bar.ratio, bar.key, bar.raw = nil, nil, nil
 			bar.level, bar.repId, bar.reaction = nil, nil, nil
 		end
 		F.Text(bar)

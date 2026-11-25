@@ -293,6 +293,7 @@ function Minimap.build(stage)
 		parts[path] = s.lines.coords
 	end
 	parts["hud.mapDurability"], parts["hud.mapDurabilityPlace"] = s.lines.durability, s.lines.durability
+	parts["hud.mapDurabilityWhen"] = s.lines.durability
 	for _, path in ipairs({ "hud.mapPerf", "hud.mapPerfPlace", "hud.mapPerfShow", "hud.mapLatency", "hud.mapPerfColour" }) do
 		parts[path] = s.lines.perf
 	end
@@ -307,15 +308,17 @@ function Minimap.build(stage)
 	return root
 end
 
--- The sample text of a line around the map, from its rows: the coordinates by Coordinate decimals; the durability; the frame rate and latency by
--- Show and Latency, each number in its colour while Colour by value is on (ns.PerfColour, MapText.lua); the time, local or the realm's, by Time
--- format.
+-- The sample text of a line around the map, from its rows: the coordinates by Coordinate decimals; the durability by Durability shows; the frame
+-- rate and latency by Show and Latency, each number in its colour while Colour by value is on (ns.PerfColour, MapText.lua); the time, local or
+-- the realm's, by Time format.
 local function MapLineText(id)
 	if id == "coords" then
 		local decimals = Val("mapCoordsDecimals")
 		return (decimals == "0" and "45, 62") or (decimals == "2" and "45.31, 62.08") or "45.3, 62.1"
 	elseif id == "durability" then
-		return "Durability 92%"
+		-- Durability shows at 50% or less, or at 20% or less: a worn item in yellow or red, so the picture keeps the line.
+		local when = Val("mapDurabilityWhen")
+		return (when == "worn" and "|cffffd12eDurability 42%|r") or (when == "low" and "|cffed1212Durability 18%|r") or "Durability 92%"
 	elseif id == "perf" then
 		local colour = Val("mapPerfColour") == true and type(ns.PerfColour) == "function"
 		local function Number(kind, value)

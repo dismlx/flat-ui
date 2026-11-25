@@ -30,6 +30,8 @@ local _, ns = ...
 --     white, yellow at 50% or less and red at 20% or less, in the colours of the game's damaged and broken items (INVENTORY_ALERT_COLORS,
 --     Blizzard_DurabilityFrame/DurabilityFrame.lua:14-16). It is read on the game's durability and equipment events and a second after a
 --     death or a release, never on a timer, and not at all where the game rule RepairArmorDisabled is on (DurabilityFrame.lua:51-55).
+--     Durability shows (hud.mapDurabilityWhen) keeps it Always, or hides it until an item is at 50% or less (yellow) or at 20% or less (red);
+--     the line comes as an item wears to the mark and goes after a repair, and the lines and the addon button row below close up.
 --   Frame rate and latency: GetFramerate, and the home and world latency of GetNetStats (its values 3 and 4), neither of which marks a return
 --     secret (ClientDocumentation.lua:44-51, ConnectionDocumentation.lua:40-49). Show picks the frame rate, the latency or both, and Latency
 --     picks home and world, the higher one, or one of them. With Colour by value each number is green, yellow or red by ns.PerfColour, which the
@@ -223,6 +225,11 @@ local function Durability()
 	end
 	if not lowest then
 		return nil, "hidden, nothing you wear has durability"
+	end
+	-- Durability shows: at 50% or less, or at 20% or less, the line waits for an item that worn; hidden by choice, so /flatui status is quiet.
+	local when = Opt("mapDurabilityWhen")
+	if (when == "worn" and lowest > 50) or (when == "low" and lowest > 20) then
+		return nil
 	end
 	local word = _G.DURABILITY
 	if ns.IsSecret(word) or type(word) ~= "string" or word == "" then
