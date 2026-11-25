@@ -33,16 +33,20 @@ local _, ns = ...
 -- WL/apis.yaml:36266). It is as wide as the layout (BagsLayout.lua) and its padding of 8 on each side, at least as wide as its title bar and its
 -- footer need, and the bank window at least as wide as the row of BagsBank.lua over its footer. While a window is open, an update that does not
 -- lay it out afresh never makes it shorter: the bag window hangs from its bottom right corner, so a shorter window would move everything above
--- what shrank (Free slots losing a row as its slots fill), and neither does a fold or an unfold of a section the player clicked (B.Window.KeepHeight,
--- asked by BagsOrder.lua), so the title clicked stays under the mouse. It takes its exact height again at its next other fresh layout and at its
--- opening.
+-- what shrank (Free slots losing a row as its slots fill), and neither does a fold or an unfold of a section the player clicked in the bag window
+-- (B.Window.KeepHeight, asked by BagsOrder.lua), so the title clicked stays under the mouse; the bank window, which hangs from its top left, simply
+-- shrinks as a section folds. A window kept taller so takes its exact height again once the mouse is off it and no menu of it is open (Unslack,
+-- IsMouseOver, read each frame while it is taller than it needs), at its next other fresh layout and at its opening.
 -- The bag window's footer has the gold of the character shown (Errands.Money, Errands.lua:65-85), whose tooltip lists the characters of this realm
 -- and its connected realms, richest first, each with its realm when that is not this character's, with their total, and one line for those of
 -- other realms, and while the window shows the player's own bags what this character made (in green) or spent (in red) since it logged in
--- (ns.SessionMoney, BagsData.lua; a /reload keeps the session, and nothing shows while it made and spent nothing); its free slots, those of the
+-- (ns.SessionMoney, BagsData.lua; a /reload keeps the session, and nothing shows while it made and spent nothing); while the window shows the
+-- player's own bags, each change of the gold floats up from it as a short "+38s 2c" in green or "-1g 4s" in red, the changes that come while one
+-- plays added up (GoldFloat, a frame, font string and animation group of this file's own); its free slots, those of the
 -- general bags alone (B.Data.Free: the backpack and normal bags, family 0, the only room for any
 -- item), whose tooltip names each special bag's free slots apart, uncounted (the reagent bag, a trade bag, a quiver, an ammo pouch, a soul bag
--- take only certain items), and leaves the keyring out, as its slots hold only keys; and, at a merchant, Sell junk (N): N is
+-- take only certain items), and leaves the keyring out, as its slots hold only keys, and which pulse twice in red when they reach 0 while the
+-- window shows the player's own bags, or when it opens full after it was last seen with room (FullPulse); and, at a merchant, Sell junk (N): N is
 -- ns.ErrandsJunkCount, what the next pass of Errands would sell, whose tooltip says what it brings (Errands.Money; "at least" while the price of
 -- one has not loaded), and a click runs ns.ErrandsSellJunk, which sells as Errands sells and says why when it cannot. The bank window's footer has
 -- the free slots of the bank, its general slots alone the same way, and, at the banker with a
@@ -144,6 +148,9 @@ local DIM = { 0.66, 0.68, 0.62 }
 local SESSION_GAIN, SESSION_LOSS = { 0.3, 0.85, 0.3 }, { 1, 0.35, 0.24 }
 local DIM_HEX, WHITE_HEX, LOW_HEX, NONE_HEX = "|cffa8ad9e", "|cffffffff", "|cffffd100", "|cffff5a3d"
 local LOW = 4
+-- The footer's two cues (GoldFloat, FullPulse): how far a change of gold rises, how long it takes and when it starts to fade; how long each half of
+-- a pulse of the free slots takes, the opacity it dips to, and how many pulses.
+local CUE = { rise = 12, seconds = 1.0, fade = 0.35, half = 0.2, dip = 0.25, pulses = 2 }
 -- The separators under the title bar and over the footer, white at this opacity.
 local SEPARATOR = 0.07
 -- The glyphs of the title bar's buttons, in units of an 18 unit button: rectangles { x, y, width, height } from its top left corner, and strokes
@@ -1196,8 +1203,8 @@ local function FreeTip(w, owner)
 end
 
 -- The free slots as the footer may write them, longest first, for ArrangeFoot to take the first that fits: those of the general bags, low in gold
--- and none in red, and the count alone, without the word Free. The special bags are not counted, as they take only certain items (the tooltip
--- names them apart).
+-- and none in red, and the count alone, without the word Free; and that number. The special bags are not counted, as they take only certain items
+-- (the tooltip names them apart).
 local function FreeTexts(w)
 	local main
 	for _, kind in ipairs(Kinds(w)) do
@@ -1211,7 +1218,7 @@ local function FreeTexts(w)
 	end
 	local colour = main.free <= 0 and NONE_HEX or (main.free <= LOW and LOW_HEX) or WHITE_HEX
 	local count = ("%s%d|r%s/%d|r"):format(colour, main.free, DIM_HEX, main.total)
-	return { DIM_HEX .. "Free|r " .. count, count }
+	return { DIM_HEX .. "Free|r " .. count, count }, main.free
 end
 
 -- What Sell junk would sell now (ns.ErrandsJunkCount): how many items, how many of the sell list wait for the next click, what they are worth in
@@ -1497,15 +1504,115 @@ local function FootLeast(w)
 	return 2 * PAD + FREE_ROOM + 8 + MOVE_W + 4 + MOVE_W
 end
 
+-- A change of the gold floats up from it: "+38s 2c" in green or "-1g 4s" in red, CUE.rise units over CUE.seconds, fading after CUE.fade, on a
+-- frame and font string of this file's own raised over the row of bag slots, with an animation group made the first time. A change that comes
+-- while one plays adds to it and starts it again, so a whole Sell junk pass reads as one growing sum.
+local function GoldFloat(w, delta)
+	local float = w.float
+	if float == nil then
+		local ok, made = pcall(function()
+			local holder = Own(CreateFrame("Frame", nil, w.foot))
+			holder:SetFrameLevel(math.min(9000, w.frame:GetFrameLevel() + 40))
+			holder:SetSize(1, 1)
+			holder:SetPoint("BOTTOMLEFT", w.gold.frame, "TOPLEFT", 0, -6)
+			holder:Hide()
+			local text = ns.OwnText(holder, "OVERLAY", "GameFontHighlightSmall")
+			text:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, 0)
+			text:SetWordWrap(false)
+			local group = holder:CreateAnimationGroup()
+			local move = group:CreateAnimation("Translation")
+			move:SetOffset(0, CUE.rise)
+			move:SetDuration(CUE.seconds)
+			move:SetSmoothing("OUT")
+			local fade = group:CreateAnimation("Alpha")
+			fade:SetFromAlpha(1)
+			fade:SetToAlpha(0)
+			fade:SetStartDelay(CUE.fade)
+			fade:SetDuration(CUE.seconds - CUE.fade)
+			local cue = { holder = holder, text = text, group = group, sum = 0 }
+			group:SetScript("OnFinished", function()
+				holder:Hide()
+				cue.sum = 0
+			end)
+			return cue
+		end)
+		float = ok and made or false
+		w.float = float
+	end
+	if not float then
+		return
+	end
+	local okPlaying, playing = pcall(float.group.IsPlaying, float.group)
+	float.sum = (okPlaying and playing == true and float.sum or 0) + delta
+	float.group:Stop()
+	if float.sum == 0 then
+		float.holder:Hide()
+		return
+	end
+	local colour = float.sum > 0 and SESSION_GAIN or SESSION_LOSS
+	float.text:SetText((float.sum > 0 and "+" or "-") .. Money(math.abs(float.sum)))
+	float.text:SetTextColor(colour[1], colour[2], colour[3], 1)
+	float.holder:Show()
+	float.group:Play()
+end
+
+-- The free slots of the general bags reaching 0 while the window shows the player's own bags (or the window opening full after it was last seen
+-- with room) pulse twice in red: CUE.pulses dips of the text's frame to CUE.dip, CUE.half each way, an animation group of this file's own made the
+-- first time.
+local function FullPulse(w)
+	local pulse = w.pulse
+	if pulse == nil then
+		local ok, made = pcall(function()
+			local group = w.free.frame:CreateAnimationGroup()
+			for index = 1, CUE.pulses * 2 do
+				local step = group:CreateAnimation("Alpha")
+				local down = index % 2 == 1
+				step:SetFromAlpha(down and 1 or CUE.dip)
+				step:SetToAlpha(down and CUE.dip or 1)
+				step:SetDuration(CUE.half)
+				step:SetOrder(index)
+			end
+			group:SetLooping("NONE")
+			return group
+		end)
+		pulse = ok and made or false
+		w.pulse = pulse
+	end
+	if pulse then
+		pulse:Stop()
+		pulse:Play()
+	end
+end
+
+-- The two cues of the bag window's footer, for the player's own live bags only: the gold against what it last showed of this character in this
+-- opening (none at an opening, a switch of character or for another's), and the free slots against what they were the last time it was open.
+local function FootCues(w, key, mine, live, money, free)
+	local own = mine and live and w.open == true and not w.warming
+	if w.gold then
+		if own and Finite(money) and w.goldKey == key and Finite(w.goldShown) and money ~= w.goldShown then
+			GoldFloat(w, money - w.goldShown)
+		end
+		w.goldShown, w.goldKey = Finite(money) and money or nil, key
+	end
+	if own and Finite(free) then
+		if free <= 0 and Finite(w.lastFree) and w.lastFree > 0 then
+			FullPulse(w)
+		end
+		w.lastFree = free
+	end
+end
+
 -- Reads the footer again: gold, free slots, and the buttons the window wants now.
 function Footer(w)
 	local which = w.which
 	local key, mine, live = Layout.Viewed(which)
-	w.freeTexts = FreeTexts(w)
+	local free
+	w.freeTexts, free = FreeTexts(w)
 	if which == "bags" then
 		if w.gold then
 			local money = Call(Data, "Money", key)
 			w.gold.text:SetText(Finite(money) and money >= 0 and Money(money) or "")
+			Run("window", FootCues, w, key, mine, live, money, free)
 		end
 		-- The currencies shown on the backpack (BagsCurrency.lua): this character's as the game has them, another's as kept.
 		Call(B.Currency, "Read", w, key, mine)
@@ -1620,9 +1727,13 @@ function Resize(w, keep)
 	else
 		view = math.max(LEAST_VIEW, math.min(math.ceil(ch), most - fixed))
 	end
+	-- slack: the view is taller than its layout needs, until the mouse leaves the window (Unslack).
+	w.slack = nil
 	if keep and Finite(w.viewH) and w.viewH > view then
 		-- No shorter than it is, and never past the share of the screen it may take.
-		view = math.min(w.viewH, math.max(view, most - fixed))
+		local kept = math.min(w.viewH, math.max(view, most - fixed))
+		w.slack = kept > view or nil
+		view = kept
 	end
 	w.frame:SetSize(width, fixed + view)
 	local left = math.floor((width - cw) / 2 + 0.5)
@@ -1680,14 +1791,30 @@ local function Slots(w)
 	end
 end
 
--- Each frame while the window shows: the drag of the scroll bar's thumb, the busy sort button, and every half second whether a pass that runs
--- (Sell junk, Deposit, Take out) began or ended.
+-- A window kept taller than its layout needs (Resize, slack) takes its exact height again once the mouse is off it and no menu of it is open, so
+-- the band a fold or an emptied row left goes while nothing under the mouse can move.
+local function Unslack(w)
+	if Call(Layout, "MenuOf", w.which) == true then
+		return
+	end
+	local ok, over = pcall(w.frame.IsMouseOver, w.frame)
+	if ok and not IsSecret(over) and over == false then
+		w.slack = nil
+		Resize(w, false)
+		Window.Place(w.which)
+	end
+end
+
+-- Each frame while the window shows: the drag of the scroll bar's thumb, the busy sort button, a height kept taller than needed (Unslack), and
+-- every half second whether a pass that runs (Sell junk, Deposit, Take out) began or ended.
 local function Tick(w, elapsed)
 	if w.warming then
 		return
 	end
 	if w.drag then
 		Run("window", ThumbDrag, w)
+	elseif w.slack and not w.moving then
+		Run("window", Unslack, w)
 	end
 	if Sorting(w) then
 		w.pulsing = true
@@ -1767,7 +1894,7 @@ function Showing(w)
 		return
 	end
 	w.open = true
-	w.keepNext = nil
+	w.keepNext, w.slack, w.goldShown, w.goldKey = nil, nil, nil, nil
 	Run("window", Call, B, "LaidOut", w.which)
 	Sound("IG_BACKPACK_OPEN")
 	Watching()
@@ -1810,7 +1937,16 @@ function Hiding(w, quiet)
 		Layout.CloseMenu(w.which)
 		return
 	end
-	w.open, w.drag = false, nil
+	w.open, w.drag, w.slack = false, nil, nil
+	-- The footer's cues end with the window, so none is left half played at the next opening.
+	if w.float then
+		pcall(w.float.group.Stop, w.float.group)
+		w.float.holder:Hide()
+		w.float.sum = 0
+	end
+	if w.pulse then
+		pcall(w.pulse.Stop, w.pulse)
+	end
 	if w.moving then
 		-- A drag the closing cut short ends as one let go (Dropped): its place is kept and the window hangs from it again, whichever of the window
 		-- and its title bar hears the hiding first.
@@ -2027,12 +2163,33 @@ local function Updating(w, flags, changed)
 	Window.Place(which)
 end
 
+-- True while the sort button of that window looks busy (Sorting): the clean up key of BagSort.lua waits it out, as the button does.
+function Window.Sorting(which)
+	local w = windows[which]
+	return w ~= nil and Sorting(w) == true
+end
+
+-- The line a tooltip names a key of Flat UI's with: "Key: Ctrl-K", the first key bound to that binding in the client's words (GetBindingKey and
+-- GetBindingText, read each time so a new binding counts; plain strings only), else how to bind one.
+function Window.KeyName(binding)
+	local ok, key = pcall(GetBindingKey, binding)
+	if not ok or IsSecret(key) or type(key) ~= "string" or key == "" then
+		return "Bind a key under Flat UI in Key Bindings."
+	end
+	local okWords, words = pcall(GetBindingText, key)
+	words = okWords and not IsSecret(words) and type(words) == "string" and words ~= "" and words or key
+	return "Key: " .. words
+end
+
 -- The next update of the open window keeps its height, though it lays the window out afresh: BagsOrder.lua asks it before the layout of a fold or
 -- an unfold the player clicked, so the bag window, which hangs from its bottom right corner, does not move the title clicked away from the mouse
--- by the height of the rows that folded. An unfold that needs more room still grows the window; its opening takes its exact height (Showing).
+-- by the height of the rows that folded. Only a window that hangs from a bottom corner (CORNERS): the bank window hangs from its top left, so its
+-- titles stay where they are as it shrinks, and a kept height would only leave a gap. An unfold that needs more room still grows the window; the
+-- band a fold leaves goes once the mouse is off the window (Unslack), and its opening takes its exact height (Showing).
 function Window.KeepHeight(which)
 	local w = windows[which]
-	if Shown(w) then
+	local corner = CORNERS[which]
+	if Shown(w) and type(corner) == "string" and corner:find("^BOTTOM") then
 		w.keepNext = true
 	end
 end
@@ -2446,12 +2603,14 @@ function Clicks.sort(w)
 	end
 end
 
+-- The bag window's sort button names the clean up key (BagSort.lua), the bank window's has none.
 function Tips.sort(w, owner)
 	local title = w.which == "bank" and Word("BAG_CLEANUP_BANK", "Clean Up Bank") or Word("BAG_CLEANUP_BAGS", "Clean Up Bags")
+	local key = w.which == "bags" and Window.KeyName("CLICK FlatUIBagSortButton:LeftButton") or nil
 	if Sorting(w) then
-		Say(owner, title, "Sorting: the window is laid out again once your items have stopped moving.")
+		Say(owner, title, "Sorting: the window is laid out again once your items have stopped moving.", key)
 	else
-		Say(owner, title)
+		Say(owner, title, key)
 	end
 end
 
@@ -2472,11 +2631,12 @@ function Tips.bank(w, owner)
 	else
 		game = Opt("bank") == "game"
 	end
+	local bind = Window.KeyName("CLICK FlatUIBankButton:LeftButton")
 	if mine and game then
-		Say(owner, Word("BANK", "Bank"), "Your bank as you last left it. At the banker the game's bank window is the live one.")
+		Say(owner, Word("BANK", "Bank"), "Your bank as you last left it. At the banker the game's bank window is the live one.", bind)
 	elseif mine then
-		Say(owner, Word("BANK", "Bank"), "Your bank: live at the banker, and as you last left it anywhere else.")
+		Say(owner, Word("BANK", "Bank"), "Your bank: live at the banker, and as you last left it anywhere else.", bind)
 	else
-		Say(owner, Word("BANK", "Bank"), ("The bank of %s, as it was last seen."):format(Plain(Named(key, CharacterOf(key)))))
+		Say(owner, Word("BANK", "Bank"), ("The bank of %s, as it was last seen."):format(Plain(Named(key, CharacterOf(key)))), bind)
 	end
 end

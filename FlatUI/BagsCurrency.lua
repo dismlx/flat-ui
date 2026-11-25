@@ -39,14 +39,21 @@ local _, ns = ...
 -- GameTooltip: out of a fight and for the player's own bags the game's own of that backpack currency (SetBackpackToken, as the game's token does,
 -- :758-764; TooltipDataHandler.lua:555), else plain lines (SetText, AddLine) of its name (C_CurrencyInfo.GetCurrencyInfo,
 -- CurrencyInfoDocumentation.lua:249-262, for another character's) and its count, then a line of what a click does; it is hidden when the cursor
--- leaves the button that owns it (IsOwned). A left click, out of a fight, opens the Currency tab of the Character window as the game's token does
--- (CharacterFrameMixin:ToggleTokenFrame, Camelot/CharacterFrame.lua:98-104: only while C_CurrencyInfo.GetCurrencyListSize says there is a list,
--- then the game's own ToggleCharacter("TokenFrame"), :3-30, as Data panels and the reputation bar open their tabs); in a fight it does nothing.
+-- leaves the button that owns it (IsOwned). A click goes as the game's token takes it (BackpackTokenMixin:OnClick, Blizzard_TokenUI.lua:770-787):
+-- with the link modifier (IsModifiedClick CHATLINK, Shift) the currency's link (C_CurrencyInfo.GetCurrencyLink) goes in chat while a chat box
+-- takes it (ChatFrameUtil.InsertLink, in a fight too); else, for the player's own bags, the backpack modifier (TOKENWATCHTOGGLE, Shift) takes it
+-- off the backpack and so off the footer (C_CurrencyInfo.SetCurrencyBackpackByID with false), only while the Currency tab is not open (its list
+-- would not be drawn again, as its Update is a mixin's: one line says to untick it there); else a plain left click opens the Currency tab of the
+-- Character window as the game's token does (CharacterFrameMixin:ToggleTokenFrame, Camelot/CharacterFrame.lua:98-104: only while
+-- C_CurrencyInfo.GetCurrencyListSize says there is a list, then the game's own ToggleCharacter("TokenFrame"), :3-30, as Data panels and the
+-- reputation bar open their tabs), in a fight once it ends, with one line (ns.OpenAfterFight, MapText.lua). Another character's currency takes
+-- the link alone, and its tooltip names no plain click.
 -- Hidden by the window's hiding, a button may hear that before the window does, so a slot that owns the game's split box is left to the game
 -- first (B.Buttons.Unsplit, BagsItems.lua), as BagsWindow's own footer buttons do.
 --
--- It never writes a field on a frame of the game's or calls a mixin's method (not BackpackTokenFrame's Update or GetMaxTokensWatched), never ticks
--- or unticks a currency itself, calls nothing protected, and registers nothing with Movers: it is part of the bag window. The bank window has no
+-- It never writes a field on a frame of the game's or calls a mixin's method (not BackpackTokenFrame's or TokenFrame's Update, or
+-- GetMaxTokensWatched), never ticks a currency, unticks one only on the player's Shift-click on it, calls nothing protected, and registers
+-- nothing with Movers: it is part of the bag window. The bank window has no
 -- currencies. Every frame and font string here is Flat UI's own.
 
 local B = ns.Bags
@@ -69,7 +76,10 @@ local LONGEST = 5
 -- The tint under the cursor, in the Highlight colour, and the colour of the plain lines of a tooltip (BagsWindow.lua, DIM).
 local HOVER = 0.2
 local DIM = { 0.66, 0.68, 0.62 }
-local CLICK_LINE, FIGHT_LINE = "Click to open the Currency tab.", "Out of a fight, click to open the Currency tab."
+local CLICK_LINE, FIGHT_LINE = "Click: open the Currency tab.", "Click: open the Currency tab, after the fight."
+local SHIFT_LINE, LINK_LINE = "Shift-click: link it in chat, or take it off the footer.", "Shift-click: link it in chat."
+local LATER_LINE = "Flat UI: the Currency tab opens when the fight ends."
+local TAB_OPEN_LINE = "Flat UI: untick Show on Backpack on the Currency tab."
 
 -- Per window (BagsWindow's w, the bag window's only): { w, holder, slots = { { button, text, hover, index } }, list = { entries }, live }. An
 -- entry is { id, icon, count, index (the backpack's, live only), name (live only), full, short (its texts), fullW, shortW (their widths) }.
@@ -316,19 +326,76 @@ local function Entered(state, slot)
 		local count = Text(Ask(_G.BreakUpLargeNumbers, entry.count)) or tostring(entry.count)
 		tip:AddLine(state.live and count or (count .. ", as Flat UI last saw it"), 1, 1, 1)
 	end
-	tip:AddLine(fighting and FIGHT_LINE or CLICK_LINE, DIM[1], DIM[2], DIM[3], true)
+	if state.live then
+		tip:AddLine(fighting and FIGHT_LINE or CLICK_LINE, DIM[1], DIM[2], DIM[3], true)
+		tip:AddLine(SHIFT_LINE, DIM[1], DIM[2], DIM[3], true)
+	else
+		tip:AddLine(LINK_LINE, DIM[1], DIM[2], DIM[3], true)
+	end
 	tip:Show()
 end
 
--- Opens the Currency tab as the game's token does, out of a fight only.
-local function Clicked()
-	if Fighting() then
+-- True while the modifier of a modified click of the game's is held (IsModifiedClick).
+local function Modified(kind)
+	if type(IsModifiedClick) ~= "function" then
+		return false
+	end
+	local ok, held = pcall(IsModifiedClick, kind)
+	return ok and not ns.IsSecret(held) and held == true
+end
+
+-- True while the Currency tab of the Character window shows (TokenFrame, IsShown).
+local function TabShown()
+	local frame = _G.TokenFrame
+	if not Usable(frame) or ns.Forbidden(frame) then
+		return false
+	end
+	local ok, shown = pcall(frame.IsShown, frame)
+	return ok and not ns.IsSecret(shown) and shown == true
+end
+
+-- A click on a currency, in the order of the game's token (BackpackTokenMixin:OnClick): the chat link with the link modifier (Shift) while a chat
+-- box takes it (ChatFrameUtil.InsertLink, in a fight too); else, for the player's own, the backpack modifier (Shift) takes it off the backpack
+-- and so off the footer (C_CurrencyInfo.SetCurrencyBackpackByID, which the follower below hears), while the Currency tab is not open, as its list
+-- would not be drawn again (its Update is a mixin's); else a plain click opens the Currency tab, after the fight in one (ns.OpenAfterFight).
+local function Clicked(state, slot)
+	local entry = state and slot and state.list[slot.index]
+	if entry == nil then
+		return
+	end
+	if Modified("CHATLINK") then
+		local link = Text(Ask(Api("GetCurrencyLink"), entry.id))
+		local util = _G.ChatFrameUtil
+		if link and link:find("|H", 1, true) and Usable(util) and type(util.InsertLink) == "function" then
+			local ok, linked = pcall(util.InsertLink, link)
+			if ok and not ns.IsSecret(linked) and linked == true then
+				return
+			end
+		end
+	end
+	if not state.live then
+		return
+	end
+	if Modified("TOKENWATCHTOGGLE") then
+		if TabShown() then
+			print(TAB_OPEN_LINE)
+		else
+			E.Call(Api("SetCurrencyBackpackByID"), entry.id, false)
+		end
 		return
 	end
 	local size = Ask(Api("GetCurrencyListSize"))
 	local toggle = _G.ToggleCharacter
-	if ns.Finite(size) and size > 0 and type(toggle) == "function" then
-		pcall(toggle, "TokenFrame")
+	if not (ns.Finite(size) and size > 0 and type(toggle) == "function") then
+		return
+	end
+	local function Open()
+		toggle("TokenFrame")
+	end
+	if type(ns.OpenAfterFight) == "function" then
+		ns.OpenAfterFight(Open, LATER_LINE)
+	elseif not Fighting() then
+		pcall(Open)
 	end
 end
 
@@ -381,7 +448,7 @@ local function Slot(state, index)
 		Untip(button)
 	end)
 	button:SetScript("OnClick", function()
-		Run(Clicked)
+		Run(Clicked, state, slot)
 	end)
 	-- Hidden by the window's hiding, it may hear that before the window does, so the game's split box is left to the game first.
 	button:SetScript("OnHide", function()
