@@ -36,8 +36,10 @@ local _, ns = ...
 -- may withhold marks nothing and is not kept. Nothing of the game's is written: a mark is a text or a texture of this addon's own made on the slot,
 -- out of a fight while the slot is protected. On a client without one of the calls its mark is never made, and /flatui status says so.
 -- Bags (Bags*.lua) draws the same three marks on slots of its own with these answers (ItemMarks.BoE, Unusable and Eats), whatever the switch of
--- Windows and its rows. An item in no bag slot the game can read now, such as one of the bank away from the banker, has the tooltip of its link
--- read (C_TooltipInfo.GetHyperlink, TooltipInfoDocumentation.lua:337-354) in place of the slot's. ItemMarks.Hear has Bags hear the events after
+-- Windows and its rows, and a fourth of its own: a green plus on a recipe this character can learn now (ItemMarks.Learnable, Unusable's answer
+-- false for a recipe whose tooltip lines were all read); the game's windows do not get it. An item in no bag slot the game can read now, such as
+-- one of the bank away from the banker, has the tooltip of its link read (C_TooltipInfo.GetHyperlink, TooltipInfoDocumentation.lua:337-354) in
+-- place of the slot's. ItemMarks.Hear has Bags hear the events after
 -- which an answer goes old while it is on, and each function given to ItemMarks.Watch is called when an answer goes old or an item that was
 -- waited for arrives, so Bags draws its slots again.
 -- These follow the bind status, unusable item and Hunter pet food overlays of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
@@ -50,6 +52,8 @@ local ROWS = { bind = "windows.boeMark", tint = "windows.unusableTint", food = "
 -- Enum does not say.
 local BIND_ON_EQUIP = 2
 local USAGE, EQUIP_SLOT, NESTED, LEARN = 43, 21, 19, 38
+-- Enum.ItemClass.Recipe (wowless, data/products/wowf/enums.yaml:4649), for ItemMarks.Learnable.
+local RECIPE = 9
 -- The game's red for a requirement not met is 1, 0.125, 0.125 (RED_FONT_COLOR); any colour this close to it counts.
 local RED_LEAST, OTHER_MOST = 0.9, 0.25
 local BIND_WORD, BIND_FONT, BIND_COLOUR = "BoE", "NumberFontNormalSmall", { 0.38, 0.82, 1 }
@@ -64,8 +68,9 @@ local MISSING = { bind = "binding of items", tint = "item tooltips", food = "die
 -- Per slot: { bind = the BoE text, tint = the red texture, food = the food texture, bindOn, tintOn, foodOn = true while shown, queued = true while a
 -- fight keeps a mark from being made }.
 local marks = setmetatable({}, { __mode = "k" })
--- Per item ID: its binding; true when it cannot be used, false when it can; true while its information has not loaded.
-local binds, blocked, waiting = {}, {}, {}
+-- Per item ID: its binding; true when it cannot be used, false when it can; true while its information has not loaded; true when its answer read
+-- every line of the item's own (a recipe whose made item's lines were told apart from its own, or an item with none), kept with blocked.
+local binds, blocked, waiting, clear = {}, {}, {}, {}
 -- The pet: diet is nil until read, false with no pet out or one that eats nothing, else its food types in one text; foods the list of them, and
 -- eats the answer for each item ID.
 local pet = { diet = nil, foods = nil, eats = {} }
@@ -228,7 +233,7 @@ end
 -- a recipe's lines are its name, a NestedBlock line, the made item's own lines (its armour or weapon type, its Requires Level), then the recipe's
 -- Use: Teaches you line (ItemSpellTriggerLearn), its reagents, Requires <profession> and Already known. The made item can have a Teaches you line
 -- of its own, so the block ends before the last one after the NestedBlock line; with none, it runs to the end of the tooltip, and a red line of the
--- recipe is missed rather than a recipe the player can learn tinted.
+-- recipe is missed rather than a recipe the player can learn tinted. The third answer is true when the block's end was found that way.
 local function Nested(lines)
 	local nested = EnumValue("TooltipDataLineType", "NestedBlock", NESTED)
 	local learn = EnumValue("TooltipDataLineType", "ItemSpellTriggerLearn", LEARN)
@@ -249,7 +254,7 @@ local function Nested(lines)
 	if first == nil then
 		return nil
 	end
-	return first, last or count
+	return first, last or count, last ~= nil
 end
 
 -- True when the item in this slot cannot be used, false when it can, nil when the game has not said yet. A tooltip of another item than the slot
@@ -282,7 +287,7 @@ local function Unusable(id, link, bag, slot)
 		return nil
 	end
 	local answer = false
-	local first, last = Nested(lines)
+	local first, last, closed = Nested(lines)
 	for index, line in ipairs(lines) do
 		if not (first and index >= first and index <= last) and Usable(line) and Unmet(line) then
 			answer = true
@@ -290,6 +295,7 @@ local function Unusable(id, link, bag, slot)
 		end
 	end
 	blocked[id] = answer
+	clear[id] = first == nil or closed == true
 	return answer
 end
 
@@ -680,6 +686,32 @@ function ItemMarks.Unusable(id, link, bag, slot)
 		return nil
 	end
 	return Unusable(id, LinkOf(id, link), bag, slot)
+end
+
+-- True for a recipe (Enum.ItemClass.Recipe, from C_Item.GetItemInfoInstant) that this character can learn now: its tooltip has no requirement in red
+-- (Unusable said false: the right profession and skill, the level, not known already). False for any other item, and for a recipe whose made
+-- item's lines could not be told apart from its own (Nested found no end of the block), since a red line of it may have been missed; nil while
+-- the game has not said. Only Bags asks it (a green plus on its own slots); the answers go old with Unusable's, after the same events.
+function ItemMarks.Learnable(id, link, bag, slot)
+	if not ns.Finite(id) then
+		return nil
+	end
+	local call = Call("C_Item", "GetItemInfoInstant")
+	if call == nil then
+		return false
+	end
+	local ok, _, _, _, _, _, class = pcall(call, id)
+	if not ok or not ns.Finite(class) then
+		return nil
+	end
+	if class ~= EnumValue("ItemClass", "Recipe", RECIPE) then
+		return false
+	end
+	local answer = Unusable(id, LinkOf(id, link), bag, slot)
+	if answer == nil then
+		return nil
+	end
+	return answer == false and clear[id] == true
 end
 
 -- True when the pet that is out eats the item.

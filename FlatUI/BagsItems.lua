@@ -82,9 +82,10 @@ local _, ns = ...
 -- the quest border and the junk coin with textures of their own in the same art (TEXTURE_ITEM_QUEST_BANG and TEXTURE_ITEM_QUEST_BORDER,
 -- Blizzard_FrameXMLBase/Constants.lua:274-275; the atlas bags-junkcoin, ContainerFrame.xml:139-143). The item level is a text of this file
 -- (NumberFontNormal at 12 with an outline, as Items.lua:491-531 sets its own) from ns.Items.LevelOf, in the quality colour. The marks are
--- ItemMarks' answers drawn as ItemMarks.lua:366-460 draws them (BoE, the red tint, the Feed Pet icon of C_Spell.GetSpellTexture): all three on
--- this character's items, with Unusable asked by bag and slot for a live slot and by link for the bank away from the banker, and the BoE mark
--- alone on another character's, since the other two describe the character playing. The junk coin shows B.Categories.IsJunk, Errands' own test
+-- ItemMarks' answers drawn as ItemMarks.lua:366-460 draws them (BoE, the red tint, the Feed Pet icon of C_Spell.GetSpellTexture), and Bags' own
+-- green plus at the bottom left of a recipe this character can learn now (ItemMarks.Learnable): all four on this character's items, with Unusable
+-- and Learnable asked by bag and slot for a live slot and by link for the bank away from the banker, and the BoE mark alone on another
+-- character's, since the others describe the character playing. The junk coin shows B.Categories.IsJunk, Errands' own test
 -- of the slot for a live slot of the bags, on anything Sell junk would sell, an item of the sell list of any quality too; the BoE word sits in
 -- the same corner, so it is left out while the coin shows, since the item is to be sold. The search dims through the item button's
 -- SetMatchesSearch (Shared/ItemButtonTemplate.lua:49-56, 96-116), and the level and marks fade to 0.4. A name the client has not loaded is asked
@@ -144,6 +145,9 @@ local MIN_QUALITY = { all = 0, uncommon = 2, rare = 3, epic = 4 }
 local BIND_WORD, BIND_FONT, BIND_COLOUR = "BoE", "NumberFontNormalSmall", { 0.38, 0.82, 1 }
 local TINT = { 1, 0.18, 0.18 }
 local FEED_PET, FOOD_SIZE, FOOD_COLOUR = 6991, 14, { 0.45, 0.85, 0.3 }
+-- Bags' own mark of a recipe this character can learn now (ItemMarks.Learnable): a green plus at the bottom left, a corner a recipe never has an
+-- item level or a food mark in, in the game's font of item counts with an outline.
+local LEARN = { word = "+", font = "NumberFontNormal", size = 16, colour = { 0.3, 0.9, 0.3 } }
 -- The art of the template that the other buttons draw with textures of their own.
 local JUNK_ATLAS = "bags-junkcoin"
 local QUEST_BANG = { "TEXTURE_ITEM_QUEST_BANG", "Interface\\ContainerFrame\\UI-Icon-QuestBang" }
@@ -182,12 +186,12 @@ local COUNT_LINE = "%d in this slot"
 local SEEN = { today = "Last seen today", yesterday = "Last seen yesterday", days = "Last seen %d days ago" }
 local DAY = 86400
 -- The regions that fade while the search dims a slot.
-local FADES = { "level", "bind", "tint", "food" }
+local FADES = { "level", "bind", "tint", "food", "learn" }
 local NONE = {}
 
 -- Per button: { kind = "live", "bank" or "offline", bag, slot (live and bank), holder (live), owner (offline), icon, outline, cooldown, record and
 -- opts of the last Draw, broken, fill (the kind's colour of an empty slot), and the regions of this file made on it when first needed, false when
--- the game refused one: level, bind, tint, food, quest, junk, freeText }.
+-- the game refused one: level, bind, tint, food, learn, quest, junk, freeText }.
 local states = setmetatable({}, { __mode = "k" })
 -- Per bag: its holder, and its template buttons by slot. The number of slots each bag had at the last Prepare.
 local holders = {}
@@ -783,6 +787,21 @@ local function BindText(button)
 	return text
 end
 
+local function LearnText(button)
+	local text = ns.OwnText(button, "OVERLAY", LEARN.font)
+	if text == nil then
+		return nil
+	end
+	local ok, file = pcall(text.GetFont, text)
+	if ok and Text(file) then
+		pcall(text.SetFont, text, file, LEARN.size, "OUTLINE")
+	end
+	pcall(text.SetPoint, text, "BOTTOMLEFT", button, "BOTTOMLEFT", 3, 1)
+	pcall(text.SetTextColor, text, LEARN.colour[1], LEARN.colour[2], LEARN.colour[3], 1)
+	pcall(text.SetText, text, LEARN.word)
+	return text
+end
+
 -- The red with the MOD blend just above the icon, which is in the BORDER layer (Shared/ItemButtonTemplate.xml:17-21), as ItemMarks' tint.
 local function TintTexture(button, state)
 	local texture = Made(button, "BORDER", 7)
@@ -972,25 +991,27 @@ local function JunkShown(record)
 	return record ~= nil and Opt("junkCoin") ~= false and Ask(Categories.IsJunk, record) == true
 end
 
--- Whose marks a record gets (design §2.5.3): the character playing gets all three, and Unusable reads its tooltip by bag and slot while the slot
--- is live, by link otherwise (the bank away from the banker); another character only the BoE mark, which depends on the item and its bound flag.
--- junk: the junk coin shows, in the corner of the BoE word, which is left out then: the item is to be sold.
+-- Whose marks a record gets (design §2.5.3): the character playing gets all four, and Unusable and Learnable read its tooltip by bag and slot
+-- while the slot is live, by link otherwise (the bank away from the banker); another character only the BoE mark, which depends on the item and
+-- its bound flag. junk: the junk coin shows, in the corner of the BoE word, which is left out then: the item is to be sold.
 local function Marks(button, state, record, link, junk)
-	local bind, tint, food = false, false, false
+	local bind, tint, food, learn = false, false, false, false
 	if record ~= nil and Opt("marks") ~= false and Usable(ItemMarks) then
 		bind = not junk and Ask(ItemMarks.BoE, record.id, link, record.bound == true) == true
 		if record.key == Me() then
+			local bag, slot = nil, nil
 			if record.live == true then
-				tint = Ask(ItemMarks.Unusable, record.id, link, record.bag, record.slot) == true
-			else
-				tint = Ask(ItemMarks.Unusable, record.id, link, nil, nil) == true
+				bag, slot = record.bag, record.slot
 			end
+			tint = Ask(ItemMarks.Unusable, record.id, link, bag, slot) == true
+			learn = not tint and Ask(ItemMarks.Learnable, record.id, link, bag, slot) == true
 			food = Ask(ItemMarks.Eats, record.id) == true
 		end
 	end
 	Mark(button, state, "bind", bind, BindText)
 	Mark(button, state, "tint", tint, TintTexture)
 	Mark(button, state, "food", food, FoodTexture)
+	Mark(button, state, "learn", learn, LearnText)
 end
 
 -- The junk coin (JunkShown): the template's own JunkIcon on a live slot, a texture of this file's on the other buttons.

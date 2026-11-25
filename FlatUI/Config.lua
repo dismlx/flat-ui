@@ -1664,7 +1664,7 @@ ns.PAGES = {
 		{ key = "quality", kind = "choice", default = "all", label = "Quality border",
 			choices = { { "all", "Every item" }, { "uncommon", "Green and better" }, { "rare", "Blue and better" }, { "epic", "Epic and better" }, { "off", "Off" } } },
 		{ key = "marks", kind = "bool", default = true, label = "Item marks",
-			tip = "BoE at the top left of items that bind when equipped, but not on one with the junk coin, which takes that corner; red over items you cannot use; and the Feed Pet icon on food your pet eats." },
+			tip = "BoE at the top left of items that bind when equipped, but not on one with the junk coin, which takes that corner; red over items you cannot use; the Feed Pet icon on food your pet eats; and a green plus at the bottom left of a recipe you can learn now (search #learnable to light them all)." },
 		{ key = "junkCoin", kind = "bool", default = true, label = "Junk coin",
 			tip = "The game's coin at the top left of what Sell junk would sell, as Errands sells. It stays while the game holds the item for a moment, as in a trade, on a mail not sent yet or on the cursor, though Sell junk leaves it until then." },
 		{ key = "newGlow", kind = "bool", default = true, label = "New item glow", tip = "The game's glow on a new item, until you point at it." },

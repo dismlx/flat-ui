@@ -25,7 +25,8 @@ local _, ns = ...
 -- and 4, 2, 4), #consumable and its subclasses #potion, #elixir, #flask, #scroll, #food and #bandage (Enum.ItemClass and
 -- Enum.ItemConsumableSubclass, wowless, data/products/wowf/enums.yaml:4630-4651 and 4694-4711), #trade, #reagent, #recipe, #ammo, #bag and #key
 -- (the rules of those sections), #boe (ItemMarks' answer, ns.ItemMarks.BoE, ItemMarks.lua:184-191), #bound, #set, #usable and #unusable (ItemMarks'
--- tooltip test, ns.ItemMarks.Unusable, :247-279), and the qualities #poor to #legendary. q takes 0 to 7, the English names or the client's
+-- tooltip test, ns.ItemMarks.Unusable, :247-279), #learnable (a recipe this character can learn now, ns.ItemMarks.Learnable, the green plus of
+-- BagsItems.lua), and the qualities #poor to #legendary. q takes 0 to 7, the English names or the client's
 -- (ITEM_QUALITY0_DESC to ITEM_QUALITY7_DESC, Enum.ItemQuality, enums.yaml:5101-5111); ilvl compares the item level of weapons and armour
 -- (ns.Items.LevelOf, Items.lua:425-438), and an item with no level never matches it. tip:stamina or tip:"chance to hit" looks for its text,
 -- plainly and in lower case, in the item's tooltip: every left and right text of C_TooltipInfo.GetHyperlink of the record's link (the "item:" link
@@ -34,8 +35,8 @@ local _, ns = ...
 --
 -- A record whose name the client has not loaded yet matches nil, unknown, when only its name could decide: it is drawn dimmed until the name
 -- comes. The search never asks the server for an item: the name, the binding, the tooltips and the item level are read only once
--- C_Item.IsItemDataCachedByID says the client has the item, since the picker of characters counts matches over items no window shows. #usable
--- and #unusable say what this character can use, so another character's items match neither.
+-- C_Item.IsItemDataCachedByID says the client has the item, since the picker of characters counts matches over items no window shows. #usable,
+-- #unusable and #learnable say what this character can use, so another character's items match none of them.
 --
 -- The box is an EditBox of Flat UI's own (CreateFrame), HEIGHT high, in the look of Windows' text boxes (an outline filled with the Button and slot
 -- colour, Windows.lua:1230-1253), with the edge in the Highlight colour while it has the keyboard (HasFocus): GameFontHighlightSmall, a Search
@@ -47,11 +48,11 @@ local _, ns = ...
 -- gets two short lines instead, the search and what the cross does, and a click in the box or a letter typed takes the tooltip away, so it never
 -- lies over the slots the search lights. The search itself, typing and the cross work in a fight too.
 -- A right click on the box (OnMouseUp) opens a menu of BagsLayout's (B.Layout.Menu) of quick searches, New items, Junk, Bind on equip, Quest items,
--- Cannot use, Consumables, Trade goods, Green and better and Epic and better, each with its term at the right; a pick types the term (the one
--- typed now is ticked), and Clear, while a search is typed, clears it. Under a Recent header it lists the last RECENT (5) searches typed, newest
--- first, the one typed now ticked, and Clear recent: a search is kept when Enter is pressed, when the box loses the keyboard and when it is cleared
--- (the cross, Clear, the bags closing), but not a quick search, in FlatUIDB.bags.recent for the account (ns.Account; BagsData.lua resets only its v
--- and chars), so they last between sessions. The menu belongs to the box's window, and closes with it.
+-- Cannot use, Recipes you can learn, Consumables, Trade goods, Green and better and Epic and better, each with its term at the right; a pick
+-- types the term (the one typed now is ticked), and Clear, while a search is typed, clears it. Under a Recent header it lists the last RECENT (5)
+-- searches typed, newest first, the one typed now ticked, and Clear recent: a search is kept when Enter is pressed, when the box loses the keyboard
+-- and when it is cleared (the cross, Clear, the bags closing), but not a quick search, in FlatUIDB.bags.recent for the account (ns.Account;
+-- BagsData.lua resets only its v and chars), so they last between sessions. The menu belongs to the box's window, and closes with it.
 -- The bag search key: Bindings.xml binds a click of FlatUIBagSearchButton (CLICK FlatUIBagSearchButton:LeftButton), a plain button of Flat UI's own
 -- made here as the file loads, a child of UIParent with no size and no point that hears the release only, as the bank key's (BagsBank.lua), named
 -- in the game's Key Bindings by the global BINDING_NAME_CLICK FlatUIBagSearchButton:LeftButton. It opens the bag window with the command hold, as
@@ -88,7 +89,7 @@ local HELP = {
 	"Search",
 	"Words look in each item's name, kind and slot, and in the name of its section: potion, cloth, mail, head, consumables.",
 	"A space or & is and, | is or, ! is not, brackets group, and \"quoted text\" is one word.",
-	"#junk  #new  #quest  #boe  #bound  #set  #usable  #unusable",
+	"#junk  #new  #quest  #boe  #bound  #set  #usable  #unusable  #learnable",
 	"#gear  #weapon  #armour  #consumable  #potion  #elixir  #flask  #food  #bandage  #scroll",
 	"#trade  #reagent  #recipe  #ammo  #bag  #key",
 	"#poor  #common  #uncommon  #rare  #epic  #legendary",
@@ -107,6 +108,7 @@ local QUICK = {
 	{ "Bind on equip", "#boe" },
 	{ "Quest items", "#quest" },
 	{ "Cannot use", "#unusable" },
+	{ "Recipes you can learn", "#learnable" },
 	{ "Consumables", "#consumable" },
 	{ "Trade goods", "#trade" },
 	{ "Green and better", "q>=uncommon" },
@@ -315,10 +317,11 @@ local function BoE(record)
 end
 
 -- Whether this character cannot use the item: true, false, nil while the client has not loaded it, or "none" when nobody can say for this
--- character: another character's item, or a build without ItemMarks' answer. The bank away from the banker is asked with no bag and slot.
-local function Unusable(record)
+-- character: another character's item, or a build without ItemMarks' answer. The bank away from the banker is asked with no bag and slot. which:
+-- another answer of ItemMarks asked the same way, "Learnable" (a recipe this character can learn now).
+local function Unusable(record, which)
 	local marks = ns.ItemMarks
-	local answer = type(marks) == "table" and marks.Unusable or nil
+	local answer = type(marks) == "table" and marks[which or "Unusable"] or nil
 	if type(answer) ~= "function" then
 		return "none"
 	end
@@ -396,6 +399,13 @@ local KEYWORDS = {
 			return nil
 		end
 		return answer == false
+	end,
+	learnable = function(record)
+		local answer = Unusable(record, "Learnable")
+		if answer == nil then
+			return nil
+		end
+		return answer == true
 	end,
 	poor = OfQuality(0),
 	common = OfQuality(1),
