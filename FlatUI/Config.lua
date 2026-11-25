@@ -1604,7 +1604,7 @@ ns.PAGES = {
 		{ key = "bagKey", kind = "bool", default = true, label = "Backpack key opens every bag", changed = "BagKeyChanged",
 			tip = "B, or your key for Toggle Backpack, opens the reagent bag with your other bags and closes them all again, as Open All Bags (Shift+B) does. With separate bags it opens all of them, not only the backpack." },
 		{ section = "Clean up bags" },
-		{ key = "sortButton", kind = "choice", default = "title", label = "Clean up bags button", tip = "Under the slots, only the lowest bag of a stack has a button.",
+		{ key = "sortButton", kind = "choice", default = "title", label = "Clean up bags button", tip = "Under the slots, only the lowest bag of a stack has a button. /flatui sort and the key Flat UI bags: clean up, under Flat UI in Key Bindings, clean up your bags too.",
 			choices = { { "title", "In the title bar" }, { "slots", "Under the slots" }, { "none", "None" } } },
 		{ key = "sortBank", kind = "bool", default = true, label = "Also on the bank", needs = "sortButton", needsIn = { "title", "slots" } },
 		{ key = "sortFrom", kind = "choice", default = "other", label = "Items gather", tip = "Also applies to the game's own clean up.",
