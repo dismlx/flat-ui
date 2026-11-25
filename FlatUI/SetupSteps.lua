@@ -936,7 +936,7 @@ ns.SETUP_STEPS = {
 		{ "chat.spellTotal", "c", "behaviour", "Adds to a spell's tooltip what one cast does now with your stats, base and bonus together, over its duration for a spell over time." },
 		{ "chat.spellRates", "o", "behaviour", "Adds a dim line under the total with what a cast does on average with crits, misses and Spell Piercing, for a second of cast time and for a point of mana." },
 		{ "chat.spellLowRank", "r", "behaviour", "Counts less spell power for ranks far below your level, by an estimate from players' tests on WoW: Forever." },
-		{ "chat.spellNextRank", "o", "behaviour", "Adds to a spell's tooltip the level of its next rank, or that you can learn it now." },
+		{ "chat.spellNextRank", "o", "behaviour", "Adds to a spell's tooltip the level of its next rank, that you can learn it now, or that it comes from a book." },
 		{ "chat.spellThreat", "c", "behaviour", "Adds a spell's threat where it is special or your stance, form, aura, talents or gear change it, or to every spell whose threat is known." },
 		{ "chat.spellWhen", "o", "behaviour", "Chooses whether the spell lines show always or only while Shift, Ctrl or Alt is held." },
 		{ "chat.tipDetail", "r", "behaviour", "Chooses whether spell and item tooltips keep one dim line of notes under each block or show every note." },

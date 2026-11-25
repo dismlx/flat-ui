@@ -2495,7 +2495,7 @@ ns.PAGES = {
 			tip = "On WoW: Forever a rank far below your level gets less of your spell damage and healing. Blizzard gave no formula, so Flat UI uses an estimate from players' tests on heals up to level 30: in full for 17 levels after the rank is learned, then 5% less a level. Marked ~." },
 		-- SpellLines.lua: one line after the spell lines with the rank after the one shown, from the rank's level in SpellData.lua (0.5.35).
 		{ key = "spellNextRank", kind = "bool", default = true, label = "Next rank",
-			tip = "On a spell with more ranks: the level of the next rank, as Next rank: Rank 6 at level 32, or in green that you can learn it now. Not at the top rank or once you know a higher one, nor on talents, pet spells and judgements." },
+			tip = "On a spell with more ranks: the level of the next rank, as Next rank: Rank 6 at level 32, or in green that you can learn it now. A rank no trainer teaches, from the class books of Ahn'Qiraj, says it comes from a book. Not at the top rank or once you know a higher one, nor on talents, pet spells and judgements." },
 		{ key = "spellThreat", kind = "choice", default = "special", label = "Threat lines",
 			choices = { { "special", "Where threat is special or changed" }, { "all", "On every spell" }, { "off", "Off" } },
 			tip = "Where threat is special or changed: abilities with threat of their own, and spells whose threat your stance, form, Righteous Fury, talents or gear change, with what changes it; not a damage dealer's Battle Stance or Cat Form, nor heals at the usual half a point a point healed. Stances, forms and Righteous Fury say what their own text does not. A spell whose threat on WoW: Forever is not known, such as Whirlwind, Execute, Power Word: Shield and the absorbs, gets no line." },
