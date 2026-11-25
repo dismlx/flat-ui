@@ -55,7 +55,9 @@ local _, ns = ...
 -- info (Bags' Data.Info, C_Item.GetItemInfoInstant, :16569) by the client's INVTYPE names (Enum.InventoryType, WL/enums.yaml:4567-4603), else
 -- C_Item.GetItemInventoryTypeByID (:16616).
 -- The search box: the words in any order, case-insensitive, each found in the item's name; a pasted item link or "item:ID" finds that item alone,
--- whatever the filters, also one the index does not have (from the client). Filters: Slot (the item's inventory type: Main hand is a main-hand
+-- whatever the filters, also one the index does not have (from the client). As the bag search box (0.5.39): a cross at its right while a search is
+-- typed clears it and searches again, and Up and Down (OnArrowPressed) step through the last five searches of this session, newest first, Down
+-- going forward again to what was typed; a search is kept as Enter is pressed and as the cross clears it, none under two letters, in memory alone. Filters: Slot (the item's inventory type: Main hand is a main-hand
 -- weapon and One-hand a weapon of either hand, as the game's tooltips name them; Ranged a bow, gun or crossbow, Wand a wand), Armor (the armor
 -- subclass) and Weapon type (the weapon subclass, by the client's names, C_Item.GetItemSubClassInfo, :16785), which exclude each other; required
 -- level from and to, the upper bound at first the player's level + 5 with Level filter: Near your level (chat.gearFindLevel), none with Any, until
@@ -1997,28 +1999,117 @@ local function MakeBar(frame)
 	S.barRule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -L.PAD, -L.BAR)
 end
 
+-- The search box's cross and its recent searches (0.5.39), as the bag search box has them (BagsSearch.lua): the searches of this session, newest
+-- first, at most MOST, none under SHORT letters, in memory alone; at, the one Up brought back (0 for what was typed, typed).
+local RECENT = { list = {}, at = 0, typed = nil, MOST = 5, SHORT = 2, CROSS = 16 }
+
+-- A search kept: Enter in the box, and the cross clearing it.
+local function Remember(text)
+	local search = type(text) == "string" and text:match("^%s*(.-)%s*$") or ""
+	if #search < RECENT.SHORT then
+		return
+	end
+	local list = RECENT.list
+	for index = #list, 1, -1 do
+		if list[index] == search then
+			table.remove(list, index)
+		end
+	end
+	table.insert(list, 1, search)
+	while #list > RECENT.MOST do
+		table.remove(list)
+	end
+end
+
+-- Up and Down in the box step through the recent searches, as the bag search box's Recall: Up the last search and the one before, Down forward
+-- again to what was typed before the first Up; a search that is the text now is stepped over. The finder searches again as typing settles.
+local function Recall(box, key)
+	local list = RECENT.list
+	if (key ~= "UP" and key ~= "DOWN") or #list == 0 then
+		return
+	end
+	local now = BoxText(box)
+	local at = math.min(RECENT.at, #list)
+	if key == "UP" then
+		if at == 0 then
+			RECENT.typed = now
+		end
+		local was = at
+		at = at + 1
+		while list[at] == now and at < #list do
+			at = at + 1
+		end
+		if list[at] == nil or list[at] == now then
+			at = was
+		end
+	elseif at > 0 then
+		at = at - 1
+		while at > 0 and list[at] == now do
+			at = at - 1
+		end
+	end
+	if at == RECENT.at then
+		return
+	end
+	RECENT.at = at
+	pcall(box.SetText, box, at == 0 and (RECENT.typed or "") or list[at])
+	pcall(box.SetCursorPosition, box, #BoxText(box))
+	S.typedAt = Now()
+end
+
 local function MakeSearch(frame, y)
 	local box = MakeBox(frame, L.INNER, false)
 	box:SetPoint("TOPLEFT", frame, "TOPLEFT", L.PAD, y)
+	-- The text keeps clear of the cross at the right.
+	box:SetTextInsets(6, RECENT.CROSS + 6, 0, 0)
 	S.box = box
 	S.hint = Label(box)
 	S.hint:SetPoint("LEFT", box, "LEFT", 6, 0)
 	S.hint:SetPoint("RIGHT", box, "RIGHT", -6, 0)
 	S.hint:SetText(T.SEARCH)
+	-- The cross: shown while a search is typed, a click clears it (kept as a recent search) and the finder searches again.
+	local cross = Own(CreateFrame("Button", nil, box))
+	cross:SetSize(RECENT.CROSS, RECENT.CROSS)
+	cross:SetPoint("RIGHT", box, "RIGHT", -2, 0)
+	cross:RegisterForClicks("LeftButtonUp")
+	S.strokes[#S.strokes + 1] = Stroke(cross, "OVERLAY", "TOPLEFT", 5, -5, 11, -11)
+	S.strokes[#S.strokes + 1] = Stroke(cross, "OVERLAY", "TOPLEFT", 5, -11, 11, -5)
+	S.hoverStrokes[#S.hoverStrokes + 1] = Stroke(cross, "HIGHLIGHT", "TOPLEFT", 5, -5, 11, -11)
+	S.hoverStrokes[#S.hoverStrokes + 1] = Stroke(cross, "HIGHLIGHT", "TOPLEFT", 5, -11, 11, -5)
+	cross:Hide()
 	local function Hint()
-		S.hint:SetShown(BoxText(box) == "" and not box:HasFocus())
+		local empty = BoxText(box) == ""
+		S.hint:SetShown(empty and not box:HasFocus())
+		cross:SetShown(not empty)
 	end
+	cross:SetScript("OnClick", function()
+		Remember(BoxText(box))
+		RECENT.at = 0
+		pcall(box.SetText, box, "")
+		S.typedAt = nil
+		Hint()
+		Run(Search, true)
+	end)
 	box:SetScript("OnTextChanged", function(_, typed)
 		Hint()
 		if typed then
 			S.typedAt = Now()
+			-- Up starts from what is typed again.
+			RECENT.at = 0
 		end
 	end)
-	box:SetScript("OnEditFocusGained", Hint)
+	box:SetScript("OnEditFocusGained", function()
+		RECENT.at = 0
+		Hint()
+	end)
 	box:SetScript("OnEditFocusLost", Hint)
+	box:SetScript("OnArrowPressed", function(self, key)
+		Run(Recall, self, key)
+	end)
 	box:SetScript("OnEnterPressed", function(self)
 		self:ClearFocus()
 		S.typedAt = nil
+		Remember(BoxText(self))
 		if S.min then
 			Run(D.Collapse, false)
 		end

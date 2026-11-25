@@ -26,10 +26,10 @@ local _, ns = ...
 -- The colour is never all that says it: the tooltip says it in words.
 -- Clicks: a left click opens the Trinket queue window on that slot, shows it there while the window shows the other slot, and closes it while it
 -- shows this one (ns.TrinketWindowToggle, TrinketQueueWindow.lua); a Shift-click is Queue now for that slot (Q.Now, as the window's Queue now
--- button, with one line in chat, 0.5.37), which clears a red square (held, held empty, refused); a right click turns the slot's Auto queue on or
--- off (Q.SetAuto), a Shift-right click pauses or resumes every swap (Q.SetPaused); a trinket dropped on it (OnReceiveDrag), or clicked on it from
--- the cursor, goes in that slot's list (Q.Add), and one lifted from a bag or a worn slot goes back there with ClearCursor, as GearButton.lua's
--- Compare (GearButton.lua:300-356).
+-- button, with one line in chat, 0.5.37, which in a fight says the queue looks again as the fight ends, 0.5.39), which clears a red square (held,
+-- held empty, refused); a right click turns the slot's Auto queue on or off (Q.SetAuto), a Shift-right click pauses or resumes every swap
+-- (Q.SetPaused); a trinket dropped on it (OnReceiveDrag), or clicked on it from the cursor, goes in that slot's list (Q.Add), and one lifted from
+-- a bag or a worn slot goes back there with ClearCursor, as GearButton.lua's Compare (GearButton.lua:300-356).
 -- Its tooltip is GameTooltip (SetOwner, AddLine, Show, and Hide only while IsOwned says the button owns it), never in a fight (GearButton.lua:285-298).
 -- While the cursor is on a button (over, from OnEnter to OnLeave or OnHide), each click and each look of the driver out of a fight says the
 -- tooltip again as soon as its words changed (0.5.37): a click's change shows at once, and a cooldown or the next trinket's time counts down.
@@ -54,6 +54,7 @@ local T = {
 	TIPS = { "Click: the queue window.", "Shift-click: Queue now for this slot.", "Right-click: turn this slot's queue on or off.",
 		"Shift-right-click: pause or resume every swap.", "Drop a trinket here to add it to this list." },
 	NOW = "Flat UI: the %s trinket queue looks again now.",
+	NOW_FIGHT = "Flat UI: the %s trinket queue looks again as the fight ends.",
 	OFF = "Flat UI: the trinket queue's swaps are off. /flatui status says why.",
 	REPORT = "Flat UI, Trinket queue buttons, %s: %s",
 }
@@ -355,7 +356,8 @@ local function Click(n, mouse)
 			return
 		end
 		q.Now(n)
-		print(T.NOW:format(n))
+		-- In a fight no trinket changes, so the line says when it will (0.5.39).
+		print((Fighting() and T.NOW_FIGHT or T.NOW):format(n))
 		B[n].tone = nil
 		return
 	end

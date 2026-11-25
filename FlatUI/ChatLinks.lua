@@ -30,11 +30,17 @@ local _, ns = ...
 -- instance, guild, officer and numbered channel lines (not whispers, not the game's own lines), colours each whole-word match of the player's own
 -- name (UnitName, case aside) in the plain text of a line another player wrote, in Your name colour. Links, textures and colour codes are passed
 -- over whole, as for the addresses, and so is a web address; a line of the chat lockdown never comes. With Sound when you are named, the sound
--- plays once for each line (its lineID), at most one a second (ns.PlayKit); picking it in the options window plays it once
--- (ns.ChatMentionSoundPicked, 0.5.37). The text alone changes; the filters chain, each rewriting what the last gave.
+-- plays once for each line (its lineID), at most one a second (ns.PlayKit); picking it in the options window plays it once, as every sound row
+-- of Panel.lua's AddChoice does (0.5.36; the row's own handler of 0.5.37 played it again and on an undo, and went in 0.5.39). The text alone
+-- changes; the filters chain, each rewriting what the last gave. With Light the tab that names you (chat.mentionTab, 0.5.39; on), each window
+-- that takes such a line (a numbered channel's only when a channel of its list matches, Takes) goes to Chat.lua's ns.ChatTabNamed, which lights
+-- the tab of a window that does not show.
 -- Other words to colour (0.5.37): /flatui words add, remove and list (ns.AddSlash) keep up to 20 more words for the account
 -- (ns.Account().chatWords, lower case, 2 to 24 bytes, no space), each coloured and sounded as your name is, whole words only, each look on what
--- the last gave; the row Other words to colour lists them and a pick takes one off (ns.ChatWordLines, ns.ChatWordPick).
+-- the last gave; the row Other words to colour lists them and a pick takes one off (ns.ChatWordLines, ns.ChatWordPick). Its first line, Add a
+-- word (0.5.39; at 20 words a line that says the list is full), opens the copy box empty as a word box over the options window: Enter adds the
+-- word typed as /flatui words add does and closes it with the usual line in chat, a refusal shows in red in the box, Escape closes it; never
+-- in a fight. /flatui words remove with no list yet says the word is not in it.
 -- These follow the clickable addresses and the link tooltips of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoLChatSocial/ChatIcons.lua). Left out: its item and currency icons and the item levels in links.
 
@@ -76,6 +82,10 @@ local WORDS = { SHORT = 2, LONG = 24, MOST = 20,
 	LIST = "Flat UI: other words coloured in chat: %s.",
 	NONE = "Flat UI: no other words are coloured in chat; /flatui words add tank adds one.",
 	HELP = "/flatui words - the other words coloured in chat as your name is; words add <word>, words remove <word>",
+	-- The row's first line and the word box (0.5.39).
+	ADD_LINE = "Add a word...", FULL_LINE = "At most 20 other words: choose one to stop colouring it",
+	TYPE = "Type a word and press Enter. Escape closes this.",
+	FIGHT = "Flat UI: words are added out of a fight.",
 }
 
 -- The state of the file: whether the filter is in the registry, whether each callback was given (true) or refused (false), the last line
@@ -539,9 +549,34 @@ local function MarkAll(msg, name)
 	return out
 end
 
+-- True when the window takes the line: any line but a numbered channel's, which the game gives a window only when a channel of its list matches
+-- it (by its zone channel, arg7, or its name, arg9) and is shorter than its label (Mainline/ChatFrameOverrides.lua:346-360), after the filters
+-- ran. Both lists are read only; a list or a value withheld does not take it.
+local function Takes(frame, event, label, zone, base)
+	if event ~= "CHAT_MSG_CHANNEL" then
+		return true
+	end
+	local list, zones = rawget(frame, "channelList"), rawget(frame, "zoneChannelList")
+	if not Plain(list, "table") or not Plain(label, "string") then
+		return false
+	end
+	local upper = Plain(base, "string") and base:upper() or nil
+	local byZone = Plain(zone, "number") and zone > 0
+	for index, value in pairs(list) do
+		if Plain(value, "string") and #label > #value then
+			local of = Plain(zones, "table") and zones[index] or nil
+			if (byZone and Plain(of, "number") and of == zone) or (upper ~= nil and value:upper() == upper) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 -- One line of one window: S.marked is the line to show in its place, or nil to leave it. A line you wrote is left. The same line comes once for
--- each window that shows it, so the last answer is kept and the sound plays once for each lineID.
-local function Mark(_, msg, author, lineID)
+-- each window that shows it, so the last answer is kept and the sound plays once for each lineID. With Light the tab that names you (0.5.39),
+-- each window that takes the line is handed to Chat.lua (ns.ChatTabNamed), which lights its tab while the window does not show.
+local function Mark(frame, msg, author, lineID, event, label, zone, base)
 	local name = MyName()
 	if not name then
 		return
@@ -566,35 +601,22 @@ local function Mark(_, msg, author, lineID)
 	end
 	S.mentionLine = id
 	S.marked = S.mentionOut
-end
-
--- Picking a sound in the options window plays it once, so it can be chosen by ear: the changed handler of Sound when you are named (Config.lua,
--- 0.5.37), as UnitGroupMarks.lua's ns.DispelSoundPicked. Only while the options window shows and out of a fight; None plays nothing.
-function ns.ChatMentionSoundPicked(path)
-	if type(path) ~= "string" or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
-		return
-	end
-	local okFight, fighting = pcall(InCombatLockdown)
-	if not okFight or ns.IsSecret(fighting) or fighting == true then
-		return
-	end
-	local kit = KITS[ns.Get(path)]
-	local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
-	if sound and type(ns.PlayKit) == "function" then
-		ns.PlayKit(sound[1])
+	if Opt("mentionTab") == true and Plain(frame, "table") and type(ns.ChatTabNamed) == "function" and Takes(frame, event, label, zone, base) then
+		ns.ChatTabNamed(frame)
 	end
 end
 
 -- The game's registry calls it with the window, the event and the values of the line: the text first, its author second ("Name" or
--- "Name-Realm"), lineID eleventh. The text alone is put in its place; every other value stays as it came. It chains with the address filter,
--- each rewriting what the other gave.
+-- "Name-Realm"), a channel's label fourth, its zone channel seventh, its name ninth, lineID eleventh. The text alone is put in its place; every
+-- other value stays as it came. It chains with the address filter, each rewriting what the other gave.
 local function Mentions(frame, event, msg, author, ...)
 	if not Wanted(MENTIONS) or not Plain(msg, "string") or msg == "" then
 		return false
 	end
 	S.marked = nil
 	-- A part that fails is counted once for each window it fails on.
-	ns.EachPart(KEY, MENTIONS, Mark, Plain(frame, "table") and frame or Mentions, msg, author, (select(9, ...)))
+	ns.EachPart(KEY, MENTIONS, Mark, Plain(frame, "table") and frame or Mentions, msg, author, (select(9, ...)), event, (select(2, ...)),
+		(select(5, ...)), (select(7, ...)))
 	local out = S.marked
 	S.marked = nil
 	if out ~= nil then
@@ -634,7 +656,7 @@ local function EditWord(verb, typed)
 	end
 	local list = WordList(verb == "add")
 	if not list then
-		return WORDS.BAD
+		return verb == "add" and WORDS.BAD or WORDS.MISSING:format(word)
 	end
 	local name = MyName()
 	for index, have in ipairs(list) do
@@ -656,14 +678,14 @@ local function EditWord(verb, typed)
 	end
 	list[#list + 1] = word
 	S.mentionIn, S.mentionOut = nil, nil
-	return WORDS.ADDED:format(word) .. (Opt("mentions") == true and "" or WORDS.OFF)
+	return WORDS.ADDED:format(word) .. (Opt("mentions") == true and "" or WORDS.OFF), true
 end
 
 local function WordsSlash(rest)
 	local verb, word = (type(rest) == "string" and rest or ""):match("^%s*(%S*)%s*(.-)%s*$")
 	verb = (verb or ""):lower()
 	if verb == "add" or verb == "remove" then
-		print(EditWord(verb, word))
+		print((EditWord(verb, word)))
 	elseif verb == "" or verb == "list" then
 		local words = {}
 		for _, have in ipairs(WordList(false) or {}) do
@@ -679,8 +701,9 @@ end
 
 ns.AddSlash(KEY, "words", WordsSlash, { WORDS.HELP })
 
--- The row Other words to colour (Config.lua): the words of the list, and a pick that stops colouring one, as Items always sold does
--- (ErrandsMerchant.lua's ErrandsSellLines and ErrandsSellPick).
+-- The row Other words to colour (Config.lua): Add a word (0.5.39; at MOST words a line that says so in its place) and the words of the list, and a
+-- pick that opens the word box or stops colouring one, as Items always sold does (ErrandsMerchant.lua's ErrandsSellLines and ErrandsSellPick)
+-- and Make a new section opens its name box (BagsCustom.lua).
 function ns.ChatWordLines()
 	local rows = {}
 	for index, word in ipairs(WordList(false) or {}) do
@@ -691,10 +714,22 @@ function ns.ChatWordLines()
 	table.sort(rows, function(a, b)
 		return a[2] < b[2]
 	end)
+	table.insert(rows, 1, #rows < WORDS.MOST and { "add", WORDS.ADD_LINE } or { "full", WORDS.FULL_LINE })
 	return rows
 end
 
+local OpenWordBox
+
 function ns.ChatWordPick(id)
+	if id == "add" then
+		if Fighting() then
+			return false, WORDS.FIGHT
+		end
+		OpenWordBox()
+		return true
+	elseif id == "full" then
+		return false, WORDS.FULL
+	end
 	local list = WordList(false)
 	local word = list and type(id) == "number" and list[id] or nil
 	if not Fit(word) then
@@ -704,6 +739,10 @@ function ns.ChatWordPick(id)
 end
 
 -- The copy box --------------------------------------------------------------------------------
+
+-- The colour of the box's line of help as it was made (read back from it), and Enter in the word box (below).
+local HELP_COLOUR = { 1, 0.82, 0 }
+local WordEntered
 
 local function CloseBox()
 	local box = S.box
@@ -746,6 +785,10 @@ local function BuildBox()
 		help:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -7)
 		pcall(help.SetJustifyH, help, "LEFT")
 		help:SetText(Help())
+		local ok, r, g, b = pcall(help.GetTextColor, help)
+		if ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
+			HELP_COLOUR[1], HELP_COLOUR[2], HELP_COLOUR[3] = r, g, b
+		end
 	end
 	local edit = CreateFrame("EditBox", nil, frame)
 	ns.Own[edit] = true
@@ -759,9 +802,16 @@ local function BuildBox()
 	pcall(edit.SetMaxLetters, edit, 0)
 	pcall(edit.SetMaxBytes, edit, 0)
 	ns.SetOutlineFill(ns.SetOutlineArea(ns.Outline(edit, edit, true), KEY), 0, 0, 0, 0.5)
-	local box = { frame = frame, edit = edit }
+	local box = { frame = frame, edit = edit, help = help }
 	edit:SetScript("OnEscapePressed", CloseBox)
-	edit:SetScript("OnEnterPressed", CloseBox)
+	-- Enter closes the copy box; in the word box it adds the word typed (WordEntered).
+	edit:SetScript("OnEnterPressed", function()
+		if box.mode == "word" then
+			WordEntered(box)
+		else
+			CloseBox()
+		end
+	end)
 	edit:SetScript("OnEditFocusLost", CloseBox)
 	-- What is typed over the address is taken back: the box is for copying.
 	edit:SetScript("OnTextChanged", function(self, typed)
@@ -792,6 +842,19 @@ local function Place(frame)
 	end
 end
 
+-- The line of help over the box: its text in the colour it was made with, or in red for a refusal of the word box.
+local function SayInBox(box, text, refused)
+	local help = box.help
+	if help then
+		help:SetText(text)
+		if refused then
+			help:SetTextColor(1, 0.3, 0.3)
+		else
+			help:SetTextColor(HELP_COLOUR[1], HELP_COLOUR[2], HELP_COLOUR[3])
+		end
+	end
+end
+
 local function OpenBox(_, address)
 	-- None opens in a fight: the box would hold the keyboard, which goes back to the game when a fight starts.
 	if Fighting() then
@@ -801,7 +864,8 @@ local function OpenBox(_, address)
 		S.box = BuildBox()
 	end
 	local box = S.box
-	box.address = address
+	box.mode, box.address = "copy", address
+	SayInBox(box, Help())
 	box.edit:SetText(address)
 	Place(box.frame)
 	box.frame:Show()
@@ -820,6 +884,42 @@ local function OpenBox(_, address)
 				pcall(box.edit.HighlightText, box.edit)
 			end
 		end)
+	end
+end
+
+-- The word box (0.5.39): the same box, empty, for Add a word of the row Other words to colour. Enter adds the word typed (EditWord, as /flatui
+-- words add): the line of chat it gives is printed and the box closes, or a refusal shows in red in the box, which stays open with the word
+-- selected. What is typed stays (box.address is nil). Never in a fight, as the copy box.
+function WordEntered(box)
+	local ok, typed = pcall(box.edit.GetText, box.edit)
+	local word = ok and Plain(typed, "string") and typed:match("^%s*(.-)%s*$") or ""
+	local said, done = EditWord("add", word)
+	if done then
+		print(said)
+		CloseBox()
+		return
+	end
+	SayInBox(box, (said:gsub("^Flat UI: ", "")), true)
+	pcall(box.edit.HighlightText, box.edit)
+end
+
+function OpenWordBox()
+	if Fighting() then
+		return
+	end
+	if not S.box then
+		S.box = BuildBox()
+	end
+	local box = S.box
+	box.mode, box.address = "word", nil
+	SayInBox(box, WORDS.TYPE)
+	box.edit:SetText("")
+	Place(box.frame)
+	box.frame:Show()
+	pcall(box.edit.SetFocus, box.edit)
+	local okFocus, focus = pcall(box.edit.HasFocus, box.edit)
+	if okFocus and not ns.IsSecret(focus) and focus == false then
+		CloseBox()
 	end
 end
 
