@@ -12,7 +12,8 @@ local _, ns = ...
 -- in a fight (with In combat ticked), with a target (With a target ticked; not the Target frame row, see When shown), while you cast or channel
 -- and for 1.5 s, a global cooldown, after an instant spell or an item use, so its cooldown sweep can be read (While casting ticked:
 -- UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the module's own frame, and UnitCastingInfo and UnitChannelInfo), while
--- the cursor holds something, while the spell flyout is open and in Edit Mode.
+-- the cursor holds something, while the spell flyout is open, in Edit Mode and while /flatui move is open (ns.MoverKit.IsOpen), so a frame at
+-- 0% is not a box over nothing while it is lined up.
 -- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. Back to full it comes in a tenth
 -- of a second (RETURN_TIME), or over Fade time where that is shorter, as the bar block does. A frame is written only when its value changes.
 -- A frame whose alpha something else holds at 0 (the hidden minimap buttons) is left alone, and a frame the action bar block fades is left to that fade.
@@ -334,6 +335,7 @@ end
 -- driver's own frame), so an instant spell counts too: the length of a global cooldown, so the frames stay up long enough to read its sweep before
 -- Wait before fading starts. Every row of While casting uses it; the bar block holds the same (BarBlock.lua). A withheld name counts as no cast.
 local CAST_HOLD = 1.5
+local CAST_READS = { "UnitCastingInfo", "UnitChannelInfo" }
 local function Casting()
 	if state.castAt and GetTime() - state.castAt < CAST_HOLD then
 		return true
