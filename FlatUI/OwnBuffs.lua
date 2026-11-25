@@ -9,7 +9,8 @@ local _, ns = ...
 -- buttons already shown, waits until the game says buffs are open; a change to the container itself (its groups, their filters and their
 -- layout of Icon size and Spacing) is allowed at any time. Where the game
 -- will not make the container, the same icons show out of combat from a read of the player's buffs. Nothing may anchor to the container: the
--- other rows of the display hang from the holder (ns.OwnBuffsHolder), which keeps its height when no buff is up.
+-- other rows of the display hang from the holder (ns.OwnBuffsHolder), which keeps its height when no buff is up. The samples of test mode
+-- and /flatui test icons show Time left as the row draws it: under the icon, as a thin bar under it, on the icon or not at all (B.SampleTime).
 
 local KEY = "ownbuffs"
 -- The name of the row among the saved spots of the movers.
@@ -901,6 +902,65 @@ local function Now()
 end
 
 -- Ends a test: the sweeps are cleared and the icons hidden.
+-- The time of a sample as Time left shows it on the game's buttons: Under the icon as whole seconds in the row's small font, Thin bar as a bar
+-- of BAR_HEIGHT under it in the row's blue and Bar texture that runs down with the sweep, On the icon as the sweep's own countdown (the look's
+-- numbers) and Off as the sweep alone. The text and the bar are made once on the sample's frame, and one OnUpdate of their own runs only while
+-- one of them shows: it reads the end and the length of a sample of test mode from icon.held, which ns.IconSampleLoop starts again, else the
+-- start and the length given here.
+function B.SampleTime(icon, start, seconds)
+	local parts = icon.time
+	if parts == nil then
+		local ok, made = pcall(function()
+			local clock = Own(CreateFrame("Frame", nil, icon.frame))
+			clock:SetAllPoints(icon.frame)
+			clock:SetFrameLevel(icon.frame:GetFrameLevel() + 3)
+			local text = Own(clock:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall"))
+			text:SetPoint("TOP", icon.frame, "BOTTOM", 0, -1)
+			local bar = Own(CreateFrame("StatusBar", nil, clock))
+			bar:SetPoint("TOPLEFT", icon.frame, "BOTTOMLEFT", 0, -1)
+			bar:SetPoint("TOPRIGHT", icon.frame, "BOTTOMRIGHT", 0, -1)
+			bar:SetHeight(BAR_HEIGHT)
+			bar:SetMinMaxValues(0, 1)
+			clock:Hide()
+			return { clock = clock, text = text, bar = bar }
+		end)
+		parts = ok and made or false
+		icon.time = parts
+		if parts then
+			parts.clock:SetScript("OnUpdate", function()
+				local held = icon.held
+				local length = held and held.seconds or parts.seconds
+				local left = math.max(0, (held and held.ends or (parts.start + parts.seconds)) - Now())
+				if parts.want == "under" then
+					parts.text:SetText(left > 0 and ("%d"):format(math.ceil(left)) or "")
+				else
+					parts.bar:SetMinMaxValues(0, length > 0 and length or 1)
+					parts.bar:SetValue(left)
+				end
+			end)
+		end
+	end
+	if not parts then
+		return
+	end
+	local want = Opt("time")
+	parts.want, parts.start, parts.seconds = want, start or Now(), seconds or 0
+	parts.text:SetShown(want == "under")
+	parts.bar:SetShown(want == "bar")
+	if want == "bar" then
+		pcall(parts.bar.SetStatusBarTexture, parts.bar, ns.BarTexture(Opt("barTexture")) or WHITE)
+		pcall(parts.bar.SetStatusBarColor, parts.bar, BLUE[1], BLUE[2], BLUE[3], 1)
+	end
+	parts.clock:SetShown(want == "under" or want == "bar")
+end
+
+-- The time of a sample goes with the sample.
+function B.SampleTimeOff(icon)
+	if icon.time then
+		icon.time.clock:Hide()
+	end
+end
+
 function B.EndTest(token)
 	local test = B.testing
 	if not test or (token and test ~= token) then
@@ -909,6 +969,7 @@ function B.EndTest(token)
 	B.testing = nil
 	for _, icon in ipairs(test.list) do
 		ns.IconClear(icon)
+		B.SampleTimeOff(icon)
 	end
 	if B.holder and not (B.on and ns.Enabled(KEY)) then
 		B.holder:Hide()
@@ -948,7 +1009,8 @@ function ns.OwnBuffsTest()
 		end
 		B.sample[index] = icon
 		list[index] = icon
-		ns.IconSet(icon, ({ 135940, 135964, 136089 })[index], now, 2 * index + 2, { numbers = Opt("time") ~= "off", border = Opt("iconBorder") })
+		ns.IconSet(icon, ({ 135940, 135964, 136089 })[index], now, 2 * index + 2, { numbers = Opt("time") == "on", border = Opt("iconBorder") })
+		B.SampleTime(icon, now, 2 * index + 2)
 	end
 	B.Row(list)
 	local test = { list = list }
@@ -989,9 +1051,11 @@ function B.Held()
 	for _, icon in ipairs(B.icons) do
 		ns.IconClear(icon)
 	end
-	local look = { numbers = Opt("time") ~= "off", border = Opt("iconBorder"), flash = false, sound = false }
+	-- The countdown on the icon only with Time left On the icon; Under the icon and Thin bar draw their own (B.SampleTime).
+	local look = { numbers = Opt("time") == "on", border = Opt("iconBorder"), flash = false, sound = false }
 	for index, icon in ipairs(list) do
 		ns.IconSampleHeld(icon, index, KEY, look)
+		B.SampleTime(icon)
 	end
 	B.Row(list)
 end
@@ -1001,6 +1065,7 @@ function B.Drop()
 	local had = false
 	for _, icon in ipairs(B.held or {}) do
 		had = ns.IconSampleDrop(icon) or had
+		B.SampleTimeOff(icon)
 	end
 	return had
 end

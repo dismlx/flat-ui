@@ -26,7 +26,8 @@ local _, ns = ...
 -- player's power hold now, and takes the type away when nothing is left to do, as ErrandsRanks.lua's PreClick does (754-770); the slot of a
 -- pet click is read again there from the tokens of the pet bar (TrackerKinds.lua's PetModes), so a click never runs another pet action. No
 -- field is written on a button and none of the game's frames is touched; the button reads and writes nothing of the click path of the game's
--- action buttons (TaintScan.lua). Only GameTooltip is written, the lines of the button's own tooltip while the mouse is over it.
+-- action buttons (TaintScan.lua). Only GameTooltip is written, the lines of the button's own tooltip while the mouse is over it: with Tracker
+-- tooltips on, the tracker's own lines (Trackers.lua) and then what a click does.
 
 local KEY = "trackers"
 local IsSecret = ns.IsSecret
@@ -428,6 +429,12 @@ local function Allowed(entry)
 	return ns.Enabled(KEY) and entry.on ~= false and kinds[entry.kind or "buff"] == true
 end
 
+-- For the tooltip of a tracker (Trackers.lua's K.TipLines): true when Click to apply takes the tracker's kind, so out of combat a click on it
+-- fixes it while it is low or missing.
+function ns.TrackerClickCovers(entry)
+	return type(entry) == "table" and Allowed(entry)
+end
+
 -- The tracker has something a click fixes, as it is drawn now: live and shown (a plain alpha of 1, so never a pet tracker shown by its pet's
 -- health alone, TrackerKinds.lua's PetOver), and low or missing.
 local function Fixable(entry, reading, how, record)
@@ -540,7 +547,12 @@ local function Enter(button)
 	local _, text = Choose(entry, true)
 	pcall(function()
 		tip:SetOwner(button, "ANCHOR_TOP")
-		tip:SetText(type(ns.TrackerLabel) == "function" and ns.TrackerLabel(entry) or "Tracker", 1, 1, 1)
+		-- With Tracker tooltips on, the tracker's own lines first (Trackers.lua's K.TipLines), so both tooltips look alike; off, the name alone.
+		if ns.Get(KEY .. ".tooltips") ~= "off" and type(ns.TrackerTipLines) == "function" then
+			ns.TrackerTipLines(entry, tip, true)
+		else
+			tip:SetText(type(ns.TrackerLabel) == "function" and ns.TrackerLabel(entry) or "Tracker", 1, 1, 1)
+		end
 		tip:AddLine(text and ("A click " .. text .. ".") or "Nothing to do now.", 0.8, 0.8, 0.8, true)
 		tip:Show()
 	end)

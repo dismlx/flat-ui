@@ -39,13 +39,14 @@ local _, ns = ...
 -- groups, each a frame of its own with its own spot, icon size and queue (Core.lua:168-175, Runtime.lua:26-43 and 138-153, Editor.lua:246-250),
 -- are the pulse spots here, which share one list of what pulses and give each spell or item the spot it pulses at. Flat UI has one look in place
 -- of its styles, glows and editor: the icon, the name of the spell or item under it (Name under the icon, a FontString of the frame, so it
--- fades with it), and with Grow as it fades a Scale animation of the frame that swells it by a quarter while it fades out, from its middle;
--- and the sounds of its other pages in place of a choice of files and channels.
+-- fades with it), and with Grow as it fades a Scale animation of the frame that swells it by a quarter while it fades out, from its middle,
+-- the border with it, since its edges are textures of the frame itself; and the sounds of its other pages in place of a choice of files and
+-- channels. Opacity sets how solid a pulse is at its height (70% by default, EnhanceQoL's), and an item's name takes its quality's colour.
 
 local KEY = "pulse"
 local MOVER = "FlatUIPulse"
 local CROP = 0.08
--- The opacity at the height of a pulse, and the share of its time it takes to come in; the rest it fades out
+-- The opacity at the height of a pulse where Opacity has no plain value, and the share of its time it takes to come in; the rest it fades out
 -- (EnhanceQoLCooldownPulse/Core.lua:13: 0.3 seconds in, 0.7 out, 0.7 at most).
 local PEAK, RISE = 0.7, 0.3
 -- How much larger a pulse grows as it fades with Grow as it fades, the room between the icon and its name, and the font of the name.
@@ -838,7 +839,9 @@ function P.Frame(spot)
 		pcall(name.SetShadowColor, name, 0, 0, 0, 1)
 		spot.name = name
 	end
-	spot.outline = ns.Outline(frame, frame)
+	-- The edges are textures of the frame itself (a direct outline), as the name is, so the Scale animation of Grow as it fades swells them with
+	-- the icon; an outline on a frame that ignores its parent's scale might not take it.
+	spot.outline = ns.Outline(frame, frame, true)
 	local ok, fade = pcall(P.MakeFade, frame)
 	spot.fade = ok and fade or nil
 	P.Size(spot)
@@ -876,14 +879,50 @@ function P.PlaceAll()
 	end
 end
 
+-- The opacity at the height of a pulse: Opacity, 30 to 100%, else PEAK.
+function P.Peak()
+	local alpha = Opt("alpha")
+	if ns.Finite(alpha) and alpha >= 30 and alpha <= 100 then
+		return alpha / 100
+	end
+	return PEAK
+end
+
+-- The colour of an item's name: its quality's (C_Item.GetItemQualityByID, C_Item.GetItemQualityColor), else ITEM_QUALITY_COLORS; white for a
+-- spell, a test pulse or an answer that is withheld or missing.
+function P.NameColour(entry)
+	if entry.kind ~= "item" or not P.Plain(entry.id, "number") or type(C_Item) ~= "table" then
+		return 1, 1, 1
+	end
+	local quality = P.Ask(C_Item.GetItemQualityByID, entry.id)
+	if not (ns.Finite(quality) and quality >= 0) then
+		return 1, 1, 1
+	end
+	if type(C_Item.GetItemQualityColor) == "function" then
+		local ok, r, g, b = pcall(C_Item.GetItemQualityColor, quality)
+		if ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
+			return r, g, b
+		end
+	end
+	local colours = ITEM_QUALITY_COLORS
+	local colour = type(colours) == "table" and colours[quality] or nil
+	if type(colour) == "table" and ns.Finite(colour.r) and ns.Finite(colour.g) and ns.Finite(colour.b) then
+		return colour.r, colour.g, colour.b
+	end
+	return 1, 1, 1
+end
+
 -- The fade of a spot for `seconds`; false when there is none or the game refused it.
 function P.Fade(spot, seconds)
 	local fade = spot.fade
 	if not fade then
 		return false
 	end
+	local peak = P.Peak()
 	return pcall(function()
 		fade.rise:SetDuration(seconds * RISE)
+		fade.rise:SetToAlpha(peak)
+		fade.fall:SetFromAlpha(peak)
 		fade.fall:SetDuration(seconds * (1 - RISE))
 		if fade.grow then
 			local to = Opt("grow") == true and GROW or 1
@@ -921,11 +960,13 @@ function P.Show(spot, entry)
 		local size = Opt(spot.size)
 		spot.name:SetText(Opt("name") ~= false and (entry.label or entry.name) or "")
 		spot.name:SetTextHeight(math.max(10, math.floor((ns.Finite(size) and size or 72) / 5)))
+		-- The frame is used again for every pulse, so the colour is set each time.
+		spot.name:SetTextColor(P.NameColour(entry))
 	end
 	frame:SetAlpha(0)
 	frame:Show()
 	if not P.Fade(spot, seconds) then
-		frame:SetAlpha(PEAK)
+		frame:SetAlpha(P.Peak())
 	end
 	local sound = not entry.quiet and ns.SOUNDS and ns.SOUNDS[KITS[P.OwnSound(entry.key) or Opt("sound")] or 0]
 	if sound and ns.PlayKit then
