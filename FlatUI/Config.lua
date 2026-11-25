@@ -1565,7 +1565,10 @@ ns.PAGES = {
 		{ key = "durability", kind = "bool", default = true, label = "Show durability",
 			tip = "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below, and red while an item is broken, yellow while one is at 20% or less. Point at it for each item with its icon, lowest first, and about what a repair costs. Not where gear does not wear out." },
 		{ key = "thorns", kind = "bool", default = true, label = "Show thorns",
-			tip = "The damage an attacker takes each time it strikes you in melee, one total under the right column of slots: Thorns, Retribution Aura, Fire Shield, items and shield spikes (on a block). Point at it for each source and school." },
+			tip = "The damage an attacker takes each time it strikes you in melee, one total under the right column of slots: Thorns, Retribution Aura, Fire Shield, items and shield spikes (on a block). Point at it for each source and school. It shows only while something deals such damage." },
+		-- CharacterThorns.lua: keeps the grey line while the total is 0 (0.5.35).
+		{ key = "thornsZero", kind = "bool", default = false, label = "Also at 0", needs = "thorns",
+			tip = "Shows Thorns 0 in grey while nothing deals damage to attackers." },
 	},
 	-- Bags.lua and the Bags*.lua files: a bag window and a bank window of Flat UI's own in place of the game's, with sections, a search and the bags
 	-- and bank of your other characters. On by default for every character since 0.5.19 (a profile saved before then with every module that is on
@@ -2312,7 +2315,7 @@ ns.PAGES = {
 		{ key = "webLinks", kind = "bool", default = true, label = "Web addresses as links",
 			tip = "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy." },
 		{ key = "linkTips", kind = "bool", default = true, label = "Tooltips of chat links",
-			tip = "While the mouse is over an item, spell or achievement link in a chat window, its tooltip shows. Not in a fight." },
+			tip = "While the mouse is over an item, spell, achievement or quest link in a chat window, its tooltip shows. Not in a fight." },
 	},
 	-- Tooltips, Spell tooltips and Gear comparison: rows of Chat and tooltips (saved as chat.*), each on a page of its own in the sidebar with the
 	-- switch of Chat and tooltips (Panel.lua, BuildModel).
@@ -2389,7 +2392,10 @@ ns.PAGES = {
 		{ key = "itemLevel", kind = "bool", default = true, label = "Item level", tip = "On armor and weapons, as Item level 63 in gold, also in the comparison beside them." },
 		{ key = "icons", kind = "bool", default = true, label = "Item and spell icons",
 			tip = "The icon before the name of an item, a spell, a buff or a debuff: not on the target and focus frames, whose buff tooltip is the game's own." },
-		{ key = "targetLine", kind = "bool", default = true, label = "Target of units", tip = "A line naming what a unit targets, in its class or reaction colour: You when it is you." },
+		{ key = "targetLine", kind = "bool", default = true, label = "Target of units", tip = "A line naming what a unit targets, in its class or reaction colour: You when it is you, in red while it is a unit you can attack." },
+		-- ChatTips.lua (TargetedBy): the targets of the party or raid members (0.5.35).
+		{ key = "targetedBy", kind = "bool", default = true, label = "Who in your group targets it",
+			tip = "In a party or raid, a grey line under a unit's tooltip naming the members whose target it is, in their class colours: at most six, then +N." },
 		{ section = "Item comparison" },
 		{ key = "compareShift", kind = "bool", default = true, label = "Compare items only while holding Shift",
 			tip = "The items you wear show beside the tooltip of an item only while you hold Shift. Sets a game setting that the game's options do not show. Turned off, the game's own value is back." },

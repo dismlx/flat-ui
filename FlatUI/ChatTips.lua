@@ -1,6 +1,8 @@
 local _, ns = ...
 
--- More on tooltips, for the Tooltips page of Chat and tooltips: a line naming what a unit targets, the class colour on the line with a player's
+-- More on tooltips, for the Tooltips page of Chat and tooltips: a line naming what a unit targets (You in red while a unit you can attack targets
+-- you, UnitCanAttack; 0.5.35), in a group a line naming who in it targets the unit (Who in your group targets it, TargetedBy: the targets of
+-- party1-4 or raid1-40 by UnitIsUnit, GetNumSubgroupMembers and GetNumGroupMembers; 0.5.35), the class colour on the line with a player's
 -- class, the icon of an item, a spell or a buff before its name, the ID of the temporary enchant on a weapon you wear, the ID of the icon file, and
 -- Show IDs, the key the ID lines wait for. A buff or a debuff counts as a spell: its data has the spell's id (Enum.TooltipDataType.UnitAura), which
 -- the game withholds while it restricts auras, and then it gets nothing. So do the buffs of the target and focus frames, whose tooltip is forbidden
@@ -9,7 +11,8 @@ local _, ns = ...
 -- data (TooltipDataProcessor.AddTooltipPostCall, the one path its lines go through), before its own work so that the Elite and Rare word stays the
 -- last line, and its extra lines ask ns.ChatTipIds for the ID lines. The game runs the post calls once it has added its lines and before it shows
 -- the tooltip (TooltipDataHandler.lua:283-300), and sets the index of each line in the data as it adds it (TooltipDataHandler.lua:319-336).
--- What is written on a tooltip: the target line with AddLine, once for each build as Chat.lua adds its lines, and with SetText and Show when the
+-- What is written on a tooltip: the target line and after it the line of who targets the unit with AddLine, once for each build as Chat.lua adds
+-- its lines, and the target line with SetText and Show when the
 -- target of the unit changes while the mouse stays on it (The target line while the mouse stays on the unit); the colour of the class line with
 -- SetTextColor; and with Item and spell icons the text of the first line with SetText: the icon of the item or the spell (C_Item.GetItemIconByID,
 -- ItemDocumentation.lua:611-624; C_Spell.GetSpellTexture, SpellDocumentation.lua:595-612) before the name the game wrote, only when the first line of
@@ -43,6 +46,10 @@ local WEAPONS = { [16] = true, [17] = true, [18] = true }
 -- data with that line still there is the same build. text is what the line holds while it is kept current ("" while the unit targets nothing), nil
 -- once it is not.
 local added = setmetatable({}, { __mode = "k" })
+-- Per tooltip: { data, lines } of the line of who in the group targets the unit, so that the post calls of one build add it once (0.5.35).
+local byAdded = setmetatable({}, { __mode = "k" })
+-- Who in your group targets it: at most BY_MOST names, then +N. YOU_RED is You on the target line while a unit you can attack targets you.
+local BY_MOST, YOU_RED = 6, { 1, 0.25, 0.25 }
 
 local IsSecret = ns.IsSecret
 
@@ -221,7 +228,12 @@ local function TargetText(unit)
 	local name, r, g, b
 	if Ask(UnitIsUnit, target, "player") == true then
 		name = "You"
-		r, g, b = ns.ClassColourOf("player")
+		-- A unit you can attack that targets you: You in red, so a mob about to hit you stands out from a friend.
+		if Ask(UnitCanAttack, "player", unit) == true then
+			r, g, b = YOU_RED[1], YOU_RED[2], YOU_RED[3]
+		else
+			r, g, b = ns.ClassColourOf("player")
+		end
 	else
 		name = Ask(UnitName, target)
 		if not Plain(name, "string") or name == "" or (Plain(UNKNOWNOBJECT, "string") and name == UNKNOWNOBJECT) then
@@ -341,6 +353,55 @@ local function AddOnce(tooltip, data, text)
 	end
 end
 
+-- Who in your group targets it (chat.targetedBy, 0.5.35) ----------------------------------------------------------------------
+-- In a raid raid1 to raidN (GetNumGroupMembers, the player skipped), in a party party1 to party4 (GetNumSubgroupMembers): each member whose target
+-- the game plainly says is the unit (UnitIsUnit of its target and the unit), by name (UnitName) in its class colour, at most BY_MOST, then +N. An
+-- answer the game withholds counts as no, and a unit whose identity it withholds gets no line. Nil solo or when no one does.
+local function TargetedBy(unit)
+	if Hidden(unit) then
+		return nil
+	end
+	local raid = Ask(IsInRaid) == true
+	local count = raid and Ask(GetNumGroupMembers) or Ask(GetNumSubgroupMembers)
+	if not Plain(count, "number") or count <= 0 then
+		return nil
+	end
+	local names, more = {}, 0
+	for index = 1, math.min(count, raid and 40 or 4) do
+		local member = (raid and "raid" or "party") .. index
+		if Ask(UnitIsUnit, member, "player") ~= true and Ask(UnitIsUnit, member .. "target", unit) == true then
+			local name = Ask(UnitName, member)
+			if Plain(name, "string") and name ~= "" then
+				if #names < BY_MOST then
+					local r, g, b = ns.ClassColourOf(member)
+					names[#names + 1] = r and (Hex(r, g, b) .. name .. "|r") or name
+				else
+					more = more + 1
+				end
+			end
+		end
+	end
+	if #names == 0 then
+		return nil
+	end
+	return "Targeted by: " .. table.concat(names, ", ") .. (more > 0 and (" +%d"):format(more) or "")
+end
+
+-- Adds the line of who targets the unit once for each build, after the target line, so the target line keeps its index for Keep.
+local function AddBy(tooltip, data, text)
+	local ok, shown = pcall(tooltip.NumLines, tooltip)
+	if not ok or not Plain(shown, "number") then
+		return
+	end
+	local record = byAdded[tooltip]
+	if record and rawequal(record.data, data) and shown >= record.lines then
+		return
+	end
+	if pcall(tooltip.AddLine, tooltip, text, GREY[1], GREY[2], GREY[3]) then
+		byAdded[tooltip] = { data = data, lines = shown + 1 }
+	end
+end
+
 -- The index of the line of a player's data that holds the name of the class: the level line when the game marks it, else the last such line other
 -- than the name. Nil when no line does, or the lines cannot be read.
 local function ClassIndex(data, className)
@@ -439,7 +500,7 @@ local function Lines(tooltip, data)
 		return
 	end
 	if IsData(data, "Unit") then
-		local unit = (Opt("classLine") == true or Opt("targetLine") == true) and UnitOf(data)
+		local unit = (Opt("classLine") == true or Opt("targetLine") == true or Opt("targetedBy") == true) and UnitOf(data)
 		if not unit then
 			return
 		end
@@ -449,6 +510,10 @@ local function Lines(tooltip, data)
 		local text = Opt("targetLine") == true and TargetText(unit)
 		if text then
 			AddOnce(tooltip, data, text)
+		end
+		local by = Opt("targetedBy") == true and TargetedBy(unit)
+		if by then
+			AddBy(tooltip, data, by)
 		end
 	elseif Opt("icons") == true then
 		-- A buff or a debuff has the icon of its spell before its name, as a spell does.

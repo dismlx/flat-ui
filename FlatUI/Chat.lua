@@ -2,7 +2,8 @@ local _, ns = ...
 
 -- The chat windows, the chat input box and the look of tooltips. The game fades the plates of a chat window with SetAlpha, so those are
 -- hidden; art whose alpha the game leaves alone is made transparent. The flat boxes are textures of the addon's own. What the game sets again
--- is followed with hooksecurefunc on a global function of the game, with HookScript on GameTooltip, and with EventRegistry for the input box; no
+-- is followed on a global function of the game through ns.FollowGlobal (Core.lua's one hooksecurefunc for each global), with HookScript on
+-- GameTooltip, and with EventRegistry for the input box; no
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
 -- from the lines the kind of a unit, an item level, an ID and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
 -- and the hit table lines of HitTableTip.lua (called from the post call after them, on an enemy's GameTooltip), and nothing is created on one in
@@ -1627,17 +1628,19 @@ end
 
 -- Hooks -------------------------------------------------------------------------------------
 
--- A hook on a global function of the game, put on once and only when the function exists.
+-- A hook on a global function of the game, put on once and only when the function exists, through ns.FollowGlobal (Core.lua), which runs each
+-- follower of a global under pcall, so a fault here stops no other follower of it (0.5.35).
 local function Follow(name, fn)
-	if hooked[name] or type(hooksecurefunc) ~= "function" or type(_G[name]) ~= "function" then
+	if hooked[name] or type(_G[name]) ~= "function" then
 		return
 	end
-	hooked[name] = true
-	hooksecurefunc(name, function(...)
+	if ns.FollowGlobal(name, function(...)
 		if not ns.IsStopped(KEY) then
 			ns.Each(KEY, fn, ...)
 		end
-	end)
+	end) then
+		hooked[name] = true
+	end
 end
 
 -- The game colours a tab with the state it is in: true for the selected tab.

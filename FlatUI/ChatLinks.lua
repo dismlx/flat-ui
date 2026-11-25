@@ -1,7 +1,7 @@
 local _, ns = ...
 
 -- Links in the chat windows: a web address in a chat line becomes a link of Flat UI's own that opens a box to copy it, and the tooltip of an item,
--- spell or achievement link shows while the mouse is over it. Runs with the chat module: Chat.lua calls ns.ChatLinksSync at the end of each refresh.
+-- spell, achievement or quest link shows while the mouse is over it. Runs with the chat module: Chat.lua calls ns.ChatLinksSync at the end of each refresh.
 -- Web addresses: a filter in the game's own chat filter registry (ChatFrameUtil.AddMessageEventFilter, Blizzard_ChatFrameBase/Shared/
 -- ChatFrameFilters.lua:112-124 and 202-215) reads the text of the lines players write and of the game's system lines. The registry calls it securely
 -- and only with a line whose every value an addon may read (canaccessvalue), so a line of the chat lockdown is passed on untouched, and the filter
@@ -40,8 +40,9 @@ local EVENTS = { "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_EMOTE", "CHAT_MSG_WH
 	"CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER", "CHAT_MSG_RAID_WARNING", "CHAT_MSG_INSTANCE_CHAT",
 	"CHAT_MSG_INSTANCE_CHAT_LEADER", "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER", "CHAT_MSG_GUILD_DISCORD", "CHAT_MSG_CHANNEL", "CHAT_MSG_COMMUNITIES_CHANNEL",
 	"CHAT_MSG_BN_WHISPER", "CHAT_MSG_BN_WHISPER_INFORM", "CHAT_MSG_BN_INLINE_TOAST_BROADCAST", "CHAT_MSG_SYSTEM" }
--- The kinds of link that show a tooltip: an enchant link is the spell of a profession.
-local TIP_KINDS = { item = true, spell = true, enchant = true, achievement = true }
+-- The kinds of link that show a tooltip: an enchant link is the spell of a profession; a quest link (0.5.35) has no handler of its own and goes to
+-- the same SetHyperlink as the ItemRef tooltip a click on it opens (Blizzard_UIPanels_Game/Mainline/ItemRef.lua:21-25, 390-392).
+local TIP_KINDS = { item = true, spell = true, enchant = true, achievement = true, quest = true }
 -- An escape whose end is a closing code of its own: a texture, an atlas, a Battle.net name.
 local CLOSING = { T = "|t", A = "|a", K = "|k" }
 local BOX_WIDTH, BOX_HEIGHT, FIELD_HEIGHT = 380, 50, 20

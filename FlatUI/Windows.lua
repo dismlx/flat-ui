@@ -2443,13 +2443,15 @@ local function OnFlyout()
 	end
 end
 
--- Hooks a global function of Blizzard's, if the client has it.
+-- Follows a global function of Blizzard's, if the client has it, through ns.FollowGlobal (Core.lua: one hooksecurefunc for each global, and each
+-- follower run under pcall with a fault sent to the game's error handler, so a fault here stops no other follower of that global; 0.5.35).
 local function HookGlobal(name, fn)
-	if hookedGlobals[name] or type(hooksecurefunc) ~= "function" or type(_G[name]) ~= "function" then
+	if hookedGlobals[name] or type(_G[name]) ~= "function" then
 		return
 	end
-	hookedGlobals[name] = true
-	hooksecurefunc(_G, name, fn)
+	if ns.FollowGlobal(name, fn) then
+		hookedGlobals[name] = true
+	end
 end
 
 local function StyleMenu(menu)
