@@ -8,6 +8,9 @@ local _, ns = ...
 -- are listed first, under Hidden, where the eye shows one again, and the inspector's Hide frame hides the chosen frame or shows it again. Samples
 -- on the toolbar turns test mode on or off (TestMode.lua), so the boxes of hidden frames hold their samples; a test mode turned on there passes to
 -- the options window when that is shown as the session ends for good, and ends otherwise.
+-- The label of a box is one line as wide as the box, cut with an ellipsis where the name is longer and hidden in a box too small for a line, so
+-- the labels of small boxes in a crowd stay inside them. The box under the cursor is drawn again over every box, with its whole name on a plate
+-- over its middle, by a frame of the addon's own that takes no mouse, so the smaller box under the cursor still takes it.
 
 local MM = {}
 ns.MoversMode = MM
@@ -29,6 +32,9 @@ local ARROWS = { UP = { 0, 1 }, DOWN = { 0, -1 }, LEFT = { -1, 0 }, RIGHT = { 1,
 local SCALE_MIN, SCALE_MAX, SCALE_STEP = 50, 200, 5
 local WINDOW_MIN, WINDOW_MAX = 60, 150
 local TRACK_W = 80
+-- The label of a box: the room it leaves at each side of the box, the least width it is drawn in, and the height of a line when the client does
+-- not say it. The box under the cursor is drawn again over every box at FRONT_LEVEL (Movers.lua gives the boxes levels 1 to 501, BOX_LEVELS).
+local LABEL_INSET, LABEL_MIN_W, LINE_H, FRONT_LEVEL = 3, 24, 10, 600
 
 -- The session: spots at the start (snapshot), the last seen spot of each frame (last), the steps for Undo, the handles hidden by the eye,
 -- the chosen frame and the handle under the cursor. paused: the session waits for the end of a fight. panel: the options window was open.
@@ -368,25 +374,91 @@ function MM.Paint(name)
 	end
 end
 
--- Called when Movers.lua makes the handle of a frame.
+-- The height of a line of a label as the client gives it, else LINE_H.
+local function LineHeight(text)
+	local ok, height = pcall(text.GetLineHeight, text)
+	if ok and ns.Finite(height) and height > 0 then
+		return height
+	end
+	return LINE_H
+end
+
+-- A label shows only in a box with room for a line of a few letters: as high as a line, and LABEL_MIN_W wide inside its insets.
+local function Fit(handle, text)
+	local width, height = handle:GetWidth(), handle:GetHeight()
+	text:SetShown(ns.Finite(width) and ns.Finite(height) and width - 2 * LABEL_INSET >= LABEL_MIN_W and height >= LineHeight(text))
+end
+
+-- Called when Movers.lua makes the handle of a frame. Its label is one line as wide as the box, cut with an ellipsis where the name is longer,
+-- and hidden in a box too small for it (Fit), so the labels of small boxes stay inside them; pointing at a box shows its whole name (MM.Front).
 function MM.Style(name, handle, outline, text)
 	S.texts[name] = text
 	local object = Look().Object("GameFontHighlightSmall")
 	if object then
 		text:SetFontObject(object)
 	end
+	text:SetWordWrap(false)
+	text:ClearAllPoints()
+	text:SetPoint("LEFT", handle, "LEFT", LABEL_INSET, 0)
+	text:SetPoint("RIGHT", handle, "RIGHT", -LABEL_INSET, 0)
 	ns.SetOutlineThickness(outline, 1)
+	handle:SetScript("OnSizeChanged", function()
+		Fit(handle, text)
+	end)
 	handle:SetScript("OnEnter", function()
 		S.hover = name
 		MM.Paint(name)
+		Try(MM.Front, name)
 	end)
 	handle:SetScript("OnLeave", function()
 		if S.hover == name then
 			S.hover = nil
+			Try(MM.Front, nil)
 		end
 		MM.Paint(name)
 	end)
+	Fit(handle, text)
 	MM.Paint(name)
+end
+
+-- The box under the cursor, drawn again over every other box by a frame that takes no mouse, so the smaller box under the cursor still takes
+-- it: the box's edges, and its whole name on a plate over its middle, which a label cut short, hidden, or under the labels of other boxes is
+-- read from. No name, or a box that is not shown, takes it away. The session's tick draws it again, for a name that changed under the cursor.
+function MM.Front(name)
+	local handle = name and Kit().handles[name]
+	local text = name and S.texts[name]
+	local words = text and text:GetText()
+	if not (handle and handle:IsShown() and type(words) == "string" and words ~= "") then
+		if ui.front then
+			ui.front:Hide()
+		end
+		return
+	end
+	if not ui.front then
+		local front = Make("Frame")
+		front:SetFrameStrata("HIGH")
+		front:SetFrameLevel(FRONT_LEVEL)
+		ui.frontEdges = ns.Outline(front, front, true)
+		ns.KeepOutline(ui.frontEdges)
+		ns.SetOutline(ui.frontEdges, true, false)
+		ns.SetOutlineThickness(ui.frontEdges, 1)
+		local plate = Make("Frame", front)
+		plate:SetClampedToScreen(true)
+		plate:SetPoint("CENTER", front, "CENTER", 0, 0)
+		Surface(plate, "raised", "line-strong")
+		ui.frontText = Text(plate, "GameFontHighlightSmall", "text", "CENTER")
+		ui.frontText:SetPoint("CENTER", plate, "CENTER", 0, 0)
+		ui.front, ui.frontPlate = front, plate
+	end
+	ui.front:ClearAllPoints()
+	ui.front:SetAllPoints(handle)
+	ns.SetOutlineColour(ui.frontEdges, Look().Colour(S.selected == name and "accent" or "text"))
+	if ui.frontWords ~= words then
+		ui.frontWords = words
+		ui.frontText:SetText(words)
+		ui.frontPlate:SetSize(ui.frontText:GetStringWidth() + 12, LineHeight(ui.frontText) + 6)
+	end
+	ui.front:Show()
 end
 
 function MM.Hidden(name)
@@ -1196,6 +1268,7 @@ local function Tick(_, elapsed)
 	end
 	ui.clock = 0
 	Try(MM.Refresh, false)
+	Try(MM.Front, S.hover)
 	ui.listClock = (ui.listClock or 0) + 1
 	if ui.listClock >= 3 and S.list then
 		ui.listClock = 0
@@ -1231,7 +1304,7 @@ local function HideAll()
 	ns.MoversSnap.Hide()
 	ui.sliding = false
 	ui.keys:EnableKeyboard(false)
-	for _, name in ipairs({ "screen", "bar", "list", "side", "chip", "keys", "ask", "space" }) do
+	for _, name in ipairs({ "screen", "bar", "list", "side", "chip", "front", "keys", "ask", "space" }) do
 		if ui[name] then
 			ui[name]:Hide()
 		end

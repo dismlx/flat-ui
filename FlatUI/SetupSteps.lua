@@ -642,7 +642,7 @@ ns.SETUP_STEPS = {
 		{ "hud.addonButtons", "o", "behaviour", "Chooses whether the minimap buttons of other addons stay put, stand in a column beside the map, or sit in a row under it." },
 		{ "hud.addonButtonsKeep", "r", "behaviour", "Leaves the minimap buttons you tick where their addons put them, out of the column or row." },
 		{ "hud.addonButtonsFlat", "o", "behaviour", "Gives the minimap buttons of other addons that Flat UI gathers a square, thin-bordered look in place of their round gold ring." },
-		{ "hud.mapCoords", "o", "behaviour", "Shows your map coordinates as text by the minimap, except in instances." },
+		{ "hud.mapCoords", "o", "behaviour", "Shows your map coordinates as text by the minimap, except in instances and while the game's own coordinates show under it." },
 		{ "hud.mapCoordsPlace", "r", "behaviour", "Chooses whether the coordinates show above or below the minimap." },
 		{ "hud.mapCoordsDecimals", "r", "behaviour", "Chooses how many decimals the coordinates show, from none to two." },
 		{ "hud.mapDurability", "o", "behaviour", "Shows the durability of your most worn equipped item by the minimap, yellow and then red as it wears." },

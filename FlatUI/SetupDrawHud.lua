@@ -574,7 +574,9 @@ local function DrawOwn(s, mode, size, file)
 			bar.frame:ClearAllPoints()
 			At(bar.frame, bar.frame:GetParent(), x, y)
 			y = y + h + gap
-			Style(bar, frameOn, ns.Get("hud.xpBack") ~= false, false)
+			-- As XpBar.lua draws it: the background by Bar background, the edges by Bar border whatever Borderless says.
+			Style(bar, true, ns.Get("hud.xpBack") ~= false, false)
+			ns.SetOutlineEdges(bar.outline, frameOn)
 			PlaceDividers(bar, w, ticks, ticks > 1)
 			PlaceWords(bar, place)
 			bar.words:SetShown(mode ~= "hide")
