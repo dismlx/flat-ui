@@ -342,7 +342,11 @@ local ADDON_NAME, ns = ...
 -- they play the sounds their rows choose (PlaySound, through ns.PlayKit) and change nothing.
 -- Chat and tooltips adds a filter to the game's chat filters (ChatFrameUtil.AddMessageEventFilter, the chat events players write and
 -- CHAT_MSG_SYSTEM) that writes a web address in the plain text of a line it may read as a link of the game's addon type (|Haddon:FlatUI:url:...|h);
--- a click on one comes through EventRegistry (SetItemRef) and opens a box of its own. While the mouse is over an item, spell or achievement
+-- a click on one comes through EventRegistry (SetItemRef) and opens a box of its own. With Your name in chat (on by default) a filter of the same
+-- registry colours the player's own name in the plain text of other players' lines (|c...|r) and may play a sound (PlaySound, through ns.PlayKit).
+-- With Health bar colour (Class colour for players, reaction for the rest, by default) it colours GameTooltip's health bar (SetStatusBarColor),
+-- again after each change of its value through one HookScript of its OnValueChanged (which writes nothing else on it), and puts the game's green
+-- (0, 1, 0) back at Green. While the mouse is over an item, spell or achievement
 -- link in a chat window (EventRegistry: ChatFrame.OnHyperlinkEnter and ChatFrame.OnHyperlinkLeave) it fills GameTooltip from the link
 -- (SetOwner on a frame of its own, SetHyperlink) and hides it when the mouse leaves (Hide), only while that frame owns it and never in a fight.
 -- Inside the game's build of a tooltip, Chat and tooltips colours a player's class line (SetTextColor) and, with Item and spell icons, writes
