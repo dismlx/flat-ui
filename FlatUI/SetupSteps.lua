@@ -1579,7 +1579,7 @@ ns.SETUP_STEPS = {
 		{ "threat.barTexture", "r", "behaviour", "Chooses the texture of the bars of the threat list, or that of the Flat UI page." },
 		{ "threat.mine", "o", "behaviour", "Puts a thin white outline round your own bar on the threat list." },
 		{ "threat.keepMine", "o", "behaviour", "Keeps your own bar on the threat list when you rank below the last bar." },
-		{ "threat.warn", "o", "behaviour", "Makes your bar pulse red while you deal damage or heal, are not tanking and are about to pull aggro." },
+		{ "threat.warn", "o", "behaviour", "Makes your bar pulse red while you deal damage or heal, are not tanking and are about to pull aggro, and keeps it red once you hold it." },
 		{ "threat.warnAt", "r", "behaviour", "Sets the share of threat at which the warning starts." },
 		{ "threat.lost", "o", "behaviour", "As a tank, makes your bar pulse red and plays the warning sound once when an enemy you held turns to someone else." },
 		{ "threat.warnSound", "r", "behaviour", "Chooses the sound that plays once for either warning." },
@@ -1620,6 +1620,7 @@ ns.SETUP_STEPS = {
 		{ "grouptools.spacing", "r", "behaviour", "Sets the room between the buttons." },
 		{ "grouptools.layout", "o", "behaviour", "Lays the buttons out in a row, in two rows or in a column." },
 		{ "grouptools.markColours", "r", "behaviour", "Gives the border of each raid marker the colour of its marker." },
+		{ "grouptools.fade", "o", "behaviour", "Keeps the buttons faint until the mouse comes over one, full during a ready check or a countdown." },
 	} },
 	{ id = "pingbar", area = "Ping bar", title = "Ping bar", draw = "mock-screen", built = false, rows = {
 		{ "pingbar.enabled", "c", "behaviour", "Shows a bar with a button for each ping of the game: click one, then click where to ping, or another to switch. Each also has a key in the game's Key Bindings that pings what is under the mouse, and the movers place the bar." },
@@ -1630,6 +1631,7 @@ ns.SETUP_STEPS = {
 		{ "pingbar.layout", "o", "behaviour", "Lays the buttons out horizontally or vertically." },
 		{ "pingbar.colours", "r", "behaviour", "Gives the border of each button the colour of its ping." },
 		{ "pingbar.keys", "o", "behaviour", "Shows the key you bound for each ping, short, in the corner of its button." },
+		{ "pingbar.fade", "o", "behaviour", "Keeps the buttons faint until the mouse comes over one, full while a ping waits." },
 	} },
 	{ id = "bags", area = "Bags", title = "Bags", draw = "mock-screen", built = false, rows = {
 		{ "bags.enabled", "c", "behaviour", "Puts all your bags in one Flat UI window with sections and a search, and shows your bank and your other characters' bags anywhere." },

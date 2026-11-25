@@ -8,7 +8,10 @@ local _, ns = ...
 -- out of combat; in combat only the picture, the dimming, the sweep and show or hide of icons that exist are touched. Where the game
 -- shows its party as raid-style frames the rows hang from those frames, the unit read from each frame. In a raid group the game shows
 -- no party member frames, so the player's own row and the rows of the subgroup stack in a holder of their own with a handle in
--- /flatui move, each row labelled with the member's name. The abilities an account adds or hides, by name or spell ID, are kept in
+-- /flatui move, each row labelled with the member's name in his class colour (RAID_CLASS_COLORS, plain answers only, else white), right-aligned
+-- on one line and cut at the room of the label. The row of a member who is dead, a ghost or offline (UnitIsDeadOrGhost, UnitIsConnected, plain
+-- answers only: a withheld one changes nothing) fades to 35% with its label, also in a fight, as both are frames of the addon's own, and comes
+-- back as he is up again; its tooltips say Dead or Offline. The abilities an account adds or hides, by name or spell ID, are kept in
 -- the account (/flatui party). A member who also runs Flat UI sends his cooldowns as addon messages (PartySync.lua), which start his
 -- timers here and show his ready icons. Pointing at an icon writes the ability with its class, in its kind's colour, the member's name, Ready or
 -- the time left, and whether he shares by Flat UI, in GameTooltip (Icon tooltips: On, Out of combat only or Off), written again each second
@@ -29,6 +32,8 @@ local UNKNOWN_ICON = 134400
 -- The colours of a tooltip's lines: Ready, and the text-dim of the windows (PanelLook.lua).
 local READY = { 0.4, 0.9, 0.4 }
 local DIM = { 0.66, 0.68, 0.62 }
+-- The opacity of the row of a member who is dead or offline.
+local GONE = 0.35
 -- How long the flash of Flash when ready plays (IconRow.lua: FLASH), which a row waits before a ready icon leaves it.
 local FLASH = 0.5
 -- The kinds each switch shows (CooldownData.lua: ns.COOLDOWN_KINDS), in the order of the rows.
@@ -498,7 +503,45 @@ function P.Draw(row, slot, item)
 	icon.texture:SetVertexColor(level, level, level)
 end
 
+-- Fades a row and its label while its member is dead or offline (word "Dead" or "Offline", P.Gone), and brings them back with nil. Written only
+-- when it changes.
+function P.Fade(row, word)
+	word = word or nil
+	if row.gone == word then
+		return
+	end
+	row.gone = word
+	local level = word and GONE or 1
+	row.holder:SetAlpha(level)
+	if row.label then
+		row.label:SetAlpha(level)
+	end
+end
+
+-- Offline or Dead for the member of a row (Offline first, as Healer mana says it), from plain answers; false while he is up, and nil while the
+-- game withholds whether he is dead, which leaves the row as it was. A sample has no member, and is up.
+function P.Gone(row)
+	local unit = row.unit
+	if not unit or row.testing then
+		return false
+	end
+	if T.Ask(UnitIsConnected, unit) == false then
+		return "Offline"
+	end
+	local dead, why = T.Ask(UnitIsDeadOrGhost, unit)
+	if dead == true then
+		return "Dead"
+	elseif dead == nil and why == "hidden" then
+		return nil
+	end
+	return false
+end
+
 function P.RenderRow(row)
+	local gone = P.Gone(row)
+	if gone ~= nil then
+		P.Fade(row, gone)
+	end
 	if row.testing then
 		return
 	end
@@ -576,6 +619,7 @@ function P.Release(row)
 	if row.label then
 		row.label:Hide()
 	end
+	P.Fade(row, nil)
 	row.holder:Hide()
 	P.pool[#P.pool + 1] = row
 end
@@ -681,6 +725,7 @@ function P.Tip(row, icon)
 	end
 	local sync = ns.PartySync
 	local shares = not row.testing and not row.own and row.owner and sync and sync.Shares(row.owner)
+	local gone = P.Gone(row)
 	pcall(function()
 		tip:SetOwner(icon.frame, "ANCHOR_TOP")
 		if row.testing then
@@ -701,6 +746,9 @@ function P.Tip(row, icon)
 			tip:AddLine(("Ready in %s"):format(Clock(start + seconds - T.Now())), DIM[1], DIM[2], DIM[3])
 		else
 			tip:AddLine("Ready", READY[1], READY[2], READY[3])
+		end
+		if gone then
+			tip:AddLine(gone, DIM[1], DIM[2], DIM[3])
 		end
 		if shares then
 			tip:AddLine("Shared by Flat UI", DIM[1], DIM[2], DIM[3])
@@ -817,21 +865,49 @@ function P.Stacked(row, stack, position, size)
 	row.frame, row.side, row.above, row.aboveFrame, row.anchored = nil, nil, nil, nil, true
 end
 
--- The name of the member to the left of his row in the stack.
-function P.Label(row, stack, text)
+-- Red, green and blue of a class by its file name, from plain values only, or nil.
+local function ClassRGB(class)
+	local colours = RAID_CLASS_COLORS
+	if not Plain(class, "string") or type(colours) ~= "table" or IsSecret(colours) then
+		return nil
+	end
+	local colour = colours[class]
+	if type(colour) ~= "table" or IsSecret(colour) then
+		return nil
+	end
+	local r, g, b = colour.r, colour.g, colour.b
+	if ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
+		return r, g, b
+	end
+	return nil
+end
+
+-- The name of the member to the left of his row in the stack, in his class colour (class, a file name such as "MAGE"; white where it is
+-- unknown), right-aligned on one line and cut at the room of the label. The colour is written only when the class changes.
+function P.Label(row, stack, text, class)
 	local label = row.label
 	if not label then
 		label = Own(stack:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
 		label:SetWidth(LABEL_W - 4)
 		label:SetJustifyH("RIGHT")
+		label:SetWordWrap(false)
+		pcall(label.SetMaxLines, label, 1)
 		label:SetPoint("RIGHT", row.holder, "LEFT", -4, 0)
 		row.label = label
+		row.labelClass = nil
 	end
 	text = text or ""
 	if row.labelText ~= text then
 		label:SetText(text)
 		row.labelText = text
 	end
+	class = Plain(class, "string") and class or ""
+	if row.labelClass ~= class then
+		row.labelClass = class
+		local r, g, b = ClassRGB(class)
+		label:SetTextColor(r or 1, g or 1, b or 1, 1)
+	end
+	label:SetAlpha(row.gone and GONE or 1)
 	label:Show()
 end
 
@@ -1005,7 +1081,7 @@ function P.SyncRaid(members)
 			row.race, row.raceFile = P.Race(unit)
 			P.Fit(row, size, count, "right")
 			P.Stacked(row, stack, position, size)
-			P.Label(row, stack, Text(UnitName, unit))
+			P.Label(row, stack, Text(UnitName, unit), row.class)
 			row.holder:Show()
 		end
 	end
@@ -1700,7 +1776,7 @@ function P.SyncSample()
 			row.unit, row.class, row.own, row.level, row.race, row.raceFile = nil, member.class, nil, nil, nil, nil
 			P.Fit(row, size, count, "right")
 			P.Stacked(row, stack, position, size)
-			P.Label(row, stack, member.name)
+			P.Label(row, stack, member.name, member.class)
 			P.Hold(row)
 			row.holder:Show()
 		end

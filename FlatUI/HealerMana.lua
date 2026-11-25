@@ -21,6 +21,12 @@ local _, ns = ...
 -- any group, as Show says, while the group has a healer; it is drawn again on a step of half a second only while it shows, and the group is
 -- read again when it changes (GROUP_ROSTER_UPDATE, PLAYER_ROLES_ASSIGNED, PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA; a burst is read once,
 -- a moment after the first).
+-- A bar glides to each new share (Enum.StatusBarInterpolation.ExponentialEaseOut, as the Threat list and the pet target bar have it), a withheld one
+-- too, while it shows the same healer (his unit token); a bar that turns to another healer, comes back from Offline or Dead, a sample, a list that
+-- just showed or a client with no interpolation takes the value at once.
+-- While the game gives every share of the healers shown plainly (out of a fight, as a rule), the title reads their average, "Healer mana 64%",
+-- the members offline or dead left out, in the red of the wash while it is under Low mana at; as soon as one share is withheld it reads Healer
+-- mana alone, as nothing withheld is added. The samples read 48%.
 -- The window is a child of UIParent in the LOW strata in the look of the Threat list (Threat.lua): a flat background and a thin border in the
 -- colours of the Flat UI page, its bars in Bar texture (the bar texture of that page by default); it takes no mouse and hides with the
 -- interface. It fades in over 0.15 seconds as it shows and out over 0.35 as it hides, as the Threat list does (H.Showing); showing again while it
@@ -300,11 +306,28 @@ local function Fades(frame)
 	return nil, nil
 end
 
--- Shows the window, fading in when it was hidden and stopping a fade out at once, or fades it out; at once with now or with no fades.
+-- Sets the value of a bar, gliding to it where the client has the interpolation (Threat.lua has the same), at once with now or where it has not.
+-- A withheld value goes as it is, as to SetValue. False when the client refuses the value.
+local function Glide(bar, value, now)
+	local list = not now and type(Enum) == "table" and Enum.StatusBarInterpolation or nil
+	local how = type(list) == "table" and list.ExponentialEaseOut or nil
+	if how ~= nil and pcall(bar.SetValue, bar, value, how) then
+		return true
+	end
+	return (pcall(bar.SetValue, bar, value))
+end
+
+-- Shows the window, fading in when it was hidden and stopping a fade out at once, or fades it out; at once with now or with no fades. Hiding
+-- forgets whose share each bar shows, so the next one takes its value at once.
 function H.Showing(on, now)
 	local frame, fadeIn, fadeOut = H.frame, H.fadeIn, H.fadeOut
 	if not frame then
 		return
+	end
+	if not on then
+		for _, row in ipairs(H.rows) do
+			row.who = nil
+		end
 	end
 	local fading = fadeOut ~= nil and fadeOut:IsPlaying()
 	if on then
@@ -500,7 +523,9 @@ function H.Layout(n)
 end
 
 -- Writes one bar: the class colour, the name and the share of mana, the red wash below Low mana at, the cup while the member drinks and its
--- fade out of range; the share goes to the bar, its text and the wash untouched. A sample is a table of SAMPLE.
+-- fade out of range; the share goes to the bar, its text and the wash untouched. A sample is a table of SAMPLE. The bar glides to a share of the
+-- same healer it showed (row.who) in a window that shows, else takes it at once. A plain share is added to the average of the title (H.sum,
+-- H.count); a withheld one marks it as unknown (H.hidden).
 function H.Fill(row, unit, sample)
 	local r, g, b
 	if sample then
@@ -518,6 +543,8 @@ function H.Fill(row, unit, sample)
 		local cup = drinks and sample[4] == true
 		row.name:SetText(sample[1])
 		row.bar:SetValue(sample[3])
+		row.who = nil
+		H.sum, H.count = (H.sum or 0) + sample[3], (H.count or 0) + 1
 		row.share:SetText((cup and "Drinking %d%%" or "%d%%"):format(sample[3]))
 		H.Wash(row, nil, sample)
 		H.Cup(row, cup)
@@ -535,6 +562,7 @@ function H.Fill(row, unit, sample)
 	H.Range(row, unit, nil, word)
 	if word then
 		row.bar:SetValue(0)
+		row.who = nil
 		row.share:SetText(word)
 		H.Cup(row, false)
 		return
@@ -542,12 +570,47 @@ function H.Fill(row, unit, sample)
 	local cup = drinks and AurasOpen() and Drinking(unit)
 	H.Cup(row, cup)
 	local ok, share = pcall(UnitPowerPercent, unit, MANA, false, Hundred())
-	if not ok or not pcall(row.bar.SetValue, row.bar, share) then
+	local jump = row.who ~= unit or not H.frame:IsShown()
+	row.who = unit
+	if not ok or not Glide(row.bar, share, jump) then
 		row.bar:SetValue(0)
+	end
+	if ok and not IsSecret(share) and ns.Finite(share) then
+		H.sum, H.count = (H.sum or 0) + share, (H.count or 0) + 1
+	else
+		H.hidden = true
 	end
 	if not ok or not pcall(row.share.SetFormattedText, row.share, cup and "Drinking %.0f%%" or "%.0f%%", share) then
 		row.share:SetText(cup and "Drinking" or "")
 	end
+end
+
+-- The title: with the average of the plain shares H.Fill added (H.sum, H.count) and none withheld (H.hidden), "Healer mana 64%", in the red of the
+-- wash while under Low mana at; else Healer mana alone in the text-dim. Written only when it changes.
+function H.Title()
+	local count, average = H.count or 0, nil
+	if count > 0 and not H.hidden then
+		average = math.floor((H.sum or 0) / count + 0.5)
+	end
+	local at = Number("lowAt", 30)
+	local low = average ~= nil and at > 0 and average < at
+	local key = average and ("%d:%s"):format(average, tostring(low)) or "plain"
+	if H.titled == key then
+		return
+	end
+	H.titled = key
+	local colour = low and LOW or DIM
+	H.title:SetTextColor(colour[1], colour[2], colour[3], 1)
+	if average then
+		H.title:SetFormattedText("%s %d%%", TITLE, average)
+	else
+		H.title:SetText(TITLE)
+	end
+end
+
+-- Starts a new average for the title (H.Title).
+local function Average()
+	H.sum, H.count, H.hidden = 0, 0, false
 end
 
 -- True while the sample bars show: /flatui healers holds them for a few seconds (H.sample), and test mode (TestMode.lua) while it is on.
@@ -588,6 +651,7 @@ function H.Draw()
 	end
 	H.Frame()
 	H.Layout(n)
+	Average()
 	for index = 1, n do
 		if samples then
 			H.Fill(H.rows[index], nil, samples[index])
@@ -595,6 +659,7 @@ function H.Draw()
 			H.Fill(H.rows[index], list[index])
 		end
 	end
+	H.Title()
 	for index = n + 1, #H.rows do
 		H.rows[index].bar:Hide()
 	end
@@ -641,9 +706,11 @@ end
 local function Step()
 	if H.frame and #H.healers > 0 and not H.Sampling() then
 		local n = math.min(#H.healers, Number("rows", 5), MOST_ROWS)
+		Average()
 		for index = 1, math.min(n, #H.rows) do
 			H.Fill(H.rows[index], H.healers[index])
 		end
+		H.Title()
 	end
 end
 
