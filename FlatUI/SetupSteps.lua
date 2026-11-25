@@ -1724,7 +1724,7 @@ ns.SETUP_STEPS = {
 		{ "bags.placed", "r", "behaviour", "Lists the items you placed in a section by hand." },
 		{ "bags.order", "r", "behaviour", "Puts the sections back in Flat UI's order after you dragged their titles." },
 		{ "bags.folded", "r", "behaviour", "Lists the sections you folded with a click on their titles, and opens one or all." },
-		{ "bags.custom", "r", "behaviour", "Makes sections of your own with names you choose, and renames or deletes one." },
+		{ "bags.custom", "r", "behaviour", "Makes sections of your own with names you choose, and renames, colours or deletes one, or brings back the last one deleted." },
 		{ "bags.pinMoves", "o", "behaviour", "Puts each item whose slot you pinned with Ctrl+right-click back in that slot after a clean up and when it comes back." },
 		{ "bags.pins", "r", "behaviour", "Lists your pinned slots and unpins one or all." },
 		{ "bags.itemLevel", "c", "behaviour", "Shows the item level of weapons and armour." },

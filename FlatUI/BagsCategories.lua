@@ -63,8 +63,11 @@ local _, ns = ...
 -- within the same MOST_PLACED; a placement in a section that is not there is skipped, and deleting a section of the player's own takes its
 -- placements away. Categories.File is the same drop without the cursor, which BagsCustom calls for an item it put in a free slot of the bags and
 -- for the item a new section is made for; Categories.Takes makes its tests without writing, so BagsCustom moves no item a section would refuse,
--- and says the same line. Categories.Label names a section of the player's own by its name, so the windows, the rows and the search's section
--- words use it.
+-- and says the same line, or, asked quietly while the cursor holds an item, gives the sentence a tooltip shows, so a + slot, a catcher or a title
+-- that would refuse it stays unlit. Categories.Label names a section of the player's own by its name, so the windows, the rows and the search's
+-- section words use it. Categories.PlacedCount and PutBack count and take away the placements of one section as the windows show it (a section
+-- title's menu, BagsOrder.lua), and Categories.PlacedKey gives the section an item is placed in, which its tooltip in Flat UI's windows names
+-- (BagsTooltip.lua).
 --
 -- Inside a section, equipment sorts by the place of its slot in the Character window (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:779-873),
 -- then by item level (ns.Items.LevelOf, Items.lua:425-438), quality and name; everything else by class, subclass, quality, name and count. An item
@@ -613,6 +616,52 @@ function Categories.Placed()
 	return copy
 end
 
+-- The section a record is placed in by hand, as the windows show it (the Equipment and Consumables rows, Fit), or nil; a bare item ID is judged
+-- by its ID alone. The tooltip of an item in Flat UI's windows says so when the item shows there (BagsTooltip.lua).
+function Categories.PlacedKey(record)
+	if Whole(record) then
+		record = { id = record }
+	end
+	if type(record) ~= "table" then
+		return nil
+	end
+	return PlacedIn(record)
+end
+
+-- The item IDs placed by hand in a section as the windows show it (a placement on Weapons counts for Equipment while the Equipment row shows
+-- one section), in a new list.
+local function PlacedHere(key)
+	local ids = {}
+	if type(key) ~= "string" then
+		return ids
+	end
+	for id, placedKey in pairs(Store(false) or {}) do
+		if Whole(id) and type(placedKey) == "string" and Placeable(placedKey) and Fit(placedKey, { id = id }, true) == key then
+			ids[#ids + 1] = id
+		end
+	end
+	return ids
+end
+
+-- How many items are placed by hand in a section, for the line of its title's menu and its tooltip (BagsOrder.lua).
+function Categories.PlacedCount(key)
+	return #PlacedHere(key)
+end
+
+-- Puts every item placed by hand in a section back in its own section, and asks for the layout once: how many went.
+function Categories.PutBack(key)
+	local ids = PlacedHere(key)
+	local placed = Store(false)
+	if not placed or #ids == 0 then
+		return 0
+	end
+	for _, id in ipairs(ids) do
+		placed[id] = nil
+	end
+	Request("layout")
+	return #ids
+end
+
 -- Keeps an item in a section, or takes its placement away with no key. Returns true, or false and why: "id", "key", "saved" (the saved
 -- variables are not loaded) or "full" (MOST_PLACED items are placed already).
 function Categories.Place(id, key)
@@ -806,30 +855,45 @@ function Categories.File(id, key, link, bag, slot)
 	return taken
 end
 
+-- What Categories.Takes says of a refusal: the line in chat, and with quiet the sentence a tooltip shows in its place (BagsCustom.lua).
+local REFUSALS = {
+	fight = { "Items are not placed in sections in a fight. Try again once it is over.", "Items are not placed in sections in a fight." },
+	quest = { "%s is a quest item, and quest items are never sold.", "Quest items are never sold." },
+	list = { "Junk takes no items: this build of Flat UI cannot write the sell list.", "This build of Flat UI cannot write the sell list." },
+	unsold = { "%s cannot be sold, so it does not go in Junk.", "This item cannot be sold, so it does not go in Junk." },
+	full = { "%d items are placed by hand already. Take one off with Items placed by hand on the Bags page first.",
+		"%d items are placed by hand already. Put some back first." },
+}
+
 -- Whether section key would take item id, changing nothing: the tests Categories.File makes before it writes (Junk takes no quest item and none
 -- that cannot be sold; another section no new placement past MOST_PLACED, unless it is the section the item reaches by itself), saying the same
 -- line on a refusal. BagsCustom.lua asks it before it moves an item from the bank, worn gear or a merchant into the bags, so a drop refused moves
--- nothing. True when the section would take it.
-function Categories.Takes(id, key, link, bag, slot)
+-- nothing. True when the section would take it. With quiet nothing is said: a refusal gives false and the sentence a tooltip shows (REFUSALS),
+-- which BagsCustom.lua asks while the cursor holds an item, so a + slot, a catcher or a title that would refuse it stays unlit.
+function Categories.Takes(id, key, link, bag, slot, quiet)
 	id = Whole(id)
 	if not id or id <= 0 or (key ~= "junk" and not Placeable(key)) then
 		return false
 	end
-	if Errands.Fighting() then
-		Say("Items are not placed in sections in a fight. Try again once it is over.")
+	local function Refuse(why, value)
+		local lines = REFUSALS[why]
+		if quiet then
+			return false, value and lines[2]:format(value) or lines[2]
+		end
+		Say(value and lines[1]:format(value) or lines[1])
 		return false
+	end
+	if Errands.Fighting() then
+		return Refuse("fight")
 	end
 	local record = Probe(id, Source(id, Whole(bag), Whole(slot)))
 	if key == "junk" then
 		if Quest(record) then
-			Say(("%s is a quest item, and quest items are never sold."):format(Named(id)))
-			return false
+			return Refuse("quest", not quiet and Named(id) or nil)
 		elseif type(ns.ErrandsJunkMark) ~= "function" then
-			Say("Junk takes no items: this build of Flat UI cannot write the sell list.")
-			return false
+			return Refuse("list")
 		elseif Unsellable(record, Text(link)) then
-			Say(("%s cannot be sold, so it does not go in Junk."):format(Named(id)))
-			return false
+			return Refuse("unsold", not quiet and Named(id) or nil)
 		end
 		return true
 	end
@@ -840,8 +904,7 @@ function Categories.Takes(id, key, link, bag, slot)
 			count = count + 1
 		end
 		if count >= MOST_PLACED then
-			Say(("%d items are placed by hand already. Take one off with Items placed by hand on the Bags page first."):format(MOST_PLACED))
-			return false
+			return Refuse("full", MOST_PLACED)
 		end
 	end
 	return true

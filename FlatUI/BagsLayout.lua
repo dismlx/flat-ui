@@ -57,14 +57,21 @@ local _, ns = ...
 -- SELL_ALL_JUNK_ITEMS_EXCLUDE_FLAG and the six BAG_FILTER labels, ContainerFrame.lua:46-53, 648, 667, 686, 708), in English when the client has
 -- none. A change asks for the junk coin and the Sell junk count again, since Errands follows these flags. Layout.BagFlags reads the same flags
 -- for the tooltip of a bag's slot in that row.
--- The title of a section takes a drop. An item on the cursor (GetCursorInfo, WL/apis.yaml:36258) let go or clicked on it goes to
--- B.Categories.Drop, which keeps it in that section, puts it on Errands' sell list (on Junk), or takes a junk item off that list and a grey one
--- onto the keep list (on another section), and asks for the layout when it took the drop; either way the item goes back to its slot
--- (ClearCursor, :34956, which is not protected). That happens out of combat only: in a fight the item only goes back, with one line. The
+-- The title of a section takes a drop. An item or a merchant's item on the cursor (GetCursorInfo, WL/apis.yaml:36258) let go or clicked on it is
+-- the drop of that section's + slot (B.Custom.DropOn, BagsCustom.lua): an item of the bank or worn gear goes into a free slot of the bags and a
+-- merchant's item is bought into one in the player's own live bag window, and a refusal says why in chat; an item of the bags (and every item in
+-- the bank window) goes to B.Categories.Drop (Take), which keeps it in that section, puts it on Errands' sell list (on Junk), or takes a junk item
+-- off that list and a grey one onto the keep list (on another section), and asks for the layout when it took the drop; either way the item goes
+-- back to its slot (ClearCursor, :34956, which is not protected). While the part custom is stopped, Take alone takes an item and a merchant's item
+-- goes back. Anything else on the cursor (a spell, a macro, money) makes a click on a title do nothing: no fold, menu or name box. That happens
+-- out of combat only: in a fight the item only goes back, with one line. The
 -- tooltip of the Junk title, in any window and for any character, also says what its items bring at a merchant: the sell price of each
 -- (C_Item.GetItemInfo) times its count, "at least" while a price has not loaded. The top
--- shelf and Free slots take no drop, and their titles only give the item back. While the cursor holds an item the titles that take one are lit,
--- read every tenth of a second while the window shows. A click on the top shelf's title puts its items away and lays the window out
+-- shelf and Free slots take no drop, and their titles only give the item back. While the cursor holds an item the titles that would take it are
+-- lit, and while it holds a merchant's item those that would buy it, read every tenth of a second while the window shows (Watch, also when the
+-- item is swapped for another or a fight starts): B.Custom.Accepts says which, as the + slots light, so Junk stays unlit for a quest item, nothing
+-- lights in a fight, and the tooltip of a title says why in red (B.Custom.HeldLine). A section of the player's own with a colour (B.Custom.Colour)
+-- has its title's text and rule in it, its count still dim. A click on the top shelf's title puts its items away and lays the window out
 -- again: in the bag window, while New items at the top is on, B.ClearNew (Bags.lua) first takes the game's new flags off the items of the bags,
 -- as the window's close does, then B.Categories.New.Clear lets New items go.
 -- A drop on Keep in place goes to B.Pins.Drop instead, which pins the slot the item came from; a drop on any other section that takes one reads
@@ -85,11 +92,13 @@ local _, ns = ...
 -- that closes ends a drag in it (B.Order.Cancel). These run as the parts order and pins of the module, so a fault of theirs stops them alone.
 -- The + slot, the catcher and the flash are BagsCustom.lua's, as the part custom: each pass starts and ends them (B.Custom.Begin, Done) and places
 -- them with each section (B.Custom.Place: the + slot's cell, and the rectangle of the section's cells for its catcher, a frame under the buttons
--- that takes the mouse only while the cursor holds an item, in both windows); Watch tells it when the cursor comes to hold an item or lets it go
--- (B.Custom.Holding). A drop on either is Layout.Take, the title's drop, unless BagsCustom first puts an item of the bank, worn gear or a merchant in
--- a free slot of the bags; when that item arrives Layout.Update lays the window out afresh (B.Custom.Arrived), so it shows in its section. A
--- section that took a drop flashes (B.Custom.Took). + New section takes a drop (B.Custom.DropNew), a click (B.Custom.AddClick, a name box or the
--- menu of the player's sections) and gives its tooltip line (B.Custom.AddTip); the tooltip of Free slots says what it counts.
+-- that takes the mouse only while the cursor holds an item or a merchant's item, in both windows); Watch tells it when the cursor comes to hold one,
+-- swaps it or lets it go (B.Custom.Holding). A drop on either, or on a title, is Layout.Take unless BagsCustom first puts an item of the bank, worn
+-- gear or a merchant in a free slot of the bags; when that item arrives Layout.Update lays the window out afresh (B.Custom.Arrived), so it shows in
+-- its section. A section that took a drop flashes (B.Custom.Took). + New section takes a drop (B.Custom.DropNew), a click (B.Custom.AddClick, a
+-- name box or the menu of the player's sections) and gives its tooltip line (B.Custom.AddTip, a refusal in red); the tooltip of Free slots says
+-- what it counts. Layout.EntryOf gives the slot and record a button shows, for the line of an item's tooltip that says it is placed by hand or
+-- pinned (BagsTooltip.lua).
 -- The buttons are BagsItems.lua's: the game's item buttons for the player's own bags, buttons of Flat UI's own for the live bank and for
 -- everything else. They are drawn with B.Buttons.Draw, dimmed with B.Buttons.Dim and placed here (ClearAllPoints, SetPoint, Show, Hide). While the
 -- mouse points at a bag on the game's bag bar (Bags.lua) or in the bag slot row (BagsSlots.lua), Layout.Light dims every slot of the bag window
@@ -141,6 +150,8 @@ local ADDED = "Added"
 local LATE = 1000
 -- The text-dim of the windows (Threat.lua) for titles, a darker one for their counts, and a red for a bag with no room.
 local DIM = { 0.66, 0.68, 0.62 }
+-- The red of a refusal in a title's tooltip (BagsCustom.lua's).
+local RED = { 1, 0.35, 0.24 }
 local COUNT_HEX = "|cff7d8078"
 local FULL_HEX = "|cffff5a3d"
 -- How strongly a title that takes a drop is lit, and the same under the cursor; the faint line after a title's text; a title with no match of the
@@ -188,7 +199,8 @@ end
 -- title's text and the height of a title. containers, rank, sizes, kinds: the containers shown, their order, their slots shown and their kinds.
 -- sections: the sections or bag blocks in order; strip: the top shelf; free: Free slots. cells: the cell of each slot that has one, by slot key.
 -- placed: the cell or free slot each button placed by the last pass shows, by button. where: where each button was put. titles: the title frames,
--- used: how many the last pass used. ruler: the font string titles are measured on. holding: the cursor held an item at the last reading.
+-- used: how many the last pass used. ruler: the font string titles are measured on. holding: the cursor held an item or a merchant's item at the
+-- last reading; merchant: the second; heldId: its item ID or merchant index; fight: a fight was on then.
 -- built: a layout stands; builds: how many times the window was laid out afresh (Layout.Builds). lit, stuck: the bag the mouse lights
 -- (Layout.Light) and the one a click on its slot keeps lit (Layout.Stick).
 local state = {}
@@ -268,13 +280,40 @@ local function Fighting()
 	return ok and not IsSecret(fight) and fight == true
 end
 
--- The item ID on the cursor, or nil when it holds no item.
+-- The item ID on the cursor, or nil when it holds no item (a merchant's item too, whose index is not an item ID).
 local function Holding()
 	local ok, kind, id = pcall(GetCursorInfo)
 	if not ok or IsSecret(kind) or kind ~= "item" or not Finite(id) then
 		return nil
 	end
 	return id
+end
+
+-- What the cursor holds, as GetCursorInfo names it ("item", "merchant", "spell", "macro", "money" and others), and the item ID or the merchant's
+-- index that comes with it; "unknown" for a kind the client withholds, and nil for an empty cursor.
+local function CursorKind()
+	local ok, kind, id = pcall(GetCursorInfo)
+	if not ok then
+		return nil
+	end
+	if IsSecret(kind) then
+		return "unknown"
+	end
+	if type(kind) ~= "string" then
+		return nil
+	end
+	return kind, Finite(id) and id or nil
+end
+
+-- In a fight as BagsCustom.lua tells it (Errands.Fighting: the lockdown, or the player in combat), else the lockdown alone.
+local function InFight()
+	local errands = ns.Errands
+	local fighting = type(errands) == "table" and errands.Fighting or nil
+	if type(fighting) == "function" then
+		local ok, fight = pcall(fighting)
+		return not ok or fight == true
+	end
+	return Fighting()
 end
 
 -- The width a font string's text needs, whatever width it is given; 0 when the client does not say.
@@ -551,19 +590,56 @@ local function Plus(st, sec)
 	return Opt("addSlots") ~= false and st.which == "bags" and st.mine and st.live and not sec.add and not sec.folded and Takes(st, sec)
 end
 
+-- True while a title is lit for what the cursor holds: one that takes a drop, or + New section, when BagsCustom says it takes the item
+-- (B.Custom.Accepts: only what that section would take, as its + slot, and nothing in a fight). A merchant's item lights only where it says so;
+-- while it cannot tell (its part stopped) an item lights every such title.
+local function Lit(st, sec)
+	if not st.holding or not (Takes(st, sec) or sec.add) then
+		return false
+	end
+	local ok, accepts = pcall(Call, B.Custom, "Accepts", st, sec)
+	if not ok then
+		accepts = nil
+	end
+	if st.merchant then
+		return accepts == true
+	end
+	return accepts ~= false
+end
+
+-- The colour a section of the player's own was given from its title's menu (B.Custom.Colour), or nil.
+local function OwnColour(sec)
+	if sec.block or sec.add or sec.strip then
+		return nil
+	end
+	local ok, r, g, b = pcall(Call, B.Custom, "Colour", sec.key)
+	if ok and Finite(r) and Finite(g) and Finite(b) then
+		return r, g, b
+	end
+	return nil
+end
+
 local function PaintTitle(title)
 	local st, sec = title.st, title.sec
 	if not (st and sec) then
 		return
 	end
 	local r, g, b = LookRGB("accent", 0.85, 0.85, 0.85)
+	local cr, cg, cb = OwnColour(sec)
 	if sec.strip then
 		title.text:SetTextColor(r, g, b, 1)
+	elseif cr then
+		-- The label in its colour; the count keeps its own darker code (TitleText).
+		title.text:SetTextColor(cr, cg, cb, 1)
 	else
 		title.text:SetTextColor(DIM[1], DIM[2], DIM[3], 1)
 	end
-	title.rule:SetColorTexture(DIM[1], DIM[2], DIM[3], RULE_ALPHA)
-	if st.holding and (Takes(st, sec) or sec.add) then
+	if cr then
+		title.rule:SetColorTexture(cr, cg, cb, RULE_ALPHA)
+	else
+		title.rule:SetColorTexture(DIM[1], DIM[2], DIM[3], RULE_ALPHA)
+	end
+	if Lit(st, sec) then
 		title.back:SetColorTexture(r, g, b, title.over and LIT_HOVER or LIT)
 		title.back:Show()
 	elseif title.over and title.clickable then
@@ -661,24 +737,30 @@ local function TitleTip(title)
 	if not (st and sec) or type(tip) ~= "table" or ns.Forbidden(tip) then
 		return
 	end
-	local head, line, worth, folded
+	local head, line, worth, folded, refused
 	if sec.block then
 		if not title.clickable then
 			return
 		end
 		head, line = sec.name, "Click or right-click for this bag's settings, as the game's bag menu has them."
 	elseif sec.add then
-		-- + New section (BagsCustom.lua).
-		local ok, text = pcall(Call, B.Custom, "AddTip", st)
+		-- + New section (BagsCustom.lua), its refusal in red.
+		local ok, text, no = pcall(Call, B.Custom, "AddTip", st)
 		if not (ok and type(text) == "string") then
 			return
 		end
-		head, line = sec.label, text
+		head, line, refused = sec.label, text, no == true
 	elseif sec.key == FREE and not st.holding then
 		head, line = sec.label, FREE_TIPS[st.which] or FREE_TIPS.bags
 	elseif st.holding and Takes(st, sec) then
 		head = sec.label
-		if sec.key == JUNK then
+		-- What the section's + slot says of the item (BagsCustom.lua): moved in, bought, kept, or why not, in red; these lines while it cannot tell.
+		local ok, text, no = pcall(Call, B.Custom, "HeldLine", st, sec)
+		if ok and type(text) == "string" then
+			line, refused = text, no == true
+		elseif st.merchant then
+			line, refused = "Buy the item into your bags first, then drop it here.", true
+		elseif sec.key == JUNK then
 			line = "Drop the item here to sell it at merchants from now on."
 		elseif sec.key == KEEP then
 			line = "Drop the item here to pin the slot it came from to it."
@@ -720,7 +802,8 @@ local function TitleTip(title)
 	if folded then
 		FoldedTip(tip, sec)
 	end
-	tip:AddLine(line, DIM[1], DIM[2], DIM[3], true)
+	local colour = refused and RED or DIM
+	tip:AddLine(line, colour[1], colour[2], colour[3], true)
 	tip:Show()
 end
 
@@ -1551,7 +1634,9 @@ local function HideUnplaced(st)
 	end
 end
 
--- The cursor, read every tenth of a second while the window shows: the titles that take a drop are lit while it holds an item.
+-- The cursor, read every tenth of a second while the window shows: the titles that take a drop are lit while it holds an item or a merchant's item
+-- (st.holding; st.merchant for the second) that they take. A change of what it holds (an item swapped by a click on another slot, st.heldId) or of
+-- the fight (st.fight) while it holds one reads it again too. A title under the mouse draws its tooltip again.
 local function Watch(st)
 	if st.watcher or not st.content then
 		return
@@ -1564,17 +1649,29 @@ local function Watch(st)
 			return
 		end
 		wait = CURSOR_STEP
-		local holding = Holding() ~= nil
-		if holding ~= (st.holding == true) then
-			st.holding = holding
+		local kind, id = CursorKind()
+		local merchant = kind == "merchant"
+		local holding = kind == "item" or merchant
+		local heldId = holding and id or nil
+		local fight = holding and InFight() or false
+		if holding ~= (st.holding == true) or merchant ~= (st.merchant == true) or heldId ~= st.heldId or fight ~= (st.fight == true) then
+			st.holding, st.merchant, st.heldId, st.fight = holding, merchant, heldId, fight
+			-- The + slots light, and the catchers take the mouse, while the cursor holds an item (BagsCustom.lua); read first, so the titles light by
+			-- what it read (Lit).
+			Run("custom", Call, B.Custom, "Holding", st)
+			local tip = GameTooltip
 			for index = 1, st.used do
 				local title = st.titles[index]
 				if title then
 					Run("layout", PaintTitle, title)
+					if title.over and type(tip) == "table" and not ns.Forbidden(tip) then
+						local ok, owned = pcall(tip.IsOwned, tip, title.frame)
+						if ok and not IsSecret(owned) and owned == true then
+							Run("layout", TitleTip, title)
+						end
+					end
 				end
 			end
-			-- The + slots light, and the catchers take the mouse, while the cursor holds an item (BagsCustom.lua).
-			Run("custom", Call, B.Custom, "Holding", st)
 		end
 	end)
 	st.watcher = frame
@@ -1907,6 +2004,17 @@ function Layout.Placed(which, button)
 	return st ~= nil and st.built == true and st.placed[button] ~= nil
 end
 
+-- The bag, slot and record of the cell the last layout of a window shows this button in, and true while that is the player's own live bag window;
+-- nil for a button it does not show. The record is the cell's, so the caller checks it is the item it means.
+function Layout.EntryOf(which, button)
+	local st = state[which]
+	local entry = st and st.built == true and type(button) == "table" and st.placed[button] or nil
+	if type(entry) ~= "table" or type(entry.record) ~= "table" then
+		return nil
+	end
+	return entry.bag, entry.slot, entry.record, which == "bags" and st.mine == true and st.live == true
+end
+
 -- Where the warm-up of BagsWindow.lua puts a button it shows in an open window for one frame: off the left edge of the screen, out of sight and
 -- out of reach of the mouse (not by its alpha: the template's SetAlpha fades its icon and count only). Every layout forgets where it put the
 -- button, so the next pass that shows it anchors it in its cell again.
@@ -1987,18 +2095,35 @@ function Layout.Take(st, sec)
 	return Take(st, sec)
 end
 
--- An item let go or clicked on a section's title (Take). The time of the drop is kept first, so the click that ends it on the same title is that
--- drop (TitleClick), in a fight too. A drop on + New section asks for the name of a section for the item (B.Custom.DropNew), and a section that
--- took the item flashes (B.Custom.Took).
+-- An item or a merchant's item let go or clicked on a section's title. The time of the drop is kept first, so the click that ends it on the same
+-- title is that drop (TitleClick), in a fight too. A drop on + New section asks for the name of a section for the item (B.Custom.DropNew). On a title
+-- that takes a drop it is the drop of that section's + slot (B.Custom.DropOn): an item of the bank or worn gear goes into a free slot of the bags
+-- first, a merchant's item is bought into one, an item of the bags is Take's, and a refusal says why; the section that took it flashes
+-- (B.Custom.Took). While BagsCustom does not take it (its part stopped), an item is Take's alone and a merchant's item goes back.
 function Drop(title)
 	local st, sec = title.st, title.sec
-	local id = Holding()
-	if not (st and sec and id) or sec.block or not st.mine or st.view ~= "sections" then
+	local kind = CursorKind()
+	if not (st and sec) or (kind ~= "item" and kind ~= "merchant") or sec.block or not st.mine or st.view ~= "sections" then
 		return
 	end
 	title.dropped = GetTime()
 	if sec.add then
 		Run("custom", Call, B.Custom, "DropNew", st, title.frame)
+		return
+	end
+	local handled = false
+	if Takes(st, sec) then
+		-- Run gives back no result of its function, so the answer is read inside it.
+		Run("custom", function()
+			handled = Call(B.Custom, "DropOn", st, sec) == true
+		end)
+	end
+	if handled then
+		return
+	end
+	local id = Holding()
+	if not id then
+		pcall(ClearCursor)
 		return
 	end
 	if Take(st, sec) then
@@ -2011,8 +2136,13 @@ function TitleClick(title, mouse)
 	if not (st and sec) then
 		return
 	end
-	if Holding() then
+	-- An item or a merchant's item on the cursor is a drop; anything else on it (a spell, a macro, money) makes the click do nothing, so it never folds
+	-- a section or opens a menu or the name box.
+	local kind = CursorKind()
+	if kind == "item" or kind == "merchant" then
 		Drop(title)
+		return
+	elseif kind ~= nil then
 		return
 	end
 	-- The click that ends a drop on the same title is that drop.

@@ -19,6 +19,11 @@ local _, ns = ...
 -- One line for each character, the most first: the name in the colour of its class (RAID_CLASS_COLORS, Blizzard_SharedXML/ClassColors.lua:1),
 -- without the realm when it is this character's, and where the items are. At most MOST characters have a line of their own and the rest share
 -- one; a total ends the lines when two or more characters carry the item.
+-- Why an item lies where it does: in Flat UI's bag and bank windows, an item's tooltip ends with a dim line, before the counts and whether or not
+-- the row is on, "Placed by hand in Raid" while it shows in the section it was placed in by hand (B.Categories.PlacedKey and Of), and, in the
+-- player's own live bag window, "Pinned to this slot." while its slot is pinned for it (B.Pins.Get). The tooltip's owner (GetOwner, a widget call)
+-- is the button, whose slot and record the last layout gives (B.Layout.EntryOf); a record of another item (a slot that changed while the window
+-- is open) gives no line. Added once for each build, as the counts are, on a record of its own (marked).
 -- What another file of Bags uses: Tips.Forget (BagsData's Forget, after a character is forgotten). Tips.Start, which adds the post call, runs only
 -- from this file's ns.AddStart line, after the Start of Bags. This file owns no event (design 2.8).
 
@@ -37,9 +42,14 @@ local MOST = 8
 -- The colour of the counts, as Chat and tooltips writes its own extra lines (Chat.lua:801), and of a name whose class is not known.
 local DIM = { 0.8, 0.8, 0.8 }
 local PLAIN = { 1, 1, 1 }
+-- The text-dim of the windows (BagsLayout.lua), for the line of a placement or a pin.
+local WHY = { 0.66, 0.68, 0.62 }
+local PLACED_LINE = "Placed by hand in %s"
+local PINNED_LINE = "Pinned to this slot. Ctrl+right-click unpins it."
 
--- Per tooltip: { data, lines } of the build that has the lines.
+-- Per tooltip: { data, lines } of the build that has the lines; marked, the same for the line of a placement or a pin.
 local built = setmetatable({}, { __mode = "k" })
+local marked = setmetatable({}, { __mode = "k" })
 -- Per character key: { text, r, g, b }, the name as a line shows it.
 local names = {}
 -- The post call is added; the game refused it.
@@ -235,10 +245,72 @@ local function Add(tooltip, data)
 	built[tooltip] = { data = data, lines = shown }
 end
 
--- The post call, run by the game for every item tooltip it builds.
+-- The lines that say why an item of Flat UI's windows lies where it does, for the button that owns the tooltip, or nil.
+local function Why(owner, id)
+	local layout, categories = B.Layout, B.Categories
+	local entryOf = Usable(layout) and layout.EntryOf or nil
+	if type(entryOf) ~= "function" then
+		return nil
+	end
+	for _, which in ipairs({ "bags", "bank" }) do
+		local bag, slot, record, live = entryOf(which, owner)
+		if record then
+			if record.id ~= id then
+				return nil
+			end
+			local lines = {}
+			local placedKey = Usable(categories) and type(categories.PlacedKey) == "function" and categories.PlacedKey(record) or nil
+			if type(placedKey) == "string" and type(categories.Of) == "function" and categories.Of(record) == placedKey then
+				lines[#lines + 1] = PLACED_LINE:format((tostring(categories.Label(placedKey)):gsub("|", "||")))
+			end
+			local pins = B.Pins
+			if live and Usable(pins) and type(pins.Get) == "function" and pins.Get(bag, slot) == id then
+				lines[#lines + 1] = PINNED_LINE
+			end
+			return #lines > 0 and lines or nil
+		end
+	end
+	return nil
+end
+
+-- The line of a placement or a pin at the end of a tooltip of Flat UI's windows, once for each build of it.
+local function Placement(tooltip, data)
+	local id = data.id
+	if not ns.Finite(id) then
+		return
+	end
+	local ok, shown = pcall(tooltip.NumLines, tooltip)
+	if not ok or not ns.Finite(shown) then
+		return
+	end
+	local record = marked[tooltip]
+	if record and record.data == data and shown >= record.lines then
+		return
+	end
+	local okOwner, owner = pcall(tooltip.GetOwner, tooltip)
+	if not okOwner or owner == nil or ns.IsSecret(owner) or type(owner) ~= "table" then
+		return
+	end
+	local lines = Why(owner, id)
+	if not lines then
+		return
+	end
+	for _, line in ipairs(lines) do
+		if not pcall(tooltip.AddLine, tooltip, line, WHY[1], WHY[2], WHY[3], true) then
+			return
+		end
+		shown = shown + 1
+	end
+	marked[tooltip] = { data = data, lines = shown }
+end
+
+-- The post call, run by the game for every item tooltip it builds: the line of a placement or a pin, then the counts while the row is on.
 local function Filled(tooltip, data)
-	if Ours(tooltip) and Usable(data) and On() and Wanted() then
-		Run(Add, tooltip, data)
+	if Ours(tooltip) and Usable(data) and On() then
+		Run(Placement, tooltip, data)
+		if Wanted() then
+			Run(Add, tooltip, data)
+		end
 	end
 end
 
@@ -267,6 +339,7 @@ end
 function Tips.Forget()
 	names = {}
 	built = setmetatable({}, { __mode = "k" })
+	marked = setmetatable({}, { __mode = "k" })
 end
 
 -- After the Start of Bags (ns.AddStart, Core.lua), which is also what turning the page on runs the first time.

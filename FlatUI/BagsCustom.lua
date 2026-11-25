@@ -1,12 +1,13 @@
 local _, ns = ...
 
 -- Bags: the sections the player makes and names (B.Custom), the + slot that ends each section of the player's own bag window, and the drops on a
--- section's slots. Bags.lua makes ns.Bags with B.Custom; this file only adds its fields, makes frames, textures and font strings of its own only
--- (ns.Own, ns.OwnText), owns no event of the module, and looks up the functions of the other parts when it calls them, never at load
+-- section's slots and titles. Bags.lua makes ns.Bags with B.Custom; this file only adds its fields, makes frames, textures and font strings of its
+-- own only (ns.Own, ns.OwnText), owns no event of the module, and looks up the functions of the other parts when it calls them, never at load
 -- (Bags.lua:10-14). BagsCategories.lua asks Is and Name when it files and names an item, BagsLayout.lua calls Begin, Place, Done, Holding, Arrived,
--- Closed, Took, AddClick, AddTip and DropNew as it lays a window out and takes a drop, and BagsOrder.lua asks Keys for the built-in order and
--- MenuLines for a title's menu. Its work runs as the part custom of the module (B.Part, Bags.lua:379-399), which is not critical, so a fault stops it
--- alone and the windows go on without + slots and catchers.
+-- Closed, Took, AddClick, AddTip, DropNew, DropOn, Accepts, HeldLine and Colour as it lays a window out, lights and paints its titles and takes a
+-- drop, and BagsOrder.lua asks Keys for the built-in order and MenuLines for a title's menu. Its work runs as the part custom of the module (B.Part,
+-- Bags.lua:379-399), which is not critical, so a fault stops it alone and the windows go on without + slots and catchers, and their titles take a
+-- drop as BagsLayout's Layout.Take alone takes it.
 --
 -- The sections: FlatUIDB.bags.custom, { { key = "custom1", name = "Raid" }, ... } in the order they were made, for the whole account beside the
 -- placements, the order and the folds (ns.Account, Core.lua:3010-3012; a new layout of BagsData's record resets only its v and chars), and
@@ -15,9 +16,14 @@ local _, ns = ...
 -- placements, the folds and the order. At most MOST sections, a name of 1 to LONGEST letters, trimmed, with no bar, unique and none of Flat UI's
 -- own section names, whatever the case. A section of the player's own holds only the items placed in it by hand (FlatUIDB.bags.placed, whose shape
 -- stays { [itemID] = key }): Make, Rename and Delete change the list alone, and Delete also takes the section's placements (its items go back to
--- their own sections; their sell and keep lists stay), its fold and its place in the order away. Sweep, after the module's Start (ns.AddStart),
--- takes away every placement, fold and order key of a section the list does not have, saying nothing; until then BagsCategories skips them.
--- Read keeps what it read until a write or until the saved list changes, since Is is asked for every item at each layout.
+-- their own sections; their sell and keep lists stay), its fold and its place in the order away. Delete asks nothing, so the last section deleted
+-- is kept in this file (lastGone, never saved: its key, name, colour, place in the list, placed item IDs, fold and place in the order) until the
+-- next delete or a reload, and Restore brings it back with the same key: the first line of + New section's menu and of the row Custom sections.
+-- An item placed elsewhere since keeps its new place, MOST_PLACED still counts, and a section made since with the same name, or MOST sections,
+-- refuses it with a line. An entry may also have colour, the ID of one of COLOURS, set from its title's menu (Colour): its title's text takes it in
+-- both windows and for every character, and its + slot's + at rest; Plain, the first, takes it away. Sweep, after the module's Start
+-- (ns.AddStart), takes away every placement, fold and order key of a section the list does not have, saying nothing; until then BagsCategories
+-- skips them. Read keeps what it read until a write or until the saved list changes, since Is is asked for every item at each layout.
 --
 -- The name box: one frame of Flat UI's own on UIParent, made the first time a name is asked, in the DIALOG strata as the bag menus are
 -- (BagsLayout.lua:2155), clamped to the screen (SetClampedToScreen, WL/uiobjects.yaml:4581) and taking the mouse (EnableMouse, :7170), in the bag
@@ -25,22 +31,28 @@ local _, ns = ...
 -- EditBox of Flat UI's own (SetAutoFocus, :2976; SetMaxLetters, :3050; SetFocus, :3019; HighlightText, :2877; HasFocus, :2867) with the search box's
 -- look, a note and Cancel and Make (or Rename) in the look of the footer's buttons. Enter (OnEnterPressed) makes or renames, Escape (OnEscapePressed)
 -- cancels, and a refusal stays in the box in red with the text selected again. It goes above the frame that asked for it, else above the middle of
--- the screen, as ChatLinks.lua:631-643 does. It is not in Movers or test mode, as the bag menus and the copy box of ChatLinks are not: it is a
--- passing question. It never opens in a fight (it would hold the keyboard), and it closes as a fight starts (PLAYER_REGEN_DISABLED,
--- WL/events.yaml:7457, registered on its own frame only while it shows), and when the window that opened it closes.
+-- the screen, as ChatLinks.lua:631-643 does. For a section made for an item dropped on + New section the field starts with a name for it, selected,
+-- so Enter takes it and typing replaces it: the item's subtype (the third answer of C_Item.GetItemInfoInstant, WL/apis.yaml:16569: Herb, Cloth),
+-- else its type, else its name, the first that Check takes and that is not one of Flat UI's own section names with an s after it (Reagent,
+-- Key); else it starts empty. It is not in Movers or test mode, as the bag menus and the copy box of ChatLinks are not: it is a passing question.
+-- It never opens in a fight (it would hold the keyboard), and it closes as a fight starts (PLAYER_REGEN_DISABLED, WL/events.yaml:7457,
+-- registered on its own frame only while it shows), and when the window that opened it closes.
 --
 -- The + slot: BagsLayout decides which sections end in one (Drop slot in each section, the player's own live bag window, Sections, an open
 -- section whose title takes a drop) and gives Place where; this file draws it, a Button of Flat UI's own SLOT units square under the window's
 -- content frame (whose scale is Slot size, so it lines up with the item buttons), as an empty slot of BagsItems.lua is drawn (BagsItems.lua:660-711:
 -- the outline filled in Button and slot colour) with a + in FREE_COLOUR of BagsItems.lua:140. It reads Free slots' count (the free slots of the
 -- general bags, the layout's st.free.count): with none left it dims, and it keeps its cell, so nothing moves while the window is open
--- (BagsLayout.lua:35-37). While the cursor holds an item that it takes, it is lit in the Highlight colour of the Windows page as the titles are.
+-- (BagsLayout.lua:35-37). While the cursor holds an item that it takes, it is lit in the Highlight colour of the Windows page as the titles are:
+-- one the section would take, B.Categories.Takes asked quietly once per section for each item held (held.takes; Keep in place is B.Pins's to
+-- decide), so Junk stays unlit for a quest item or one with no sell price, and its tooltip says why in red; nothing lights in a fight.
 -- The catcher: a plain Frame of Flat UI's own per section whose title takes a drop, in both windows, over the rectangle of the section's cells
 -- (title left out), at the content frame's own level (SetFrameLevel, :4646), under the holders of the bags, the item buttons, the titles and the +
 -- slots, and taking the mouse only while the cursor holds an item, so it never takes a click, a tooltip or a drag from a real slot; a drop on a
 -- real slot is still the game's swap (Mainline/ContainerFrame.lua:1515-1540). Under the cursor it lights its section's gaps.
 --
--- A drop on a + slot or a catcher (OnReceiveDrag, WL/scripttypes.yaml:52, or a click with an item on the cursor): the cursor is read with
+-- A drop on a + slot, a catcher or a section's title (OnReceiveDrag, WL/scripttypes.yaml:52, or a click with an item on the cursor; a title's
+-- through DropOn, from BagsLayout.lua's Drop): the cursor is read with
 -- GetCursorInfo (WL/apis.yaml:36258) and C_Cursor.GetCursorItem (:10071), whose ItemLocation's bagID, slotIndex and equipmentSlotIndex
 -- (WL/structures.yaml:12645-12656) are read inside a pcall, every value through ns.Finite. No drop is taken in a fight (InCombatLockdown,
 -- :39650, and UnitAffectingCombat, :42083, through Errands.Fighting): the item goes back (ClearCursor, :34956), with one line. An item of the
@@ -62,19 +74,21 @@ local _, ns = ...
 -- slot click reads them) is refused with a line, so that question is never skipped, and so is a merchant's item on Keep in place, which pins
 -- slots of the bags only. A bag from the bag bar (a worn slot past 19) is refused, as is an item for which the bags have no room, with a line in
 -- chat (items named by C_Item.GetItemNameByID, :16685). When the moved item has arrived (BagsLayout's Layout.Update asks Arrived), the window is
--- laid out afresh, so it shows in its section and not on the top shelf. BagsLayout reads only an "item" as held (its Holding), so a + slot is
--- lit for a merchant's item while the mouse is over it, and no catcher takes one: among a section's slots it is the game's buy into the slot it
--- is let go on. A drop on the + New section title (DropNew) gives the item back and asks for a name: the item is kept in the new section by its
--- ID where it lies. A cursor that holds no item (a spell or money) takes no drop.
+-- laid out afresh, so it shows in its section and not on the top shelf. BagsLayout's Watch reads a merchant's item as held too (st.holding, with
+-- st.merchant), so every + slot, catcher and title that would buy it lights at once, and a catcher takes it: let go among a section's slots it is
+-- bought into a free slot, as on the + slot, while let go on a real empty slot it is the game's buy into that slot. A swap of the item on the
+-- cursor (a click on another slot) is read again (Holding). A drop on the + New section title (DropNew) gives the item back and asks for a name:
+-- the item is kept in the new section by its ID where it lies; a merchant's item, an item the game gives no place for and a bag from the bag bar
+-- are refused there with a line, since none of them lies in the bags. A cursor that holds no item (a spell or money) takes no drop.
 --
 -- The bells: the section that took an item flashes in the Highlight colour and says what happened for a moment ("Kept: Linen Cloth", "Moved in: ...",
--- "Bought: ...", "On your sell list", "Pinned", "Made", "Renamed"), on a frame of its own over the section. The words are on a tag of their own (the
--- panel colour, outlined in the Highlight colour), as wide as they need and in the title's font, so a narrow section never cuts them: on the title's
--- row right after its text; where that would pass the content's right edge, over the first row of the section's cells; for a section with no cells,
--- at the content's right edge on its title's row. Only a window narrower than the words cuts them. A section that is not laid out within FLASH_WAIT
--- of the drop shows nothing. Refusals keep their lines in chat. The tooltips are GameTooltip (SetOwner, SetText, AddLine, Show, Hide). The row Custom
--- sections (ns.BagsCustomLines, ns.BagsCustomPick) makes, renames and deletes a section with the page on or off, and /flatui status counts them
--- (ns.AddStatus).
+-- "Bought: ...", "On your sell list", "Pinned", "Made", "Renamed", "Back"), on a frame of its own over the section. The words are on a tag of their
+-- own (the panel colour, outlined in the Highlight colour), as wide as they need and in the title's font, so a narrow section never cuts them: on the
+-- title's row right after its text; where that would pass the content's right edge, over the first row of the section's cells; for a section with no
+-- cells, at the content's right edge on its title's row. Only a window narrower than the words cuts them. A section that is not laid out within
+-- FLASH_WAIT of the drop shows nothing. Refusals keep their lines in chat. The tooltips are GameTooltip (SetOwner, SetText, AddLine, Show, Hide). The
+-- row Custom sections (ns.BagsCustomLines, ns.BagsCustomPick) makes, renames, deletes and brings back a section with the page on or off, and /flatui
+-- status counts them (ns.AddStatus). The Delete lines of the menus are red and say how many items go back.
 --
 -- It never writes a field of a frame or table of the game's (it reads two of MerchantFrame, above), hooks nothing, calls no protected function, moves
 -- nothing in a fight, and never touches StaticPopupDialogs, UISpecialFrames or the panel layout of UIParent.
@@ -104,6 +118,7 @@ local FLASH_LEVEL, FLASH_ALPHA, SAY_PAD, SAY_GAP = 40, 0.3, 4, 6
 -- The + slot's level over the content: above the catcher, which lies at the content's own.
 local CELL_LEVEL = 2
 local FIGHT_LINE = "Flat UI: Bags: an item is put in a section out of combat only."
+local FIGHT_TIP = "Items are put in a section out of combat only."
 -- The containers of the bags (Enum.BagIndex, WL/enums.yaml:544-572): the backpack, the four bags, the reagent bag and the keyring.
 local BAG_IDS = { [0] = true, [1] = true, [2] = true, [3] = true, [4] = true, [5] = true, [-1] = true }
 -- The last worn slot (INVSLOT_TABARD; INVSLOT_AMMO is 0), the bags a moved item may go in (the backpack and the four bags), and Forever's item
@@ -125,9 +140,15 @@ local SAY = {
 	taken = "You have a section called %s already.",
 	gone = "That section is not there any more.",
 	fight = "sections are named out of a fight.",
-	deleted = "%s is deleted.",
-	deletedOne = "%s is deleted. Its item goes back to its own section.",
-	deletedMany = "%s is deleted. Its %d items go back to their own sections.",
+	deleted = "%s is deleted. Right-click + New section to bring it back.",
+	deletedOne = "%s is deleted. Its item goes back to its own section. Right-click + New section to bring it back.",
+	deletedMany = "%s is deleted. Its %d items go back to their own sections. Right-click + New section to bring it back.",
+	back = "%s is back.",
+	backOne = "%s is back with its item.",
+	backMany = "%s is back with its %d items.",
+	backSome = "%s is back with %d of its %d items; the others are placed in another section now.",
+	noBack = "No deleted section to bring back.",
+	backFull = "You have 20 sections of your own, the most Flat UI keeps. Delete one first to bring %s back.",
 	bagBar = "Put a bag in with the Bag slots row of the bag window.",
 	noRoom = "Your bags have no free slot for %s.",
 	notPut = "The game did not put %s in your bags.",
@@ -135,6 +156,8 @@ local SAY = {
 	asks = "The game asks before it buys %s. Buy it into your bags first, then drop it here.",
 	buyFirst = "Buy %s into your bags first, then drop it here.",
 	full = "You have 20 sections, the most. Delete one to make another.",
+	newBuy = "Buy %s into your bags first, then drop it on New section.",
+	newNowhere = "%s is not in your bags. Put it there first, then drop it on New section.",
 }
 local NOTES = { make = "Enter makes it, Escape cancels.", rename = "Enter renames it, Escape cancels." }
 local TIPS = {
@@ -149,18 +172,38 @@ local TIPS = {
 	move = "%s to move it into your bags and keep it in %s.",
 	buy = "%s to buy it into a free slot of your bags and keep it in %s.",
 	asks = "The game asks before it buys this item. Buy it into your bags first.",
+	buyFirst = "Buy it into your bags first, then drop it here.",
 	nowhere = "This item is not in your bags. Put it there first.",
 	junk = "%s to sell it at merchants from now on.",
 	keep = "%s to pin the slot it came from to it.",
 	kept = "%s to keep it in %s.",
 	drop = "Drop it here",
 	letGo = "Let go here",
+	refused = "This section does not take that item.",
 	addHolding = "Drop the item here to make a new section for it and name it.",
+	addBuy = "Buy it into your bags first, then drop it here to make a section for it.",
 	add = "Click to make a section of your own and name it, then drop items on its title or its + slot. Right-click for your sections.",
 	addFull = " You have 20, the most Flat UI keeps.",
 }
 local FLASH = { junk = "On your sell list", keep = "Pinned", moved = "Moved in: %s", kept = "Kept: %s", made = "Made", renamed = "Renamed",
-	bought = "Bought: %s" }
+	bought = "Bought: %s", back = "Back" }
+-- The colours a section of the player's own may take from its title's menu, by the ID saved on its entry (colour); Plain, the first, is none.
+local COLOURS = {
+	{ "plain", "Plain" },
+	{ "red", "Red", 0.93, 0.38, 0.33 },
+	{ "orange", "Orange", 0.96, 0.6, 0.26 },
+	{ "gold", "Gold", 1, 0.82, 0.2 },
+	{ "green", "Green", 0.45, 0.82, 0.38 },
+	{ "teal", "Teal", 0.3, 0.8, 0.74 },
+	{ "blue", "Blue", 0.42, 0.62, 1 },
+	{ "purple", "Purple", 0.72, 0.5, 0.96 },
+}
+local COLOUR_OF = {}
+for _, colour in ipairs(COLOURS) do
+	COLOUR_OF[colour[1]] = colour
+end
+-- The red of a Delete line in a menu (BagsLayout.lua:145).
+local DELETE_HEX = "|cffff5a3d"
 
 -- Small helpers -------------------------------------------------------------------------------------------------------------------------------
 
@@ -583,7 +626,35 @@ function Custom.Rename(key, name)
 	return true
 end
 
--- Deletes a section: true and the line to say, or false and why. Its items go back to their own sections.
+-- The last section deleted, for Restore: { key, name, colour, index (its place in FlatUIDB.bags.custom), ids (its placed items), folded, order
+-- (its place in FlatUIDB.bags.order, or nil) }. Never saved: it lasts until the next delete or a reload.
+local lastGone = nil
+
+-- What a delete takes, read before it: lastGone for that section.
+local function Remember(bags, key, name)
+	local gone = { key = key, name = name, ids = {} }
+	for index, entry in ipairs(bags.custom) do
+		if type(entry) == "table" and entry.key == key then
+			gone.index = gone.index or index
+			gone.colour = gone.colour or (type(entry.colour) == "string" and COLOUR_OF[entry.colour] and entry.colour or nil)
+		end
+	end
+	for id, placedKey in pairs(type(bags.placed) == "table" and bags.placed or {}) do
+		if placedKey == key and Whole(id) then
+			gone.ids[#gone.ids + 1] = id
+		end
+	end
+	gone.folded = type(bags.folded) == "table" and bags.folded[key] == true
+	for index, orderKey in ipairs(type(bags.order) == "table" and bags.order or {}) do
+		if orderKey == key then
+			gone.order = index
+			break
+		end
+	end
+	return gone
+end
+
+-- Deletes a section: true and the line to say, or false and why. Its items go back to their own sections, and Restore can bring it back.
 function Custom.Delete(key)
 	local data = Read()
 	local name = type(key) == "string" and data.names[key] or nil
@@ -591,6 +662,7 @@ function Custom.Delete(key)
 	if not name or not bags or type(bags.custom) ~= "table" then
 		return false, "Flat UI: " .. SAY.gone
 	end
+	lastGone = Remember(bags, key, name)
 	local list = bags.custom
 	for index = #list, 1, -1 do
 		local entry = list[index]
@@ -618,6 +690,105 @@ function Custom.Delete(key)
 		text = SAY.deleted:format(Plain(name))
 	end
 	return true, "Flat UI: " .. text
+end
+
+-- The name and item count of the section Restore would bring back, or nil.
+function Custom.Gone()
+	if not lastGone then
+		return nil
+	end
+	return lastGone.name, #lastGone.ids
+end
+
+-- Brings the last section deleted back, with the same key, in its place in the list and the order, with its fold and with the items placed in it
+-- that are not placed elsewhere since. which: the window that flashes it, "bags" when nil. True and the line to say, or false and why.
+function Custom.Restore(which)
+	local gone = lastGone
+	if not gone then
+		return false, "Flat UI: " .. SAY.noBack
+	end
+	if #Read().keys >= MOST then
+		return false, "Flat UI: " .. SAY.backFull:format(Plain(gone.name))
+	end
+	local bags = Bags(true)
+	if not bags then
+		return false, "Flat UI: " .. SAY.saved
+	end
+	local clean, why = Check(gone.name)
+	if not clean then
+		return false, "Flat UI: " .. why
+	end
+	if Read().names[gone.key] then
+		return false, "Flat UI: " .. SAY.gone
+	end
+	if type(bags.custom) ~= "table" then
+		bags.custom = {}
+	end
+	local list = bags.custom
+	table.insert(list, math.min(gone.index or (#list + 1), #list + 1), { key = gone.key, name = clean, colour = gone.colour })
+	local number = KeyNumber(gone.key)
+	if number and (Whole(bags.customNext) or 1) <= number then
+		bags.customNext = number + 1
+	end
+	Changed()
+	lastGone = nil
+	-- Through B.Categories.Place, so MOST_PLACED still counts; an item placed elsewhere since keeps its new place.
+	local back = 0
+	for _, id in ipairs(gone.ids) do
+		local placed = bags.placed
+		if (type(placed) ~= "table" or placed[id] == nil) and Call(B.Categories, "Place", id, gone.key) == true then
+			back = back + 1
+		end
+	end
+	if gone.folded then
+		if type(bags.folded) ~= "table" then
+			bags.folded = {}
+		end
+		bags.folded[gone.key] = true
+	end
+	local order = bags.order
+	if gone.order and type(order) == "table" and #order > 0 then
+		table.insert(order, math.min(gone.order, #order + 1), gone.key)
+	end
+	Request("layout")
+	Custom.Took(which or "bags", gone.key, nil, nil, FLASH.back)
+	local name, count = Plain(clean), #gone.ids
+	local text
+	if back < count then
+		text = SAY.backSome:format(name, back, count)
+	elseif count == 1 then
+		text = SAY.backOne:format(name)
+	elseif count > 1 then
+		text = SAY.backMany:format(name, count)
+	else
+		text = SAY.back:format(name)
+	end
+	return true, "Flat UI: " .. text
+end
+
+-- The colour of a section of the player's own (COLOURS), as red, green and blue, or nil for Plain or any other section. Its title's text takes it
+-- (BagsLayout.lua's PaintTitle), and its + slot's + at rest.
+function Custom.Colour(key)
+	local entry = type(key) == "string" and Read().entries[key] or nil
+	local colour = entry and type(entry.colour) == "string" and COLOUR_OF[entry.colour] or nil
+	if colour and colour[3] then
+		return colour[3], colour[4], colour[5]
+	end
+	return nil
+end
+
+-- Gives a section of the player's own a colour of COLOURS ("plain" takes it away); both windows are laid out again.
+local function SetColour(key, id)
+	local entry = type(key) == "string" and Read().entries[key] or nil
+	if not entry or not COLOUR_OF[id] then
+		return
+	end
+	local value = id ~= "plain" and id or nil
+	if entry.colour ~= value then
+		entry.colour = value
+		Changed()
+		Request("layout")
+	end
 end
 
 -- After the module's Start: every placement, fold and order key of a section the list does not have goes, saying nothing.
@@ -854,6 +1025,31 @@ local function PlaceBox(anchor)
 	end
 end
 
+-- A name the box starts with for a section made for an item: its subtype (Herb, Cloth), else its type, else its name, the first that Check takes and
+-- that is not one of Flat UI's own section names with an s after it (Reagent of Reagents, Key of Keys); nil when none is.
+local function Suggest(id)
+	local candidates = {}
+	local instant = Item("GetItemInfoInstant")
+	if type(instant) == "function" then
+		local ok, _, itemType, itemSubType = pcall(instant, id)
+		if ok then
+			candidates[1], candidates[2] = itemSubType, itemType
+		end
+	end
+	local name = Ask(Item("GetItemNameByID"), id)
+	candidates[#candidates + 1] = name
+	for index = 1, 3 do
+		local candidate = candidates[index]
+		if not ns.IsSecret(candidate) and type(candidate) == "string" and candidate ~= "" then
+			local clean = Check(candidate)
+			if clean and not BuiltIn(clean:lower() .. "s") then
+				return clean
+			end
+		end
+	end
+	return nil
+end
+
 -- Opens the name box. opts: mode ("make" or "rename"), key (a rename's section), item ({ id, link, bag, slot }: a new section for that item),
 -- anchor (the frame it goes above) and which (the window that opened it, "bags" or "bank"; nil from the options). A second ask replaces the
 -- first. True when the box is open.
@@ -892,7 +1088,7 @@ function Custom.Ask(opts)
 		box.make.label:SetText("Make")
 	end
 	Note()
-	box.edit:SetText(current or "")
+	box.edit:SetText(current or (item and Suggest(item.id)) or "")
 	PlaceBox(opts.anchor)
 	box.frame:Show()
 	pcall(box.frame.RegisterEvent, box.frame, "PLAYER_REGEN_DISABLED")
@@ -908,14 +1104,42 @@ end
 
 -- Menus and the + New section title ------------------------------------------------------------------------------------------------------------
 
+-- Per layout state of a window (BagsLayout.lua): { st, cells, catchers, cellsUsed, catchersUsed, held, flash }, made by Pool; here since the tooltip
+-- of + New section reads what its window holds.
+local pools = setmetatable({}, { __mode = "k" })
+
 local function Announce(_, text)
 	if type(text) == "string" then
 		print(text)
 	end
 end
 
--- The lines BagsOrder.lua adds to a title's menu: Rename and Delete this section on a section of the player's own, and New section in the
--- player's own bag window.
+-- What a Delete line says, in red: the words, and how many placed items go back to their own sections.
+local function DeleteText(words, count)
+	if count == 1 then
+		words = words .. " (1 item goes back)"
+	elseif count > 1 then
+		words = ("%s (%d items go back)"):format(words, count)
+	end
+	return DELETE_HEX .. words .. "|r"
+end
+
+-- The line that brings the last section deleted back (Restore), or nil.
+local function RestoreText()
+	local name, count = Custom.Gone()
+	if not name then
+		return nil
+	end
+	if count == 1 then
+		return ("Bring back %s (1 item)"):format(Plain(name))
+	elseif count > 1 then
+		return ("Bring back %s (%d items)"):format(Plain(name), count)
+	end
+	return "Bring back " .. Plain(name)
+end
+
+-- The lines BagsOrder.lua adds to a title's menu: Rename, Colour with its colours (a tick on the one it has) and Delete this section on a section
+-- of the player's own, and New section in the player's own bag window.
 function Custom.MenuLines(st, sec, anchor)
 	local items = {}
 	if type(st) ~= "table" or type(sec) ~= "table" then
@@ -926,7 +1150,21 @@ function Custom.MenuLines(st, sec, anchor)
 		items[#items + 1] = { text = "Rename", part = PART, pick = function()
 			Custom.Ask({ mode = "rename", key = key, anchor = anchor, which = which })
 		end }
-		items[#items + 1] = { text = "Delete this section", part = PART, pick = function()
+		items[#items + 1] = { text = "Colour", header = true }
+		local entry = Read().entries[key]
+		local current = entry and type(entry.colour) == "string" and COLOUR_OF[entry.colour] and entry.colour or "plain"
+		for _, colour in ipairs(COLOURS) do
+			local id = colour[1]
+			local text = colour[2]
+			if colour[3] then
+				text = ("|cff%02x%02x%02x%s|r"):format(math.floor(colour[3] * 255 + 0.5), math.floor(colour[4] * 255 + 0.5),
+					math.floor(colour[5] * 255 + 0.5), text)
+			end
+			items[#items + 1] = { text = text, tick = current == id, part = PART, pick = function()
+				SetColour(key, id)
+			end }
+		end
+		items[#items + 1] = { text = DeleteText("Delete this section", Custom.Count(key)), part = PART, pick = function()
 			Announce(Custom.Delete(key))
 		end }
 	end
@@ -938,13 +1176,20 @@ function Custom.MenuLines(st, sec, anchor)
 	return items
 end
 
--- The menu of + New section: New section, then each section of the player's own under its name (with how many items it holds) with Rename and
--- Delete.
+-- The menu of + New section: Bring back the last section deleted (while there is one), New section, then each section of the player's own under
+-- its name (with how many items it holds) with Rename and Delete.
 local function YourLines(st, anchor)
 	local which = st.which
-	local items = { { text = ADD_WORD, part = PART, pick = function()
+	local items = {}
+	local restore = RestoreText()
+	if restore then
+		items[1] = { text = restore, part = PART, pick = function()
+			Announce(Custom.Restore(which))
+		end }
+	end
+	items[#items + 1] = { text = ADD_WORD, part = PART, pick = function()
 		Custom.Ask({ mode = "make", anchor = anchor, which = which })
-	end } }
+	end }
 	local keys, names = Sorted()
 	if #keys == 0 then
 		items[#items + 1] = { text = "No section of your own yet", header = true }
@@ -956,7 +1201,7 @@ local function YourLines(st, anchor)
 		items[#items + 1] = { text = "Rename", part = PART, pick = function()
 			Custom.Ask({ mode = "rename", key = key, anchor = anchor, which = which })
 		end }
-		items[#items + 1] = { text = "Delete", part = PART, pick = function()
+		items[#items + 1] = { text = DeleteText("Delete", count), part = PART, pick = function()
 			Announce(Custom.Delete(key))
 		end }
 	end
@@ -975,9 +1220,21 @@ function Custom.AddClick(st, mouse, anchor)
 	end
 end
 
--- The line of + New section's tooltip.
+-- The line of + New section's tooltip, and true when it is a refusal, which BagsLayout says in red: with an item on the cursor, what a drop does,
+-- or why a merchant's item, one the game gives no place for or a bag from the bag bar is refused.
 function Custom.AddTip(st)
 	if type(st) == "table" and st.holding then
+		local pool = pools[st]
+		local held = pool and pool.held or nil
+		if held and held.merchant then
+			return TIPS.addBuy, true
+		elseif held and held.nowhere then
+			return TIPS.nowhere, true
+		elseif held and held.bagBar then
+			return TIPS.bagBar, true
+		elseif #Read().keys >= MOST then
+			return SAY.full, true
+		end
 		return TIPS.addHolding
 	end
 	if #Read().keys >= MOST then
@@ -1150,7 +1407,7 @@ local function FreeFor(id)
 end
 
 -- The cursor as the frames of a window last read it: what Holding read as the cursor came to hold an item (or Enter, under the mouse), whether
--- it would go in, and for a merchant's item whether the game would ask first.
+-- it would go in, for a merchant's item whether the game would ask first, and takes, the answers of the sections asked so far (Taken).
 local function ReadHeld()
 	local held = Cursor()
 	if held and held.outside and not held.bagBar then
@@ -1159,17 +1416,56 @@ local function ReadHeld()
 	if held and held.merchant then
 		held.asks = Asks()
 	end
+	if held then
+		held.takes = {}
+	end
 	return held
 end
 
--- What a + slot shows of the cursor: what it holds while BagsLayout says it holds an item (st.holding), and a merchant's item, which BagsLayout
--- does not read, while Enter read it under the mouse.
+-- What the frames of a window show of the cursor: what it holds while BagsLayout says it holds an item or a merchant's item (st.holding).
 local function Shown(st, pool)
-	local held = pool.held
-	if held and (st.holding or held.merchant) then
-		return held
+	if st.holding then
+		return pool.held
 	end
 	return nil
+end
+
+-- True while the part custom is stopped (ns.PartStopped), so BagsLayout keeps its titles as they were without it.
+local function Stopped()
+	local stopped = ns.PartStopped
+	if type(stopped) ~= "function" then
+		return false
+	end
+	local ok, yes = pcall(stopped, KEY, PART)
+	return ok and yes == true
+end
+
+-- Whether section sec would take the held item: B.Categories.Takes asked quietly once for each section and item held (held.takes), so a + slot, a
+-- catcher or a title that would refuse it stays unlit: true, or false and the sentence its tooltip says in red. In a fight, false and why, read
+-- each time. Keep in place takes what B.Pins takes when it is dropped.
+local function Taken(sec, held)
+	if Fighting() then
+		return false, FIGHT_TIP
+	end
+	if sec.key == "keep" then
+		return true
+	end
+	local takes = held.takes
+	if type(takes) ~= "table" then
+		takes = {}
+		held.takes = takes
+	end
+	local answer = takes[sec.key]
+	if answer == nil then
+		local ok, yes, why = pcall(Call, B.Categories, "Takes", held.id, sec.key, held.link, held.bag, held.slot, true)
+		if ok and yes == false then
+			answer = { false, type(why) == "string" and why or nil }
+		else
+			answer = { true }
+		end
+		takes[sec.key] = answer
+	end
+	return answer[1], answer[2]
 end
 
 -- True when a drop of the held item in that window moves it into the bags first: from outside the bags, in the player's own live bag window.
@@ -1177,8 +1473,9 @@ local function Moves(st, held)
 	return held.outside and st.which == "bags" and st.mine == true and st.live == true
 end
 
--- Whether a + slot or a catcher takes the held item: not one the game gives no place for, nothing from outside the bags on Keep in place, and a
--- merchant's item only where it is bought into a free slot, when the game would not ask first.
+-- Whether a + slot, a catcher or a title takes the held item: not one the game gives no place for, nothing from outside the bags on Keep in
+-- place, a merchant's item only where it is bought into a free slot, when the game would not ask first, and only what the section would take
+-- (Taken), never in a fight.
 local function Accepts(st, sec, held)
 	if not held or held.nowhere then
 		return false
@@ -1187,9 +1484,13 @@ local function Accepts(st, sec, held)
 		return false
 	end
 	if Moves(st, held) then
-		return not held.bagBar and not held.asks and held.fits == true
+		if held.bagBar or held.asks or held.fits ~= true then
+			return false
+		end
+	elseif held.merchant then
+		return false
 	end
-	return not held.merchant
+	return (Taken(sec, held))
 end
 
 -- Whether the bags have a free slot of the general bags, as Free slots counts them (BagsLayout.lua, st.free.count).
@@ -1203,7 +1504,7 @@ local function Recent(target)
 	return dropped ~= nil and Now() - dropped < DROP_CLICK
 end
 
--- The item on the cursor let go or clicked on a + slot or a catcher (see the top of the file).
+-- The item on the cursor let go or clicked on a + slot, a catcher or a title (see the top of the file).
 local function Drop(target)
 	local st, sec = target.st, target.sec
 	if not (st and sec) then
@@ -1273,7 +1574,19 @@ local function Drop(target)
 	end
 end
 
--- The + New section title took a drop: the item goes back where it was, and the box asks for the name of a section for it.
+-- An item or a merchant's item let go or clicked on the title of a section that takes a drop (BagsLayout.lua's Drop): the same as on its + slot,
+-- so an item of the bank or worn gear goes into a free slot of the bags and a merchant's item is bought into one. True when the cursor held one,
+-- so the drop was taken here (and the section flashed, Took); false leaves it to BagsLayout.
+function Custom.DropOn(st, sec)
+	if type(st) ~= "table" or type(sec) ~= "table" or not Cursor() then
+		return false
+	end
+	Drop({ st = st, sec = sec })
+	return true
+end
+
+-- The + New section title took a drop: the item goes back where it was, and the box asks for the name of a section for it. A merchant's item, an
+-- item the game gives no place for (in the trade window) and a bag from the bag bar are refused with a line: none of them lies in the bags.
 function Custom.DropNew(st, anchor)
 	if type(st) ~= "table" then
 		return
@@ -1288,15 +1601,24 @@ function Custom.DropNew(st, anchor)
 	if not held then
 		return
 	end
+	local name = Plain(ItemName(held.id))
+	if held.merchant then
+		Say(SAY.newBuy:format(name))
+		return
+	elseif held.nowhere then
+		Say(SAY.newNowhere:format(name))
+		return
+	elseif held.bagBar then
+		Say(SAY.bagBar)
+		return
+	end
 	Custom.Ask({ mode = "make", item = { id = held.id, link = held.link, bag = held.bag, slot = held.slot }, anchor = anchor, which = st.which })
 end
 
 -- The layout's frames --------------------------------------------------------------------------------------------------------------------------
 
--- Per layout state of a window (BagsLayout.lua): { st, cells, catchers, cellsUsed, catchersUsed, held, flash }. byWhich: the state of each
--- window, for Closed. arrivals: { which, bag, slot, id, at } of the items a drop put in a free slot of the bags. waiting: the drop whose section
--- flashes at its next placing, { which, key, at, text }.
-local pools = setmetatable({}, { __mode = "k" })
+-- byWhich: the state of each window, for Closed. arrivals: { which, bag, slot, id, at } of the items a drop put in a free slot of the bags.
+-- waiting: the drop whose section flashes at its next placing, { which, key, at, text }. pools: see the top of the menus.
 local byWhich = {}
 local arrivals = {}
 local waiting = nil
@@ -1310,7 +1632,25 @@ local function Pool(st)
 	return pool
 end
 
--- Paints a + slot: lit while the cursor holds an item it takes, white under the mouse with an empty cursor, and its + dimmed while the bags are full.
+-- For BagsLayout's titles: whether section sec of that window takes what the cursor holds, as its + slot and catcher do; for + New section, an item
+-- that lies in the bags while a section can still be made. Nil when it cannot tell: the part is stopped, or the window was not laid out since.
+function Custom.Accepts(st, sec)
+	if type(st) ~= "table" or type(sec) ~= "table" or Stopped() then
+		return nil
+	end
+	local pool = pools[st]
+	local held = pool and Shown(st, pool) or nil
+	if not held then
+		return nil
+	end
+	if sec.add then
+		return not (held.merchant or held.nowhere or held.bagBar or Fighting()) and #Read().keys < MOST
+	end
+	return Accepts(st, sec, held) == true
+end
+
+-- Paints a + slot: lit while the cursor holds an item it takes, white under the mouse with an empty cursor, its + in the section's colour (none for
+-- Flat UI's own sections) and dimmed while the bags are full.
 local function Paint(cell)
 	local st, sec, pool = cell.st, cell.sec, cell.pool
 	if not (st and sec) then
@@ -1331,8 +1671,13 @@ local function Paint(cell)
 	end
 	ns.SetOutlineColour(cell.outline, nil, nil, nil)
 	local alpha = Room(st) and PLUS_ALPHA or PLUS_DIM
+	-- A section of the player's own with a colour (Custom.Colour) has its + in it.
+	local cr, cg, cb = Custom.Colour(sec.key)
+	if not cr then
+		cr, cg, cb = PLUS[1], PLUS[2], PLUS[3]
+	end
 	for _, line in ipairs(cell.lines) do
-		line:SetColorTexture(PLUS[1], PLUS[2], PLUS[3], alpha)
+		line:SetColorTexture(cr, cg, cb, alpha)
 	end
 	if cell.over and not held then
 		cell.light:SetColorTexture(1, 1, 1, HOVER)
@@ -1340,6 +1685,51 @@ local function Paint(cell)
 	else
 		cell.light:Hide()
 	end
+end
+
+-- What a drop of the held item on section sec does, for a tooltip: the line, and true when it is a refusal, which the tooltip says in red. verb:
+-- the words of the frame it is let go on ("Drop it here").
+local function HeldLine(st, sec, held, verb)
+	local label = Plain(sec.label or sec.key)
+	if held.nowhere then
+		return TIPS.nowhere, true
+	elseif held.outside and sec.key == "keep" then
+		return TIPS.keepOutside, true
+	elseif Moves(st, held) and held.bagBar then
+		return TIPS.bagBar, true
+	elseif held.merchant and not Moves(st, held) then
+		return TIPS.buyFirst, true
+	elseif held.merchant and held.asks then
+		return TIPS.asks, true
+	elseif Moves(st, held) and not held.fits then
+		return TIPS.noRoom, true
+	end
+	local takes, why = Taken(sec, held)
+	if not takes then
+		return why or TIPS.refused, true
+	end
+	if Moves(st, held) then
+		return (held.merchant and TIPS.buy or TIPS.move):format(verb, label), false
+	elseif sec.key == "junk" then
+		return TIPS.junk:format(verb), false
+	elseif sec.key == "keep" then
+		return TIPS.keep:format(verb), false
+	end
+	return TIPS.kept:format(verb, label), false
+end
+
+-- For BagsLayout's title of a section that takes a drop, while the cursor holds an item or a merchant's item: the line of its tooltip and whether it
+-- is a refusal, as the section's + slot says it; nil when it cannot tell (HeldLine, Custom.Accepts).
+function Custom.HeldLine(st, sec)
+	if type(st) ~= "table" or type(sec) ~= "table" or Stopped() then
+		return nil
+	end
+	local pool = pools[st]
+	local held = pool and Shown(st, pool) or nil
+	if not held then
+		return nil
+	end
+	return HeldLine(st, sec, held, TIPS.drop)
 end
 
 -- The tooltip of a + slot, and of a catcher while the cursor holds an item.
@@ -1351,28 +1741,9 @@ local function Tip(target)
 	end
 	local label = Plain(sec.label or sec.key)
 	local held = Shown(st, target.pool)
-	local verb = target.catcher and TIPS.letGo or TIPS.drop
-	local line
+	local line, refused
 	if held then
-		if held.nowhere then
-			line = TIPS.nowhere
-		elseif held.outside and sec.key == "keep" then
-			line = TIPS.keepOutside
-		elseif Moves(st, held) and held.bagBar then
-			line = TIPS.bagBar
-		elseif held.merchant and (held.asks or not Moves(st, held)) then
-			line = TIPS.asks
-		elseif Moves(st, held) and not held.fits then
-			line = TIPS.noRoom
-		elseif Moves(st, held) then
-			line = (held.merchant and TIPS.buy or TIPS.move):format(verb, label)
-		elseif sec.key == "junk" then
-			line = TIPS.junk:format(verb)
-		elseif sec.key == "keep" then
-			line = TIPS.keep:format(verb)
-		else
-			line = TIPS.kept:format(verb, label)
-		end
+		line, refused = HeldLine(st, sec, held, target.catcher and TIPS.letGo or TIPS.drop)
 	elseif target.catcher then
 		return
 	elseif sec.key == "junk" then
@@ -1384,12 +1755,13 @@ local function Tip(target)
 	end
 	tip:SetOwner(target.frame, "ANCHOR_TOP")
 	tip:SetText(label, 1, 1, 1)
-	tip:AddLine(line, DIM[1], DIM[2], DIM[3], true)
+	local colour = refused and RED or DIM
+	tip:AddLine(line, colour[1], colour[2], colour[3], true)
 	tip:Show()
 end
 
--- The mouse comes over a + slot or a catcher: what the cursor holds is read again, since a click may have swapped it; over a + slot also with no
--- item held for BagsLayout, so a merchant's item is seen (Shown).
+-- The mouse comes over a + slot or a catcher: what the cursor holds is read again while BagsLayout says it holds an item or a merchant's item,
+-- since a click may have swapped it.
 local function Enter(target)
 	local st = target.st
 	if not st then
@@ -1397,7 +1769,7 @@ local function Enter(target)
 	end
 	target.over = true
 	local pool = target.pool
-	if st.holding or not target.catcher then
+	if st.holding then
 		pool.held = ReadHeld()
 	end
 	if target.catcher then
@@ -1417,15 +1789,12 @@ local function Enter(target)
 	Tip(target)
 end
 
--- The mouse leaves: a merchant's item read under it is forgotten, as BagsLayout does not tell when it leaves the cursor.
+-- The mouse leaves: the + slot is painted again, the catcher's light goes.
 local function Leave(target)
 	target.over = false
 	if target.catcher then
 		target.light:Hide()
 	else
-		if not (target.st and target.st.holding) then
-			target.pool.held = nil
-		end
 		Paint(target)
 	end
 	Untip(target.frame)
@@ -1788,8 +2157,8 @@ function Custom.Done(st)
 	end
 end
 
--- The cursor came to hold an item, or let it go (BagsLayout's Watch): it is read once, the + slots are painted again, and the catchers take the
--- mouse while it holds one.
+-- The cursor came to hold an item or a merchant's item, swapped it for another, or let it go, or a fight started or ended while it holds one
+-- (BagsLayout's Watch): it is read once, the + slots are painted again, and the catchers take the mouse while it holds one.
 function Custom.Holding(st)
 	local pool = type(st) == "table" and pools[st] or nil
 	if not pool then
@@ -1845,8 +2214,9 @@ end
 
 -- The row Custom sections ------------------------------------------------------------------------------------------------------------------------
 
--- Make a new section (or, at MOST, why not), then Rename and Delete for each section in the order the windows show them, as the lines of Section
--- order and Items placed by hand are given (BagsOrder.lua:722-734, BagsCategories.lua:986-1026).
+-- Make a new section (or, at MOST, why not), Bring back the last section deleted while there is one, then Rename and Delete for each section in the
+-- order the windows show them, as the lines of Section order and Items placed by hand are given (BagsOrder.lua:722-734,
+-- BagsCategories.lua:986-1026).
 function ns.BagsCustomLines()
 	local lines = {}
 	local keys, names = Sorted()
@@ -1854,6 +2224,10 @@ function ns.BagsCustomLines()
 		lines[1] = { "new", "Make a new section" }
 	else
 		lines[1] = { "full", SAY.full }
+	end
+	local restore = RestoreText()
+	if restore then
+		lines[2] = { "restore", restore }
 	end
 	local counts = Counts()
 	for _, key in ipairs(keys) do
@@ -1874,6 +2248,8 @@ function ns.BagsCustomPick(id)
 		return true
 	elseif id == "full" then
 		return false, "Flat UI: " .. SAY.full
+	elseif id == "restore" then
+		return Custom.Restore(nil)
 	end
 	local key = type(id) == "string" and id:match("^rename:(.+)$") or nil
 	if key then
