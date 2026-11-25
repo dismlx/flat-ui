@@ -817,6 +817,7 @@ ns.SETUP_STEPS = {
 	{ id = "win-art", area = "Windows", title = "Window backdrops", draw = "mock-window", built = true, rows = {
 		{ "windows.raceArt", "c", "mock-window" },
 		{ "windows.bookPages", "o", "behaviour", "Gives the Spellbook its parchment pages and dark text back; off, its pages are dark with light text." },
+		{ "windows.questPages", "o", "behaviour", "Gives the quest, gossip, book and quest log pages the game's own dark pages with light text (its Quest Text Contrast at Dark); off, their parchment." },
 		{ "windows.bookArt", "c", "mock-window" },
 		{ "windows.eye", "o", "mock-window" },
 		{ "windows.roleArt", "c", "mock-window" },

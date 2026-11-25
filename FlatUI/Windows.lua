@@ -11,7 +11,9 @@ local _, ns = ...
 -- that. An open menu gets a frame of this addon's inside the menu, since the game refuses
 -- textures made on it. The Spellbook's parchment is faded too, and its text, written in a dark
 -- ink for the parchment, takes a light colour; the colour each text had is kept and given back
--- exactly with the parchment (Spellbook parchment, the ink kind).
+-- exactly with the parchment (Spellbook parchment, the ink kind). The quest, gossip and book pages
+-- are the game's own dark pages with light text, by its Quest Text Contrast, which Dark quest,
+-- gossip and book pages writes and gives back (questPages, the account variable questTextContrast).
 
 local KEY = "windows"
 
@@ -2192,7 +2194,8 @@ local WINDOWS = {
 	MERCHANT,
 	{ name = "MailFrame", title = "Mail", group = "npc", strip = { "SendMailMoneyBg" } },
 	{ name = "OpenMailFrame", title = "Open Mail", group = "npc" },
-	-- Quest, gossip and book pages keep their parchment: the game sets the colour of each line of their text for the material.
+	-- Quest, gossip and book pages keep the game's page: the game sets the colour of each line of their text for the material, and with
+	-- Dark quest, gossip and book pages (questPages, below) it picks its own dark page and light text.
 	{ name = "GossipFrame", title = "Gossip", group = "npc" },
 	{ name = "QuestFrame", title = "Quest", group = "npc" },
 	{ name = "QuestLogPopupDetailFrame", title = "Quest Log", group = "npc", special = QuestLogExtras, parchment = true },
@@ -2526,6 +2529,115 @@ local function InstallHooks()
 	HookGlobal("SetPaperDollBackground", Watch.RaceBackground)
 end
 
+-- Dark quest, gossip and book pages (questPages, on by default, with the vendor, mail, quest, trade and trainer windows). These are the game's own
+-- Quest Text Contrast pages at Dark: the account variable questTextContrast at 4 gives the quest giver, gossip, book and letter pages and the
+-- quest log details the QuestBG-Parchment-Accessibility4 and QuestDetailsBackgrounds-Accessibility_Dark backgrounds and the light "Stone" text
+-- colours, chosen by the game itself as each page fills (QuestTextContrast.lua:11-14, 17-35, 49-63; Mainline/QuestFrame.lua:656-696,
+-- GossipFrame.lua, ItemTextFrame.lua:57, 143, QuestInfo.lua:68-71, QuestMapFrame.lua:971, all loaded on Camelot through the Mainline family).
+-- While the row and the module are on, the variable is written 4 out of combat, at login and when the row, a switch or the profile changes; the
+-- text it had before the first write is kept in FlatUIDB.questContrastGame and written back when the row or the module goes off while the
+-- variable still reads 4. A value set meanwhile some other way is left as it is. Nothing is written on a frame: a page already open changes the
+-- next time it opens. ItemCompare.lua does the same for alwaysCompareItems.
+do
+	local CVAR = "questTextContrast"
+	local DARK = "4"
+	-- A write waits for combat to end, and how the last one ended while the row was on: nil, "ok" or "refused".
+	local queued, result = false, nil
+
+	local function Calls()
+		local cvar = _G.C_CVar
+		if type(cvar) == "table" and not ns.IsSecret(cvar) then
+			return cvar
+		end
+		return nil
+	end
+
+	-- The text of the variable, or nil when the client has no such variable or withholds it.
+	local function Text()
+		local cvar = Calls()
+		if not cvar or type(cvar.GetCVar) ~= "function" then
+			return nil
+		end
+		local ok, value = pcall(cvar.GetCVar, CVAR)
+		if ok and not ns.IsSecret(value) and type(value) == "string" then
+			return value
+		end
+		return nil
+	end
+
+	-- Writes the text and says whether the variable holds it after.
+	local function Write(text)
+		local cvar = Calls()
+		if not cvar or type(cvar.SetCVar) ~= "function" then
+			return false
+		end
+		pcall(cvar.SetCVar, CVAR, text)
+		return Text() == text
+	end
+
+	local function Wanted()
+		return ns.Enabled(KEY) and Opt("npc") == true and Opt("questPages") == true
+	end
+
+	local function Apply()
+		queued = false
+		local now, db = Text(), ns.Account()
+		if now == nil or type(db) ~= "table" then
+			return
+		end
+		if Wanted() then
+			if now == DARK then
+				result = "ok"
+				return
+			end
+			-- What the game had before the first write, kept for the account like the variable itself.
+			if db.questContrastGame == nil then
+				db.questContrastGame = now
+			end
+			if Write(DARK) then
+				result = "ok"
+				return
+			end
+			-- The game kept its value: nothing of Flat UI's stands, so there is nothing to put back.
+			db.questContrastGame = nil
+			result = "refused"
+			return
+		end
+		result = nil
+		local game = db.questContrastGame
+		if type(game) ~= "string" then
+			-- Nothing was written by this addon, so the game's value stays.
+			return
+		end
+		db.questContrastGame = nil
+		if now == DARK and game ~= DARK then
+			Write(game)
+		end
+	end
+
+	-- The Windows refresh calls this, and Core.lua at every login whatever the switch of Windows: the variable is the account's, so a character
+	-- whose profile has the row or the module off gets the game's value back. Nothing is written in combat.
+	function ns.QuestPagesSync()
+		if queued then
+			return
+		end
+		queued = true
+		ns.OutOfCombat(Apply)
+	end
+
+	function Watch.QuestPagesStatus()
+		if not Wanted() or Text() == nil then
+			return {}
+		end
+		if queued then
+			return { "Quest pages: dark. Waiting for combat to end." }
+		elseif result == "refused" then
+			return { "Quest pages: the game kept its own Quest Text Contrast, so they keep their parchment." }
+		end
+		return { "Quest pages: dark, the game's Quest Text Contrast at Dark." }
+	end
+end
+
 -- The module ----------------------------------------------------------------------------------------
 
 -- The settings that bring more of the interface under the module when they go on, and whether each
@@ -2569,12 +2681,13 @@ local function Refresh()
 			Style(item[1], item[2], item[3].group)
 		end
 	end
-	-- The clean up button, the sort direction, the backpack key and the durability and thorns of the Character window follow their own settings,
-	-- whatever the switches say.
+	-- The clean up button, the sort direction, the backpack key, the durability and thorns of the Character window and the dark quest pages
+	-- follow their own settings, whatever the switches say.
 	ns.BagSort.Apply()
 	ns.BagKey.Apply()
 	ns.CharacterDurability.Apply()
 	ns.CharacterThorns.Apply()
+	ns.QuestPagesSync()
 	if ns.Enabled(KEY) and switched then
 		SweepAll()
 	end
@@ -2681,3 +2794,5 @@ ns.Register(KEY, {
 	slash = { windows = PrintWindows, sort = ns.BagSort.Command },
 	help = { "/flatui windows - each window and whether it is styled", ns.BagSort.help[1], ns.BagSort.help[2] },
 })
+
+ns.AddStatus(KEY, Watch.QuestPagesStatus)
