@@ -15,14 +15,15 @@ local _, ns = ...
 -- Flat UI's bar 1 has its own beside it, where the game puts them (MainActionBar.xml:93-140): two secure buttons of the game's paging action
 -- (type actionbar, action increment or decrement, SECURE_ACTIONS.actionbar in SecureTemplates.lua:322-339), which page the bar in a fight too, and
 -- between them the page number (C_ActionBar.GetActionBarPage, as MainActionBar.lua:11 and 57 write it), a font string of Flat UI's own set again
--- as the page changes. They are children of FlatUIBar1, so they move, hide and fade with it; they take the place and size of the game's own,
--- read at each layout, and show while the row is on and the game's page number is shown, which Edit Mode's Hide bar scrolling turns off
--- (EditModeSystemTemplates.lua:1129-1130), read only. They are placed and shown out of combat, the buttons by the header. They page on the left
--- button only, play the game's scroll click as they page (SOUNDKIT.U_CHAT_SCROLL_BUTTON, as MainActionBar.lua:164-182), and say in a tooltip which
--- way they page, the page you are on and the key of that command (NEXTACTIONPAGE, PREVIOUSACTIONPAGE, short as the hotkeys are with Hotkey text at
--- Short): hooks of Flat UI's own buttons (HookScript), which only play the sound and draw the tooltip. A change of profile reaches the row through
--- ActionBars.lua's Refresh (ns.OwnPagerChanged); the mouse over a shown arrow counts as over the main bar for Fading and the bar block
--- (ns.OwnPagerOver).
+-- as the page changes, which pops (its holder scales from 140% back to full over 0.25 s, in a fight too) at each change after the first, while an
+-- arrow's tooltip that is up is drawn again with the new page. They are children of FlatUIBar1, so they move, hide and fade with it; they take the
+-- place and size of the game's own, read at each layout, and show while the row is on and the game's page number is shown, which Edit Mode's
+-- Hide bar scrolling turns off (EditModeSystemTemplates.lua:1129-1130), read only. They are placed and shown out of combat, the buttons by the
+-- header. They page on the left button only, play the game's scroll click as they page (SOUNDKIT.U_CHAT_SCROLL_BUTTON, as
+-- MainActionBar.lua:164-182), and say in a tooltip which way they page, the page you are on and the key of that command (NEXTACTIONPAGE,
+-- PREVIOUSACTIONPAGE, short as the hotkeys are with Hotkey text at Short): hooks of Flat UI's own buttons (HookScript), which only play the sound
+-- and draw the tooltip. A change of profile reaches the row through ActionBars.lua's Refresh (ns.OwnPagerChanged); the mouse over a shown arrow
+-- counts as over the main bar for Fading and the bar block (ns.OwnPagerOver).
 -- Quick Keybind Mode (the game's Key Bindings) works on the game's own buttons: while it is open the game's eight bars are given back where they
 -- are (alpha 1, the mouse on) and Flat UI's are hidden, out of combat; as it closes, or just before a fight starts, the game's bars are parked
 -- again and Flat UI's shown. A mode opened in a fight waits for its end. A fight that starts while the mode is open says so in one chat line: Flat
@@ -530,7 +531,27 @@ function F.Layout()
 	S.pagerError = not ok and tostring(err) or nil
 end
 
--- The page number shown now, set on Flat UI's own font string when it changed; allowed in a fight.
+-- The pop of the page number as the page changes: its holder, Flat UI's own frame, scales from POP_FROM back to 1 over POP_TIME, made the first time.
+local POP_FROM, POP_TIME = 1.4, 0.25
+function F.PagePop(pager)
+	if not pager.pop then
+		local group = pager.holder:CreateAnimationGroup()
+		ns.Own[group] = true
+		local scale = group:CreateAnimation("Scale")
+		ns.Own[scale] = true
+		scale:SetScaleFrom(POP_FROM, POP_FROM)
+		scale:SetScaleTo(1, 1)
+		scale:SetDuration(POP_TIME)
+		scale:SetSmoothing("OUT")
+		scale:SetOrigin("CENTER", 0, 0)
+		pager.pop = group
+	end
+	pager.pop:Stop()
+	pager.pop:Play()
+end
+
+-- The page number shown now, set on Flat UI's own font string when it changed; allowed in a fight. A change after the first pops the number
+-- (F.PagePop), and a tooltip of a page arrow that is up reads the new page at once.
 function F.PageText()
 	local pager = S.pager
 	local get = C_ActionBar and C_ActionBar.GetActionBarPage or _G.GetActionBarPage
@@ -539,8 +560,23 @@ function F.PageText()
 	end
 	local ok, page = pcall(get)
 	if ok and ns.Finite(page) and page ~= pager.page then
+		local known = pager.page ~= nil
 		pager.page = page
 		pager.text:SetText(page)
+		if known then
+			pcall(F.PagePop, pager)
+			local tip = GameTooltip
+			local okShown, shown = false, nil
+			if tip ~= nil then
+				okShown, shown = pcall(tip.IsShown, tip)
+			end
+			if okShown and not ns.IsSecret(shown) and shown == true then
+				local okOwner, owner = pcall(tip.GetOwner, tip)
+				if okOwner and not ns.IsSecret(owner) and (rawequal(owner, pager.Up) or rawequal(owner, pager.Down)) then
+					pcall(F.PagerTip, owner)
+				end
+			end
+		end
 	end
 end
 
