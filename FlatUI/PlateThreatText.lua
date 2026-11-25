@@ -9,6 +9,10 @@ local _, ns = ...
 -- number, name, colour or answer is never read, compared or joined in Lua, since SetFormattedText, SetTextColor and SetAlphaFromBoolean take them
 -- (SimpleFontStringAPIDocumentation.lua:539-548, 675-688; SimpleRegionAPIDocumentation.lua:133-145). Every call is in a pcall; a part that fails
 -- on enough plates stops alone and hides its text on every plate.
+-- Each text fades in over FADE seconds as it comes and out as it goes (Alpha animations of the font string's own, not protected, so they play in
+-- a fight), as the threat ring eases in and out (PlateThreatLook.lua), so the values of a big pull do not blink on and off. What stands over a
+-- text drops back as it starts to fade. A plate that leaves, a part that stops and the page going off clear the texts at once, and the name of
+-- the enemy's target takes no fade while its opacity is the game's withheld answer (SetAlphaFromBoolean), which a fade would override.
 -- The value follows Threat Plates' threat widget (Widgets/ThreatWidget.lua:352-408): the share of aggro (scaledPercentage) or the share of the
 -- tank's threat (rawPercentage) of UnitDetailedThreatSituation, or the game's own threat number, the lead while tanking and the share of the
 -- tank's threat otherwise (Blizzard_UnitFrame/Mainline/UnitFrame.lua:1028-1046), in place of Threat Plates' value types that compare units,
@@ -19,7 +23,8 @@ local _, ns = ...
 -- it sits after the level frame, as the enemy's target does, and the enemy's target then sits after it; above the bar it stands over the name and
 -- the row of the enemy's debuffs (on PlateOverpower.lua's guide, ns.PlateDebuffTop, so it rises as the row wraps, and over the name while the
 -- row is empty, hidden or faded), with an Above quest mark and the Overpower icon over it; below it clears the cast bar, as Nameplates.lua places a
--- class icon (PlaceIcon). Left of the bar it sits past the game's raid marker and its elite or rare icon:
+-- class icon (PlaceIcon), and the row of combo points on your target's plate while it shows (PlateCombo.lua, ns.PlateComboRow; that file places the
+-- value again as its row comes and goes, ns.PlateThreatPlace). Left of the bar it sits past the game's raid marker and its elite or rare icon:
 -- it hangs from the left of the plate's ClassificationFrame, which hangs left of the RaidTargetFrame, which hangs left of the bar (past a class
 -- icon on the left, Nameplates.lua's Marker), both of which take no room while hidden (collapsesLayout, Blizzard_NamePlates.xml:186-199), so the
 -- value moves as a marker comes or goes, in a fight too, and keeps its height while Raid marker vertical offset moves the marker. A client whose
@@ -27,8 +32,8 @@ local _, ns = ...
 -- The game's rows of aura icons beside the bar are kept clear (AuraRow): while the enemy's buffs show (the Buffs bit of the game's enemy aura
 -- display), the value on the left hangs from the left end of their row, which grows left from the elite or rare icon, and while its crowd control
 -- shows, the value on the right and the enemy's target hang after that row. Each row is 1 across while empty and grows with its icons, so the texts
--- move as icons come and go, in a fight too; a row whose icons Nameplates.lua fades to nothing (Show auras Only on the target, on another plate)
--- keeps no room, and the texts are placed again as the target changes.
+-- move as icons come and go, in a fight too; a row whose icons Nameplates.lua fades to nothing (Show auras Only on the target or On the target and
+-- focus, on another plate) keeps no room, and the texts are placed again as the target or the focus changes.
 -- PlateQuest.lua's quest mark sits past both texts: ns.PlateThreatTexts gives it the value and the enemy's target of a plate, ns.PlateAuraRow the
 -- row of aura icons on a side, and a text placed anew places the plate's quest mark again (ns.PlateQuestPlace), and a value placed anew the plate's
 -- Overpower icon (ns.PlateOverpowerPlace). ns.PlateAurasSeen gives PlateOverpower.lua's guide the same rule for faded auras.
@@ -49,17 +54,20 @@ local SHOWN = { scaled = true, raw = true, lead = true }
 -- How the value is aligned on each side of the bar: away from the bar, and centred above or below it (Threat Plates aligns its value right on the
 -- left of the bar, Constants.lua:2100).
 local JUSTIFY = { left = "RIGHT", right = "LEFT", above = "CENTER", below = "CENTER" }
+-- The seconds a text fades in as it comes and out as it goes, as the threat ring eases (PlateThreatLook.lua's RING_EASE).
+local FADE = 0.15
 
 -- Per unit frame: value and target (the font strings), valueShown and targetShown (false once hidden), base (the font object's font, for a plate
 -- whose health text cannot be read), fonts (per font string, the font it was given), place (what the target text is anchored to), valuePlace and
 -- valueSide (the place the value was anchored for, and its side), colourFor and colourThreat (the state and the setting the value was coloured
--- for), own (what Nameplates.lua keeps of the plate), waiting (the plate waits for the end of combat to get its texts).
+-- for), own (what Nameplates.lua keeps of the plate), waiting (the plate waits for the end of combat to get its texts), valueIn, valueOut, targetIn
+-- and targetOut (each text's fades, nil on a client without them), targetWithheld (the target text's opacity is the game's answer).
 local recs = setmetatable({}, { __mode = "k" })
 -- subscribed: the listeners are on the core. heard: UNIT_TARGET is heard. fighting: between PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED.
 -- placeWaiting: the texts wait for the end of combat to be placed again.
 local subscribed, heard, fighting, placeWaiting = false, false, false, false
 local listener
-local Draw, OnChange, OnUpdate, Beside
+local Draw, OnChange, OnUpdate, Beside, MakeFades, Clear
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -177,6 +185,39 @@ end
 
 -- The texts ----------------------------------------------------------------------------------
 
+-- The fades of a text: an Alpha animation of the font string from nothing to whole as it comes, and one from whole to nothing that keeps its end as
+-- it goes, which empties and hides the text once it ends while the text is still not wanted. Animations of a region of Flat UI's own, not protected,
+-- so they play in a fight. Nil on a client that refuses them, which shows and hides the text at once.
+function MakeFades(rec, which, text)
+	local ok, fadeIn, fadeOut = pcall(function()
+		local inGroup = text:CreateAnimationGroup()
+		ns.Own[inGroup] = true
+		local appear = inGroup:CreateAnimation("Alpha")
+		ns.Own[appear] = true
+		appear:SetFromAlpha(0)
+		appear:SetToAlpha(1)
+		appear:SetDuration(FADE)
+		local outGroup = text:CreateAnimationGroup()
+		ns.Own[outGroup] = true
+		local away = outGroup:CreateAnimation("Alpha")
+		ns.Own[away] = true
+		away:SetFromAlpha(1)
+		away:SetToAlpha(0)
+		away:SetDuration(FADE)
+		pcall(outGroup.SetToFinalAlpha, outGroup, true)
+		outGroup:SetScript("OnFinished", function()
+			if rec[which .. "Shown"] == false then
+				text:SetText("")
+				text:Hide()
+			end
+		end)
+		return inGroup, outGroup
+	end)
+	if ok and type(fadeIn) == "table" and type(fadeOut) == "table" then
+		rec[which .. "In"], rec[which .. "Out"] = fadeIn, fadeOut
+	end
+end
+
 -- One of the two texts of a plate, made the first time it is wanted. A plate that may be protected gets it when combat ends, and is drawn then.
 local function Text(unitFrame, rec, which)
 	local text = rec[which]
@@ -213,15 +254,61 @@ local function Text(unitFrame, rec, which)
 		text:SetJustifyH("LEFT")
 	end
 	rec[which] = text
+	MakeFades(rec, which, text)
 	return text
 end
 
-local function Clear(rec, which)
+-- True while an animation group plays.
+local function Playing(group)
+	if not group then
+		return false
+	end
+	local ok, playing = pcall(group.IsPlaying, group)
+	return ok and playing == true
+end
+
+-- Both fades of a text stop.
+local function StopFades(rec, which)
+	for _, group in ipairs({ rec[which .. "In"] or false, rec[which .. "Out"] or false }) do
+		if group then
+			pcall(group.Stop, group)
+		end
+	end
+end
+
+-- A text goes. It fades out over FADE (its record says at once that it is gone, so what stands over it drops back now), and is emptied and hidden as
+-- the fade ends; now (a plate that leaves, a part that stops, the page going off), a text whose opacity is the game's answer (SetAlphaFromBoolean,
+-- which a fade would override, so it could show your own name) and a client without the fade clear it at once.
+function Clear(rec, which, now)
 	local text = rec[which]
 	if text ~= nil and rec[which .. "Shown"] ~= false then
+		rec[which .. "Shown"] = false
+		local fadeIn, fadeOut = rec[which .. "In"], rec[which .. "Out"]
+		if fadeIn then
+			pcall(fadeIn.Stop, fadeIn)
+		end
+		if not now and fadeOut and not rec[which .. "Withheld"] and Ask(text.IsShown, text) == true and not Playing(fadeOut)
+			and pcall(fadeOut.Play, fadeOut) then
+			return
+		end
+		StopFades(rec, which)
 		text:SetText("")
 		text:Hide()
-		rec[which .. "Shown"] = false
+	end
+end
+
+-- A text shows, whole: a fade out still running stops where it is, and a text that was not shown (fade) fades in over FADE.
+local function Appear(rec, which, text, fade)
+	local fadeIn, fadeOut = rec[which .. "In"], rec[which .. "Out"]
+	local cut = Playing(fadeOut)
+	if fadeOut then
+		pcall(fadeOut.Stop, fadeOut)
+	end
+	text:SetAlpha(1)
+	text:Show()
+	if fade and not cut and fadeIn then
+		pcall(fadeIn.Stop, fadeIn)
+		pcall(fadeIn.Play, fadeIn)
 	end
 end
 
@@ -364,19 +451,30 @@ local function DebuffTop(unitFrame)
 	return guide, stale == true
 end
 
+-- The row of combo points under a plate while it shows (PlateCombo.lua, ns.PlateComboRow), or nil.
+local function ComboRow(unitFrame)
+	if type(ns.PlateComboRow) ~= "function" then
+		return nil
+	end
+	local ok, row = pcall(ns.PlateComboRow, unitFrame)
+	return ok and type(row) == "table" and row or nil
+end
+
 -- True for a frame that says it takes no room while hidden (CollapsesLayout, SimpleScriptRegionAPIDocumentation.lua:60-70).
 local function Collapses(frame)
 	return frame ~= nil and Ask(frame.CollapsesLayout, frame) == true
 end
 
--- False on a plate whose auras Nameplates.lua fades to nothing: one that is not the target while Show auras is Only on the target (AurasAlpha). The
--- target's plate is compared as a frame, so no unit comparison the client can withhold is needed.
+-- False on a plate whose auras Nameplates.lua fades to nothing: one that is not the target while Show auras is Only on the target, or neither the
+-- target nor the focus while it is On the target and focus (AurasAlpha). The plates are compared as frames, so no unit comparison the client can
+-- withhold is needed.
 local function AurasSeen(unitFrame, rec)
 	local own = rec.own
-	if not (ns.Enabled(KEY) and type(own) == "table" and own.styleOn == true and Opt("aurasWhen") == "target") then
+	local when = Opt("aurasWhen")
+	if not (ns.Enabled(KEY) and type(own) == "table" and own.styleOn == true and (when == "target" or when == "focus")) then
 		return true
 	end
-	return ns.PlateUnitFrame("target") == unitFrame
+	return ns.PlateUnitFrame("target") == unitFrame or (when == "focus" and ns.PlateUnitFrame("focus") == unitFrame)
 end
 
 -- A row of the game's aura icons of a plate while it and the plate's AurasFrame show and its icons are seen: BuffListFrame (an enemy's buffs, at
@@ -423,7 +521,8 @@ end
 -- else left of the bar) and aligned right (as Threat Plates has it, and as before), right of what ends the bar and aligned left, centred above
 -- the name and the enemy's debuffs (on PlateOverpower.lua's guide, ns.PlateDebuffTop, so it rises as the debuff row wraps, in a fight too; over the
 -- name where no guide could be made), or centred below the cast bar, whose frame the game keeps under the health bar
--- (Blizzard_NamePlateUnitFrame.lua:699-700, 714-715). The plate's quest mark and Overpower icon are placed again after (they stand over it at Above).
+-- (Blizzard_NamePlateUnitFrame.lua:699-700, 714-715), and below the row of combo points while it shows (ns.PlateComboRow). The plate's quest
+-- mark and Overpower icon are placed again after (they stand over it at Above).
 -- Done again only when the place changes. The first anchors of a text just made follow the rule it was made by (Text); a text placed before keeps
 -- its anchors in a fight on a plate that may be protected, as the enemy's target does, until the fight ends.
 local function PlaceValue(unitFrame, rec, text)
@@ -447,8 +546,12 @@ local function PlaceValue(unitFrame, rec, text)
 	elseif place == "right" then
 		frame, key = Beside(unitFrame, rec)
 	elseif place == "below" then
+		-- Under the row of combo points while it shows on the plate (PlateCombo.lua), else under the cast bar.
+		local combo = ComboRow(unitFrame)
 		local cast = Frame(unitFrame, "CastBarsContainer")
-		if cast then
+		if combo then
+			frame, key = combo, "combo"
+		elseif cast then
 			frame, key = cast, "cast"
 		end
 	elseif place == "above" then
@@ -510,7 +613,7 @@ local function ValuePart(unitFrame, rec, on, full)
 	local unit = unitFrame.unit
 	if not (state and Plain(unit, "string") and not NameOnly(unitFrame) and When()) then
 		local was = rec.valueShown == true
-		Clear(rec, "value")
+		Clear(rec, "value", not on)
 		if was then
 			StandsOver(unitFrame, rec)
 		end
@@ -529,8 +632,8 @@ local function ValuePart(unitFrame, rec, on, full)
 	end
 	ValueColour(PT, rec, text, state)
 	Write(text, Number(mode, unit))
-	text:Show()
 	local was = rec.valueShown
+	Appear(rec, "value", text, was ~= true)
 	rec.valueShown = true
 	if was ~= true then
 		StandsOver(unitFrame, rec)
@@ -587,10 +690,10 @@ local function Place(unitFrame, rec, text)
 	QuestPlace(unitFrame)
 end
 
--- The target changed while Show auras is Only on the target: the aura rows of the old target and the new one faded or came back, so the texts and
--- the quest mark of every plate are placed again where that changed what they hang from.
+-- The target (or the focus, with On the target and focus) changed while Show auras is not On every nameplate: the aura rows of the old plate and
+-- the new one faded or came back, so the texts and the quest mark of every plate are placed again where that changed what they hang from.
 local function AurasMoved()
-	if Opt("aurasWhen") ~= "target" then
+	if Opt("aurasWhen") == "always" then
 		return
 	end
 	ns.EachPlate(function(unitFrame)
@@ -655,7 +758,7 @@ end
 local function TargetPart(unitFrame, rec, on, full)
 	local token = TargetToken(unitFrame, on)
 	if token == nil then
-		Clear(rec, "target")
+		Clear(rec, "target", not on)
 		return
 	end
 	local text = Text(unitFrame, rec, "target")
@@ -683,15 +786,19 @@ local function TargetPart(unitFrame, rec, on, full)
 		return
 	end
 	TargetColour(text, token)
+	-- The plain name fades in as it comes (Appear); an opacity that is the game's answer takes no fade, which would override it.
 	if withheld then
+		StopFades(rec, "target")
+		rec.targetWithheld = true
 		if not pcall(text.SetAlphaFromBoolean, text, me, 0, 1) then
-			Clear(rec, "target")
+			Clear(rec, "target", true)
 			return
 		end
+		text:Show()
 	else
-		text:SetAlpha(1)
+		rec.targetWithheld = nil
+		Appear(rec, "target", text, rec.targetShown ~= true)
 	end
-	text:Show()
 	rec.targetShown = true
 end
 
@@ -796,8 +903,8 @@ local function Fight(on)
 end
 
 -- The texts of a plate for PlateQuest.lua: the value, the side it was anchored on and the enemy's target, each nil while it has not been made (or
--- placed), its part is stopped or its row is off (Threat value Off, Name of the enemy's target off). A text that shows nothing is empty, so a frame anchored
--- to its far end sits at its anchor and follows the text's width as it changes, in a fight too.
+-- placed), its part is stopped or its row is off (Threat value Off, Name of the enemy's target off), and the value at Above while it fades out. A text
+-- that shows nothing is empty, so a frame anchored to its far end sits at its anchor and follows the text's width as it changes, in a fight too.
 function ns.PlateThreatTexts(unitFrame)
 	local rec = unitFrame ~= nil and recs[unitFrame]
 	if not rec or ns.IsStopped(KEY) then
@@ -805,6 +912,10 @@ function ns.PlateThreatTexts(unitFrame)
 	end
 	local value, target = rec.value, rec.target
 	if ns.PartStopped(KEY, VALUE) or not SHOWN[Opt("threatValue")] then
+		value = nil
+	end
+	-- A value at Above that is fading out no longer carries what stands over it: the quest mark and the Overpower icon drop back at once.
+	if value ~= nil and rec.valueSide == "above" and rec.valueShown ~= true then
 		value = nil
 	end
 	-- A target text is given once it has its anchor (Place), so nothing hangs from a text the game has not laid out.
@@ -821,6 +932,15 @@ function ns.PlateAurasSeen(unitFrame)
 		return true
 	end
 	return AurasSeen(unitFrame, Rec(unitFrame))
+end
+
+-- The value of a plate placed again where it shows, for PlateCombo.lua as its row of combo points comes or goes: at Below the value hangs under it.
+function ns.PlateThreatPlace(unitFrame)
+	local rec = unitFrame ~= nil and recs[unitFrame]
+	if rec and rec.value ~= nil and rec.valueShown == true and not ns.Forbidden(unitFrame) and not ns.IsStopped(KEY)
+		and not ns.PartStopped(KEY, VALUE) then
+		pcall(PlaceValue, unitFrame, rec, rec.value)
+	end
 end
 
 -- The row of the game's aura icons on one side of a plate, for PlateQuest.lua: left, the enemy's buffs; right, its crowd control. Nil while that row
@@ -849,8 +969,10 @@ EXTRA.leave[#EXTRA.leave + 1] = function(unitFrame)
 	if rec == nil then
 		return
 	end
+	-- The game hands the plate to another unit: both texts clear at once, fades and all.
 	for _, which in ipairs({ "value", "target" }) do
 		local text = rec[which]
+		pcall(StopFades, rec, which)
 		if text ~= nil then
 			pcall(text.SetText, text, "")
 			pcall(text.Hide, text)
@@ -882,4 +1004,9 @@ ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
 		ns.EachPlate(DrawTarget)
 	end
 	AurasMoved()
+end)
+ns.AddEvent(KEY, "PLAYER_FOCUS_CHANGED", function()
+	if Opt("aurasWhen") == "focus" then
+		AurasMoved()
+	end
 end)

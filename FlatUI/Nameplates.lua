@@ -344,7 +344,8 @@ end
 local function MarkTargets()
 	local mark = ns.Enabled(KEY) and Opt("health") and Opt("target")
 	local kinds = ns.Enabled(KEY) and Opt("health") and Opt("kindBorder")
-	local targetOnly = ns.Enabled(KEY) and Opt("aurasWhen") == "target"
+	-- Show auras at Only on the target or On the target and focus: a plate that stops or starts being either shows or hides its auras.
+	local targetOnly = ns.Enabled(KEY) and Opt("aurasWhen") ~= "always"
 	local target, focus = UnitFrameOf("target"), UnitFrameOf("focus")
 	local all, asked = markAll, marks
 	markAll, marks = false, {}
@@ -480,14 +481,18 @@ local function StyleAura(item, on, look)
 	end
 end
 
--- The opacity of the icons of one plate: the row's, or none for a plate that is not the target while Show auras says only the target has them.
--- The target's plate is compared as a frame, as MarkTargets does, since the game's isTarget comes from a unit comparison the client can withhold.
+-- The opacity of the icons of one plate: the row's, or none for a plate that is not the target while Show auras says only the target has them
+-- (Only on the target), or neither the target nor the focus (On the target and focus). The target's and the focus's plates are compared as frames,
+-- as MarkTargets does, since the game's isTarget comes from a unit comparison the client can withhold.
 local function AurasAlpha(unitFrame, aurasFrame, styled)
 	local own = known[unitFrame]
 	local alpha = 1
 	if styled then
 		alpha = Opt("auraOpacity") / 100
-		if Opt("aurasWhen") == "target" and UnitFrameOf("target") ~= unitFrame then
+		local when = Opt("aurasWhen")
+		if when == "target" and UnitFrameOf("target") ~= unitFrame then
+			alpha = 0
+		elseif when == "focus" and UnitFrameOf("target") ~= unitFrame and UnitFrameOf("focus") ~= unitFrame then
 			alpha = 0
 		end
 	end
@@ -759,7 +764,8 @@ end
 -- size and the one anchor set here the right end of the plate's guide is the right end of the box. Since 70425 the game anchors the frame
 -- TOPLEFT and BOTTOMLEFT to the health bar, 5 past its end (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8): those anchors set its height and
 -- keep no room, so they are cleared first. When the part turns off, the anchors the game gave the frame, its size (:239), and the health bar
--- end and the aura offsets UpdateAnchors gives those anchors go back.
+-- end go back, and the row of crowd control icons and the loss of control icon hang past the level frame again while it shows (else past the bars),
+-- as UpdateControlAnchors hangs them (Blizzard_NamePlateUnitFrame.lua:872-877, 892-907), so they do not lie on the level number.
 -- Level box Hidden only fades the level frame, which stays shown, and the game hangs the row of crowd control icons and the loss of control icon
 -- past it (UpdateControlAnchors, Blizzard_NamePlateUnitFrame.lua:892-907). While Hidden is on, those two start 5 past the bar's end instead (past
 -- a class icon on the right), so what hangs after them (the threat value at Right, the enemy's target, a Right quest mark) sits at the bar.
@@ -886,11 +892,14 @@ local function SquareBox(unitFrame, own, on, fresh)
 		local room = (shown and home[1][3] == "RIGHT") and width + math.abs(home[1][4]) or 0
 		-- 0 - room, not -room: no room at all is the game's 0, not a negative zero (which Lua 5.1, the game's Lua, keeps).
 		container:SetPoint("BOTTOMRIGHT", cast, "TOPRIGHT", 0 - room, spacing)
+		-- The crowd control row and the loss of control icon as UpdateControlAnchors hangs them: past the level frame while it shows, else past
+		-- the bars, 5 and the room it keeps further (Blizzard_NamePlateUnitFrame.lua:872-877, 892-907), as HiddenControl puts them back.
+		local to = shown and level or container
 		if control then
-			control:SetPoint("LEFT", container, "RIGHT", 5 + room, 0)
+			control:SetPoint("LEFT", to, "RIGHT", 5 + room, 0)
 		end
 		if lost then
-			lost:SetPoint("LEFT", container, "RIGHT", 5 + room, 0)
+			lost:SetPoint("LEFT", to, "RIGHT", 5 + room, 0)
 		end
 	end
 	own.levelBox = nil

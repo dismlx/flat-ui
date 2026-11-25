@@ -1,8 +1,8 @@
 local _, ns = ...
 
--- The nameplate drawings of Flat UI setup: mock-nameplate, mock-nameplate-cast, mock-nameplate-auras, mock-nameplate-marks, mock-nameplate-stack and
--- mock-nameplate-walk, the cards of the nameplate stop of setup's walk round the screen, whose draw returns the size of a canvas of its own for the
--- card to fit.
+-- The nameplate drawings of Flat UI setup: mock-nameplate, mock-nameplate-cast, mock-nameplate-auras, mock-nameplate-marks, mock-nameplate-threat,
+-- mock-nameplate-stack and mock-nameplate-walk, the cards of the nameplate stop of setup's walk round the screen, whose draw returns the size of a
+-- canvas of its own for the card to fit.
 -- A drawing is { build(stage), draw(stage), parts = { [path] = region } }. build makes the frames of the drawing once for a stage, all marked ns.Own, so no
 -- module restyles them. draw reads the settings through ns.Get only (the caller runs it inside ns.Viewing, so it draws the draft) and paints every part again.
 -- parts maps a saved path to the region that setting changes, for the bracket that follows the row under the mouse; parts.of(stage) gives the parts of one
@@ -11,18 +11,26 @@ local _, ns = ...
 -- What a plate is made of is the game's own layout for the nameplate style and size chosen: the sizes are Camelot's
 -- (Blizzard_NamePlates/Camelot/Blizzard_NamePlateConstants.lua:33-60, 62-68), the anchors those of NamePlateUnitFrameMixin:UpdateAnchors
 -- (Blizzard_NamePlates/Blizzard_NamePlateUnitFrame.lua:678-890) and of the cast bar (Blizzard_NamePlateCastingBar.lua:26-130). What each row changes is what
--- Nameplates.lua, PlateText.lua, PlateColours.lua, HealthColour.lua, PlateQuest.lua (the quest mark and its kill count of a sample with quest) and
--- PlateOverpower.lua (the Overpower icon of a sample with overpower, whose swipe drains over its 5 seconds and starts again) do to a plate with the
--- same row. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a unit (UnitDocumentation.lua:1526-1529).
--- Test mode's sample plate (TestHud.lua) is P.NewPlate and P.Plate on a frame of its own; a sample's threat (threatGood, threatTransition or
--- threatBad) colours its health bar as PlateColours.lua orders it and, as PlateThreatLook.lua, PlateText.lua and PlateThreatText.lua draw it
--- (P.Threat), gives it the threat ring (flashing as it turns to threatBad), a sample threat value, the threat colour on its name, health text,
--- border and background as their rows ask, the name of the enemy's target and the fade of an enemy held for you or changing hands; P.CastProgress,
--- P.Health and P.Threat change only its fills, time, ring, colours, texts and alpha. Setup's plates have no threat, so they show none of these. A
--- stage whose state has still (test mode's, true while Moving is off) pauses the sample's Overpower swipe with it (P.SwipeStill), and a sample with
--- questHave counts that many of 8 kills and pops its count as it goes up. On that stage the sample moves as a live plate does: its ring eases in
--- and out (ns.PlateRingEase), it eases to each round's opacity over P.EASE_SECONDS (P.Alpha), and its Overpower icon pops in as each round after
--- the first starts and fades over the round's last P.OP_FADE seconds; all of it holds still with Moving off, and setup's drawings snap.
+-- Nameplates.lua, PlateText.lua, PlateColours.lua, HealthColour.lua, PlateQuest.lua (the quest mark and its kill count of a sample with quest),
+-- PlateOverpower.lua (the Overpower icon of a sample with overpower, a hunter's Mongoose Bite, moved by its offsets, whose swipe drains over its 5
+-- seconds and starts again) and PlateCombo.lua (the row of combo points of a sample with combo, under the cast bar's room, in a rogue's or a druid's
+-- drawing) do to a plate with the same row. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a
+-- unit (UnitDocumentation.lua:1526-1529).
+-- A sample's threat (threatGood, threatTransition or threatBad) colours its health bar as PlateColours.lua orders it and, as PlateThreatLook.lua,
+-- PlateText.lua and PlateThreatText.lua draw it (P.Threat), gives it the threat ring at Threat ring thickness (flashing as it turns to threatBad), a
+-- sample threat value (under the combo points at Below), the threat colour on its name, health text, border and background as their rows ask, the
+-- name of the enemy's target and the fade of an enemy held for you or changing hands. Setup's step of nameplate colours and threat draws
+-- mock-nameplate-threat: an enemy, an enemy player, the mouseover and low health, and with Threat on nameplates four samples: threat you want
+-- (faded), changing hands, threat you do not want (its ring flashes as the drawing opens and as Flash the ring when threat goes wrong turns on) and
+-- your target changing hands, which never fades and carries the name of the enemy's target with Only on your target.
+-- Test mode's sample plate (TestHud.lua) is P.NewPlate and P.Plate on a frame of its own, which takes the threat states in turn; P.CastProgress,
+-- P.Health, P.Combo and P.Threat change only its fills, time, ring, colours, texts, squares and alpha. A stage whose state has still (test mode's,
+-- true while Moving is off) pauses the sample's Overpower swipe with it (P.SwipeStill), and a sample with questHave counts that many of 8 kills,
+-- pops its count as it goes up, turns it green at 8/8 and fades the mark and its count once that pop settles, as PlateQuest.lua does (P.QuestFade),
+-- fading them back in as the count starts again. On that stage the sample moves as a live plate does: its ring eases in and out
+-- (ns.PlateRingEase), it eases to each round's opacity over P.EASE_SECONDS (P.Alpha), its newest combo point pops, and its Overpower icon pops in as
+-- each round after the first starts and fades over the round's last P.OP_FADE seconds, on its own round clock whatever Time left on the Overpower
+-- icon says (P.OverpowerClock); all of it holds still with Moving off, and setup's drawings snap.
 -- A threat value at Above stands over the sample's auras, and an Above quest mark and the Overpower icon over it (the mark over the icon too).
 
 local KEY = "nameplates"
@@ -55,20 +63,32 @@ P.QUEST_ATLAS, P.QUEST_FILE, P.QUEST_GAP = "QuestNormal", "Interface\\GossipFram
 P.QUEST_COUNT, P.QUEST_COUNT_SIZE, P.QUEST_COUNT_GAP = "3/8", 0.8, 1
 -- The pop of a kill count that goes up, as PlateQuest.lua's: from P.QUEST_POP of its size back to whole over P.QUEST_POP_SECONDS, white until it ends.
 P.QUEST_POP, P.QUEST_POP_SECONDS = 1.6, 0.3
+-- The count's colour once the objective is done, and the seconds the mark and its count fade in as they come and out once done (after the pop), as
+-- PlateQuest.lua's K.GREEN, K.FADE_IN and K.FADE_OUT.
+P.QUEST_GREEN, P.QUEST_FADE_IN, P.QUEST_FADE_OUT = { 0.3, 0.9, 0.35 }, 0.15, 0.3
 -- The threat of test mode's sample plate: the sample value of each state, the units between the value and what it sits beside (PlateThreatText.lua's
--- GAP), and the ring's thickness and its gap past the border in pixels (PlateThreatLook.lua's RING_PX and GAP_PX).
+-- GAP), and the ring's thickness when Threat ring thickness cannot be read and its gap past the border in pixels (PlateThreatLook.lua's RING_PX and
+-- GAP_PX).
 P.THREAT_VALUES = { threatGood = "40%", threatTransition = "92%", threatBad = "110%" }
 P.THREAT_GAP, P.RING_PX, P.RING_GAP = 4, 2, 2
 -- The name of the enemy's target on the sample (PlateThreatText.lua's TargetPart): a warrior who holds it, and you while it attacks you; the share of
 -- the threat colour the background takes (PlateThreatLook.lua's BACK_SHARE).
 P.THREAT_HOLDER, P.THREAT_HOLDER_CLASS, P.BACK_SHARE = "Gorvak", "WARRIOR", 0.3
--- The Overpower icon of PlateOverpower.lua: its spell, its file when the client gives none, the crop of each edge, the units over the name and its
--- window in seconds; its pop as a round starts (a fade in over P.OP_POP_IN seconds and a shrink from P.OP_POP_FROM of its size over P.OP_POP_SCALE)
--- and its fade over the round's last P.OP_FADE seconds, as PlateOverpower.lua's.
-P.OP_SPELL, P.OP_FILE, P.OP_CROP, P.OP_GAP, P.OP_WINDOW = 7384, "Interface\\Icons\\Ability_MeleeDamage", 0.08, 2, 5
+-- The Overpower icon of PlateOverpower.lua: the spell of each class that has one (Overpower for a warrior, Mongoose Bite for a hunter), its file
+-- when the client gives none and its name, the crop of each edge, the units over the name and its window in seconds; its pop as a round starts (a
+-- fade in over P.OP_POP_IN seconds and a shrink from P.OP_POP_FROM of its size over P.OP_POP_SCALE) and its fade over the round's last P.OP_FADE
+-- seconds, as PlateOverpower.lua's.
+P.OP_SPELLS = { WARRIOR = 7384, HUNTER = 1495 }
+P.OP_FILES = { WARRIOR = "Interface\\Icons\\Ability_MeleeDamage", HUNTER = "Interface\\Icons\\Ability_Hunter_SwiftStrike" }
+P.OP_NAMES = { WARRIOR = "Overpower", HUNTER = "Mongoose Bite" }
+P.OP_CROP, P.OP_GAP, P.OP_WINDOW = 0.08, 2, 5
 P.OP_POP_FROM, P.OP_POP_IN, P.OP_POP_SCALE, P.OP_FADE = 1.3, 0.12, 0.15, 0.25
 -- Test mode's sample eases to a new opacity over P.EASE_SECONDS, as a live plate's fade (PlateThreatLook.lua's EASE_SECONDS).
 P.EASE_SECONDS = 0.2
+-- The row of combo points of PlateCombo.lua: the squares, each square and the units between two, the units under the cast bar, the opacity of a
+-- square not lit, and the pop of the newest point (from P.COMBO_POP_FROM of its size back to whole over P.COMBO_POP_SECONDS).
+P.COMBO_MAX, P.COMBO_SIZE, P.COMBO_SPACE, P.COMBO_DROP, P.COMBO_DIM = 5, 7, 3, 2, 0.25
+P.COMBO_POP_FROM, P.COMBO_POP_SECONDS = 1.4, 0.15
 P.SPACING = 2
 -- The gap between a class icon and the row, and the border of an elite, a rare and a boss in screen pixels (Nameplates.lua:30, 46).
 P.GAP, P.KIND_PX = 3, 2
@@ -346,9 +366,9 @@ function P.NewIcon(S, parent)
 	return icon
 end
 
--- The pop of the sample kill count (P.QuestMark), a Scale animation of the font string from its middle that gives it its gold back as it ends; nil
--- when the client will not make it.
-function P.CountPop(text)
+-- The pop of the sample kill count (P.QuestMark), a Scale animation of the font string from its middle that gives it its gold back as it ends (its
+-- green while its count is done, p.questDone); nil when the client will not make it.
+function P.CountPop(p, text)
 	local ok, group = pcall(function()
 		local modes = Enum and Enum.FontStringScaleAnimationMode
 		pcall(text.SetScaleAnimationMode, text, modes and modes.Vertex or 1)
@@ -362,10 +382,29 @@ function P.CountPop(text)
 		grow:SetOrigin("CENTER", 0, 0)
 		pcall(grow.SetSmoothing, grow, "OUT")
 		local function Done()
-			text:SetTextColor(P.GOLD[1], P.GOLD[2], P.GOLD[3], 1)
+			local colour = p.questDone and P.QUEST_GREEN or P.GOLD
+			text:SetTextColor(colour[1], colour[2], colour[3], 1)
 		end
 		made:SetScript("OnFinished", Done)
 		made:SetScript("OnStop", Done)
+		return made
+	end)
+	return ok and type(group) == "table" and group or nil
+end
+
+-- The pop of a combo point of the sample (P.Combo), a Scale animation of its square from its middle, as PlateCombo.lua's; nil when the client will
+-- not make it.
+function P.ComboPop(texture)
+	local ok, group = pcall(function()
+		local made = texture:CreateAnimationGroup()
+		ns.Own[made] = true
+		local shrink = made:CreateAnimation("Scale")
+		ns.Own[shrink] = true
+		shrink:SetScaleFrom(P.COMBO_POP_FROM, P.COMBO_POP_FROM)
+		shrink:SetScaleTo(1, 1)
+		shrink:SetDuration(P.COMBO_POP_SECONDS)
+		shrink:SetOrigin("CENTER", 0, 0)
+		pcall(shrink.SetSmoothing, shrink, "OUT")
 		return made
 	end)
 	return ok and type(group) == "table" and group or nil
@@ -408,7 +447,7 @@ function P.NewPlate(S, parent)
 	p.rarity = Tex(p.f, "OVERLAY", 3)
 	p.quest = Tex(p.f, "OVERLAY", 4)
 	p.questCount = Txt(p.f, "OVERLAY")
-	p.questPop = P.CountPop(p.questCount)
+	p.questPop = P.CountPop(p, p.questCount)
 	-- The threat ring round the bar, and the threat value.
 	p.ring = Frame(p.f)
 	p.ringOutline = P.Outline(S, p.ring, p.ring)
@@ -441,6 +480,11 @@ function P.NewPlate(S, parent)
 		pcall(swipe.SetDrawBling, swipe, false)
 		pcall(swipe.SetHideCountdownNumbers, swipe, true)
 		swipe:SetScript("OnCooldownDone", function()
+			-- A swipe cleared on purpose (its row off, the icon hidden) ends no round.
+			if not p.opSwiping then
+				return
+			end
+			p.opSwiping = nil
 			-- A round that ends while the stage holds still starts again once it moves.
 			if P.Still(p) then
 				p.opDone = true
@@ -449,23 +493,34 @@ function P.NewPlate(S, parent)
 			P.OverpowerSwipe(p, true)
 		end)
 		p.opSwipe = swipe
-		-- A stage that can hold still (test mode's Moving off, S.still) pauses the swipe with it and lets it run on where it stopped, and fades the
-		-- icon over each round's last P.OP_FADE seconds; the frame's OnUpdate runs only while the icon shows.
-		if type(S.still) == "function" then
-			p.opFrame:SetScript("OnUpdate", function()
-				P.SwipeStill(p)
-				P.OverpowerFade(p)
-			end)
-		end
 	end
 	if type(S.still) == "function" then
+		-- A stage that can hold still (test mode's Moving off, S.still) pauses the swipe with it and lets it run on where it stopped, fades the icon
+		-- over each round's last P.OP_FADE seconds and starts the next round as one ends while no swipe runs (Time left on the Overpower icon off,
+		-- or a client without Cooldown frames); the frame's OnUpdate runs only while the icon shows.
+		p.opFrame:SetScript("OnUpdate", function()
+			P.SwipeStill(p)
+			P.OverpowerFade(p)
+			P.OverpowerClock(p)
+		end)
 		P.OverpowerMotion(p)
-		-- Test mode's sample eases to a new opacity (P.Alpha), one step a frame while it is on its way.
+		-- Test mode's sample eases to a new opacity (P.Alpha), one step a frame while it is on its way, and its quest mark fades in and out.
 		p.alphaStep = function(_, elapsed)
 			P.AlphaStep(p, elapsed)
 		end
+		P.QuestFades(p)
 	end
 	p.opFrame:Hide()
+	-- The row of combo points under the cast bar (PlateCombo.lua's): its squares, each in Flat UI's thin border and with its pop.
+	p.combo = Frame(p.f)
+	p.comboSquares = {}
+	for index = 1, P.COMBO_MAX do
+		local square = Tex(p.combo, "ARTWORK", 0)
+		square:SetSize(P.COMBO_SIZE, P.COMBO_SIZE)
+		square:SetPoint("LEFT", p.combo, "LEFT", (index - 1) * (P.COMBO_SIZE + P.COMBO_SPACE), 0)
+		p.comboSquares[index] = { texture = square, outline = P.Outline(S, p.combo, square), pop = P.ComboPop(square) }
+	end
+	p.combo:Hide()
 	p.cast = Frame(p.f)
 	p.cbar = Frame(p.cast)
 	p.cfill = Tex(p.cbar, "ARTWORK", 0)
@@ -834,11 +889,15 @@ end
 -- marker or the game's elite or rare icon (at the marker's height); Right past the threat value on the right, else past the level box while it shows;
 -- Above over the Overpower icon while it shows, else over a threat value above the sample, else over the sample's auras, else over the name (over the
 -- bar while the name is inside it); then moved by Quest mark horizontal and vertical offset. With Kill count beside the quest mark a sample count
--- sits beside it, left of it at Left and right of it at Right and Above; test mode's sample counts up with its threat rounds and pops as it does.
+-- sits beside it, left of it at Left and right of it at Right and Above; test mode's sample counts up with its threat rounds to 8/8 and pops as
+-- it goes up (not as it drops back), turns green at 8/8, and its mark and count fade out once that pop settles and fade back in as the next round
+-- starts again at 3/8 (P.QuestFade); setup's drawings and a still stage show it whole.
 function P.QuestMark(p, spec, o, m)
 	if not (spec.quest and o.quest and not spec.friendly and not spec.player) then
 		p.quest:Hide()
 		p.questCount:Hide()
+		P.QuestRest(p)
+		p.questHave, p.questDone = nil, nil
 		return
 	end
 	local size, place, gap = Get("questMarkSize"), Get("questMarkPlace"), P.QUEST_GAP
@@ -861,13 +920,13 @@ function P.QuestMark(p, spec, o, m)
 		x = x + gap
 	elseif place == "above" then
 		-- Over the sample's auras while it has them (m.top), as the live mark stands over the debuff row, and over the value or the icon there.
-		local top = m.top
+		local top, middle = m.top, m.BW / 2
 		if p.opFrame:IsShown() and ns.Finite(p.opT) then
-			top = p.opT
+			top, middle = p.opT, ns.Finite(p.opX) and p.opX or middle
 		elseif side == "above" and ns.Finite(p.tvalueT) then
 			top = p.tvalueT
 		end
-		point, x, y = "BOTTOM", m.BW / 2, top + gap
+		point, x, y = "BOTTOM", middle, top + gap
 	else
 		point, x, y = "RIGHT", P.LeftEdge(p, o, m), m.center + o.markerY
 		if side == "left" then
@@ -879,15 +938,17 @@ function P.QuestMark(p, spec, o, m)
 	x, y = x + (ns.Finite(ox) and ox or 0), y + (ns.Finite(oy) and oy or 0)
 	P.Put(p, p.quest, point, x, y, size, size)
 	p.quest:Show()
+	-- Test mode's sample counts up with its threat rounds (spec.questHave); setup's drawings keep the fixed count.
+	local have = spec.questHave
+	P.QuestFade(p, have)
 	local count = p.questCount
 	if Get("questMarkCount") ~= true then
 		count:Hide()
+		p.questHave = have
 		return
 	end
 	local height = math.max(6, size * P.QUEST_COUNT_SIZE)
-	P.Text(count, height, 100, "game", P.GOLD, o.face)
-	-- Test mode's sample counts up with its threat rounds (spec.questHave); setup's drawings keep the fixed count.
-	local have = spec.questHave
+	P.Text(count, height, 100, "game", p.questDone and P.QUEST_GREEN or P.GOLD, o.face)
 	count:SetText(ns.Finite(have) and ("%d/8"):format(have) or P.QUEST_COUNT)
 	local width = count:GetStringWidth()
 	width = (ns.Finite(width) and width or height * 2) + 1
@@ -898,14 +959,124 @@ function P.QuestMark(p, spec, o, m)
 		P.Put(p, count, "LEFT", x + size * (1 - P.AX[point]) + P.QUEST_COUNT_GAP, middle, width, height)
 	end
 	count:Show()
-	-- A count that went up pops, white until it settles, as a live one does as a kill counts.
+	-- A count that went up pops, white until it settles, as a live one does as a kill counts; one that drops back to the start does not.
 	local pop = p.questPop
-	if pop and ns.Finite(have) and ns.Finite(p.questHave) and have ~= p.questHave then
+	if pop and ns.Finite(have) and ns.Finite(p.questHave) and have > p.questHave then
 		pcall(pop.Stop, pop)
 		count:SetTextColor(1, 1, 1, 1)
 		pcall(pop.Play, pop)
 	end
 	p.questHave = have
+end
+
+-- The row of combo points of a sample on a rogue's or a druid's target (spec.combo, lit of P.COMBO_MAX), where PlateCombo.lua puts it while Combo
+-- points on your target's nameplate is on: centred just under the cast bar (the bottom of the sample, where the game keeps the cast bar's room),
+-- lit squares in Combo point colour and the rest in it at P.COMBO_DIM, each in its thin border. p.comboB is the row's bottom, which a threat value
+-- at Below hangs under. Test mode's sample pops the newest point as its count goes up; setup's drawings and a still stage do not.
+function P.Combo(p, spec, o, m)
+	local count = spec.combo
+	p.comboB = nil
+	if not (ns.Finite(count) and count > 0 and o.styled and not spec.friendly and Get("comboPoints") == true) then
+		p.combo:Hide()
+		for _, square in ipairs(p.comboSquares) do
+			if square.pop then
+				pcall(square.pop.Stop, square.pop)
+			end
+		end
+		p.comboHave = nil
+		return
+	end
+	count = math.min(P.COMBO_MAX, math.floor(count))
+	local width = P.COMBO_MAX * P.COMBO_SIZE + (P.COMBO_MAX - 1) * P.COMBO_SPACE
+	P.Put(p, p.combo, "TOP", m.BW / 2, -P.COMBO_DROP, width, P.COMBO_SIZE)
+	p.comboB = -P.COMBO_DROP - P.COMBO_SIZE
+	local r, g, b = ns.Colour(KEY .. ".comboColour")
+	for index, square in ipairs(p.comboSquares) do
+		square.texture:SetColorTexture(r, g, b, 1)
+		square.texture:SetAlpha(index <= count and 1 or P.COMBO_DIM)
+		ns.SetOutline(square.outline, true, false)
+	end
+	p.combo:SetFrameLevel(p.f:GetFrameLevel() + 5)
+	p.combo:Show()
+	local newest = p.comboSquares[count]
+	if ns.Finite(p.comboHave) and count > p.comboHave and newest and newest.pop and not P.Snaps(p) then
+		pcall(newest.pop.Stop, newest.pop)
+		pcall(newest.pop.Play, newest.pop)
+	end
+	p.comboHave = count
+end
+
+-- The fades of test mode's sample quest mark and its count, as PlateQuest.lua's: in over P.QUEST_FADE_IN as the mark comes back, and out over
+-- P.QUEST_FADE_OUT once a finished count's pop has settled (a start delay of P.QUEST_POP_SECONDS), keeping its end. Alpha animations of the mark's
+-- texture and of the count's font string; none on a client without them, nor on setup's drawings, whose stage has no still.
+function P.QuestFades(p)
+	local ins, outs = {}, {}
+	local ok = pcall(function()
+		for _, region in ipairs({ p.quest, p.questCount }) do
+			local fadeIn = region:CreateAnimationGroup()
+			ns.Own[fadeIn] = true
+			local appear = fadeIn:CreateAnimation("Alpha")
+			ns.Own[appear] = true
+			appear:SetFromAlpha(0)
+			appear:SetToAlpha(1)
+			appear:SetDuration(P.QUEST_FADE_IN)
+			local fadeOut = region:CreateAnimationGroup()
+			ns.Own[fadeOut] = true
+			local away = fadeOut:CreateAnimation("Alpha")
+			ns.Own[away] = true
+			away:SetFromAlpha(1)
+			away:SetToAlpha(0)
+			away:SetDuration(P.QUEST_FADE_OUT)
+			away:SetStartDelay(P.QUEST_POP_SECONDS)
+			pcall(fadeOut.SetToFinalAlpha, fadeOut, true)
+			ins[#ins + 1], outs[#outs + 1] = fadeIn, fadeOut
+		end
+	end)
+	if ok then
+		p.questIns, p.questOuts = ins, outs
+	end
+end
+
+-- The mark and its count whole: their fades stop. A mark that is hidden, and a stage that snaps (setup's drawings, test mode's with Moving off).
+function P.QuestRest(p)
+	for _, list in ipairs({ p.questIns or {}, p.questOuts or {} }) do
+		for _, group in ipairs(list) do
+			pcall(group.Stop, group)
+		end
+	end
+	p.quest:SetAlpha(1)
+	p.questCount:SetAlpha(1)
+	p.questFaded = nil
+end
+
+-- The sample's count reaching 8/8 (have, of 8) turns it done (p.questDone, green): the mark and its count fade out once its pop settles; a count that
+-- drops back from it fades them in again. On a stage that snaps they stay whole.
+function P.QuestFade(p, have)
+	local done = ns.Finite(have) and have >= 8
+	local was = p.questDone
+	p.questDone = done
+	if not p.questOuts or P.Snaps(p) then
+		P.QuestRest(p)
+		return
+	end
+	if done and not was and ns.Finite(p.questHave) then
+		for _, group in ipairs(p.questIns) do
+			pcall(group.Stop, group)
+		end
+		for _, group in ipairs(p.questOuts) do
+			pcall(group.Stop, group)
+			pcall(group.Play, group)
+		end
+		p.questFaded = true
+	elseif not done and was then
+		local faded = p.questFaded
+		P.QuestRest(p)
+		if faded then
+			for _, group in ipairs(p.questIns) do
+				pcall(group.Play, group)
+			end
+		end
+	end
 end
 
 -- The threat of test mode's sample plate (spec.threat), as a live plate has it: the ring in the threat colour round the bar (and Flat UI's square
@@ -929,16 +1100,23 @@ function P.Threat(p, spec, o, m)
 		p.ring:SetPoint("BOTTOM", p.bar, "BOTTOM", 0, -d)
 		p.ring:SetPoint("RIGHT", right, "RIGHT", d, 0)
 		local r, g, b = ns.Colour(KEY .. "." .. threat)
-		ns.SetOutlineThickness(p.ringOutline, P.RING_PX)
+		-- Threat ring thickness, as the live ring has it; its edges lie outside the ring's frame, so it grows outward.
+		local px = Get("threatRingPx")
+		ns.SetOutlineThickness(p.ringOutline, ns.Finite(px) and px >= 1 and math.floor(px + 0.5) or P.RING_PX)
 		ns.SetOutlineColour(p.ringOutline, r, g, b)
 		ns.SetOutline(p.ringOutline, true, false)
 		p.ring:Show()
 		local first = not p.ringShown
 		p.ringShown = true
-		-- A sample that has just turned to threat you do not want flashes its ring, with Flash the ring when threat goes wrong; a ring that comes
-		-- otherwise eases in.
+		-- A sample that has just turned to threat you do not want flashes its ring, with Flash the ring when threat goes wrong, and so does one
+		-- that has it as that row turns on (setup's drawing of the threat rows shows the flash then); a ring that comes otherwise eases in.
 		local flash, flashed = p.ringFlash, false
-		if flash and threat == "threatBad" and p.lastThreat ~= "threatBad" and Get("threatFlash") == true then
+		local flashOn = Get("threatFlash") == true
+		if flashOn and p.flashWas == false then
+			p.lastThreat = nil
+		end
+		p.flashWas = flashOn
+		if flash and threat == "threatBad" and p.lastThreat ~= "threatBad" and flashOn then
 			P.RingStill(p)
 			pcall(flash.Stop, flash)
 			flashed = pcall(flash.Play, flash)
@@ -985,7 +1163,9 @@ function P.Threat(p, spec, o, m)
 			P.Put(p, text, "BOTTOM", m.BW / 2 + x, m.top + gap + y, width, height)
 			p.tvalueT = m.top + gap + y + height
 		elseif place == "below" then
-			P.Put(p, text, "TOP", m.BW / 2 + x, y - gap, width, height)
+			-- Under the row of combo points while it shows (P.Combo), else under the cast bar, as the live value hangs.
+			local under = ns.Finite(p.comboB) and p.comboB or 0
+			P.Put(p, text, "TOP", m.BW / 2 + x, under + y - gap, width, height)
 		else
 			place = "left"
 			local edge = P.LeftEdge(p, o, m) - gap + x
@@ -1147,19 +1327,27 @@ function P.ThreatTarget(p, spec, o, m, on)
 	text:Show()
 end
 
--- Overpower's own icon (C_Spell.GetSpellTexture), else its file, asked once.
+-- The class whose spell the Overpower icon shows: the player's when it has one (a hunter's Mongoose Bite), else the warrior's Overpower.
+function P.OverpowerClass()
+	local _, class = P.Player()
+	return P.OP_SPELLS[class] and class or "WARRIOR"
+end
+
+-- The icon of that spell (C_Spell.GetSpellTexture), else its file, asked once for each class.
 function P.OverpowerIcon()
-	if P.opIcon == nil then
-		P.opIcon = P.OP_FILE
+	local class = P.OverpowerClass()
+	P.opIcons = P.opIcons or {}
+	if P.opIcons[class] == nil then
+		P.opIcons[class] = P.OP_FILES[class]
 		local spell = C_Spell
 		if type(spell) == "table" and type(spell.GetSpellTexture) == "function" then
-			local ok, icon = pcall(spell.GetSpellTexture, P.OP_SPELL)
+			local ok, icon = pcall(spell.GetSpellTexture, P.OP_SPELLS[class])
 			if ok and not ns.IsSecret(icon) and (type(icon) == "number" or (type(icon) == "string" and icon ~= "")) then
-				P.opIcon = icon
+				P.opIcons[class] = icon
 			end
 		end
 	end
-	return P.opIcon
+	return P.opIcons[class]
 end
 
 -- True while the stage of a plate holds still (test mode's Moving off: S.still), when it has a say.
@@ -1232,12 +1420,12 @@ function P.OverpowerFade(p)
 end
 
 -- The swipe pauses as the stage holds still and runs on where it stopped as it moves again; a round that ended while still starts the next one.
--- The icon's pop and fade stop as it holds still, and the fade plays again as the round nears its end after. From the Overpower frame's OnUpdate,
--- which runs only while the icon shows.
+-- The icon's pop and fade stop as it holds still, and the fade plays again as the round nears its end after; the round's end moves on by the time
+-- held, with or without a swipe. From the Overpower frame's OnUpdate, which runs only while the icon shows.
 function P.SwipeStill(p)
 	local swipe = p.opSwipe
 	local still = P.Still(p)
-	if not swipe or still == (p.opStill == true) then
+	if still == (p.opStill == true) then
 		return
 	end
 	p.opStill = still
@@ -1248,7 +1436,7 @@ function P.SwipeStill(p)
 			P.OverpowerRest(p)
 			p.opFaded = nil
 		end
-		if swipe.Pause then
+		if swipe and swipe.Pause then
 			pcall(swipe.Pause, swipe)
 		end
 		return
@@ -1257,7 +1445,7 @@ function P.SwipeStill(p)
 		p.opEnds = p.opEnds + (now - p.opHeld)
 	end
 	p.opHeld = nil
-	if swipe.Resume then
+	if swipe and swipe.Resume then
 		pcall(swipe.Resume, swipe)
 	end
 	if p.opDone then
@@ -1266,54 +1454,77 @@ function P.SwipeStill(p)
 	end
 end
 
--- The swipe drains over the window and starts again each new round of P.OP_WINDOW seconds, while Time left on the Overpower icon is on. done: the
--- last round's swipe just ended, so the next round starts even when the clock still reads the end of the last. While the stage holds still a swipe
--- that runs is not started again, so a repaint leaves it where it stopped.
+-- Rounds of P.OP_WINDOW seconds: test mode's sample (which has the pop and the fade, p.opPop) runs them on its own clock whatever Time left on the
+-- Overpower icon says, as a live icon pops and fades with that row off; setup's drawings run them only for the swipe. While Time left on the
+-- Overpower icon is on the swipe drains over each round and starts again with the next; off, it is cleared and only the swipe goes with the row.
+-- done: the last round just ended (its swipe, or the clock, P.OverpowerClock), so the next round starts even when the clock still reads the end of
+-- the last. While the stage holds still a round that runs is not started again, so a repaint leaves it where it stopped. A hidden icon has no round.
 function P.OverpowerSwipe(p, done)
 	local swipe = p.opSwipe
-	if not swipe then
-		return
-	end
-	if Get("overpowerSwipe") ~= true or not p.opFrame:IsShown() then
-		if p.opRound then
-			p.opRound = nil
+	local motion = (p.opPop or p.opFade) and true or false
+	local timed = swipe ~= nil and Get("overpowerSwipe") == true
+	if not p.opFrame:IsShown() or not (timed or motion) then
+		local swiping = p.opSwiping
+		p.opRound, p.opSwiping, p.opDone, p.opEnds, p.opFaded = nil, nil, nil, nil, nil
+		if swipe and swiping then
 			pcall(swipe.Clear, swipe)
 		end
-		p.opDone, p.opEnds, p.opFaded = nil, nil, nil
-		if p.opPop or p.opFade then
+		if motion then
 			P.OverpowerRest(p)
 		end
 		return
 	end
-	if p.opRound and P.Still(p) then
-		return
-	end
-	local now = type(GetTime) == "function" and GetTime() or 0
-	local round = now - now % P.OP_WINDOW
-	if done and p.opRound and round <= p.opRound then
-		round = p.opRound + P.OP_WINDOW
-	end
-	if p.opRound ~= round then
-		-- Test mode's sample pops as each round after the first starts, as a live icon pops as an enemy dodges.
-		local later = p.opRound ~= nil
-		p.opRound = round
-		p.opEnds, p.opFaded = round + P.OP_WINDOW, nil
-		pcall(swipe.SetCooldown, swipe, round, P.OP_WINDOW)
-		if p.opPop or p.opFade then
-			P.OverpowerRest(p)
-			if later and p.opPop and not P.Still(p) then
-				pcall(p.opPop.Play, p.opPop)
+	if not (p.opRound and P.Still(p)) then
+		local now = type(GetTime) == "function" and GetTime() or 0
+		local round = now - now % P.OP_WINDOW
+		if done and p.opRound and round <= p.opRound then
+			round = p.opRound + P.OP_WINDOW
+		end
+		if p.opRound ~= round then
+			-- Test mode's sample pops as each round after the first starts, as a live icon pops as an enemy dodges.
+			local later = p.opRound ~= nil
+			p.opRound = round
+			p.opEnds, p.opFaded, p.opSwiping = round + P.OP_WINDOW, nil, nil
+			if motion then
+				P.OverpowerRest(p)
+				if later and p.opPop and not P.Still(p) then
+					pcall(p.opPop.Play, p.opPop)
+				end
 			end
 		end
 	end
+	-- The swipe follows the row: it starts on the round as the row turns on (or the round starts), and is cleared as the row turns off.
+	if timed and not p.opSwiping and p.opRound then
+		p.opSwiping = true
+		pcall(swipe.SetCooldown, swipe, p.opRound, P.OP_WINDOW)
+		if P.Still(p) and swipe.Pause then
+			pcall(swipe.Pause, swipe)
+		end
+	elseif not timed and p.opSwiping then
+		p.opSwiping = nil
+		pcall(swipe.Clear, swipe)
+	end
 end
 
--- The Overpower icon of a sample that dodged a warrior (spec.overpower), where PlateOverpower.lua puts it: centred over the sample's auras, else over
--- the name (over the bar while the name is inside it), at Overpower icon size, in Flat UI's thin border, with its swipe.
+-- The next round once the round's end has passed while no swipe runs to end it (Time left on the Overpower icon off, or no Cooldown frame), from
+-- the Overpower frame's OnUpdate; not while the stage holds still.
+function P.OverpowerClock(p)
+	if p.opSwiping or not ns.Finite(p.opEnds) or P.Still(p) then
+		return
+	end
+	local now = type(GetTime) == "function" and GetTime() or 0
+	if now >= p.opEnds then
+		P.OverpowerSwipe(p, true)
+	end
+end
+
+-- The Overpower icon of a sample that dodged a warrior (spec.overpower; Mongoose Bite's for a hunter), where PlateOverpower.lua puts it: centred over
+-- the sample's auras, else over the name (over the bar while the name is inside it), moved by Overpower icon horizontal and vertical offset, at
+-- Overpower icon size, in Flat UI's thin border, with its swipe.
 function P.Overpower(p, spec, o, m)
 	if not (spec.overpower and o.styled and Get("overpower") == true) then
 		p.opFrame:Hide()
-		p.opT = nil
+		p.opT, p.opX = nil, nil
 		P.OverpowerSwipe(p)
 		return
 	end
@@ -1325,8 +1536,13 @@ function P.Overpower(p, spec, o, m)
 	if p.tvalue:IsShown() and p.tvalueSide == "above" and ns.Finite(p.tvalueT) then
 		top = p.tvalueT
 	end
-	P.Put(p, p.opFrame, "BOTTOM", m.BW / 2, top + P.OP_GAP, size, size)
-	p.opT = top + P.OP_GAP + size
+	-- Moved by Overpower icon horizontal and vertical offset, and an Above quest mark with it.
+	local ox, oy = Get("overpowerX"), Get("overpowerY")
+	ox, oy = ns.Finite(ox) and ox or 0, ns.Finite(oy) and oy or 0
+	P.Put(p, p.opFrame, "BOTTOM", m.BW / 2 + ox, top + P.OP_GAP + oy, size, size)
+	p.opT = top + P.OP_GAP + oy + size
+	-- An Above quest mark stands over the icon's middle, where the offset put it.
+	p.opX = m.BW / 2 + ox
 	p.op:SetTexture(P.OverpowerIcon())
 	ns.SetOutline(p.opOutline, true, false)
 	p.opFrame:SetFrameLevel(p.f:GetFrameLevel() + 10)
@@ -1603,6 +1819,8 @@ function P.Plate(p, spec, sets)
 	end
 	P.LeftEnd(p, spec, o, m)
 	P.Rarity(p, spec, o, m)
+	-- The row of combo points before the threat value, which hangs under it at Below.
+	P.Combo(p, spec, o, m)
 	P.Threat(p, spec, o, m)
 	-- The Overpower icon before the quest mark, which stands over it at Above.
 	P.Overpower(p, spec, o, m)
@@ -1868,8 +2086,28 @@ function P.Cells(kind)
 				{ id = "elite", label = "Elite", col = 2, spec = Enemy({ name = names.elite, level = 20, kind = "elite" }) },
 				{ id = "rare", label = "Rare", col = 2, spec = Enemy({ name = "Old Blanchy", level = 20, kind = "rare" }) },
 				{ id = "boss", label = "Boss", col = 2, spec = Enemy({ name = "Edwin VanCleef", level = 20, kind = "boss" }) },
-				-- A warrior's Overpower over an enemy that dodged them.
-				{ id = "overpower", label = "Overpower", col = 2, show = class == "WARRIOR", spec = Enemy({ overpower = true }) },
+				-- A warrior's Overpower, or a hunter's Mongoose Bite, over an enemy that dodged them.
+				{ id = "overpower", label = P.OP_NAMES[class] or P.OP_NAMES.WARRIOR, col = 2, show = P.OP_SPELLS[class] ~= nil,
+					spec = Enemy({ overpower = true }) },
+				-- A rogue's or a druid's combo points under their target, 3 of 5, below the room the game keeps for the cast bar.
+				{ id = "combo", label = "Combo points", col = 2, show = class == "ROGUE" or class == "DRUID",
+					spec = Enemy({ target = true, combo = 3, reserve = true }) },
+			}
+		elseif kind == "threat" then
+			-- Setup's colours and threat: an enemy, an enemy player, the mouseover and low health as the plate drawing has them, and with Threat on
+			-- nameplates the threat rows on a sample of each state, as test mode's sample takes them in turn: threat you want (faded), changing hands
+			-- (faded by its own opacity), threat you do not want (with the ring, which flashes as the drawing opens), and your target changing hands,
+			-- which never fades, takes Colour the target's health bar and shows the name of the enemy's target with Only on your target too.
+			local threat = Get("threat") == true
+			return {
+				{ id = "enemy", label = "Enemy", col = 1, spec = Enemy() },
+				{ id = "player", label = "Enemy player", col = 1, spec = Enemy({ name = names.player, player = true }) },
+				{ id = "hover", label = "Mouseover", col = 1, show = Get("hover") == true, spec = Enemy({ hover = true }) },
+				{ id = "low", label = "Low health", col = 1, show = Get("lowHealth") == true, spec = Enemy({ health = 0.18 }) },
+				{ id = "good", label = "You want", col = 2, show = threat, spec = Enemy({ threat = "threatGood" }) },
+				{ id = "changing", label = "Changing hands", col = 2, show = threat, spec = Enemy({ threat = "threatTransition" }) },
+				{ id = "bad", label = "You do not want", col = 2, show = threat, spec = Enemy({ threat = "threatBad" }) },
+				{ id = "target", label = threat and "Your target" or "Target", col = 2, spec = Enemy({ target = true, threat = "threatTransition" }) },
 			}
 		elseif kind == "walk" then
 			-- Flat UI setup's nameplate stop: an enemy casting with auras on it, and one at low health.
@@ -1940,7 +2178,7 @@ end
 -- The parts of a stage: the region each saved path changes.
 function P.Parts(S)
 	local plates = S.plates
-	local main = plates.enemy or plates.cast or plates.auras or plates.target
+	local main = plates.enemy or plates.cast or plates.auras or plates.target or plates.changing
 	local parts = {}
 	if not main then
 		S.parts = parts
@@ -1994,9 +2232,30 @@ function P.Parts(S)
 	Set({ "raidMarker", "raidMarkerSize", "raidMarkerX", "raidMarkerY" }, (plates.marked or plate).marker)
 	Set({ "questMark", "questMarkSize", "questMarkPlace", "questMarkX", "questMarkY" }, (Live("quest") or plate).quest)
 	Set({ "questMarkCount" }, (Live("quest") or plate).questCount)
-	-- Only a warrior's drawing has the Overpower plate; for anyone else the rows mark nothing.
+	-- Only a warrior's and a hunter's drawing has the Overpower plate, and a rogue's and a druid's the combo points; for anyone else the rows mark
+	-- nothing.
 	local overpower = Live("overpower")
-	Set({ "overpower", "overpowerSize", "overpowerSwipe" }, overpower and overpower.opFrame or nil)
+	Set({ "overpower", "overpowerSize", "overpowerX", "overpowerY", "overpowerSwipe" }, overpower and overpower.opFrame or nil)
+	local combo = Live("combo")
+	Set({ "comboPoints", "comboColour" }, combo and combo.combo or nil)
+	-- The threat drawing: each threat row on the sample it changes.
+	local good, changing, bad = Live("good"), Live("changing"), Live("bad")
+	if good and changing and bad then
+		local target = Live("target") or changing
+		Set({ "threatGood" }, good.bar)
+		Set({ "threatTransition" }, changing.bar)
+		Set({ "threatBad" }, bad.bar)
+		Set({ "threatGlow", "threatFlash", "threatRingPx" }, bad.ring:IsShown() and bad.ring or bad.bar)
+		Set({ "threatBar", "threatBorder", "threatBackground" }, bad.bar)
+		Set({ "threatName" }, bad.name)
+		Set({ "threatHealthText" }, bad.htext)
+		Set({ "threatValue", "threatValueColour", "threatValueCustom", "threatValueSize", "threatValuePlace", "threatValueX", "threatValueY",
+			"threatValueOutline" }, changing.tvalue:IsShown() and changing.tvalue or changing.bar)
+		Set({ "aggroTarget", "aggroTargetOnly" }, target.ttarget:IsShown() and target.ttarget or target.bar)
+		Set({ "aggroTargetNotMe" }, bad.ttarget:IsShown() and bad.ttarget or bad.bar)
+		Set({ "threatFade", "threatFadeAlpha" }, good.f)
+		Set({ "threatFadeChanging" }, changing.f)
+	end
 	Set({ "overlapH", "overlapV", "selectedScale" }, (Live("target") or plate).f)
 	Set({ "minScale", "minAlpha" }, (plates.far or plate).f)
 	Set({ "notSelectedAlpha" }, (plates.near or plate).f)
@@ -2035,6 +2294,7 @@ ns.SetupDrawings["mock-nameplate"] = Drawing("plate")
 ns.SetupDrawings["mock-nameplate-cast"] = Drawing("cast")
 ns.SetupDrawings["mock-nameplate-auras"] = Drawing("auras")
 ns.SetupDrawings["mock-nameplate-marks"] = Drawing("marks")
+ns.SetupDrawings["mock-nameplate-threat"] = Drawing("threat")
 ns.SetupDrawings["mock-nameplate-stack"] = Drawing("stack", P.Stack)
 ns.SetupDrawings["mock-nameplate-walk"] = Drawing("walk", nil, P.WalkCanvas)
 ns.SetupDrawPlates = P
