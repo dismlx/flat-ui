@@ -4,7 +4,8 @@ local _, ns = ...
 -- bar and a background behind it. Both go, and a backdrop and thin edges replace them.
 -- Every Apply below puts Blizzard's art back when its bar is turned off.
 -- The fills are flat too: a solid fill on swing timers and resource bars, and on cast bars a
--- texture laid over the game's fill. The chosen bar texture is an image file in place of the solid colour.
+-- texture laid over the game's fill. The chosen bar texture is an image file in place of the solid colour. While Heroic Strike, Cleave, Maul
+-- or Raptor Strike waits for the next swing, a texture of the addon's own lays Queued ability colour over the main hand timer's fill (Q, below).
 -- The names and numbers on the bars are sized and hidden with the font and the alpha of their font strings.
 
 local BAR_BACKGROUND = "UI-HUD-CoolDownManager-Bar-BG"
@@ -611,6 +612,169 @@ local function ApplyAutoShot(timer, option)
 	band:Show()
 end
 
+-- Next melee ability: while Heroic Strike, Cleave, Maul or Raptor Strike waits for the next swing (C_Spell.IsCurrentSpell, true "if the spell is
+-- currently being cast or is queued to be cast", SpellDocumentation.lua:741-754, asked by name, C_Spell.GetSpellName of each first rank, so every
+-- rank counts, as CombatText.lua's next swing finds them), the fill of the main hand timer takes Queued ability colour while Queued next melee
+-- ability is on (by default) and the player is a warrior, druid or hunter. It is a texture of the addon's own on the timer's bar over the fill
+-- (ARTWORK 6, under the Auto Shot band's 7 and the pip and labels), anchored to the fill region once, out of a fight on a bar the game may protect,
+-- as the cast cover is, and painted with the swing texture (else the Flat UI page's, or white) in that colour; in a fight only its Show, Hide,
+-- texture and colour change. A frame of its own hears CURRENT_SPELL_CAST_CHANGED (SpellBookDocumentation.lua:841), ACTIONBAR_UPDATE_STATE,
+-- PLAYER_SWING and PLAYER_REGEN_ENABLED only while the row is on for such a class, and looks on the next frame, after the game has taken the
+-- event: the colour comes as the ability is queued and goes as the swing lands. Nothing of the game is written or called but CreateTexture.
+local Q = {}
+do
+	local SPELLS = { 78, 845, 6807, 2973 }
+	local CLASSES = { WARRIOR = true, DRUID = true, HUNTER = true }
+	local EVENTS = { "CURRENT_SPELL_CAST_CHANGED", "ACTIONBAR_UPDATE_STATE", "PLAYER_SWING", "PLAYER_REGEN_ENABLED" }
+	-- frame and hearing: the frame of its own and whether it hears; pending: a look waits for the next frame; names: the plain names of the four
+	-- spells, kept once all four answer; covers[timer]: { tex, region (the fill it hangs on), key (its look) }, false when it could not be made.
+	local state = { frame = nil, hearing = false, pending = false, names = nil, covers = setmetatable({}, { __mode = "k" }) }
+
+	function Q.Wanted()
+		if not (ns.Enabled("swing") and ns.Get("swing.queued") == true) or type(UnitClassBase) ~= "function" then
+			return false
+		end
+		local ok, class = pcall(UnitClassBase, "player")
+		return ok and not ns.IsSecret(class) and type(class) == "string" and CLASSES[class] == true
+	end
+
+	local function Names()
+		if state.names then
+			return state.names
+		end
+		if type(C_Spell) ~= "table" or type(C_Spell.GetSpellName) ~= "function" then
+			return nil
+		end
+		local names = {}
+		for _, id in ipairs(SPELLS) do
+			local ok, name = pcall(C_Spell.GetSpellName, id)
+			if ok and not ns.IsSecret(name) and type(name) == "string" and name ~= "" then
+				names[#names + 1] = name
+			end
+		end
+		if #names == #SPELLS then
+			state.names = names
+		end
+		return names
+	end
+
+	-- True while one of the four waits for the swing: a plain true, never a withheld answer.
+	local function Waiting()
+		local ask = type(C_Spell) == "table" and C_Spell.IsCurrentSpell or nil
+		local names = Names()
+		if type(ask) ~= "function" or not names then
+			return false
+		end
+		for _, name in ipairs(names) do
+			local ok, current = pcall(ask, name)
+			if ok and not ns.IsSecret(current) and current == true then
+				return true
+			end
+		end
+		return false
+	end
+
+	-- The texture of a timer, made and hung on its fill out of a fight; while the bar may be protected in a fight, the one it has (or none).
+	local function Cover(timer)
+		local cover = state.covers[timer]
+		if cover == false then
+			return nil
+		end
+		local bar = timer.StatusBar
+		local fill = bar ~= nil and not ns.Forbidden(bar) and ns.FillRegion(bar) or nil
+		if not fill or (cover and cover.region == fill) or (InCombatLockdown() and ns.MaybeProtected(bar)) then
+			return cover
+		end
+		if not cover then
+			state.covers[timer] = false
+			local tex = bar:CreateTexture(nil, "ARTWORK", nil, 6)
+			ns.Own[tex] = true
+			tex:Hide()
+			cover = { tex = tex }
+		end
+		cover.tex:ClearAllPoints()
+		cover.tex:SetPoint("TOPLEFT", fill, "TOPLEFT", 0, 0)
+		cover.tex:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", 0, 0)
+		cover.region = fill
+		state.covers[timer] = cover
+		return cover
+	end
+
+	local function Paint(cover)
+		local file = TextureOf("swing.texture")
+		if file == nil then
+			file = ns.BarTexture()
+		end
+		local r, g, b = ns.Colour("swing.queuedColour")
+		local key = ("%s|%s|%s|%s"):format(tostring(file), r, g, b)
+		if cover.key ~= key then
+			if file then
+				cover.tex:SetTexture(file)
+			else
+				cover.tex:SetColorTexture(1, 1, 1, 1)
+			end
+			cover.tex:SetVertexColor(r, g, b, 1)
+			cover.key = key
+		end
+	end
+
+	-- The main hand timer in Queued ability colour while one waits, its own fill otherwise; the other timers have none.
+	function Q.Apply(timer, option)
+		if option ~= "main" then
+			return
+		end
+		local cover = state.covers[timer]
+		if not Q.Wanted() then
+			if cover then
+				cover.tex:Hide()
+			end
+			return
+		end
+		cover = Cover(timer)
+		if cover then
+			Paint(cover)
+			cover.tex:SetShown(Waiting())
+		end
+	end
+
+	local function Look()
+		state.pending = false
+		local timer = _G.SwingTimerMainHandFrame
+		if timer ~= nil and not ns.IsSecret(timer) and not ns.Forbidden(timer) then
+			ns.Each("swing", Q.Apply, timer, "main")
+		end
+	end
+
+	local function Heard()
+		if state.pending then
+			return
+		end
+		state.pending = true
+		if C_Timer and C_Timer.After then
+			C_Timer.After(0, Look)
+		else
+			Look()
+		end
+	end
+
+	function Q.Hear(on)
+		if on == state.hearing then
+			return
+		end
+		if on and not state.frame then
+			state.frame = CreateFrame("Frame")
+			ns.Own[state.frame] = true
+			state.frame:SetScript("OnEvent", Heard)
+		end
+		if state.frame then
+			for _, event in ipairs(EVENTS) do
+				pcall(on and state.frame.RegisterEvent or state.frame.UnregisterEvent, state.frame, event)
+			end
+		end
+		state.hearing = on
+	end
+end
+
 -- After the game starts, ends or lays out a timer, and sets its range look: what it did is looked at again.
 local function SwingLooks(timer)
 	ns.Each("swing", ApplySwingTimer, timer, swingOption[timer] or "main")
@@ -673,8 +837,10 @@ local function RefreshSwing()
 			ns.Each("swing", ApplySwingReverse, timer)
 			ns.Each("swing", ApplySwingIdle, timer)
 			ns.Each("swing", ApplyAutoShot, timer, entry[2])
+			ns.Each("swing", Q.Apply, timer, entry[2])
 		end
 	end
+	Q.Hear(Q.Wanted())
 	-- The game starts, ends and lays out a swing, and sets its range look, with no call that is followed: events, and a look every frame while one is needed.
 	WatchGame("swing")
 end
@@ -1522,6 +1688,43 @@ local function Kick(bar, record, state)
 	return ns.InterruptReady(unit)
 end
 
+-- Finish flash: the game's glow as a cast or channel ends, the Flash of the bar (ADD-blended, CastingBarFrame.xml:306-311), which the game gives the
+-- glow of the bar's kind and shows at every finish and stop (Shared/CastingBarFrame.lua:467-472, 585-590). The game sets only its atlas, alpha and
+-- shown state, never its colour, so a tint set here holds through its animations. In the cast colour (the default): desaturated and tinted the
+-- colour of the cover, so the flash matches the flat fill; for a state the game withholds, tinted from the same answer as the cover
+-- (SetVertexColorFromBoolean). Off: black, which adds nothing. The game's: white and not desaturated, as the game draws it, which is also what
+-- it gets back when the cover goes. The texture is called only when the tint changes (record.flashTint), but for a withheld state.
+local function SetFlash(bar, record, tint, r, g, b, shield, otherwise)
+	if tint ~= "withheld" and record.flashTint == tint then
+		return
+	end
+	local flash = BarPart(bar, "Flash")
+	if flash then
+		pcall(flash.SetDesaturated, flash, tint ~= nil and tint ~= "off")
+		if tint == "withheld" then
+			pcall(flash.SetVertexColorFromBoolean, flash, shield, ColourObject(record, "shield"), ColourObject(record, otherwise))
+		elseif tint == nil then
+			pcall(flash.SetVertexColor, flash, 1, 1, 1)
+		else
+			pcall(flash.SetVertexColor, flash, r, g, b)
+		end
+	end
+	record.flashTint = tint
+end
+
+local function PaintFlash(bar, record, state, r, g, b, shield, otherwise)
+	local rule = ns.Get("castbars.flash")
+	if rule == "off" then
+		SetFlash(bar, record, "off", 0, 0, 0)
+	elseif rule ~= "cast" then
+		SetFlash(bar, record, nil)
+	elseif state == "withheld" then
+		SetFlash(bar, record, "withheld", nil, nil, nil, shield, otherwise)
+	else
+		SetFlash(bar, record, ("%s,%s,%s"):format(r, g, b), r, g, b)
+	end
+end
+
 -- Colours the cover for the state of the cast. The texture is called only when the state or its
 -- colour changed.
 local function PaintCast(bar, record)
@@ -1551,6 +1754,7 @@ local function PaintCast(bar, record)
 		record.state, record.hex = state, nil
 		-- The border keeps the Flat UI colour: the colour of the cast is not known.
 		PaintBorder(bar, nil)
+		PaintFlash(bar, record, state, nil, nil, nil, shield, otherwise)
 	else
 		local r, g, b, hex = CastColour(record, state)
 		if record.state ~= state or record.hex ~= hex then
@@ -1562,6 +1766,7 @@ local function PaintCast(bar, record)
 		else
 			PaintBorder(bar, nil)
 		end
+		PaintFlash(bar, record, state, r, g, b)
 	end
 	if not record.shown then
 		cover:Show()
@@ -1650,6 +1855,10 @@ function ns.CastFill(key, bar, on)
 		record.shown, record.state = false, nil
 		PaintBorder(bar, nil)
 		HideMarks(record)
+	end
+	if not on and record.flashTint ~= nil and not forbidden then
+		-- The game's own flash again.
+		SetFlash(bar, record, nil)
 	end
 	if changed then
 		Watch()
