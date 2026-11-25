@@ -3,7 +3,9 @@ local _, ns = ...
 -- Pet target frame (off by default, Pet frame page): a small frame of Flat UI's own for what the pet attacks, the unit pettarget, which the game has
 -- no frame for (Blizzard_UnitFrame has frames for the target of the target and of the focus, none for pettarget). It is a secure button of the
 -- addon's own (SecureActionButtonTemplate) with no global name: a left click targets the unit (type1 target and unit pettarget, which the template
--- reads, Blizzard_FrameXML/SecureTemplates.lua:201-212 and 506-519, as SecureUnitButton_OnLoad sets up the game's own unit frames, :828-839). It
+-- reads, Blizzard_FrameXML/SecureTemplates.lua:201-212 and 506-519, as SecureUnitButton_OnLoad sets up the game's own unit frames, :828-839), and a
+-- Shift-click sets it as your focus (shift-type1 focus, which the template finds before type1, SecureButton_GetModifiedAttribute :119-127, and whose
+-- action calls FocusUnit, :521-524), so a hunter can focus the sheep the pet broke without targeting it first, in a fight too. It
 -- takes the release of the mouse button (RegisterForClicks AnyUp) with useOnKeyDown false, as the secure buttons of Reload.lua do: the game gives an
 -- addon's button no isKeyPress or isSecureAction (SecureTemplates.xml:6-8), so while ActionButtonUseKeyDown is on, as it is by default, the button
 -- would act on the press, which it does not hear, and the release would do nothing (SecureTemplates.lua:792-826). The game shows it only while
@@ -11,7 +13,8 @@ local _, ns = ...
 -- seconds and at once again when a pet or a target changes (Blizzard_RestrictedAddOnEnvironment/SecureStateDriver.lua:38-44, 56-63, 73-90, 119-139,
 -- 166-170, 182-196), so no code of Flat UI's shows or hides it while it is watched. A secure button is protected, and setting or taking away the
 -- watch writes an attribute of the game's protected state driver (:38-49, 178): the button is made, sized, placed and given attributes, and watched
--- or no longer watched, only out of combat, and a change asked for in a fight, a login in one included, waits for its end (ns.OutOfCombat). Off, the
+-- or no longer watched, only out of combat, and a change asked for in a fight, a login in one included, waits for its end (ns.OutOfCombat); while the
+-- options window is open, chat says once a fight that the frame changes when the fight ends (the row turned on or off, a new width). Off, the
 -- watch is taken away (UnregisterUnitWatch, :47-49) and the button hidden, out of combat.
 -- A right click opens the unit's menu (type2 togglemenu, which the game's secure code opens, SecureTemplates.lua:269-321, so Set Focus in it works): the
 -- target menu, with Set Focus and the raid markers, while the unit is also your target, a player's menu for a player, and none for another creature,
@@ -27,7 +30,9 @@ local _, ns = ...
 -- took it), drawn again on RAID_TARGET_UPDATE. While the mouse is over the button and Highlight under the mouse is on, a white layer of its own over
 -- the bar brightens it by the amount the unit frames use (UnitFrameLooks.lua, X.hoverAlpha), in the shape of the corners; the button is the addon's
 -- own, so its OnEnter and OnLeave show and hide it. The name takes the face, size and outline of the name rows and the percent the face, outline and
--- colour of the bar text rows of the Unit frames page (UnitText.lua, X.ownSpec).
+-- colour of the bar text rows of the Unit frames page (UnitText.lua, X.ownSpec), both at Small frame text size as on the pet frame beside it, and the
+-- percent at 85% with no outline (unless Bar text outline gives one) under Smaller, lighter bar text, as on the game's small frames (UnitFrames.lua
+-- ApplyText); a change of those rows paints them again at once.
 -- Border while it is not your target (on by default): a frame of its own over the bar, with edges of its own just outside the frame (and the rounded
 -- line of Corners in their place while the corners are rounded) in Not your target colour (amber), shows while the pet's target is not your target,
 -- you having none included, and hides once you are both on the same unit, also in a fight: the answer of UnitIsUnit(pettarget, target), which the game
@@ -77,6 +82,8 @@ local MARKER = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local LINE_BROKEN = "Unit frames: Pet target frame: the game did not make the frame, so it does not show until /reload."
 local LINE_NO_WATCH = "Unit frames: Pet target frame: this client has no unit watch, so the frame does not show."
 local LINE_WAITS = "Unit frames: Pet target frame: a change waits for the end of the fight."
+-- What chat says, once a fight and only while the options window is open, when a change to the frame waits for the end of the fight (Tell).
+local TELL_WAITS = "Flat UI: the pet target frame changes when the fight ends."
 -- The grey of a dead unit's bar, the hostile colour of the sample while the Colours page has no reaction colours of its own (the game's, UnitSelectionColor),
 -- and the sample of test mode: its name and how full its bar is, in percent.
 local GREY = 0.5
@@ -466,6 +473,8 @@ local function Make()
 		-- The game runs a click on the key press by default (ActionButtonUseKeyDown); the button listens for the release.
 		button:SetAttribute("useOnKeyDown", false)
 		button:SetAttribute("type1", "target")
+		-- Shift-click sets the unit as your focus (SECURE_ACTIONS.focus, SecureTemplates.lua:521-524), in a fight too.
+		button:SetAttribute("shift-type1", "focus")
 		button:SetAttribute("type2", "togglemenu")
 		button:SetAttribute("unit", UNIT)
 		Children(button, P)
@@ -558,8 +567,16 @@ local function Paint(t)
 	end
 	PaintWarn(t)
 	if type(X.ownSpec) == "function" then
-		ns.TextStyle(t.name, X.ownSpec("name", { percent = 100 }))
-		ns.TextStyle(t.pct, X.ownSpec("bar", { percent = 100 }))
+		-- Small frame text size, as the pet frame beside it has it (UnitFrames.lua ApplyText and ApplyNameSize), and the percent at 85% with no outline
+		-- under Smaller, lighter bar text, unless Bar text outline gives one.
+		local size = tonumber(Opt("smallTextSize")) or 100
+		local light = Opt("lookLightText") == true
+		ns.TextStyle(t.name, X.ownSpec("name", { percent = size }))
+		local bar = X.ownSpec("bar", { percent = light and size * 0.85 or size })
+		if light and bar.flags == nil then
+			bar.flags = ""
+		end
+		ns.TextStyle(t.pct, bar)
 	end
 	return resized
 end
@@ -613,6 +630,22 @@ end
 
 local Off
 
+-- While the options window is open, chat says once a fight that a change to the frame waits for its end, as Hide.lua and /flatui move say theirs, so
+-- a row turned on or a new width in a fight does not look broken. A refresh in a fight with the window closed (zoning, a change of the group) stays
+-- silent. The flag goes once the fight is over.
+local told = false
+
+local function Tell()
+	if told or type(ns.PanelShown) ~= "function" or ns.PanelShown() ~= true then
+		return
+	end
+	told = true
+	print(TELL_WAITS)
+	ns.OutOfCombat(function()
+		told = false
+	end)
+end
+
 -- A change asked for in a fight waits for its end, once. A module that stopped in the fight runs nothing more, so its button is put away then.
 local function Later()
 	if P.later then
@@ -639,6 +672,7 @@ function Off()
 		return
 	end
 	if Fighting() then
+		Tell()
 		Later()
 		return
 	end
@@ -656,6 +690,10 @@ function P.Update()
 		return
 	end
 	if Fighting() then
+		-- Said only when the frame itself would change: made and watched for a row turned on, or a new width.
+		if not P.button or not P.watched or P.width ~= Width() then
+			Tell()
+		end
 		Later()
 		return
 	end

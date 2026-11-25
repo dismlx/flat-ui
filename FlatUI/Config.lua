@@ -1912,7 +1912,7 @@ ns.PAGES = {
 		{ key = "petPowerBar", kind = "bool", default = true, label = "Power bar" },
 		-- UnitPetTarget.lua: a secure button of Flat UI's own for the pet's target, which the game shows while there is one. Off by default.
 		{ key = "petTarget", kind = "bool", default = false, label = "Pet target frame",
-			tip = "A small frame for what your pet attacks, with its health and name. A click targets it. /flatui move places it." },
+			tip = "A small frame for what your pet attacks, with its health and name. A click targets it, Shift-click sets it as your focus. /flatui move places it." },
 		{ key = "petTargetWidth", kind = "number", default = 120, min = 60, max = 240, step = 10, unit = " px", label = "Pet target width", tip = "Changed out of combat.",
 			needs = "petTarget" },
 		{ key = "petTargetWarn", kind = "bool", default = true, label = "Border while it is not your target", needs = "petTarget",
@@ -2053,7 +2053,7 @@ ns.PAGES = {
 		{ key = "healthTextSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Health text size", tip = "100% is the game's own size." },
 		{ key = "powerTextSize", kind = "number", default = 85, min = 50, max = 200, step = 5, unit = "%", label = "Power text size", tip = "100% is the game's own size." },
 		{ key = "smallTextSize", kind = "number", default = 70, min = 50, max = 200, step = 5, unit = "%", label = "Small frame text size",
-			tip = "Names and bar text on the pet, target of target, focus target, party and party pet frames. 100% is the game's own size." },
+			tip = "Names and bar text on the pet, target of target, focus target, party and party pet frames, and the pet target frame. 100% is the game's own size." },
 		{ key = "barTextFace", kind = "choice", default = "default", label = "Bar text font", tip = "Also the status text on raid frames, with Bar text outline.", choices = ns.FONT_CHOICES },
 		{ key = "barTextOutline", kind = "choice", default = "game", label = "Bar text outline", tip = "Replaces the outline that Smaller, lighter bar text removes.", choices = ns.OUTLINE_CHOICES },
 		{ key = "barTextColourOwn", kind = "bool", default = false, label = "Own bar text colour" },
@@ -2104,8 +2104,9 @@ ns.PAGES = {
 		{ key = "totemTimer", kind = "bool", default = true, label = "Totem time left" },
 		{ key = "totemSwipe", kind = "bool", default = true, label = "Totem cooldown swipe" },
 		{ key = "totemTimeSize", kind = "number", default = 80, min = 50, max = 200, step = 5, unit = "%", label = "Totem time size", needs = "totemTimer" },
-		-- UnitGroupMarks.lua: the colour and the type of a debuff you can dispel, the raid marker of a raid or party frame, the leader and assistant icons of
-		-- a raid frame and the outline of your target on a party frame. UnitFrames.lua: the border of your target on a raid frame.
+		-- UnitGroupMarks.lua: the colour and the type of a debuff you can dispel, the raid marker of a raid or party frame, the resurrection icon of a party
+		-- frame, the leader and assistant icons of a raid frame and the outline of your target on a party frame. UnitFrames.lua: the border of
+		-- your target on a raid frame.
 		{ section = "Party and raid frames" },
 		{ key = "dispelBorder", kind = "bool", default = true, label = "Border colour of a debuff you can dispel",
 			tip = "The border of the health bar takes the colour of Magic, Curse, Disease or Poison while the member has a debuff of that type you can dispel." },
@@ -2121,6 +2122,8 @@ ns.PAGES = {
 			tip = "The border and its type icon blink three times as a party or raid member gets a debuff you can dispel, also in a fight." },
 		{ key = "raidFrameMarker", kind = "bool", default = true, label = "Raid marker on raid frames", tip = "The game's raid frames show none." },
 		{ key = "partyFrameMarker", kind = "bool", default = true, label = "Raid marker on party frames", tip = "The game's party frames show none." },
+		{ key = "partyRezIcon", kind = "bool", default = true, label = "Resurrection icon on party frames",
+			tip = "On the portrait of a dead member while someone resurrects them, also in a fight, so two healers do not resurrect the same one. The game's party frames show a summon already, and its raid frames both." },
 		{ key = "raidLeaderIcon", kind = "bool", default = true, label = "Leader and assistant icons on raid frames", tip = "The game's raid frames show none." },
 		{ key = "targetBorder", kind = "choice", default = "game", label = "Border for your target",
 			tip = "On raid frames, the border of your target. With Own colour the game's party frames get one too.",
@@ -2128,8 +2131,9 @@ ns.PAGES = {
 		{ key = "targetColour", kind = "colour", default = "ffffffff", label = "Target border colour", needs = "targetBorder", needsIn = { "own" } },
 		-- UnitHots.lua: a square of its own colour for each heal over time of yours on a party or raid member.
 		{ key = "hotSquares", kind = "bool", default = false, label = "Squares for your heals over time",
-			tip = "A small square in a corner of a party or raid member's health bar for each heal over time of yours on them, such as Renew, Rejuvenation, Regrowth, Prayer of Mending, Power Word: Shield or Earth Shield, each in its own colour. In a fight, where the game hides which aura is which, a square read before stays until one of your buffs on the member ends, and a new one waits for the end of the fight." },
-		{ key = "hotCorner", kind = "choice", default = "tr", label = "Square corner", needs = "hotSquares", tip = "The corner of the health bar the squares sit in.",
+			tip = "A small square in a corner of a party or raid member's health bar for each heal over time of yours on them, such as Renew, Rejuvenation, Regrowth, Prayer of Mending, Power Word: Shield, Earth Shield or Sacred Shield, each in its own colour. In a fight, where the game hides which aura is which, a square read before the pull stays while the member has at least as many of your buffs as then, and a new one waits for the end of the fight." },
+		{ key = "hotCorner", kind = "choice", default = "tr", label = "Square corner", needs = "hotSquares",
+			tip = "The corner of the health bar the squares sit in. On party frames a right-hand corner starts them just left of the debuff type icon.",
 			choices = { { "tl", "Top left" }, { "tr", "Top right" }, { "bl", "Bottom left" }, { "br", "Bottom right" } } },
 		{ key = "hotSize", kind = "number", default = 6, min = 4, max = 14, step = 1, label = "Square size", needs = "hotSquares", tip = "The side of each square." },
 	},

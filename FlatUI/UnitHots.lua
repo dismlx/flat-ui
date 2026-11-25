@@ -7,16 +7,20 @@ local _, ns = ...
 --
 -- The heals over time are those of the player's class on Forever, each found by the name the client gives one of its spells, so every rank counts:
 -- Renew (139), Power Word: Shield (17) and the rune Prayer of Mending (401859) for a priest; Rejuvenation (774), Regrowth (8936), and the runes
--- Lifebloom (408124) and Wild Growth (408120) for a druid; the runes Riptide (408521) and Earth Shield (408514) for a shaman. The shields count as the
--- buffs of the player's that healers watch on a tank, and Prayer of Mending's square moves with the bounce, since the aura stays the caster's. At most
--- four for a class, the squares the drawings of the setup and test mode make (SetupDrawUnits.lua MakeMarks). Every rank of Rejuvenation and Regrowth
--- is in ProcData.lua, which is read from the DB2 tables of build 1.60.1; Renew's ranks, Lifebloom, Wild Growth and Riptide are in the client's
--- SkillLineAbility table (Holy 56, the druid runes 573, Restoration 374), Power Word: Shield's ranks and Earth Shield in CooldownData.lua, and Power
--- Word: Shield and Prayer of Mending in tools/dev/spelltips/client_spells.json (build 70938). A spell the client does not name (C_Spell.GetSpellName
+-- Lifebloom (408124) and Wild Growth (408120) for a druid; the runes Riptide (408521) and Earth Shield (408514) for a shaman; the rune Sacred Shield
+-- (412019) for a paladin, whose aura is found by its name whichever of its IDs it carries (412019 or 412018, CooldownData.lua). The shields count as
+-- the buffs of the player's that healers watch on a tank, and Prayer of Mending's square moves with the bounce, since the aura stays the caster's. At
+-- most four for a class, the squares the drawings of the setup and test mode make (SetupDrawUnits.lua MakeMarks). Every rank of Rejuvenation and
+-- Regrowth is in ProcData.lua, which is read from the DB2 tables of build 1.60.1; Renew's ranks, Lifebloom, Wild Growth and Riptide are in the
+-- client's SkillLineAbility table (Holy 56, the druid runes 573, Restoration 374), Power Word: Shield's ranks, Earth Shield and Sacred Shield in
+-- CooldownData.lua, Sacred Shield also in ClassData.lua (SpellName_1.60.1.70245.csv), and Power Word: Shield and Prayer of Mending in
+-- tools/dev/spelltips/client_spells.json (build 70938). A spell the client does not name (C_Spell.GetSpellName
 -- gives nil for one it does not have, SpellDocumentation.lua:518-533) has no square, so each is checked in the game.
 -- A class without one, or a client that does not read auras by slot, makes nothing. Each heal over time has a place of its own in a row from the
 -- corner (Square corner), so a square never moves while the others come and go; Square size is its side in units, with a dark rim of one screen pixel,
--- and the row sits just inside the dispel border of UnitGroupMarks.lua (2 screen pixels inside the health bar).
+-- and the row sits just inside the dispel border of UnitGroupMarks.lua (2 screen pixels inside the health bar). On a party frame with Debuff type icon
+-- on party frames and Top right or Bottom right, the row starts just left of the spot of the type icon at the right end of the bar, so the two show
+-- side by side; raid frames, where the game draws its own type icons, keep the corner.
 --
 -- What shows is read only from the auras the game lets addons read. C_UnitAuras.GetAuraSlots(unit, "HELPFUL|PLAYER") gives the slots of the buffs
 -- the player (or the player's pet) cast on the member (AuraUtil.lua:272-274) and carries no secret predicate (UnitAuraDocumentation.lua:304-322);
@@ -25,14 +29,17 @@ local _, ns = ...
 -- aura, or one whose spell ID is withheld, is never read further; the member is read again when the fight or the restriction ends
 -- (PLAYER_REGEN_ENABLED, and ADDON_RESTRICTION_STATE_CHANGED with Inactive, RestrictedActionsDocumentation.lua:96-107), as UnitGroupMarks.lua reads
 -- its debuffs again. The number of slots GetAuraSlots gives is a plain answer too, so in a fight, where the game hides which aura is which, the squares
--- of the last plain read stay while the member has at least as many auras of yours as then: a Sunder, a debuff or another healer's buff changes
--- nothing. When the number drops one of yours ended, and as the game does not say which, the squares it hides go and only those read plainly now
--- stay; a new heal over time cast in the fight waits for its end. Each frame
+-- of the last plain read stay while the member has at least as many auras of yours as at that read: a Sunder, a debuff or another healer's buff
+-- changes nothing, and nor does a buff of yours that comes and goes in the fight (Inspiration, a bounce of Prayer of Mending, a Lifebloom), since
+-- the count to hold is never raised in the fight. When the number drops below it one of yours ended, and as the game does not say which, the
+-- squares it hides go and only those read plainly now stay, the new number the count to hold; a new heal over time cast in the fight waits for its
+-- end. Each frame
 -- hears UNIT_AURA for its own unit on a frame of the addon's own (RegisterUnitEvent), whose payload is never read; a burst is read once, a moment
 -- after the first. A frame the game hid hears nothing until the game draws it again, through the same calls UnitGroupMarks.lua follows.
 --
 -- The squares are textures of the addon's own on a frame of its own over the health bar, made and placed out of combat on a frame the game protects;
--- in a fight only whether each shows changes. A new Square corner or Square size waits for the end of a fight. Nothing of the game's is changed.
+-- in a fight only whether each shows changes. A new Square corner or Square size, or Debuff type icon on party frames turned on or off, waits for
+-- the end of a fight, and while the options window is open chat says so once a fight (Tell). Nothing of the game's is changed.
 -- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLUnitFrames/UF_GroupFrames_HealerBuffs.lua:250-253, 260,
 -- 270, its heal over time families of Renew, Rejuvenation, Regrowth, Lifebloom, Wild Growth and Riptide; :1923-1949, a heal over time counts only when
 -- it is the player's (HELPFUL|PLAYER) and a withheld spell ID counts for none; :2324-2339, its Square style, a white texture in the colour of each):
@@ -55,6 +62,7 @@ local HOTS = {
 	DRUID = { { id = 774, colour = { 0.75, 0.3, 1 }, word = "purple" }, { id = 8936, colour = { 0.3, 0.9, 0.35 }, word = "green" },
 		{ id = 408124, colour = { 1, 0.85, 0.2 }, word = "yellow" }, { id = 408120, colour = { 0.2, 0.8, 0.9 }, word = "teal" } },
 	SHAMAN = { { id = 408521, colour = { 0.25, 0.55, 1 }, word = "blue" }, { id = 408514, colour = { 1, 0.55, 0.1 }, word = "orange" } },
+	PALADIN = { { id = 412019, colour = { 1, 0.75, 0.2 }, word = "gold" } },
 }
 -- The colours of the squares of a class file in the order of their places, for the setup's drawing of Bex (SetupDrawUnits.lua Sample), or nil for a
 -- class with none. A new list each time, so the drawing cannot change HOTS.
@@ -71,6 +79,8 @@ function X.hotColours(class)
 end
 -- The point of the health bar each Square corner puts the first square on, and the signs of its offsets across and up, which keep the row inside.
 local CORNERS = { tl = { "TOPLEFT", 1, -1 }, tr = { "TOPRIGHT", -1, -1 }, bl = { "BOTTOMLEFT", 1, 1 }, br = { "BOTTOMRIGHT", -1, 1 } }
+-- What chat says, once a fight and only while the options window is open, when the squares wait for the end of the fight (Tell).
+local TELL_MOVE, TELL_MAKE = "Flat UI: the heal over time squares move when the fight ends.", "Flat UI: the heal over time squares show when the fight ends."
 local NOTE_KEPT = "Unit frames: Heal over time squares: the game keeps your auras on a member from addons now, so a square read before stays until one of your buffs there ends, and a new one waits for the end of the fight."
 
 local IsSecret = ns.IsSecret
@@ -265,7 +275,7 @@ local function Make(rec)
 	local ok, level = pcall(box.GetFrameLevel, box)
 	local holder = X.frame(box, ok and X.number(level) and level + 4 or nil)
 	holder:SetAllPoints(box)
-	local h = { holder = holder, box = box, squares = {} }
+	local h = { holder = holder, box = box, squares = {}, party = rec.kind == "party" }
 	local px = ns.Pixels(holder, 1)
 	for index, kind in ipairs(Kinds()) do
 		local back = Own(holder:CreateTexture(nil, "OVERLAY", nil, 4))
@@ -284,12 +294,26 @@ local function Make(rec)
 	return h
 end
 
--- What the corner, the size and the screen pixel give now, as one key.
+-- What the corner, the size, the screen pixel and the type icon row give now, as one key.
 local function Key(h)
-	return ("%s:%s:%.4f"):format(tostring(Opt("hotCorner")), tostring(Opt("hotSize")), ns.Pixels(h.holder, 1))
+	return ("%s:%s:%.4f:%s"):format(tostring(Opt("hotCorner")), tostring(Opt("hotSize")), ns.Pixels(h.holder, 1), tostring(Opt("dispelIcon")))
 end
 
--- Anchors the squares out of combat, again only when the corner, the size or the size of a screen pixel changed. Each has its place in the row.
+-- How far across from the corner the first square sits: just inside the dispel border, or on a party frame with Debuff type icon on party frames and
+-- a right-hand corner, one screen pixel left of the spot of the type icon, which UnitGroupMarks.lua puts ICON_ROOM[1] units wide, ICON_ROOM[2] unit
+-- and the border in from the right end of the bar (PlaceDispel), so a square never covers the icon a healer dispels by. The spot is kept whether a
+-- debuff is there or not, so the squares never move in a fight.
+local ICON_ROOM = { 12, 1 }
+
+local function Across(h, corner, px)
+	if h.party and corner[2] < 0 and Opt("dispelIcon") == true then
+		return ICON_ROOM[2] + px * RIM_PX + ICON_ROOM[1] + px
+	end
+	return px * (RIM_PX + 1)
+end
+
+-- Anchors the squares out of combat, again only when the corner, the size, the size of a screen pixel or the type icon row changed. Each has its
+-- place in the row.
 local function Place(h)
 	local key = Key(h)
 	if h.placed == key then
@@ -298,9 +322,9 @@ local function Place(h)
 	h.placed = key
 	local corner = CORNERS[Opt("hotCorner")] or CORNERS.tr
 	local size, px = Opt("hotSize"), ns.Pixels(h.holder, 1)
-	local inset = px * (RIM_PX + 1)
+	local inset, from = px * (RIM_PX + 1), Across(h, corner, px)
 	for index, square in ipairs(h.squares) do
-		local x = corner[2] * (inset + (index - 1) * (size + px))
+		local x = corner[2] * (from + (index - 1) * (size + px))
 		square.back:ClearAllPoints()
 		square.back:SetPoint(corner[1], h.box, corner[1], x, corner[3] * inset)
 		square.back:SetSize(size, size)
@@ -354,16 +378,17 @@ local function Read(rec)
 	local found, withheld, count = Scan(h.unit)
 	h.withheld = withheld or nil
 	Say(rec, withheld)
-	-- A plain read is what the member has, and is kept. Where the game withheld an aura of yours, the squares kept stay while the member has as many
-	-- auras of yours as at the last read: one fewer means one ended, and the game does not say which, so only those read plainly now stay. With no
-	-- answer at all nothing changes.
+	-- A plain read is what the member has, and is kept. Where the game withheld an aura of yours, the squares kept stay while the member has at least
+	-- as many auras of yours as at the last plain read: fewer means one of those ended, and the game does not say which, so only those read plainly
+	-- now stay, and the count to hold is the new one. With no answer at all nothing changes.
 	if not withheld then
 		h.kept, h.count = found, count
 	elseif count == nil then
 		found = Merged(found, h.kept or {})
 	elseif h.kept and h.count and count >= h.count then
+		-- The count to hold stays that of the last plain read (or of the last drop): a buff of yours that comes and goes in the fight, such as
+		-- Inspiration, Prayer of Mending bouncing off or a Lifebloom that ends, takes the count back to it and leaves the squares alone.
 		found = Merged(found, h.kept)
-		h.count = count
 	else
 		h.kept, h.count = found, count
 	end
@@ -430,6 +455,22 @@ end
 
 local Squares
 
+-- While the options window is open, chat says once a fight that the squares wait for its end, as Hide.lua and /flatui move say theirs, so a new
+-- Square corner or Square size in a fight does not look broken. A frame made or read in a fight with the window closed (zoning, a change of the
+-- group) stays silent. The flag goes once the fight is over.
+local told = false
+
+local function Tell(line)
+	if told or type(ns.PanelShown) ~= "function" or ns.PanelShown() ~= true then
+		return
+	end
+	told = true
+	print(line)
+	ns.OutOfCombat(function()
+		told = false
+	end)
+end
+
 -- Runs Squares again once the fight is over, once however often it is asked in the fight.
 local function AfterFight(rec)
 	if rec.hotsQueued then
@@ -458,6 +499,7 @@ function Squares(rec, on)
 	if h == nil then
 		-- Made out of combat, on a frame the game protects.
 		if InCombatLockdown() then
+			Tell(TELL_MAKE)
 			AfterFight(rec)
 			return
 		end
@@ -469,7 +511,8 @@ function Squares(rec, on)
 	elseif not InCombatLockdown() then
 		Place(h)
 	elseif h.placed ~= Key(h) then
-		-- A new corner or size waits for the end of the fight; the squares keep their places until then.
+		-- A new corner or size, or the type icon row turned on or off, waits for the end of the fight; the squares keep their places until then.
+		Tell(TELL_MOVE)
 		AfterFight(rec)
 	end
 	Hear(rec, h, not Hidden(rec) and UnitOfFrame(rec) or nil)
