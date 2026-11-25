@@ -2,8 +2,8 @@ local _, ns = ...
 
 -- The Trinket queue window (0.5.36): the part "window" of the trinkets module, a small window of Flat UI's own, FlatUITrinkets, 320 by 404, where
 -- the list of each trinket slot is edited. TrinketQueue.lua (ns.TrinketQueue, looked up when called) holds the lists and decides; this file only
--- shows them and calls its contract: Q.List, Q.Add, Q.Remove, Q.Move, Q.SetDelay, Q.ToggleStop, Q.Paused, Q.SetPaused, Q.Auto, Q.SetAuto, Q.Now,
--- Q.Wear, Q.State, Q.Sentence, Q.Tone, Q.Info, Q.Candidates, Q.Clock and Q.Version.
+-- shows them and calls its contract: Q.List, Q.Add, Q.Remove, Q.Move, Q.SetDelay, Q.ToggleStop, Q.Copy, Q.Paused, Q.SetPaused, Q.Auto,
+-- Q.SetAuto, Q.Now, Q.Wear, Q.State, Q.Sentence, Q.Tone, Q.Info, Q.Candidates, Q.Clock, Q.Threshold and Q.Version.
 -- It opens with /flatui queue (ns.TrinketWindowToggle; queue top and queue bottom, ns.TrinketWindowOpen), the page's Trinket queue window row
 -- (ns.TrinketWindowLines and ns.TrinketWindowPick, answering as GearLines.lua's GearOpenLines and GearOpenPick do, GearLines.lua:1223-1229), a click
 -- on a slot's square on the Character window (TrinketQueueButtons.lua) and Queue on the test mode bar (TestMode.lua); Escape closes it.
@@ -11,18 +11,27 @@ local _, ns = ...
 -- trinket and Bottom trinket, each with a dot of its slot's state, and that slot's Auto queue box; the slot line: the worn trinket's icon
 -- (its tooltip SetInventoryItem), its name in its quality's colour, the state in words (Q.Sentence) and the next trinket when known, with Queue
 -- now while the slot is held, stopped or refused; the column heads; eight rows of the list (the mouse wheel scrolls the rest, a thin bar at the
--- right says where): icon (a click wears it now, Q.Wear), name, cooldown, Delay (a click adds 5 seconds up to 120, a right click takes 5 off, a
--- Shift-click, IsShiftKeyDown, WL/apis.yaml:40162, sets none, as the Weight cell of the Gear comparison window), Stop, up and down (with Shift to
--- the top or the bottom) and a cross that takes it out; the trinkets in the bags and the two worn not in the list (Q.Candidates), two lines of
--- eleven, a click adding one at the end and a Shift-click first; and a foot line. A trinket dropped on the window (OnReceiveDrag, or the click
--- that ends the drag, GetCursorInfo, :36258) goes in the list shown; one lifted from a bag or a worn slot, locked while it rides the cursor
--- (C_Cursor.GetCursorItem, :10071, and C_Item.IsLocked, :17097), goes back there (ClearCursor, :34956), as GearButton.lua's Lifted; any other item
+-- right says where): icon (a click wears it now, Q.Wear), name, cooldown (in the Ready colour, with a dim line in its tooltip, while its time left is
+-- inside Ready with this much left, Q.Threshold, as the queue then counts it ready; 0.5.37), Delay (a click adds 5 seconds up to 120, a right click
+-- takes 5 off, a Shift-click, IsShiftKeyDown, WL/apis.yaml:40162, sets none, as the Weight cell of the Gear comparison window), Stop, up and down
+-- (with Shift to the top or the bottom) and a cross that takes it out; while the list is empty and the other slot's is not, Copy the Top (or Bottom)
+-- trinket list under its empty line, which puts the other list here in its order with each Delay and Stop (Q.Copy, 0.5.37; /flatui queue copy top or
+-- bottom does the same); the trinkets in the bags and the two worn not in the list (Q.Candidates), two lines of eleven, a click adding one at the end
+-- and a Shift-click first; and a foot line. With a chat box open, a Shift-click (the Chat link key, IsModifiedClick "CHATLINK") on a row's icon, the
+-- worn trinket's icon or a cell of the bags puts the trinket's link in the chat line and does nothing else (U.Linked, ChatFrameUtil.GetActiveWindow
+-- and InsertLink, out of a fight, as GearSearch.lua links; 0.5.37). A trinket dropped on the window (OnReceiveDrag, or the click that ends the drag,
+-- GetCursorInfo, :36258) goes in the list shown; one lifted from a bag or a worn slot, locked while it rides the cursor (C_Cursor.GetCursorItem,
+-- :10071, and C_Item.IsLocked, :17097), goes back there (ClearCursor, :34956), as GearButton.lua's Lifted; any other item
 -- stays on the cursor and the foot says only trinkets go in.
 -- Frame, as GearWindow.lua's Make, Open and Raise (GearWindow.lua:3149-3338): CreateFrame on UIParent, in ns.Own, made the first time it opens and
 -- only out of combat (an opening asked for in a fight waits for its end once, ns.OutOfCombat, Core.lua:2323-2329); MEDIUM strata, or DIALOG while
 -- the options window shows (ns.PanelShown, Panel.lua:3300); toplevel and raised as it opens and when asked again, kept on the screen, moved by Flat
 -- UI alone (SetMovable, SetDontSavePosition); its name once in UISpecialFrames, whose windows the game hides on Escape
 -- (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:21-27, 1108). It is no UI panel: no ShowUIPanel, nothing on the panel layout.
+-- It fades in over FADE_IN as it opens, with the game's sound of the character sheet opening (SOUNDKIT.IG_CHARACTER_INFO_OPEN, PlaySound in
+-- pcall), and plays its closing sound (IG_CHARACTER_INFO_CLOSE) as it shuts by its cross, Escape, /flatui queue or a slot's square (0.5.37), as
+-- GearWindow.lua's OnShow and OnHide (GearWindow.lua:3254-3274); neither while /flatui move hides and shows it (MoversMode's Holding), nor as
+-- the module or the part goes off (U.Close(true)). Switching Top trinket and Bottom trinket shows the window no new time, so it plays nothing.
 -- Placing: its top left corner at its spot in the movers (ns.MoverSpot, Movers.lua:982; entry FlatUITrinkets), else where it was let go this
 -- session, else 680 and -120 from the screen's top left, the Gear comparison window's corner; a drag of its title bar (StartMoving and
 -- StopMovingOrSizing, SetUserPlaced false) saves where it is let go as its spot (ns.MoverKit.Commit, Movers.lua:1868), as GearWindow.lua's
@@ -55,8 +64,8 @@ local Y = { SWITCH = 28, SLOT = 52, HEAD = 94, ROWS = 108, ADD_TITLE = 290, ADD 
 -- Stop, up, down and the cross, and the scroll bar.
 local X = { STRIPE = 8, ICON = 12, NAME = 34, NAME_END = 150, CD = 152, CD_END = 210, DELAY = 214, DELAY_END = 244, STOP = 248, UP = 266,
 	DOWN = 280, CROSS = 296, THUMB = 312 }
--- Seconds between two repaints of the cooldowns, and how long a drop's line stays in the foot.
-local TICK, SAY_FOR = 0.5, 8
+-- Seconds between two repaints of the cooldowns, how long a drop's line stays in the foot, and how long the window fades in as it opens.
+local TICK, SAY_FOR, FADE_IN = 0.5, 8, 0.1
 local SEPARATOR = 0.07
 local FONT, TITLE_FONT = "GameFontHighlightSmall", "GameFontHighlight"
 -- The dim text of the windows and white (PanelLook.lua), and the tones of a slot's dot (TrinketQueue.lua's WHY): grey for off, amber for a wait,
@@ -69,6 +78,7 @@ local T = {
 	HEADS = { "Priority", "Cooldown", "Delay", "Stop" },
 	ADD = "In your bags: click to add, Shift-click to put it first",
 	EMPTY = "No trinkets yet: click one under In your bags, or drop one here.",
+	COPY = "Copy the %s list (%d)",
 	NONE_CARRIED = "No other trinket in your bags.",
 	FOOT_PAUSED = "Paused: nothing is swapped.",
 	FOOT_FIGHT = "Swaps wait for the end of the fight. You can still change the lists.",
@@ -92,12 +102,16 @@ local T = {
 		up = { "Move up", "Shift-click: to the top of the list." },
 		down = { "Move down", "Shift-click: to the bottom of the list." },
 		cross = { "Remove", "Takes this trinket out of the list." },
+		copy = { "Copy the other list", "Puts the other slot's trinkets here in the same order, with their Delay and Stop. /flatui queue copy top or bottom does the same." },
 		more = { "%d more", "Click for the next ones." },
 		top = { "Top trinket", "The list of the top trinket slot." },
 		bottom = { "Bottom trinket", "The list of the bottom trinket slot." },
 	},
-	ROW_ICON = "Click: put it on now. The slot keeps it until you use it or press Queue now.",
-	ADD_TIP = "Click: add it at the end of this list. Shift-click: put it first.",
+	ROW_ICON = "Click: put it on now. The slot keeps it until you use it or press Queue now. Shift-click with the chat box open: link it.",
+	ADD_TIP = "Click: add it at the end of this list. Shift-click: put it first, or with the chat box open, link it.",
+	LINK_TIP = "Shift-click with the chat box open: link it.",
+	NOT_LOADED = "The game has not loaded that trinket yet: click again in a moment.",
+	SOON_TIP = "Counts as ready: %d s or less left (Ready with this much left).",
 	BINDS_TIP = "Binds when worn: put it on once yourself (click its icon).",
 	DELAY_TIP = "Delay: keep it on %d s after you use it.",
 	STOP_TIP = "Stop: the queue does not take it off while you wear it.",
@@ -109,7 +123,7 @@ local T = {
 -- GearWindow.lua's Z, O, U and B (GearWindow.lua:2205).
 local W = { frame = nil, n = "top", offset = 0, addOffset = 0, version = -1, painted = nil, runs = 0, faults = {}, elapsed = 0, message = nil,
 	messageAt = 0, rows = {}, cells = {}, owners = {}, rules = {}, strokes = {}, dims = {}, plains = {}, words = {}, panels = {}, icons = {},
-	edges = {}, placed = nil, dropped = nil, moving = false, opening = false, queued = false, look = nil }
+	edges = {}, placed = nil, dropped = nil, moving = false, opening = false, queued = false, look = nil, fade = nil, held = nil, quiet = nil }
 local U, Z = {}, {}
 
 local function IsSecret(value)
@@ -167,7 +181,7 @@ local function Run(fn, ...)
 	if not ok and err ~= nil then
 		Report(PART, err)
 		if ns.PartStopped(KEY, PART) then
-			U.Close()
+			U.Close(true)
 		end
 	end
 	return ok == true
@@ -513,6 +527,36 @@ function U.Drop()
 	return true
 end
 
+-- With a chat box open, a Shift-click (the game's Chat link key, IsModifiedClick "CHATLINK") puts the trinket's link in the chat line and does
+-- nothing else, as the item finder links (GearSearch.lua's LinkInChat, ChatFrameUtil.InsertLink): true then. Out of a fight only, as there.
+function U.Linked(id)
+	local modified = Fn(_G, "IsModifiedClick")
+	if not Finite(id) or not modified or Fighting() then
+		return false
+	end
+	local okKey, key = pcall(modified, "CHATLINK")
+	if not okKey or IsSecret(key) or key ~= true then
+		return false
+	end
+	local active = Fn(_G.ChatFrameUtil, "GetActiveWindow") or Fn(_G, "ChatEdit_GetActiveWindow")
+	local okBox, box = false, nil
+	if active then
+		okBox, box = pcall(active)
+	end
+	local insert = Fn(_G.ChatFrameUtil, "InsertLink") or Fn(_G, "ChatEdit_InsertLink")
+	if not (okBox and box ~= nil and not IsSecret(box) and insert) then
+		return false
+	end
+	local q = Q()
+	local link = q and q.Info(id).link
+	if type(link) == "string" and link:find("|H", 1, true) then
+		pcall(insert, link)
+	else
+		W.message, W.messageAt = T.NOT_LOADED, GetTime()
+	end
+	return true
+end
+
 -- A drop, and the window painted at once after it.
 function U.Dropping()
 	if U.Drop() then
@@ -651,11 +695,18 @@ function U.MakeSlot(frame)
 	local icon = U.Icon(frame, 13, Y.SLOT + 3, L.ICON)
 	local button = U.Button(frame, 12, Y.SLOT + 2, L.ICON + 2, L.ICON + 2)
 	U.Drops(button)
+	-- Shift-click with the chat box open links the worn trinket (U.Linked); a click does nothing else.
+	U.Click(button, function()
+		local state = Q().State(W.n)
+		if state.worn then
+			U.Linked(state.worn)
+		end
+	end)
 	U.Tip(button, function()
 		local q = Q()
 		local state = q and q.State(W.n)
 		if state and state.worn then
-			Z.ItemTip(button, state.worn, nil, W.n, { q.Sentence(W.n, state) })
+			Z.ItemTip(button, state.worn, nil, W.n, { q.Sentence(W.n, state), T.LINK_TIP })
 		elseif q then
 			Z.Say(button, T.EMPTY_SLOT, { q.Sentence(W.n, state) })
 		end
@@ -752,7 +803,7 @@ function U.RowScripts(row)
 		Z.Untip(row.frame)
 	end)
 	U.Click(row.iconButton, function()
-		if row.entry then
+		if row.entry and not U.Linked(row.entry.item) then
 			Q().Wear(W.n, row.entry.item)
 		end
 	end)
@@ -823,10 +874,14 @@ function U.MakeAdd(frame)
 	end
 end
 
--- A cell of the bags clicked: its trinket goes in the list, at its end or, with Shift, first; "+N" shows the next ones.
+-- A cell of the bags clicked: its trinket goes in the list, at its end or, with Shift, first (with the chat box open, its link goes in the chat
+-- line instead); "+N" shows the next ones.
 function U.AddClick(cell)
 	if cell.moreCount then
 		W.addOffset = W.addOffset + #W.cells - 1
+		return
+	end
+	if cell.id and U.Linked(cell.id) then
 		return
 	end
 	if cell.id then
@@ -851,6 +906,15 @@ function U.MakeFoot(frame)
 	W.empty:SetWordWrap(true)
 	W.empty:SetPoint("TOP", frame, "TOPLEFT", SIZE.W / 2, -(Y.ROWS + 3 * L.ROW))
 	W.empty:SetText(T.EMPTY)
+	-- Under the empty line: the other slot's list copied here (header).
+	W.copy, W.copyLabel = U.Word(frame, "", 220)
+	W.copy:SetPoint("TOP", frame, "TOPLEFT", SIZE.W / 2, -(Y.ROWS + 5 * L.ROW))
+	W.copy:Hide()
+	U.Click(W.copy, function()
+		Q().Copy(W.n)
+		Z.Untip(W.copy)
+	end)
+	U.Says(W.copy, "copy")
 	W.thumb = U.Texture(frame, "OVERLAY")
 	W.thumb:SetWidth(2)
 end
@@ -986,8 +1050,21 @@ function Z.CooldownText(info)
 		return T.UNKNOWN, DIM
 	elseif info.left <= 0 then
 		return T.READY, Z.Tone("on")
+	elseif Z.Soon(info) then
+		-- Inside Ready with this much left: the queue counts it as ready, so its time shows in the Ready colour (0.5.37).
+		return q.Clock(info.left), Z.Tone("on")
 	end
 	return q.Clock(info.left), PLAIN
+end
+
+-- Ready with this much left (Q.Threshold) while an item's plain cooldown left is above 0 and at most that, else nil.
+function Z.Soon(info)
+	local q = Q()
+	local most = q and q.Threshold()
+	if Finite(info.left) and info.left > 0 and Finite(most) and info.left <= most then
+		return most
+	end
+	return nil
 end
 
 -- The dim lines a row's tooltip adds under the item.
@@ -1000,6 +1077,10 @@ function Z.RowLines(info, entry)
 	end
 	if info.tooHigh then
 		lines[#lines + 1] = T.LEVEL_TIP:format(info.level)
+	end
+	local soon = Z.Soon(info)
+	if soon and not info.tooHigh and (info.wornIn or (info.carried > 0 and info.bound)) then
+		lines[#lines + 1] = T.SOON_TIP:format(soon)
 	end
 	if entry and entry.delay > 0 then
 		lines[#lines + 1] = T.DELAY_TIP:format(entry.delay)
@@ -1202,6 +1283,13 @@ function Z.Paint()
 		Z.Row(row, list[W.offset + index], state.worn)
 	end
 	W.empty:SetShown(#list == 0)
+	local other = W.n == "top" and "bottom" or "top"
+	local others = #list == 0 and #q.List(other) or 0
+	if others > 0 then
+		W.copyLabel:SetText(T.COPY:format(T.WORDS[other], others))
+		Z.Colour(W.copyLabel, Z.Tone("on"))
+	end
+	W.copy:SetShown(others > 0)
 	Z.Thumb(#list)
 	Z.Add(list)
 	Z.Foot()
@@ -1268,15 +1356,39 @@ function U.Make()
 	frame:SetScript("OnMouseWheel", function(_, delta)
 		Run(Z.Scroll, delta)
 	end)
+	-- It fades in with the sound of the character sheet opening and plays its closing sound as it hides (header); neither while /flatui move
+	-- holds it, nor when it closed because the module or the part went off (U.Close(true)).
 	frame:SetScript("OnShow", function()
+		W.fade = 0
+		frame:SetAlpha(0)
+		if W.held then
+			W.held = nil
+		elseif type(PlaySound) == "function" and type(SOUNDKIT) == "table" and SOUNDKIT.IG_CHARACTER_INFO_OPEN then
+			pcall(PlaySound, SOUNDKIT.IG_CHARACTER_INFO_OPEN)
+		end
 		Run(U.Showing)
 	end)
 	frame:SetScript("OnHide", function()
+		local holding = type(ns.MoversMode) == "table" and type(ns.MoversMode.Holding) == "function" and ns.MoversMode.Holding() == true
+		W.held, W.fade = holding or nil, nil
+		if not holding and not W.quiet and type(PlaySound) == "function" and type(SOUNDKIT) == "table" and SOUNDKIT.IG_CHARACTER_INFO_CLOSE then
+			pcall(PlaySound, SOUNDKIT.IG_CHARACTER_INFO_CLOSE)
+		end
 		U.Hiding()
 	end)
-	-- While it shows: it closes once the module or the part is off, which is plain code, and repaints every TICK.
+	-- While it shows: the fade at each frame; it closes once the module or the part is off, which is plain code, and repaints every TICK.
 	frame:SetScript("OnUpdate", function(_, elapsed)
-		W.elapsed = W.elapsed + (Finite(elapsed) and elapsed or 0)
+		local step = Finite(elapsed) and elapsed or 0
+		if W.fade then
+			W.fade = W.fade + step
+			if W.fade >= FADE_IN then
+				W.fade = nil
+				frame:SetAlpha(1)
+			else
+				frame:SetAlpha(W.fade / FADE_IN)
+			end
+		end
+		W.elapsed = W.elapsed + step
 		if W.elapsed < TICK then
 			return
 		end
@@ -1284,7 +1396,7 @@ function U.Make()
 		if Allowed() then
 			Run(Z.Tick)
 		else
-			U.Close()
+			U.Close(true)
 		end
 	end)
 	U.Special()
@@ -1350,11 +1462,13 @@ function U.Open(n)
 	end
 end
 
--- Closes the window. Plain code, so it also works once the part has stopped.
-function U.Close()
+-- Closes the window. Plain code, so it also works once the part has stopped. quiet: the module or the part went off, so no sound plays.
+function U.Close(quiet)
 	W.opening = false
 	if W.frame then
+		W.quiet = quiet == true or nil
 		pcall(W.frame.Hide, W.frame)
+		W.quiet = nil
 	end
 end
 
@@ -1435,7 +1549,7 @@ end
 -- At the end of each refresh of the module: the window closes while the module or this part is off, and takes the look of the Windows page again.
 function ns.TrinketWindowSync()
 	if not Allowed() then
-		U.Close()
+		U.Close(true)
 		return
 	end
 	if W.frame then

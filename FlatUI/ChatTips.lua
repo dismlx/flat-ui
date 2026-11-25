@@ -1,11 +1,12 @@
 local _, ns = ...
 
 -- More on tooltips, for the Tooltips page of Chat and tooltips: a line naming what a unit targets (You in red while a unit you can attack targets
--- you, UnitCanAttack; 0.5.35), in a group a line naming who in it targets the unit (Who in your group targets it, TargetedBy: the targets of
--- party1-4 or raid1-40 by UnitIsUnit, GetNumSubgroupMembers and GetNumGroupMembers; 0.5.35), the class colour on the line with a player's
--- class, the icon of an item, a spell or a buff before its name, the ID of the temporary enchant on a weapon you wear, the ID of the icon file, and
--- Show IDs, the key the ID lines wait for. A buff or a debuff counts as a spell: its data has the spell's id (Enum.TooltipDataType.UnitAura), which
--- the game withholds while it restricts auras, and then it gets nothing. So do the buffs of the target and focus frames, whose tooltip is forbidden
+-- you, UnitCanAttack; 0.5.35), in a group a line naming who in it targets the unit (Who in your group targets it, TargetedBy: the targets of party1-4
+-- or raid1-40 by UnitIsUnit, GetNumSubgroupMembers and GetNumGroupMembers; 0.5.35), the class colour on the line with a player's class, the colour of
+-- a player's guild line with the member's rank (0.5.37), the icon of an item, a spell or a buff before its name, the ID of the temporary enchant on a
+-- weapon you wear, the ID of the icon file, and Show IDs, the key the ID lines wait for. A buff or a debuff counts as a spell: its data has the
+-- spell's id (Enum.TooltipDataType.UnitAura), which the game withholds while it restricts auras, and then it gets nothing. So do the buffs of the
+-- target and focus frames, whose tooltip is forbidden
 -- (Blizzard_AuraContainer/Mainline/Blizzard_AuraButtonTooltip.xml:3-4). This file adds to the chat module and has no switch of its own. Chat.lua
 -- calls ns.ChatTipLines from its post call of the game's tooltip
 -- data (TooltipDataProcessor.AddTooltipPostCall, the one path its lines go through), before its own work so that the Elite and Rare word stays the
@@ -14,8 +15,8 @@ local _, ns = ...
 -- What is written on a tooltip: the target line and after it the line of who targets the unit with AddLine, once for each build as Chat.lua adds
 -- its lines, and both lines with SetText and Show when the target of the unit, or who in the group targets it, changes while the mouse stays on
 -- it (The target line while the mouse stays on the unit; the line of who targets it is added then with AddLine and Show where it had none, 0.5.36);
--- the colour of the class line with
--- SetTextColor; and with Item and spell icons the text of the first line with SetText: the icon of the item or the spell (C_Item.GetItemIconByID,
+-- the colour of the class line and the guild line with SetTextColor, the rank after the guild with SetText; and with Item and spell icons the text of
+-- the first line with SetText: the icon of the item or the spell (C_Item.GetItemIconByID,
 -- ItemDocumentation.lua:611-624; C_Spell.GetSpellTexture, SpellDocumentation.lua:595-612) before the name the game wrote, only when the first line of
 -- the data is the first line of the tooltip and that line still holds the same text, so a second post call for one build adds none. A text the
 -- game withholds is left as it is. The game writes every line again at its next build, so nothing is put back. A tooltip inside another one (the
@@ -26,6 +27,11 @@ local _, ns = ...
 -- the game withholds (C_Secrets.ShouldUnitIdentityBeSecret, SecretPredicateAPIDocumentation.lua:305-319), or a name or an answer it withholds, gives
 -- no line. The class line is the line of the player's data that holds the name of the class (UnitClass): the level line when the game marks it
 -- (Enum.TooltipDataLineType.UnitLevel), else the last such line other than the name.
+-- Guild colour and rank (chat.guildLine, 0.5.37; on): the guild line of a player, the first line of the data other than the name that holds the
+-- guild's name alone or in brackets (GetGuildInfo of the unit, its first two answers: the guild and the member's rank), takes green while it is
+-- the player's own guild (GetGuildInfo "player") and a soft blue for another (SetTextColor), and the rank after the name with SetText, only while
+-- the line still holds the text the game wrote from this data, so a second post call for one build adds none. A guild or a rank the game
+-- withholds, or a client without GetGuildInfo, leaves the line as it is.
 -- The enchant: the game must say the item of the tooltip is in a weapon slot of yours (C_Item.GetItemLocation, ItemDocumentation.lua:786-799, read
 -- by its field), and the enchant is what it says of that slot (C_PaperDollInfo.GetTemporaryEnchantmentInfo, PaperDollInfoDocumentation.lua:226-241,
 -- 491-500). An item in a bag, or a link, has none.
@@ -53,6 +59,8 @@ local added = setmetatable({}, { __mode = "k" })
 local byAdded = setmetatable({}, { __mode = "k" })
 -- Who in your group targets it: at most BY_MOST names, then +N. YOU_RED is You on the target line while a unit you can attack targets you.
 local BY_MOST, YOU_RED = 6, { 1, 0.25, 0.25 }
+-- The guild line: green for your own guild, a soft blue for another (0.5.37).
+local GUILD_OWN, GUILD_OTHER = { 0.25, 1, 0.25 }, { 0.55, 0.75, 1 }
 
 local IsSecret = ns.IsSecret
 
@@ -515,6 +523,55 @@ local function ClassLine(tooltip, data, unit)
 	end
 end
 
+-- The index and the text of the guild line of a player's data: the first line other than the name whose text is the guild's name, alone or in
+-- brackets ("<Name>", with anything the game puts after them). Nil when no line is, or the lines cannot be read.
+local function GuildIndex(data, guild)
+	local lines = data.lines
+	if not Plain(lines, "table") then
+		return nil
+	end
+	local nameType, bracketed = LineType("UnitName"), "<" .. guild .. ">"
+	local found, words
+	pcall(function()
+		for _, line in ipairs(lines) do
+			if Plain(line, "table") then
+				local kind, text, index = line.type, line.leftText, line.lineIndex
+				if Plain(text, "string") and Plain(index, "number") and not IsSecret(kind) and (nameType == nil or kind ~= nameType)
+					and (text == guild or text:sub(1, #bracketed) == bracketed) then
+					found, words = index, text
+					return
+				end
+			end
+		end
+	end)
+	return found, words
+end
+
+-- The guild line of a player in the colour of its guild, your own or another, with the member's rank after it (header).
+local function GuildLine(tooltip, data, unit)
+	if Ask(UnitIsPlayer, unit) ~= true or type(GetGuildInfo) ~= "function" then
+		return
+	end
+	local ok, guild, rank = pcall(GetGuildInfo, unit)
+	if not ok or not Plain(guild, "string") or guild == "" then
+		return
+	end
+	local index, words = GuildIndex(data, guild)
+	local line = index and LeftLine(tooltip, index)
+	if not line then
+		return
+	end
+	local colour = Ask(GetGuildInfo, "player") == guild and GUILD_OWN or GUILD_OTHER
+	pcall(line.SetTextColor, line, colour[1], colour[2], colour[3])
+	if Plain(rank, "string") and rank ~= "" then
+		-- The line still holds what the game wrote from this data, and no rank.
+		local okText, text = pcall(line.GetText, line)
+		if okText and Plain(text, "string") and text == words then
+			pcall(line.SetText, line, text .. "  " .. rank)
+		end
+	end
+end
+
 -- Icons -----------------------------------------------------------------------------------------------------------------------
 
 -- The icon of the item or the spell of the data, or nil.
@@ -576,12 +633,16 @@ local function Lines(tooltip, data)
 		by.text = nil
 	end
 	if IsData(data, "Unit") then
-		local unit = (Opt("classLine") == true or Opt("targetLine") == true or Opt("targetedBy") == true) and UnitOf(data)
+		local unit = (Opt("classLine") == true or Opt("guildLine") == true or Opt("targetLine") == true or Opt("targetedBy") == true)
+			and UnitOf(data)
 		if not unit then
 			return
 		end
 		if Opt("classLine") == true then
 			ClassLine(tooltip, data, unit)
+		end
+		if Opt("guildLine") == true then
+			GuildLine(tooltip, data, unit)
 		end
 		local text = Opt("targetLine") == true and TargetText(unit)
 		if text then

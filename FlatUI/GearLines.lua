@@ -1325,6 +1325,11 @@ local function ItemLink(data, id, guid)
 	return nil
 end
 
+-- True when an item worn as loc (itemEquipLoc) can get the gear lines: Chat.lua's Hint while Shift is up promises the spells only then (0.5.37).
+function ns.GearLinesFor(loc)
+	return Plain(loc, "string") and loc ~= "" and not T.NO_LINES[loc]
+end
+
 -- The kind an item is worn as (itemEquipLoc), or nil for one that gets no lines.
 local function EquipLoc(link)
 	local instant = Call(C_Item, "GetItemInfoInstant")
