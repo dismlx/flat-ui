@@ -8,7 +8,8 @@ local _, ns = ...
 -- moves with it, and lies one strata above the window's (Strata and levels, below); it shows only while the window does:
 -- when the window hides it closes the finder (GearWindow.lua's Hiding, ns.GearSearchToggle), and the finder closes at its next look once the window
 -- is not shown, so the next opening of the window starts without it until Find (the button on the window's title bar, ns.GearSearchToggle) or the
--- list row Item finder (chat.gearFind: ns.GearFindLines and ns.GearFindPick) opens it again.
+-- list row Item finder (chat.gearFind: ns.GearFindLines and ns.GearFindPick) opens it again. It fades in over 0.1 s as it opens, as the window does
+-- (0.5.36), with no sound of its own.
 -- Moved and minimized (the owner: "when i use the movers function the search panel needs to be able to be minimized and moved"; 0.5.21: "the
 -- search tool isnt movable in mover panel its still in the way"): the finder has an entry of its own in the movers (Movers.lua: FlatUIGearSearch,
 -- Item finder), a plain one like the others: its box is at the profile's spot when one is saved, else where the finder starts, docked at the
@@ -108,6 +109,8 @@ L.HALF = (L.INNER - L.GAP) / 2
 -- Seconds: between two looks, typing that settles before a search, between two searches while an item loads (and how many), how long Best for me
 -- waits for an item to load, and how many items it works out at a look.
 local LOOK, SETTLE, WAIT, TRIES, LOAD, STEP = 0.1, 0.25, 0.5, 12, 6, 3
+-- How long the finder fades in as it opens, as the window beside it does (0.5.36). Its sound is the window's.
+local FADE_IN = 0.1
 local FONT, TITLE_FONT = "GameFontHighlightSmall", "GameFontHighlight"
 -- The text-dim of the windows (PanelLook.lua:27-28), white, and the good and bad colours when SpellModel's style does not answer (the game's
 -- GREEN_FONT_COLOR and RED_FONT_COLOR, else Flat UI's combat numbers', CombatText.lua:889-894).
@@ -2307,14 +2310,28 @@ local function Make(parent)
 	MakeList(body, y)
 	D.MakeButtons(S.bar)
 	frame:SetScript("OnShow", function()
+		S.fade = 0
+		frame:SetAlpha(0)
 		Run(Showing)
 	end)
 	frame:SetScript("OnHide", function()
+		S.fade = nil
 		Hiding()
 	end)
 	-- It closes once the module or the part is off, and when the window is not shown (it closes the finder as it hides, GearWindow.lua's Hiding).
+	-- It fades in over FADE_IN as it opens.
 	frame:SetScript("OnUpdate", function(_, elapsed)
-		S.elapsed = S.elapsed + (Finite(elapsed) and elapsed or 0)
+		local step = Finite(elapsed) and elapsed or 0
+		if S.fade then
+			S.fade = S.fade + step
+			if S.fade >= FADE_IN then
+				S.fade = nil
+				frame:SetAlpha(1)
+			else
+				frame:SetAlpha(S.fade / FADE_IN)
+			end
+		end
+		S.elapsed = S.elapsed + step
 		if S.elapsed < LOOK then
 			return
 		end

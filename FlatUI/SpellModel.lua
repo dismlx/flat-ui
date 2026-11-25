@@ -91,7 +91,7 @@ local _, ns = ...
 -- the total of one cast (0.5.20: what it does now with the player's stats, base and bonus together) and its rates (the expected value with crits,
 -- misses and a spell's Spell Piercing from GearModel.lua's G.Expect, looked up when asked; a second of cast time, from the castTime of
 -- C_Spell.GetSpellInfo, SpellDocumentation.lua:416-430, else the rank's, the global cooldown at least; and a point of mana, from
--- C_Spell.GetSpellPowerCost, :535-549), the threat block with its multipliers (the rules of design 2.5, G), and the lines of a stance, form, aura or
+-- C_Spell.GetSpellPowerCost, :535-549, with the casts from full mana, UnitPowerMax), the threat block with its multipliers (the rules of design 2.5, G), and the lines of a stance, form, aura or
 -- talent tooltip. Amounts are worded with the rounding of design 1.2, and the gear comparison's with that of design 2.3 (M.Fmt, which GearLines.lua,
 -- GearAvoid.lua and GearWindow.lua use too, with its one style of every line: M.Fmt.Style, whose header, good and bad colours are the game's
 -- NORMAL_FONT_COLOR, GREEN_FONT_COLOR and RED_FONT_COLOR, read once as this file loads, Blizzard_SharedXMLBase/Color.lua:82-86), thousands broken by
@@ -1208,6 +1208,12 @@ local function ReadStats()
 		local value = t.stat[index]
 		t.per[index] = { ap = Rate(GetAttackPowerForStat, index, value), rap = Rate(GetRangedAttackPowerForStat, index, value),
 			crit = Percent100(Rate(GetCritChanceFromStat, index, value)), spellCrit = Percent100(Rate(GetSpellCritChanceFromStat, index, value)) }
+	end
+	-- The player's mana at full (0.5.36), for the casts a full bar gives on the rates line: none without mana, or while the game withholds it, which
+	-- keeps the other stats.
+	if type(UnitPowerMax) == "function" then
+		local okMana, most = pcall(UnitPowerMax, "player", K.MANA)
+		t.mana = okMana and Finite(most) and most > 0 and most or nil
 	end
 	return t
 end
@@ -2913,7 +2919,8 @@ end
 -- The rates line (0.5.20, chat.spellRates): the expected value with crits and misses (GearModel.lua's G.Expect, looked up when asked, its cast; with
 -- crits alone for a heal, which never misses; 0.5.26: and Spell Piercing for a damage spell of a school of magic on the Spell line, the damage it
 -- adds), then a second of cast time (the global cooldown for an instant), or for what rides on the swings or shots its own figure a second, and a
--- point of mana, each of the expected value, else of the total; ~ before an estimate. Nil with nothing to say.
+-- point of mana, each of the expected value, else of the total; ~ before an estimate; and after the mana how many casts a full bar of mana gives
+-- (0.5.36, the player's UnitPowerMax of mana over the cost, kept with the stats). Nil with nothing to say.
 local function Rates(entry, at, row, state, stats, total, lowRank)
 	local G = ns.GearModel
 	local result = nil
@@ -2949,6 +2956,12 @@ local function Rates(entry, at, row, state, stats, total, lowRank)
 		local mana = ManaCost(row[1])
 		if mana then
 			words[#words + 1] = guess .. Num(figure / mana) .. " a point of mana"
+			-- How often a full bar of mana casts it (0.5.36), without the mana that comes back meanwhile.
+			local full = type(stats) == "table" and stats.mana or nil
+			if Finite(full) and full >= mana then
+				local casts = math.floor(full / mana)
+				words[#words + 1] = casts .. (casts == 1 and " cast" or " casts") .. " from full mana"
+			end
 		end
 	end
 	if #words == 0 then

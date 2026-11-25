@@ -5,12 +5,14 @@ local _, ns = ...
 -- is followed on a global function of the game through ns.FollowGlobal (Core.lua's one hooksecurefunc for each global), with HookScript on
 -- GameTooltip, and with EventRegistry for the input box; no
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
--- from the lines the kind of a unit, an item level, an ID and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
+-- from the lines the kind of a unit, an item level, the hint that Shift compares, an ID and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
 -- and the hit table lines of HitTableTip.lua (called from the post call after them, on an enemy's GameTooltip), and nothing is created on one in
 -- combat. The size of a tooltip, the height of its health bar and the place of the input box are changed out of combat only. With Arrow keys
 -- without Alt (on by default) each input box gets the widget method SetAltArrowKeyMode(false), so the arrow keys edit the text (Arrows below).
 -- With Health text on the bar (Percent by default) a frame of the addon's own on GameTooltip's health bar, made out of combat, writes the health
 -- of the tooltip's unit on it every 0.1 s while the bar shows, the game's withheld values passed straight to the text (BT, Health bar below).
+-- With Health bar colour (Class colour for players, reaction for the rest, by default) the bar takes its unit's colour (SetStatusBarColor), set again
+-- after each change of its value through one HookScript of its OnValueChanged (BT.Hook), and the game's green goes back at Green.
 -- The fade of GameTooltip is seen as a fall of its alpha in a frame of the
 -- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, Mainline/UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1017);
 -- Hide and SetAlpha are called from that frame, never inside a call of the game, and no method of GameTooltip is hooked.
@@ -1243,6 +1245,55 @@ local function FadeWatch()
 	fadeDriver:SetShown(IsShown(tooltip))
 end
 
+-- Hint while Shift is up (chat.compareHint, 0.5.36): while Compare items only while holding Shift stands (ns.ItemCompareHeld, ItemCompare.lua), the
+-- tooltip of an item the player could wear (C_Item.IsEquippableItem) on GameTooltip or ItemRefTooltip ends its game lines with one dim line saying
+-- that Shift compares it with what the player wears, and on GameTooltip, while the gear lines wait for the game's comparison (chat.gear with
+-- chat.gearWhen at With the game's comparison), with the spells too. Not while Shift is down, not on an item the player wears (its data.guid in a
+-- slot, C_Item.GetItemLocation, as on the Character window, which compares nothing), and not on the comparison tooltips. Once for each build, as
+-- ItemLevelLine: the bag slots build their tooltip again every 0.2 s, so there the hint goes as Shift goes down and the comparison comes.
+X.hints = setmetatable({}, { __mode = "k" })
+local HINT, HINT_SPELLS, HINT_COLOUR = "Shift: compare with what you wear", " and your spells", { 0.66, 0.68, 0.62 }
+
+local function CompareHint(tooltip, data)
+	if not ns.Enabled(KEY) or Opt("compareHint") ~= true or Opt("compareShift") ~= true or not IsData(data, "Item") or not Usable(tooltip)
+		or ns.Forbidden(tooltip) then
+		return
+	end
+	local game = rawequal(tooltip, Global("GameTooltip"))
+	if not (game or rawequal(tooltip, Global("ItemRefTooltip"))) or type(ns.ItemCompareHeld) ~= "function" or ns.ItemCompareHeld() ~= true
+		or KeyDown("shift") then
+		return
+	end
+	local items, id = C_Item, data.id
+	if not Usable(items) or not IsNumber(id) or type(items.IsEquippableItem) ~= "function" then
+		return
+	end
+	local okEquip, equippable = pcall(items.IsEquippableItem, id)
+	if not okEquip or ns.IsSecret(equippable) or equippable ~= true then
+		return
+	end
+	local guid = data.guid
+	if not ns.IsSecret(guid) and type(guid) == "string" and guid ~= "" and type(items.GetItemLocation) == "function" then
+		local okWhere, where = pcall(items.GetItemLocation, guid)
+		local slot = okWhere and Usable(where) and where.equipmentSlotIndex or nil
+		if IsNumber(slot) then
+			return
+		end
+	end
+	local ok, shown = pcall(tooltip.NumLines, tooltip)
+	local record = X.hints[tooltip]
+	if not ok or not IsNumber(shown) or (record and record.data == data and shown >= record.lines) then
+		return
+	end
+	local text = HINT
+	if game and Opt("gear") == true and Opt("gearWhen") == "compare" then
+		text = text .. HINT_SPELLS
+	end
+	if pcall(tooltip.AddLine, tooltip, text, HINT_COLOUR[1], HINT_COLOUR[2], HINT_COLOUR[3]) then
+		X.hints[tooltip] = { data = data, lines = shown + 1 }
+	end
+end
+
 local function FollowData()
 	if postCall or type(TooltipDataProcessor) ~= "table" or type(TooltipDataProcessor.AddTooltipPostCall) ~= "function" or TooltipDataProcessor.AllTypes == nil then
 		return
@@ -1254,6 +1305,8 @@ local function FollowData()
 			ns.Each(KEY, ns.ChatTipLines, tooltip, data)
 			-- The item level of a weapon or a piece of armour, right under the game's own lines (ItemLevelLine).
 			ns.Each(KEY, ItemLevelLine, tooltip, data)
+			-- The dim line that Shift compares, while Flat UI holds the comparison for Shift (CompareHint).
+			ns.Each(KEY, CompareHint, tooltip, data)
 			-- SpellLines.lua and GearLines.lua: the spell and the gear lines, after the game's own and before the ID and count lines (Extras), so that
 			-- the ID line stays after them. Each runs its work inside ns.EachPart, so a fault there stops that part alone.
 			if type(ns.SpellTipLines) == "function" then
@@ -1268,6 +1321,7 @@ local function FollowData()
 			end
 			ns.Each(KEY, Filled, tooltip, data)
 			ns.Each(KEY, BT.Unit, tooltip, data)
+			ns.Each(KEY, BT.Pick, tooltip, data)
 			ns.Each(KEY, Extras, tooltip, data)
 			ns.Each(KEY, Combat, tooltip, data)
 			ns.Each(KEY, FadeCancel, tooltip)
@@ -1461,16 +1515,8 @@ function BT.Size(text)
 	ns.TextStyle(text, { percent = math.max(BT.SIZE[1], math.min(BT.SIZE[2], (height + 1) * 10)), flags = "OUTLINE" })
 end
 
--- The unit of GameTooltip's health bar: of a unit tooltip's data, by the guid the bar watches or the data's guid (UnitTokenFromGUID), else the
--- mouseover; nil for any other tooltip.
-function BT.Unit(tooltip, data)
-	if not rawequal(tooltip, Global("GameTooltip")) then
-		return
-	end
-	X.barUnit = nil
-	if BT.Mode() == nil or not IsData(data, "Unit") then
-		return
-	end
+-- The unit of a unit tooltip's data, by the guid the bar watches or the data's guid (UnitTokenFromGUID), else the mouseover, or nil.
+function BT.Token(data)
 	local token
 	for _, field in ipairs({ "healthGUID", "guid" }) do
 		local guid = data[field]
@@ -1487,7 +1533,19 @@ function BT.Unit(tooltip, data)
 			token = "mouseover"
 		end
 	end
-	X.barUnit = token
+	return token
+end
+
+-- The unit of GameTooltip's health bar: of a unit tooltip's data (BT.Token); nil for any other tooltip.
+function BT.Unit(tooltip, data)
+	if not rawequal(tooltip, Global("GameTooltip")) then
+		return
+	end
+	X.barUnit = nil
+	if BT.Mode() == nil or not IsData(data, "Unit") then
+		return
+	end
+	X.barUnit = BT.Token(data)
 	-- The next pass of the frame writes the new unit's health at once.
 	if X.barText then
 		X.barText.wait = BT.EVERY
@@ -1589,6 +1647,82 @@ function BT.Show(bar)
 	end
 end
 
+-- Health bar colour (chat.barColour, 0.5.36; Class colour for players, reaction for the rest, by default): the game colours GameTooltip's health
+-- bar green at every change of its value (HealthBar_OnValueChanged, Blizzard_GameTooltip/HealthBar.lua:2-30, from the bar's OnValueChanged,
+-- Mainline/GameTooltip.xml:18-20). The post call picks the colour for each build of GameTooltip (BT.Pick): a player's class colour
+-- (ns.ClassColourOf), else the unit's reaction colour (ns.ReactionColour, as the unit frames have it), and none for any other tooltip or a colour
+-- the game withholds. It is set on the bar at once and again after each change of its value, through one HookScript of the bar's OnValueChanged that
+-- reads nothing of the call (BT.Hook); SetStatusBarColor is the one write, and the game's green (0, 1, 0) is put back when the row is at Green, the
+-- bar is hidden, the module goes off or a tooltip has no colour. PaintBar keeps the game's colour on the flat fill, so a texture file takes it.
+
+-- True while the bar takes the colour of its unit.
+function BT.Tinted()
+	return ns.Enabled(KEY) and Opt("barColour") == "class" and Opt("barHide") ~= true
+end
+
+-- The bar of GameTooltip, or nil.
+function BT.Bar()
+	local tooltip = Global("GameTooltip")
+	local bar = tooltip and not ns.Forbidden(tooltip) and tooltip.StatusBar
+	if Usable(bar) and not ns.Forbidden(bar) then
+		return bar
+	end
+	return nil
+end
+
+-- Sets the colour picked on the bar, or the game's green once where a colour was set before.
+function BT.Tint()
+	local bar, colour = BT.Bar(), X.barColour
+	if not bar then
+		return
+	end
+	if colour then
+		pcall(bar.SetStatusBarColor, bar, colour[1], colour[2], colour[3])
+	elseif X.barTinted then
+		pcall(bar.SetStatusBarColor, bar, 0, 1, 0)
+	end
+	X.barTinted = colour ~= nil
+end
+
+-- The colour of the unit of a build of GameTooltip, kept in X.barColour and set on the bar. Every other build clears it.
+function BT.Pick(tooltip, data)
+	if not rawequal(tooltip, Global("GameTooltip")) then
+		return
+	end
+	X.barColour = nil
+	local token = BT.Tinted() and IsData(data, "Unit") and BT.Token(data)
+	if token then
+		local r, g, b
+		local ok, player = false, nil
+		if type(UnitIsPlayer) == "function" then
+			ok, player = pcall(UnitIsPlayer, token)
+		end
+		if ok and not ns.IsSecret(player) and player == true then
+			r, g, b = ns.ClassColourOf(token)
+		end
+		if not r then
+			r, g, b = ns.ReactionColour(token)
+		end
+		if IsNumber(r) and IsNumber(g) and IsNumber(b) then
+			X.barColour = { r, g, b }
+		end
+	end
+	BT.Tint()
+end
+
+-- The one hook of the bar: after the game's green, the colour picked goes back on. The value of the call is never read.
+function BT.Hook(bar)
+	if X.barHooked or not BT.Tinted() or type(bar.HookScript) ~= "function" then
+		return
+	end
+	X.barHooked = pcall(bar.HookScript, bar, "OnValueChanged", function(self)
+		local colour = X.barColour
+		if colour and not ns.IsStopped(KEY) then
+			pcall(self.SetStatusBarColor, self, colour[1], colour[2], colour[3])
+		end
+	end)
+end
+
 local function HealthBar()
 	local tooltip = Global("GameTooltip")
 	local bar = tooltip and not ns.Forbidden(tooltip) and tooltip.StatusBar
@@ -1605,6 +1739,12 @@ local function HealthBar()
 		end)
 	end
 	BT.Show(bar)
+	-- Health bar colour, after the fill: the game's green while the bar does not take the colour of its unit.
+	BT.Hook(bar)
+	if not BT.Tinted() then
+		X.barColour = nil
+	end
+	BT.Tint()
 end
 
 -- Done out of combat: a tooltip and its bar are frames the game uses in secure code.

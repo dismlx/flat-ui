@@ -343,7 +343,11 @@ local ADDON_NAME, ns = ...
 -- opacity of frames of their own; they play the sounds their rows choose (PlaySound, through ns.PlayKit) and change nothing.
 -- Chat and tooltips adds a filter to the game's chat filters (ChatFrameUtil.AddMessageEventFilter, the chat events players write and
 -- CHAT_MSG_SYSTEM) that writes a web address in the plain text of a line it may read as a link of the game's addon type (|Haddon:FlatUI:url:...|h);
--- a click on one comes through EventRegistry (SetItemRef) and opens a box of its own. While the mouse is over an item, spell or achievement
+-- a click on one comes through EventRegistry (SetItemRef) and opens a box of its own. With Your name in chat (on by default) a filter of the same
+-- registry colours the player's own name in the plain text of other players' lines (|c...|r) and may play a sound (PlaySound, through ns.PlayKit).
+-- With Health bar colour (Class colour for players, reaction for the rest, by default) it colours GameTooltip's health bar (SetStatusBarColor),
+-- again after each change of its value through one HookScript of its OnValueChanged (which writes nothing else on it), and puts the game's green
+-- (0, 1, 0) back at Green. While the mouse is over an item, spell or achievement
 -- link in a chat window (EventRegistry: ChatFrame.OnHyperlinkEnter and ChatFrame.OnHyperlinkLeave) it fills GameTooltip from the link
 -- (SetOwner on a frame of its own, SetHyperlink) and hides it when the mouse leaves (Hide), only while that frame owns it and never in a fight.
 -- Inside the game's build of a tooltip, Chat and tooltips colours a player's class line (SetTextColor) and, with Item and spell icons, writes
@@ -352,6 +356,9 @@ local ADDON_NAME, ns = ...
 -- line still holds the text it wrote. With Compare items only while holding Shift
 -- (on by default) it writes the game's alwaysCompareItems, out of combat: 0, its text before that kept in FlatUIDB.compareGame, and that text
 -- again when the row, its page or the module goes off while the variable is still 0.
+-- With Dark quest, gossip and book pages (on by default) Windows writes the game's questTextContrast, out of combat: 4, the game's own dark
+-- pages with light text, its text before that kept in FlatUIDB.questContrastGame, and that text again when the row or the module goes off
+-- while the variable is still 4.
 -- Inside the game's build of a spell tooltip, through the same post call, Chat and tooltips adds lines with the share of spell damage, spell
 -- healing or attack power the spell adds, what that is with the player's stats, and its threat (AddLine, AddDoubleLine), and inside the build of
 -- an item tooltip lines with what wearing the item changes for the spells the player chose (AddLine, AddDoubleLine), each once for each build and
@@ -4193,6 +4200,13 @@ frame:SetScript("OnEvent", function(_, event, ...)
 		-- Compare items only while holding Shift is written at every login, whatever the switch of Chat and tooltips (ItemCompare.lua).
 		if ns.ItemCompareSync then
 			local ok, err = pcall(ns.ItemCompareSync)
+			if not ok then
+				geterrorhandler()(err)
+			end
+		end
+		-- Dark quest, gossip and book pages is written at every login, whatever the switch of Windows (Windows.lua).
+		if ns.QuestPagesSync then
+			local ok, err = pcall(ns.QuestPagesSync)
 			if not ok then
 				geterrorhandler()(err)
 			end

@@ -1580,6 +1580,9 @@ ns.PAGES = {
 		{ section = "Window art" },
 		{ key = "raceArt", kind = "bool", default = false, label = "Race background on the Character window", tip = "The picture behind your character.", needs = "character" },
 		{ key = "bookPages", kind = "bool", default = false, label = "Spellbook parchment", tip = "The game's parchment pages with their dark text. Off, the pages are dark with light text.", needs = "spells" },
+		{ key = "questPages", kind = "bool", default = true, label = "Dark quest, gossip and book pages",
+			tip = "The game's Quest Text Contrast at Dark: quest, gossip, book and quest log pages dark with light text, for the whole account. Off, the parchment and the contrast you had. A page already open changes the next time it opens.",
+			needs = "npc" },
 		{ key = "bookArt", kind = "bool", default = false, label = "Talent window backdrop", tip = "The class picture behind the talents and the Legacy pages.", needs = "spells" },
 		{ key = "eye", kind = "bool", default = false, label = "Looking For Group eye", needs = "groupfinder" },
 		{ key = "roleArt", kind = "bool", default = false, label = "Looking For Group role backgrounds", needs = "groupfinder" },
@@ -2431,6 +2434,15 @@ ns.PAGES = {
 			tip = "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy." },
 		{ key = "linkTips", kind = "bool", default = true, label = "Tooltips of chat links",
 			tip = "While the mouse is over an item, spell, achievement or quest link in a chat window, its tooltip shows. Not in a fight." },
+		-- ChatLinks.lua: a chat filter that colours the player's own name in other players' lines (0.5.36).
+		{ section = "Mentions" },
+		{ key = "mentions", kind = "bool", default = true, label = "Your name in chat",
+			tip = "Your name in what other players write in say, yell, emotes, party, raid, guild, officer and the numbered channels shows in a colour of its own. Not in whispers, and only the whole name." },
+		{ key = "mentionColour", kind = "colour", default = "ffff9933", label = "Your name colour", needs = "mentions" },
+		{ key = "mentionSound", kind = "choice", default = "none", label = "Sound when you are named", needs = "mentions",
+			tip = "Once for each line that names you, at most once a second.",
+			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
+				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
 	-- Tooltips, Spell tooltips and Gear comparison: rows of Chat and tooltips (saved as chat.*), each on a page of its own in the sidebar with the
 	-- switch of Chat and tooltips (Panel.lua, BuildModel).
@@ -2461,6 +2473,9 @@ ns.PAGES = {
 		{ section = "Tooltip health bar" },
 		{ key = "health", kind = "bool", default = true, label = "Health bar border and fill" },
 		{ key = "barTexture", kind = "choice", default = "default", label = "Bar texture", needs = "health", choices = "BarChoicesDefault" },
+		{ key = "barColour", kind = "choice", default = "class", label = "Health bar colour", needs = "barHide", needsIn = { false },
+			tip = "The colour of the health bar under a unit's tooltip, kept through every change of its health, also in a fight.",
+			choices = { { "class", "Class colour for players, reaction for the rest" }, { "game", "Green, as the game has it" } } },
 		{ key = "barHide", kind = "bool", default = false, label = "Hide the health bar" },
 		{ key = "barHeight", kind = "number", default = 8, min = 2, max = 16, step = 1, unit = " px", label = "Health bar height",
 			needs = "barHide", needsIn = { false } },
@@ -2510,10 +2525,12 @@ ns.PAGES = {
 		{ key = "targetLine", kind = "bool", default = true, label = "Target of units", tip = "A line naming what a unit targets, in its class or reaction colour: You when it is you, in red while it is a unit you can attack." },
 		-- ChatTips.lua (TargetedBy): the targets of the party or raid members (0.5.35).
 		{ key = "targetedBy", kind = "bool", default = true, label = "Who in your group targets it",
-			tip = "In a party or raid, a grey line under a unit's tooltip naming the members whose target it is, in their class colours: at most six, then +N." },
+			tip = "In a party or raid, a grey line under a unit's tooltip naming the members whose target it is, in their class colours: at most six, then +N. Kept up to date while you point at the unit, and it shows as soon as a first member takes it." },
 		{ section = "Item comparison" },
 		{ key = "compareShift", kind = "bool", default = true, label = "Compare items only while holding Shift",
 			tip = "The items you wear show beside the tooltip of an item only while you hold Shift. Sets a game setting that the game's options do not show. Turned off, the game's own value is back." },
+		{ key = "compareHint", kind = "bool", default = true, label = "Hint while Shift is up", needs = "compareShift",
+			tip = "An item you could wear ends its tooltip with a dim line, Shift: compare with what you wear, and your spells while the gear lines wait for the comparison. It goes once you hold Shift; not on the items you wear." },
 	},
 	-- SpellLines.lua (part of Chat and tooltips): spell power, attack power and threat in spell tooltips. The gear comparison has the page after it.
 	{
@@ -2528,14 +2545,14 @@ ns.PAGES = {
 		{ key = "spellTotal", kind = "bool", default = true, label = "Total of a cast", needs = "spellPower",
 			tip = "What one cast does now with your stats, base and bonus together, as in Total 973 a cast (556 + 417). A spell over time says its total over its duration and a tick, a channel its whole channel, a heal its healing, and a weapon strike one hit with the weapon you wear." },
 		{ key = "spellRates", kind = "bool", default = true, label = "Average and rates", needs = "spellTotal",
-			tip = "A dim line under the total: what a cast does on average with crits, misses and, for a spell, the damage your Spell Piercing adds, against the enemy Against names under Gear comparison, and that for a second of cast time (the global cooldown for an instant) and for a point of mana. Not for rage or energy." },
+			tip = "A dim line under the total: what a cast does on average with crits, misses and, for a spell, the damage your Spell Piercing adds, against the enemy Against names under Gear comparison, and that for a second of cast time (the global cooldown for an instant) and for a point of mana, with how many casts a full bar of mana gives. Not for rage or energy." },
 		-- It needs no other row: the gear comparison counts it too, in item tooltips and the window (GearModel.lua), as Against and the rows after it
 		-- serve the window (design 2.5: the low rank factor while its row is on).
 		{ key = "spellLowRank", kind = "bool", default = true, label = "Less for low ranks (estimate)",
 			tip = "On WoW: Forever a rank far below your level gets less of your spell damage and healing. Blizzard gave no formula, so Flat UI uses an estimate from players' tests on heals up to level 30: in full for 17 levels after the rank is learned, then 5% less a level. Marked ~." },
 		-- SpellLines.lua: one line after the spell lines with the rank after the one shown, from the rank's level in SpellData.lua (0.5.35).
 		{ key = "spellNextRank", kind = "bool", default = true, label = "Next rank",
-			tip = "On a spell with more ranks: the level of the next rank, as Next rank: Rank 6 at level 32, or in green that you can learn it now. Not at the top rank or once you know a higher one, nor on talents, pet spells and judgements." },
+			tip = "On a spell with more ranks: the level of the next rank, as Next rank: Rank 6 at level 32, or in green that you can learn it now. A rank no trainer teaches, from the class books of Ahn'Qiraj, says it comes from a book. Not at the top rank or once you know a higher one, nor on talents, pet spells and judgements." },
 		{ key = "spellThreat", kind = "choice", default = "special", label = "Threat lines",
 			choices = { { "special", "Where threat is special or changed" }, { "all", "On every spell" }, { "off", "Off" } },
 			tip = "Where threat is special or changed: abilities with threat of their own, and spells whose threat your stance, form, Righteous Fury, talents or gear change, with what changes it; not a damage dealer's Battle Stance or Cat Form, nor heals at the usual half a point a point healed. Stances, forms and Righteous Fury say what their own text does not. A spell whose threat on WoW: Forever is not known, such as Whirlwind, Execute, Power Word: Shield and the absorbs, gets no line." },

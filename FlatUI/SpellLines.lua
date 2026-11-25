@@ -6,8 +6,9 @@ local _, ns = ...
 -- chat.spellTotal; 0.5.20) and its rates (chat.spellRates: the expected value with crits, misses and a spell's piercing, a second of cast time, a
 -- point of mana), its threat on WoW: Forever with each multiplier in force (Threat lines), the lines a stance, form, aura or talent tooltip needs
 -- that its own text leaves out, while a number shown is from before the fight now on, one dim line that says so, and last, on a spell whose next
--- rank the player has yet to learn, the level of that rank or that it can be learned now (Next rank, chat.spellNextRank; 0.5.35, NextRank, made
--- fresh for each build from the rank's level in SpellData.lua, the player's level and ns.SpellKnown of Cooldowns.lua). SpellModel.lua makes
+-- rank the player has yet to learn, the level of that rank, that it can be learned now, or for a rank of the class books of Ahn'Qiraj that it
+-- comes from a book (Next rank, chat.spellNextRank; 0.5.35, NextRank, made fresh for each build from the rank's level in SpellData.lua, SL.BOOKS,
+-- the player's level and ns.SpellKnown of Cooldowns.lua). SpellModel.lua makes
 -- the texts (M.PowerLines, M.TotalLines, M.ThreatLines, M.RuleLines, each a block with its title) from the data of SpellData.lua and the player's
 -- state and stats, and listens to the game while a part wants it (M.Want); this file finds the spell, keeps its lines and adds them. It registers
 -- no event, adds to the chat module and has no switch of its own, as ChatTips.lua. SpellModel.lua, SpellData.lua and ns.ActionSpell of
@@ -102,6 +103,21 @@ local SL = {
 	-- The line of the next rank (chat.spellNextRank, 0.5.35): dim below its level, green once the player's level reaches it.
 	NEXT = "Next rank: Rank %d at level %d",
 	LEARN = "Rank %d: you can learn it now",
+	-- The line of a next rank no trainer teaches (0.5.36), dim at any level.
+	BOOK = "Rank %d comes from a book, not a trainer",
+	-- The ranks of SpellData.lua taught by the class books of Ahn'Qiraj (patch 1.9, three a class: the Manuals, Librams, Guides, Handbooks, Books,
+	-- Tablets, Tomes and Grimoires), not by a trainer. Facts of the game, by spell ID.
+	BOOKS = {
+		[25286] = true, [25288] = true, -- Heroic Strike 9, Revenge 6
+		[25292] = true, -- Holy Light 9
+		[25295] = true, -- Serpent Sting 9
+		[25300] = true, [25302] = true, [25349] = true, -- Backstab 9, Feint 5, Deadly Poison 5
+		[25314] = true, [25315] = true, [25316] = true, -- Greater Heal 5, Renew 10, Prayer of Healing 5
+		[25357] = true, -- Healing Wave 10
+		[25304] = true, [25306] = true, [25345] = true, -- Frostbolt 11, Fireball 12, Arcane Missiles 8
+		[25307] = true, [25309] = true, [25311] = true, -- Shadow Bolt 10, Immolate 8, Corruption 7
+		[25297] = true, [25298] = true, [25299] = true, -- Healing Touch 11, Starfire 7, Rejuvenation 11
+	},
 	-- Spells whose lines are kept at most (design 4.6).
 	MOST = 64,
 	-- The key of the lines of a build that names no talent rank.
@@ -531,7 +547,8 @@ end
 
 -- The line of the next rank (chat.spellNextRank, 0.5.35), made fresh for each build and never kept, since it follows the player's level and the
 -- spells known: the rank after the one this tooltip is of (its place in the entry's ranks, SpellData.lua: [1] the spell ID, [2] the level it is
--- learned at), dim as "Next rank: Rank 6 at level 32" below that level and green as "Rank 6: you can learn it now" at it. Nil at the top rank, on
+-- learned at), dim as "Next rank: Rank 6 at level 32" below that level and green as "Rank 6: you can learn it now" at it. A rank one of the class
+-- books of Ahn'Qiraj teaches (SL.BOOKS) is never green: it reads, dim at any level, "Rank 11 comes from a book, not a trainer". Nil at the top rank, on
 -- a talent's block (rank, trait), a pet's spell and a judgement (whose ranks follow its seal, entry.seal), and while the player knows that rank or
 -- a higher one, or the game does not say (ns.SpellKnown of Cooldowns.lua answers true then), or the player's level is not plain.
 local function NextRank(entry, index, rank, trait)
@@ -559,6 +576,9 @@ local function NextRank(entry, index, rank, trait)
 		return nil
 	end
 	local style = Colours()
+	if Whole(after[1]) and SL.BOOKS[after[1]] then
+		return { left = SL.BOOK:format(index + 1), colour = style.dim, rightColour = style.dim, wrap = true, note = true }
+	end
 	if level >= learn then
 		local good = type(style.good) == "table" and style.good or SL.STYLE.good
 		return { left = SL.LEARN:format(index + 1), colour = good, rightColour = good, wrap = true, note = true }

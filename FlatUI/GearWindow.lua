@@ -98,7 +98,9 @@ local _, ns = ...
 -- raised when clicked (SetToplevel, WL/uiobjects.yaml:4770) and when it opens or is asked for again (Raise, :4473),
 -- kept on the screen (SetClampedToScreen) and placed by Flat UI alone (SetMovable, SetDontSavePosition, :4605). The mouse wheel scrolls its lines when
 -- there are more than it holds (EnableMouseWheel, :7184). Its name goes once into UISpecialFrames, whose windows the game's CloseSpecialWindows hides
--- on Escape (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:21-27, 1104-1116). It adds a line to /flatui status while it is open with
+-- on Escape (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:21-27, 1104-1116). It fades in over 0.1 s as it opens, with the game's
+-- sound of the character sheet opening (SOUNDKIT.IG_CHARACTER_INFO_OPEN, PlaySound), and plays its closing sound as it shuts (0.5.36); neither
+-- while /flatui move hides and shows it, nor as the module or the part goes off. It adds a line to /flatui status while it is open with
 -- an item (ns.AddStatus, design 4.12), and tells GearLines.lua whether it is open (ns.GearWindowOpen), whose status lines show then too.
 -- It registers no event: it looks on the OnUpdate of its own frame while it shows. Every frame, texture and font string here is Flat UI's own.
 
@@ -177,8 +179,8 @@ local FORMS = { [1] = "cat", [5] = "bear", [8] = "bear" }
 local HANDS = { main = 16, off = 17, both = 16, ranged = 18 }
 local NORM, SWING = { one = 2.4, dagger = 1.7, two = 3.3, ranged = 2.8 }, { cat = 1.0, bear = 2.5 }
 -- Seconds between two looks at what the window was worked out from, and at the cursor; how soon the same item or spell again counts as the same drop
--- (the click that ends a drag on the window).
-local TICK, LOOK, DROP_AGAIN = 0.5, 0.1, 0.3
+-- (the click that ends a drag on the window); how long the window fades in as it opens, as the options window does (0.5.36).
+local TICK, LOOK, DROP_AGAIN, FADE_IN = 0.5, 0.1, 0.3, 0.1
 -- The dim lines the window holds under its table (the item's notes) and in its foot, the lines of Overall, the most lines of the table it makes,
 -- the lines the notes and the foot give way for, and the separators' opacity.
 local NOTES, FOOT, OVERALL, MOST_ROWS, LEAST_ROWS = 10, 7, 4, 80, 3
@@ -388,7 +390,7 @@ local function Run(fn, ...)
 	if not ok and err ~= nil then
 		Report("window", err)
 		if ns.PartStopped(KEY, PART) then
-			Close()
+			Close(true)
 		end
 	end
 	return ok == true
@@ -3249,10 +3251,25 @@ local function Make()
 	frame:SetScript("OnMouseWheel", function(_, delta)
 		Run(Scroll, delta)
 	end)
+	-- It fades in over FADE_IN (OnUpdate, below) with the game's sound of the character sheet opening, and plays the sound of its closing as it
+	-- hides (0.5.36), by its cross, Compare gear, /flatui gear or Escape; it hides at once. Hidden and shown again by /flatui move (MoversMode's
+	-- Holding), or closed because the module or the part went off (Close(true)), it plays neither.
 	frame:SetScript("OnShow", function()
+		W.fade = 0
+		frame:SetAlpha(0)
+		if W.held then
+			W.held = nil
+		elseif type(PlaySound) == "function" and type(SOUNDKIT) == "table" and SOUNDKIT.IG_CHARACTER_INFO_OPEN then
+			pcall(PlaySound, SOUNDKIT.IG_CHARACTER_INFO_OPEN)
+		end
 		Run(Showing)
 	end)
 	frame:SetScript("OnHide", function()
+		local holding = type(ns.MoversMode) == "table" and type(ns.MoversMode.Holding) == "function" and ns.MoversMode.Holding() == true
+		W.held, W.fade = holding or nil, nil
+		if not holding and not W.quiet and type(PlaySound) == "function" and type(SOUNDKIT) == "table" and SOUNDKIT.IG_CHARACTER_INFO_CLOSE then
+			pcall(PlaySound, SOUNDKIT.IG_CHARACTER_INFO_CLOSE)
+		end
 		Hiding()
 	end)
 	-- A change of size, a drag of the grip's included, draws the window again at the next frame.
@@ -3264,6 +3281,15 @@ local function Make()
 	frame:SetScript("OnUpdate", function(_, elapsed)
 		local step = Finite(elapsed) and elapsed or 0
 		W.elapsed, W.looked = W.elapsed + step, W.looked + step
+		if W.fade then
+			W.fade = W.fade + step
+			if W.fade >= FADE_IN then
+				W.fade = nil
+				frame:SetAlpha(1)
+			else
+				frame:SetAlpha(W.fade / FADE_IN)
+			end
+		end
 		if W.relayout then
 			W.relayout = false
 			Run(Paint, W.view)
@@ -3277,7 +3303,7 @@ local function Make()
 			if Allowed() then
 				Run(Tick)
 			else
-				Close()
+				Close(true)
 			end
 		end
 	end)
@@ -3328,11 +3354,13 @@ local function Open(link, base)
 	end
 end
 
--- Closes the window. Plain code, so it also works once the part has stopped.
-function Close()
+-- Closes the window. Plain code, so it also works once the part has stopped. quiet: the module or the part went off, so no sound plays.
+function Close(quiet)
 	W.opening = false
 	if W.frame then
+		W.quiet = quiet == true or nil
 		pcall(W.frame.Hide, W.frame)
+		W.quiet = nil
 	end
 	Want(false)
 end
@@ -3434,7 +3462,7 @@ end
 -- Text size of the window again after a change of them; a row of the tab worked out again comes with the next look (Tick).
 function ns.GearWindowSync()
 	if not Allowed() then
-		Close()
+		Close(true)
 		return
 	end
 	if W.frame then

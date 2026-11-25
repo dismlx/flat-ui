@@ -56,6 +56,8 @@ local ADDON_NAME, ns = ...
 -- or hiding the table when its answer changed.
 -- While test mode is on (TestMode.lua), Show lets the table show whatever it says, and Against the target with no enemy targeted counts a boss,
 -- three levels above the player.
+-- As Show lets it show or hides it (an enemy targeted, lost or killed, a fight begun or over) the table fades in over 0.15 s and out over 0.35 s
+-- (Visible, 0.5.36, two Alpha animations of its own frame); a refresh, test mode's On and Off and the row going off set it at once.
 -- Nothing of the game's is written: its frames are read and anchored to, never changed.
 
 local KEY, PART = "hud", "hit table"
@@ -1037,9 +1039,72 @@ local function Allowed()
 	return Ask(UnitExists, "target") == true and Ask(UnitCanAttack, "player", "target") == true and not S.dead
 end
 
+-- The fades of the table (0.5.36), as the threat list's (Threat.lua): in over FADE[1] seconds as Show lets it show, out over FADE[2] as it hides
+-- it. The frame stays shown at opacity 0 at the end of a fade out, so the movers keep its box. A fade out that a new target breaks gives the
+-- opacity back at once, with no flicker, and a refresh (force: a changed row, the page, the profile, test mode's On and Off) sets it at once.
+local FADE = { 0.15, 0.35 }
+
+-- The two Alpha animations of the frame, made once with it; nil where the client makes none.
+local function Fades(frame)
+	local ok, come, go = pcall(function()
+		local fadeIn = frame:CreateAnimationGroup()
+		local rise = fadeIn:CreateAnimation("Alpha")
+		rise:SetFromAlpha(0)
+		rise:SetToAlpha(1)
+		rise:SetDuration(FADE[1])
+		local fadeOut = frame:CreateAnimationGroup()
+		local fall = fadeOut:CreateAnimation("Alpha")
+		fall:SetFromAlpha(1)
+		fall:SetToAlpha(0)
+		fall:SetDuration(FADE[2])
+		pcall(fadeOut.SetToFinalAlpha, fadeOut, true)
+		fadeOut:SetScript("OnFinished", function()
+			frame:SetAlpha(0)
+		end)
+		return fadeIn, fadeOut
+	end)
+	if ok then
+		return come, go
+	end
+	return nil, nil
+end
+
+-- Shows the table (opacity 1) or hides it (opacity 0) with its fades; now, or a frame whose opacity is not known yet, without them. S.visible
+-- is what was asked last: true, false, or nil after Off.
+local function Visible(on, now)
+	local frame, come, go = S.frame, S.fadeIn, S.fadeOut
+	local fading = go ~= nil and go:IsPlaying()
+	if on then
+		if fading then
+			pcall(go.Stop, go)
+		end
+		if S.visible ~= true then
+			frame:SetAlpha(1)
+			-- Only a table fully faded out fades in; one caught in its fade out is back at once.
+			if come and not now and not fading and S.visible == false then
+				pcall(come.Play, come)
+			end
+		end
+	else
+		if come and come:IsPlaying() then
+			pcall(come.Stop, come)
+		end
+		-- A fade out under way goes on to its end; a frame already hidden, or a refresh, takes 0 at once.
+		if now or not go or (S.visible ~= true and not fading) then
+			if fading then
+				pcall(go.Stop, go)
+			end
+			frame:SetAlpha(0)
+		elseif not fading and not pcall(go.Play, go) then
+			frame:SetAlpha(0)
+		end
+	end
+	S.visible = on
+end
+
 -- Works the table out and draws it. A rule that hides it sets its opacity to 0 and leaves it laid out, so the movers find its box; while it is
 -- hidden so the numbers wait, once it has been laid out, and the next event that shows it works them out. A refresh (force) lays it out all the
--- same, so its box follows a changed row.
+-- same, so its box follows a changed row. The opacity changes with a fade (Visible), and at once in a refresh.
 Update = function(force)
 	S.dirty = false
 	local calc = ns.HitTableCalc
@@ -1049,7 +1114,7 @@ Update = function(force)
 	S.dead = Ask(UnitIsDeadOrGhost, "target") == true
 	local allowed = Allowed()
 	if not allowed and S.laid and not force then
-		S.frame:SetAlpha(0)
+		Visible(false)
 		return
 	end
 	-- Against the target, with no enemy targeted in test mode: a boss, three levels above the player, rather than a mob of the player's level.
@@ -1074,7 +1139,7 @@ Update = function(force)
 	end
 	Layout(g, lines)
 	Fill(columns, lines, title, note)
-	S.frame:SetAlpha(allowed and #lines > 0 and 1 or 0)
+	Visible(allowed and #lines > 0, force)
 end
 
 -- Events ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -1256,7 +1321,11 @@ Off = function()
 	Hear(false)
 	S.dirty, S.read = false, nil
 	if S.frame then
+		for _, fade in ipairs({ S.fadeIn, S.fadeOut }) do
+			pcall(fade.Stop, fade)
+		end
 		S.frame:Hide()
+		S.visible = nil
 	end
 end
 
@@ -1281,6 +1350,7 @@ local function Build()
 		heads[index] = Text(frame, "RIGHT")
 	end
 	S.frame, S.rail, S.outline, S.title, S.note, S.probe, S.heads = frame, rail, outline, title, note, probe, heads
+	S.fadeIn, S.fadeOut = Fades(frame)
 end
 
 -- The cast bar's lock changed, the unit frames were refreshed, or the movers set or put back the spot: the table is placed again, out of combat.
