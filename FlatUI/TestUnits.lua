@@ -38,10 +38,12 @@ local _, ns = ...
 --   pet       PetFrame: no pet, any class. boss: BossTargetFrameContainer, from its top right: no boss1; real while Edit Mode is open or
 --             Boss1TargetFrame shows. totem: TotemFrame, a shaman's, while the game shows no totem.
 -- Animate (while the bar's Moving is on): Eli's health drifts from 64% to 40% and back over 6 seconds on the party frames, three raid members' drift
--- too, and the totem's time counts down from 2:00 and starts again. It sets fills and words only (ns.DrawUnits.Fill and FillCell).
+-- too, and the totem's time counts down from 2:00 and starts again. It sets fills and words only (ns.DrawUnits.Fill and FillCell), and the low health
+-- border that goes with the new health: the first drifting raid member, Bex, goes from 48% down to 18% and back, so with Low health border on at its
+-- 20% default the border comes and goes on Bex's cell.
 --
 -- The roster of the raid (spec 2.4): 8 groups of 5, the first a tank, the second a healer and the rest damage, the classes in turn by role; health
--- 30 + (index * 37) % 71 percent and power 20 + (index * 53) % 81 percent; leader 1, assistants 6 and 11; markers on the tanks (Skull 1, Cross 6,
+-- 30 + (index * 37) % 71 percent, but 14% on 8 and 27, under the low health border's limit, and power 20 + (index * 53) % 81 percent; leader 1, assistants 6 and 11; markers on the tanks (Skull 1, Cross 6,
 -- Square 11, Moon 16, Triangle 21, Diamond 26, Circle 31, Star 36); dead 7 and 24, offline 13 and 33, out of range 4, 18, 29 and 38; a debuff the
 -- player can dispel on 3 (magic), 9 (curse), 15 (poison), 22 (disease) and 35 (magic); aggro on each tank; a buff on every third; the player's
 -- heals over time on 2, 5 and 12 (UnitHots.lua's colours: a priest's Renew, a druid's Rejuvenation and Regrowth, a shaman's Riptide); the first 10
@@ -97,15 +99,17 @@ do
 			marker = MARKERS[index], dead = DEAD[index], offline = OFFLINE[index], away = AWAY[index], dispel = DISPEL[index], threat = slot == 1,
 			buff = index % 3 == 0, hot = HOT_ON[index], debuffs = DISPEL[index] and { DISPEL[index] } or nil }
 	end
+	-- Two members low on health, under the low health border's limit.
+	ROSTER[8].base, ROSTER[27].base = 0.14, 0.14
 end
 
 -- The party (spec 1.3): a leader tank with a marker, a buff and aggro; a healer out of range with a magic debuff and your heals over time; a
--- warlock with a curse and a Voidwalker; a dead rogue.
+-- warlock at 16% after Life Tap, under the low health border's limit, with a curse and a Voidwalker; a dead rogue.
 local PARTY = {
 	{ name = "Mara", class = "PALADIN", role = "tank", base = 0.82, power = 0.64, powerType = "MANA", leader = true, marker = 1, threat = true, buff = true },
 	{ name = "Eli", class = "PRIEST", role = "healer", base = 0.64, power = 0.38, powerType = "MANA", dispel = "magic", away = true, hot = true,
 		debuffs = { "magic" } },
-	{ name = "Ivo", class = "WARLOCK", role = "damage", base = 0.47, power = 0.71, powerType = "MANA", dispel = "curse", debuffs = { "curse" },
+	{ name = "Ivo", class = "WARLOCK", role = "damage", base = 0.16, power = 0.71, powerType = "MANA", dispel = "curse", debuffs = { "curse" },
 		pet = { kind = "partypet", name = "Voidwalker", react = FRIENDLY, owner = "WARLOCK", health = 0.9 } },
 	{ name = "Fay", class = "ROGUE", role = "damage", base = 0, power = 0, powerType = "ENERGY", dead = true },
 }

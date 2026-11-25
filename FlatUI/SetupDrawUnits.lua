@@ -5,7 +5,8 @@ local ADDON_NAME, ns = ...
 -- stage, all of them in ns.Own so that no module restyles them. draw reads settings only through ns.Get and lays out and paints the same frames, so under the draft
 -- view of the setup it draws the draft. Nothing here calls a module or the draft layer. Every number shown is fixed (health 7,000 of 10,000, mana 4,200 of 6,000),
 -- since the real ones are secret values (AO/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:1526-1529); the player's power is that of their class at rest,
--- so a warrior's rage shows empty and a rogue's energy full. The bars, picture, name row, level, text and icons follow UnitFrames.lua, UnitFrameLevel.lua,
+-- so a warrior's rage shows empty and a rogue's energy full. While Low health border is on, Mara (the first party member) and the fifth raid cell are at 15%,
+-- so that the border shows on them while the limit is above that (HealthColour.lua). The bars, picture, name row, level, text and icons follow UnitFrames.lua, UnitFrameLevel.lua,
 -- UnitFrameLooks.lua, UnitFramePortrait.lua, UnitFrameCells.lua, UnitText.lua, UnitParts.lua and UnitExtras.lua, which style the game's frames; the layout is this
 -- file's own, since a module can style only the game's frames.
 -- With Frame style Separate parts (the default, and what any value but One frame means) each part has its own border and background. With One frame every
@@ -105,6 +106,8 @@ local KIND = {
 }
 -- The frames whose text sizes are those of the player (UnitFrames.lua:114).
 local LARGE = { player = true, target = true, focus = true }
+-- The frames that take the low health border (HealthColour.lua LOW_KINDS): your own and your pet's, your party's and their pets', and your raid's.
+local LOW = { player = true, pet = true, party = true, partypet = true, raid = true }
 
 -- Helpers ---------------------------------------------------------------------------------------------------------------------------------
 
@@ -536,6 +539,48 @@ local function CutFill(bar, fill, radius)
 	end
 end
 
+-- The low health border of a frame or a raid cell (HealthColour.lua MakeLow and PaintLow): a frame over the health bar, above the bar's own border, with
+-- four edges of its own in the colour of Low health border colour just outside the bar, or the rounded line in place of them while the bar's own border
+-- draws its rounded line (radius). It shows whatever Border says, as the game's does, and lies over the threat and debuff colour.
+local function MakeLow(root, bar, levels)
+	local frame = Above(Frame(root), root, levels)
+	frame:SetAllPoints(bar)
+	frame:Hide()
+	local outline = ns.Outline(frame, frame)
+	if outline == nil then
+		return nil
+	end
+	ns.SetOutlineArea(outline, KEY)
+	return { frame = frame, outline = outline }
+end
+
+-- True while a styled frame of a kind that takes it shows the border: the row on, the unit neither dead nor offline, and its health under the limit.
+local function LowShown(on, g, s, hp)
+	return on and g.lowHealth and not s.dead and not s.offline and hp * 100 < g.lowHealthAt
+end
+
+local function PaintLow(low, shown, radius, t)
+	if low == nil then
+		return
+	end
+	low.frame:SetShown(shown and true or false)
+	if not shown then
+		return
+	end
+	local r, g, b = ns.Colour(KEY .. ".lowHealthColour")
+	ns.SetOutline(low.outline, true, false)
+	ns.SetOutlineColour(low.outline, r, g, b)
+	ns.SetOutlineEdges(low.outline, true)
+	ns.SetOutlineThickness(low.outline, ns.Get("general.thickness"))
+	Round(low.outline, radius, t)
+end
+
+-- The radius of the low health border over a bar whose own border was rounded with `radius`: that radius while its rounded line shows, else none.
+local function LowRadius(outline, radius)
+	local rim = rims[outline]
+	return radius ~= nil and rim ~= nil and rim.line:IsShown() and radius or nil
+end
+
 -- Marks of party and raid frames ---------------------------------------------------------------------------------------------------------
 
 -- The thickness of the dispel border in screen pixels, the size of its type icon and the atlas of the type icons (UnitGroupMarks.lua RIM_PX, ICON,
@@ -671,9 +716,10 @@ local function Sample(id)
 	if number then
 		local member = PARTY[number]
 		local debuffed = number == 1 or number == 3
+		-- low: Mara's health while Low health border is on, so that the border shows (E.bars).
 		return { kind = "party", cap = number == 1 and "Party" or nil, name = member[1], level = 19, class = member[2], player = true, react = FRIENDLY, role = member[3],
 			leader = number == 1, number = number, away = number == 4, auras = debuffed and { { "debuff", number == 1 and "magic" or "poison", false, 3, "12" } } or nil,
-			debuff = number == 1 and TYPE.magic or nil }
+			debuff = number == 1 and TYPE.magic or nil, low = number == 1 and 0.15 or nil }
 	end
 	number = tonumber(id:match("^partypet(%d)$"))
 	if number then
@@ -737,6 +783,10 @@ function E.make(stage, id, given)
 	end
 	o.pred, o.shield, o.absorb = Tex(o.health, "ARTWORK", 1), Tex(o.health, "ARTWORK", 2), Tex(o.health, "ARTWORK", 3)
 	o.deadText = Text(o.healthTop, "GameFontHighlightSmall")
+	-- The low health border, above the health bar's own border and the name row on it.
+	if LOW[sample.kind] then
+		o.low = MakeLow(root, o.health, 4)
+	end
 	local row = Above(Frame(root), root, 3)
 	o.row = row
 	o.rBase, o.rGrad, o.rFill = Tex(row, "BACKGROUND", -8), Tex(row, "BACKGROUND", 0), Tex(row, "BACKGROUND", 0)
@@ -834,6 +884,7 @@ local function Settings(root)
 		auraCrop = Get("auraCrop"), auraTypeColours = Get("auraTypeColours") == true, auraCountSize = Get("auraCountSize"),
 		auraNumbers = Get("auraNumbers") == true, lookShadow = Get("lookShadow") == true, radius = RADIUS[Get("corners")], fit = { tot = Get("totNameFit"), pet = Get("petNameFit"), party = Get("partyNameFit"), partypet = Get("partyNameFit"), boss = Get("bossNameFit") } }
 	g.t = ns.Pixels(root, ns.Get("general.thickness"))
+	g.lowHealth, g.lowHealthAt = Get("lowHealth") == true, tonumber(Get("lowHealthAt")) or 20
 	-- Frame style: One frame only while it says One frame; any other value, or none, is Separate parts (UnitFrames.lua FRAME.want). The gap of One frame is
 	-- Border thickness and Space between parts (2 px while the row is not there), between the parts and round them (UnitFrames.lua FRAME.gap).
 	g.joined = Get("frameStyle") == "one"
@@ -1158,7 +1209,9 @@ function E.bars(o, g, L)
 	local size = L.size
 	-- The player's power at rest (REST): its colour, how full it is, and numbers to match. Every other frame shows mana at 70%, or the health, power
 	-- and power type a sample of test mode gives (s.health, s.power, s.powerType, shares of 1).
-	local hp, healthNumbers = s.health or FRACTION, s.health and Numbers(HEALTH.max, s.health) or HEALTH
+	-- A sample with `low` has that health while Low health border is on, so that the border shows.
+	local given = s.health or (L.on and g.lowHealth and s.low) or nil
+	local hp, healthNumbers = given or FRACTION, given and Numbers(HEALTH.max, given) or HEALTH
 	local token, share, powerNumbers = s.powerType or "MANA", s.power or FRACTION, s.power and Numbers(POWER.max, s.power) or POWER
 	local rest = s.kind == "player" and REST[s.class] or nil
 	if rest then
@@ -1216,6 +1269,9 @@ function E.bars(o, g, L)
 		end
 		local radius = live and L.on and not L.joined and L.radius or nil
 		Round(outline, radius, t)
+		if role == "health" then
+			o.lowRadius = LowRadius(outline, radius)
+		end
 		-- A dead unit's bars are empty; an offline one's health bar is full and grey, and its power bar empty.
 		local part = role == "health" and hp or share
 		if s.dead or (s.offline and role == "power") then
@@ -1229,6 +1285,7 @@ function E.bars(o, g, L)
 		Fill(fill, file, r, gr, b, 1)
 		CutFill(frame, fill, radius)
 	end
+	PaintLow(o.low, LOW[s.kind] and LowShown(L.on, g, s, hp), o.lowRadius, t)
 	-- Heal prediction, absorb shield and heal absorb on the health bar (UnitExtras.lua:190-216).
 	local bar = size.bar
 	local segments = { { o.pred, hp, 0.12, g.healPrediction, 0.24, 0.86, 0.39, 0.75 }, { o.shield, hp + 0.12, 0.10, g.absorbShield, 1, 1, 1, 0.6 },
@@ -1825,6 +1882,7 @@ local function MakeCell(parent, extra)
 	cell.pOutline = ns.Outline(cell.power, cell.power)
 	ns.SetOutlineArea(cell.pOutline, KEY)
 	cell.pFill = Tex(cell.power, "ARTWORK", 0)
+	cell.low = MakeLow(cell.frame, cell.health, 3)
 	cell.top = Frame(cell.frame)
 	cell.name = Text(cell.top)
 	cell.status = Text(cell.top)
@@ -1848,8 +1906,10 @@ function R.make(stage, count, columns)
 		local data = RAID[index]
 		local cell = MakeCell(o.root)
 		cell.data, cell.index = data, index
-		-- The fixed sample of the setup: the seventh is dead, the eighth out of range and the third has threat.
-		cell.sample = { name = data[1], class = data[2], role = data[3], dead = index == 7, away = index == 8, threat = index == 3 }
+		-- The fixed sample of the setup: the seventh is dead, the eighth out of range and the third has threat; the fifth is low on health while Low
+		-- health border is on.
+		cell.sample = { name = data[1], class = data[2], role = data[3], dead = index == 7, away = index == 8, threat = index == 3,
+			low = index == 5 and 0.15 or nil }
 		o.cells[index] = cell
 	end
 	local first = o.cells[1]
@@ -1966,8 +2026,12 @@ local function PaintCell(cell, s, width, height, g)
 	EdgePaint(cell.hOutline, on, g.backdrop, threat and g.threat and on and THREAT or nil, nil, true)
 	Round(cell.hOutline, on and g.radius or nil, t)
 	cell.inner = width - 2 * inset
-	Stretch(cell.hFill, cell.health, 0, cell.inner * ((dead or s.offline) and 1 or (s.health or FRACTION)), healthHeight)
+	local hp = s.health or (on and g.lowHealth and s.low) or FRACTION
+	Stretch(cell.hFill, cell.health, 0, cell.inner * ((dead or s.offline) and 1 or hp), healthHeight)
 	Fill(cell.hFill, file, r, gr, b, 1)
+	-- The low health border, kept with what it was painted for, so that FillCell shows it again as the health crosses the limit.
+	cell.g, cell.s, cell.on, cell.lowRadius = g, s, on, LowRadius(cell.hOutline, on and g.radius or nil)
+	PaintLow(cell.low, LowShown(on, g, s, hp), cell.lowRadius, t)
 	-- The power bar: thin and bordered with Raid cell look on, else the game's.
 	local pr, pg, pb = ns.PowerColour(s.powerType or "MANA")
 	if pr == nil then
@@ -2333,7 +2397,7 @@ function D.PaintUnit(o, sample, g)
 end
 
 -- Gives a frame PaintUnit painted the health hp (a share of 1), as Animate may: the fill, its colour with Health by health left, the heal prediction
--- and absorb segments and the words on the bar. It lays out nothing else.
+-- and absorb segments, the words on the bar and the low health border. It lays out nothing else.
 function D.Fill(o, hp)
 	local L, g, s = o.layout, o.g, o.s
 	if not (L and g and s and o.healthFill) or s.dead or s.offline then
@@ -2355,6 +2419,7 @@ function D.Fill(o, hp)
 		end
 	end
 	s.health = hp
+	PaintLow(o.low, LOW[s.kind] and LowShown(L.on, g, s, hp), o.lowRadius, L.t)
 	if o.healthMode and o.healthText:IsShown() then
 		local words = Says(o.healthMode, Numbers(HEALTH.max, hp))
 		if words then
@@ -2370,10 +2435,14 @@ function D.Cell(parent)
 end
 D.PaintCell = PaintCell
 
--- Gives a painted raid cell the health hp (a share of 1), and its status text `text` while that shows. It lays out nothing else.
+-- Gives a painted raid cell the health hp (a share of 1), and its status text `text` while that shows, and shows or hides its low health border for
+-- that health. It lays out nothing else.
 function D.FillCell(cell, hp, text)
 	if cell.inner then
 		Stretch(cell.hFill, cell.health, 0, cell.inner * hp, cell.health:GetHeight())
+	end
+	if cell.g and cell.s then
+		PaintLow(cell.low, LowShown(cell.on, cell.g, cell.s, hp), cell.lowRadius, cell.g.t)
 	end
 	if text and cell.status:IsShown() then
 		cell.status:SetText(text)

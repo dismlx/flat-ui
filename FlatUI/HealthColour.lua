@@ -12,10 +12,13 @@ local _, ns = ...
 --
 -- Unit frames: UnitFrames.lua asks healthLeft while it sets a health fill. The fill is then an image in white (the bar texture of the page, or a white
 -- file) and a frame of the addon's own tints it every 0.1 s. Raid frames are left out. The fill record of ns.FlatFill is what puts the colour back.
--- Low health border of unit frames (off by default, All frames: bars and pictures): on the player, party, party pet and raid frames, a frame of the
--- addon's own over the outlined health bar, one level above Flat UI's own outline of it, holds four edges in the row's colour just outside the bar (and
--- the rounded line in place of them while the bar's own outline is rounded), and takes the alpha of a step curve at its limit every 0.1 s, as a plate's
--- does. It is made out of combat, on a frame the game protects; in a fight only its alpha, its colour and whether it shows change. It hides while the
+-- Low health border of unit frames (off by default, All frames: bars and pictures): on the player, pet, party, party pet and raid frames, a frame of
+-- the addon's own over the outlined health bar, one level above Flat UI's own outline of it, holds an inner frame of its own with four edges in the
+-- row's colour just outside the bar (and the rounded line in place of them while the bar's own outline is rounded), and takes the alpha of a step
+-- curve at its limit every 0.1 s, as a plate's does. With Pulse the low health border on (off by default) the inner frame beats: an Alpha animation of
+-- its own, from 1 to 0.35 and back every 0.45 s, plays while the border shows and stops, at full alpha, when it hides or the row goes off; above the
+-- limit the curve's alpha of 0 hides it either way. It is made out of combat, on a frame the game protects; in a fight only its alpha, its colour,
+-- whether it shows and whether its animation plays change (Play and Stop on a frame of the addon's own that is not protected). It hides while the
 -- unit is plainly dead, a ghost or offline, and while the row, the frame or the part is off.
 -- Nameplates: the game's CompactUnitFrame_UpdateHealthColor runs for each health change (Shared\CompactUnitFrame.lua:725-737, 645), and this file
 -- answers it in the same call unless PlateColours.lua paints the plate in a colour of its own (the target, threat or reaction colour).
@@ -223,8 +226,10 @@ end
 -- The low health border of unit frames --------------------------------------------------------------------
 
 local LOW_FRAMES = "Low health border"
--- The kinds of frame that take it: your own, your party's, their pets' and your raid's. The corner radius of each Corners choice (UnitFrames.lua ROUND).
-local LOW_KINDS = { player = true, party = true, partypet = true, raid = true }
+-- The kinds of frame that take it: your own and your pet's, your party's, their pets' and your raid's. The corner radius of each Corners choice
+-- (UnitFrames.lua ROUND). The beat of Pulse the low health border: the alpha it dips to and the time of one way.
+local LOW_KINDS = { player = true, pet = true, party = true, partypet = true, raid = true }
+local PULSE = { low = 0.35, time = 0.45 }
 local RADIUS = { slight = 1, soft = 2 }
 -- The records whose frame has a border.
 local lows = setmetatable({}, weak)
@@ -240,8 +245,9 @@ local function LowOn(rec)
 		and not ns.PartStopped("unitframes", LOW_FRAMES) and Probe(false)
 end
 
--- The frame over the outlined health bar, one level above the frame that holds Flat UI's outline of it, with an outline of its own (its edges alone, no
--- background) and a texture for the rounded line. Made once, out of combat. Nil when the frame has no outlined health bar.
+-- The frame over the outlined health bar, one level above the frame that holds Flat UI's outline of it, which takes the step curve's alpha, and inside it
+-- the frame that beats (pulse), with an outline of its own (its edges alone, no background), a texture for the rounded line and the animation of Pulse
+-- the low health border. Made once, out of combat. Nil when the frame has no outlined health bar.
 local function MakeLow(rec)
 	local entry = rec.byRole.health
 	local box = entry and entry.target
@@ -253,15 +259,29 @@ local function MakeLow(rec)
 	local holder = X.frame(box, ok and X.number(level) and level + 1 or nil)
 	holder:SetAllPoints(box)
 	holder:Hide()
-	local outline = ns.Outline(holder, holder)
+	local pulse = X.frame(holder)
+	pulse:SetAllPoints(holder)
+	local outline = ns.Outline(pulse, pulse)
 	if outline == nil then
 		return nil
 	end
 	ns.SetOutline(outline, true, false)
-	local line = holder:CreateTexture(nil, "OVERLAY", nil, 7)
+	local line = pulse:CreateTexture(nil, "OVERLAY", nil, 7)
 	ns.Own[line] = true
 	line:Hide()
-	local low = { holder = holder, outline = outline, line = line }
+	local beat = nil
+	if type(pulse.CreateAnimationGroup) == "function" then
+		local okGroup, group = pcall(pulse.CreateAnimationGroup, pulse)
+		local okFade, fade = false, nil
+		if okGroup and group ~= nil then
+			okFade, fade = pcall(group.CreateAnimation, group, "Alpha")
+		end
+		if okFade and fade ~= nil and pcall(fade.SetFromAlpha, fade, 1) and pcall(fade.SetToAlpha, fade, PULSE.low)
+			and pcall(fade.SetDuration, fade, PULSE.time) and pcall(group.SetLooping, group, "BOUNCE") then
+			beat = group
+		end
+	end
+	local low = { holder = holder, pulse = pulse, beat = beat, outline = outline, line = line }
 	rec.lowHealth = low
 	lows[rec] = true
 	return low
@@ -288,8 +308,25 @@ local function Rounded(rec, low)
 	return low.rounded == true
 end
 
--- The border of one frame: its colour, its edges or its rounded line, and its alpha, the step curve at the health left, unread. Hidden while the frame does
--- not take it and for a unit that is gone, or plainly dead, a ghost or offline.
+-- Plays the beat of a border while `on`, or stops it with the inner frame at full alpha.
+local function Beat(low, on)
+	local beat = low.beat
+	if beat == nil then
+		return
+	end
+	if on then
+		if not Yes(pcall(beat.IsPlaying, beat)) then
+			pcall(beat.Play, beat)
+		end
+	elseif low.beating ~= false then
+		pcall(beat.Stop, beat)
+		low.pulse:SetAlpha(1)
+	end
+	low.beating = on and true or false
+end
+
+-- The border of one frame: its colour, its edges or its rounded line, its alpha, the step curve at the health left, unread, and its beat. Hidden while the
+-- frame does not take it and for a unit that is gone, or plainly dead, a ghost or offline.
 local function PaintLow(rec)
 	local low = rec.lowHealth
 	if low == nil then
@@ -302,6 +339,7 @@ local function PaintLow(rec)
 		show = not (ok and not ns.IsSecret(connected) and connected == false)
 	end
 	if not show then
+		Beat(low, false)
 		if low.shown then
 			low.shown = nil
 			low.holder:Hide()
@@ -322,6 +360,7 @@ local function PaintLow(rec)
 		low.shown = true
 		low.holder:Show()
 	end
+	Beat(low, Get("unitframes.lowHealthPulse") == true)
 end
 
 local function StepLow()
