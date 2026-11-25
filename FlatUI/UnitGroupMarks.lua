@@ -23,7 +23,9 @@ local _, ns = ...
 -- With Sound for a debuff you can dispel (None by default), the first read of a party or raid frame's unit records whether it has such a debuff, and a later
 -- read that finds one where there was none plays the row's sound (ns.SOUNDS, ns.PlayKit), at most once every 2 seconds whatever frame finds it; an
 -- answer the game would not give changes nothing, and a new unit on the frame starts again. Picking a sound in the options window plays it once, out of a
--- fight (ns.DispelSoundPicked), as the cue sounds of CombatCues.lua do; that does not count towards the row's 2 seconds.
+-- fight (ns.DispelSoundPicked), as the cue sounds of CombatCues.lua do; that does not count towards the row's 2 seconds. At that same moment, with Blink as
+-- one lands (on by default), the border and its type icon blink three times over 0.6 seconds (an Alpha animation on the frame of the addon's own that
+-- holds them, so in a fight too), then stay; the first read of a unit never blinks, so nothing does at login, on zoning or on joining a group.
 --
 -- The game's raid frames have no raid marker (Shared/CompactUnitFrame.xml:3-111). The game gives the index of a marker to addons only withheld
 -- (GetRaidTargetIndex, RaidMarkersDocumentation.lua:55-69, SecretReturns), and SetSpriteSheetCell takes a withheld index (SimpleTextureBaseAPIDocumentation
@@ -239,6 +241,45 @@ local function First(unit)
 	return true, aura
 end
 
+-- The blink of Blink as one lands: the holder's opacity down to BLINK_LOW and back, three times in order, BLINK_STEP seconds a step, so the edges and
+-- the type icon blink together. The holder is a frame of the addon's own, so it plays in a fight. Nil when the client refuses the animation; then the
+-- border just shows.
+local BLINK_LOW, BLINK_STEP = 0.2, 0.1
+
+local function Blink(holder)
+	if type(holder.CreateAnimationGroup) ~= "function" then
+		return nil
+	end
+	local okGroup, group = pcall(holder.CreateAnimationGroup, holder)
+	local made = okGroup and group ~= nil
+	for order = 1, 6 do
+		local from, to = 1, BLINK_LOW
+		if order % 2 == 0 then
+			from, to = BLINK_LOW, 1
+		end
+		local okFade, fade = false, nil
+		if made then
+			okFade, fade = pcall(group.CreateAnimation, group, "Alpha")
+		end
+		made = okFade and fade ~= nil and pcall(fade.SetFromAlpha, fade, from) and pcall(fade.SetToAlpha, fade, to)
+			and pcall(fade.SetDuration, fade, BLINK_STEP) and pcall(fade.SetOrder, fade, order)
+	end
+	if not made then
+		return nil
+	end
+	pcall(group.SetScript, group, "OnFinished", function()
+		pcall(holder.SetAlpha, holder, 1)
+	end)
+	return group
+end
+
+local function StopBlink(d)
+	if d.flash then
+		pcall(d.flash.Stop, d.flash)
+	end
+	pcall(d.holder.SetAlpha, d.holder, 1)
+end
+
 -- The border, four edges of an image file just inside the slot of the health bar, and on a party frame the four type icons at the right end of
 -- the bar, a sublevel over the edges, which cross them. Made out of combat, as a child of the slot, above the outline of Flat UI.
 local function MakeDispel(rec)
@@ -273,6 +314,7 @@ local function MakeDispel(rec)
 			d.icons[kind] = icon
 		end
 	end
+	d.flash = Blink(holder)
 	rec.dispel = d
 	return d
 end
@@ -308,6 +350,7 @@ end
 
 local function Clear(d)
 	d.rim = nil
+	StopBlink(d)
 	for _, edge in ipairs(d.edges) do
 		edge:Hide()
 	end
@@ -484,9 +527,11 @@ local function Read(rec)
 	Say(NOTE_BLIND, rec, id == false)
 	-- Whether the member has such a debuff is a plain answer: a new one plays the sound. The first read of a unit only records it, and an answer the game
 	-- would not give keeps what was there.
+	local landed = false
 	if id ~= false then
 		local has = id ~= nil
-		if has and d.had == false then
+		landed = has and d.had == false
+		if landed then
 			Chime(rec)
 		end
 		d.had = has
@@ -497,6 +542,11 @@ local function Read(rec)
 		return
 	end
 	Draw(rec, d, unit, id, aura)
+	-- Blink as one lands: at the moment the sound would play, on a party or raid frame whose border shows.
+	if landed and d.rim and d.flash and (rec.kind == "party" or rec.kind == "raid") and Opt("dispelFlash") == true then
+		pcall(d.flash.Stop, d.flash)
+		pcall(d.flash.Play, d.flash)
+	end
 end
 
 -- The frames whose unit changed its debuffs, read together a moment after the first.

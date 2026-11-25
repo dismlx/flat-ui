@@ -13,8 +13,9 @@ local _, ns = ...
 -- Unit frames: UnitFrames.lua asks healthLeft while it sets a health fill. The fill is then an image in white (the bar texture of the page, or a white
 -- file) and a frame of the addon's own tints it every 0.1 s. Raid frames are left out. The fill record of ns.FlatFill is what puts the colour back.
 -- Low health border of unit frames (off by default, All frames: bars and pictures): on the player, pet, party, party pet and raid frames, and with
--- Also on target, focus and boss frames (off by default) on those too, for Execute and Hammer of Wrath, a frame of the addon's own over the outlined
--- health bar, one level above Flat UI's own outline of it, holds an inner frame of its own with four edges in the
+-- Also on target, focus, boss and target of target frames (off by default) on those and the focus target too, for Execute and Hammer of Wrath and the
+-- tank a healer watches on the target of target, a frame of the addon's own over the outlined health bar, one level above Flat UI's own outline of it,
+-- holds an inner frame of its own with four edges in the
 -- row's colour just outside the bar (and the rounded line in place of them while the bar's own outline is rounded), and takes the alpha of a step
 -- curve at its limit every 0.1 s, as a plate's does. With Pulse the low health border on (off by default) the inner frame beats: an Alpha animation of
 -- its own, from 1 to 0.35 and back every 0.45 s, plays while the border shows and stops, at full alpha, when it hides or the row goes off; above the
@@ -24,7 +25,9 @@ local _, ns = ...
 -- (SimpleFrameAPIDocumentation.lua:276-288), so nothing tells it from a frame below; it plays unseen under the curve's alpha of 0. It is made out of
 -- combat, on a frame the game protects; in a fight only its alpha, its colour, whether it shows and whether its animation plays change (Play and Stop
 -- on a frame of the addon's own that is not protected). It hides while the unit is plainly dead, a ghost or offline, and while the row, the frame or
--- the part is off.
+-- the part is off. The limit is Low health below, but for one of those other frames whose unit you cannot assist (UnitCanAssist, which carries no
+-- secret predicate, UnitDocumentation.lua:745-761, and a withheld or missing answer counts as an enemy), which takes Enemies below: an enemy target
+-- for Execute at 20% while a friendly one, such as the tank a healer targets, keeps the limit of the group.
 -- Nameplates: the game's CompactUnitFrame_UpdateHealthColor runs for each health change (Shared\CompactUnitFrame.lua:725-737, 645), and this file
 -- answers it in the same call unless PlateColours.lua paints the plate in a colour of its own (the target, threat or reaction colour).
 -- Personal resource display: the same frame tints its health bar, and Bars.lua leaves the health colour to it while the row is on.
@@ -234,8 +237,9 @@ local LOW_FRAMES = "Low health border"
 -- The kinds of frame that take it: your own and your pet's, your party's, their pets' and your raid's. The corner radius of each Corners choice
 -- (UnitFrames.lua ROUND). The beat of Pulse the low health border: the alpha it dips to and the time of one way.
 local LOW_KINDS = { player = true, pet = true, party = true, partypet = true, raid = true }
--- The enemy frames that take it too while Also on target, focus and boss frames is on: for Execute and Hammer of Wrath.
-local ENEMY_KINDS = { target = true, focus = true, boss = true }
+-- The frames that take it too while Also on target, focus, boss and target of target frames is on: for Execute and Hammer of Wrath, and the tank a
+-- healer watches on the target of target. tot is both the target of target and the focus target frame (UnitFrames.lua ROOTS).
+local ENEMY_KINDS = { target = true, focus = true, boss = true, tot = true }
 local PULSE = { low = 0.35, time = 0.45 }
 local RADIUS = { slight = 1, soft = 2 }
 -- The records whose frame has a border.
@@ -246,7 +250,8 @@ local function Yes(ok, value)
 	return ok and not ns.IsSecret(value) and value == true
 end
 
--- True for a frame of a kind that takes the border now: your own and your group's always, the target, focus and boss frames with their row.
+-- True for a frame of a kind that takes the border now: your own and your group's always, the target, focus, boss and target of target frames with
+-- their row.
 local function Takes(rec)
 	return LOW_KINDS[rec.kind] == true or (ENEMY_KINDS[rec.kind] == true and Get("unitframes.lowHealthTarget") == true)
 end
@@ -380,7 +385,11 @@ local function PaintLow(rec)
 	if round then
 		low.line:SetVertexColor(r, g, b, 1)
 	end
+	-- The limit: Enemies below on a target, focus, boss or target of target you cannot assist, Low health below on any other.
 	local at = Get("unitframes.lowHealthAt")
+	if ENEMY_KINDS[rec.kind] and not Yes(pcall(UnitCanAssist, "player", unit)) then
+		at = Get("unitframes.lowHealthTargetAt")
+	end
 	low.holder:SetAlpha(UnitHealthPercent(unit, true, Step(ns.Finite(at) and at or 20)))
 	if not low.shown then
 		low.shown = true
@@ -401,7 +410,7 @@ end
 -- After each pass of the unit frames over a frame: the border made out of combat the first time the row asks, the driver shown, and the border painted.
 local ApplyLow
 function ApplyLow(rec, on)
-	-- A target, focus or boss frame goes on while its row is off, so that a border it had hides.
+	-- A target, focus, boss or target of target frame goes on while its row is off, so that a border it had hides.
 	if not (LOW_KINDS[rec.kind] or ENEMY_KINDS[rec.kind]) then
 		return
 	end

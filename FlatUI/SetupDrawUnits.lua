@@ -6,8 +6,8 @@ local ADDON_NAME, ns = ...
 -- view of the setup it draws the draft. Nothing here calls a module or the draft layer. Every number shown is fixed (health 7,000 of 10,000, mana 4,200 of 6,000),
 -- since the real ones are secret values (AO/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua:1526-1529); the player's power is that of their class at rest,
 -- so a warrior's rage shows empty and a rogue's energy full. While Low health border is on, Mara (the first party member) and the fifth raid cell are at 15%,
--- and with Also on target, focus and boss frames the target (Defias Pillager) too, so that the border shows on them while the limit is above that
--- (HealthColour.lua); with Pulse the low health border it beats as the live one does. The bars, picture, name row, level, text and icons follow UnitFrames.lua, UnitFrameLevel.lua,
+-- and with Also on target, focus, boss and target of target frames the target (Defias Pillager) too, so that the border shows on them while the limit
+-- is above that (HealthColour.lua): Low health below for Mara and the raid cell, Enemies below for a hostile target, focus, boss or target of target; with Pulse the low health border it beats as the live one does. The bars, picture, name row, level, text and icons follow UnitFrames.lua, UnitFrameLevel.lua,
 -- UnitFrameLooks.lua, UnitFramePortrait.lua, UnitFrameCells.lua, UnitText.lua, UnitParts.lua and UnitExtras.lua, which style the game's frames; the layout is this
 -- file's own, since a module can style only the game's frames.
 -- With Frame style Separate parts (the default, and what any value but One frame means) each part has its own border and background. With One frame every
@@ -111,9 +111,9 @@ local KIND = {
 -- The frames whose text sizes are those of the player (UnitFrames.lua:114).
 local LARGE = { player = true, target = true, focus = true }
 -- The frames that take the low health border (HealthColour.lua LOW_KINDS): your own and your pet's, your party's and their pets', and your raid's; and
--- those that take it too with Also on target, focus and boss frames (HealthColour.lua ENEMY_KINDS).
+-- those that take it too with Also on target, focus, boss and target of target frames (HealthColour.lua ENEMY_KINDS).
 local LOW = { player = true, pet = true, party = true, partypet = true, raid = true }
-local ENEMY_LOW = { target = true, focus = true, boss = true }
+local ENEMY_LOW = { target = true, focus = true, boss = true, tot = true }
 
 -- Helpers ---------------------------------------------------------------------------------------------------------------------------------
 
@@ -573,9 +573,11 @@ local function MakeLow(root, bar, levels)
 	return { frame = frame, outline = outline, beat = made and group or nil }
 end
 
--- True while a styled frame of a kind that takes it shows the border: the row on, the unit neither dead nor offline, and its health under the limit.
+-- True while a styled frame of a kind that takes it shows the border: the row on, the unit neither dead nor offline, and its health under the limit:
+-- Enemies below for a hostile target, focus, boss or target of target, Low health below for any other (HealthColour.lua PaintLow).
 local function LowShown(on, g, s, hp)
-	return on and g.lowHealth and not s.dead and not s.offline and hp * 100 < g.lowHealthAt
+	local limit = (ENEMY_LOW[s.kind] and s.react == HOSTILE) and g.lowTargetAt or g.lowHealthAt
+	return on and g.lowHealth and not s.dead and not s.offline and hp * 100 < limit
 end
 
 -- True for a kind of frame that takes the border with the settings g: your own and your group's always, the target, focus and boss frames with Also on
@@ -743,7 +745,7 @@ local function Sample(id)
 		return { kind = "player", cap = "Player", name = name, level = level, class = class, player = true, react = FRIENDLY, lcol = GOLD, state = COMBAT, leader = true,
 			flag = "PvP", timer = "3:05", own = true }
 	elseif id == "target" then
-		-- low: its health while Low health border and Also on target, focus and boss frames are on (E.bars).
+		-- low: its health while Low health border and Also on target, focus, boss and target of target frames are on (E.bars).
 		return { kind = "target", cap = "Target", name = "Defias Pillager", level = 18, react = HOSTILE, lcol = { 1, 0.5, 0.25 }, rank = "elite", marker = 8,
 			face = "MAGE", auras = { { "buff", "none", true }, { "buff", "none" }, { "debuff", "magic" }, { "debuff", "poison" } }, low = 0.15 }
 	elseif id == "focus" then
@@ -941,6 +943,7 @@ local function Settings(root)
 	g.t = ns.Pixels(root, ns.Get("general.thickness"))
 	g.lowHealth, g.lowHealthAt = Get("lowHealth") == true, tonumber(Get("lowHealthAt")) or 20
 	g.lowTarget, g.lowHealthPulse = Get("lowHealthTarget") == true, Get("lowHealthPulse") == true
+	g.lowTargetAt = tonumber(Get("lowHealthTargetAt")) or 20
 	-- Frame style: One frame only while it says One frame; any other value, or none, is Separate parts (UnitFrames.lua FRAME.want). The gap of One frame is
 	-- Border thickness and Space between parts (2 px while the row is not there), between the parts and round them (UnitFrames.lua FRAME.gap).
 	g.joined = Get("frameStyle") == "one"
@@ -1278,7 +1281,7 @@ function E.bars(o, g, L)
 	local size = L.size
 	-- The player's power at rest (REST): its colour, how full it is, and numbers to match. Every other frame shows mana at 70%, or the health, power
 	-- and power type a sample of test mode gives (s.health, s.power, s.powerType, shares of 1).
-	-- A sample with `low` has that health while Low health border is on (the target's with Also on target, focus and boss frames too), so that the
+	-- A sample with `low` has that health while Low health border is on (the target's with Also on target, focus, boss and target of target frames too), so that the
 	-- border shows.
 	local given = s.health or (L.on and g.lowHealth and (s.kind ~= "target" or g.lowTarget) and s.low) or nil
 	local hp, healthNumbers = given or FRACTION, given and Numbers(HEALTH.max, given) or HEALTH
@@ -2188,7 +2191,7 @@ local MARK = {
 	backdrop = { "player", "body" }, flat = { "player", "health" }, healthColour = { "player", "health" }, healthTexture = { "player", "health" },
 	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "boss", "health" },
 	lowHealth = { "party1", "health" }, lowHealthAt = { "party1", "health" }, lowHealthColour = { "party1", "health" }, hoverHighlight = { "player", "health" },
-	lowHealthTarget = { "target", "health" }, lowHealthPulse = { "party1", "health" }, dispelBorder = { "party1", "health" }, dispelIcon = { "party1", "health" },
+	lowHealthTarget = { "target", "health" }, lowHealthTargetAt = { "target", "health" }, lowHealthPulse = { "party1", "health" }, dispelBorder = { "party1", "health" }, dispelIcon = { "party1", "health" },
 	hotSquares = { "party2", "health" }, hotCorner = { "party2", "health" }, hotSize = { "party2", "health" },
 	healPrediction = { "player", "pred" }, absorbShield = { "player", "shield" }, healAbsorb = { "player", "absorb" }, lookOwn = { "player", "health" },
 	lookBorder = { "player", "health" }, lookBack = { "player", "health" }, lookBackAlpha = { "player", "health" },
