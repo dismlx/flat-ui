@@ -4415,6 +4415,15 @@ local function Refresh()
 	GameSound()
 end
 
+-- Sound picked on the page: the page is refreshed, as without a changed function of the row (Core.lua's Changed), which also registers the
+-- game's own sounds by the kit (GameSound), and out of combat the kit plays once, so the pick is heard. Only a pick in the options calls this.
+function ns.TrackerKitChanged()
+	ns.Try(KEY, Refresh)
+	if not InCombatLockdown() then
+		Ding(K.KITS[Opt("kit")] or K.KITS.raid)
+	end
+end
+
 ns.Register(KEY, {
 	label = "Trackers",
 	Start = Refresh,

@@ -1070,6 +1070,7 @@ ns.SETUP_STEPS = {
 		{ "absorbs.amount", "o", "behaviour", "Writes the amount a shield has left, also with its size, or no amount." },
 		{ "absorbs.time", "o", "behaviour", "Writes the time each shield has left." },
 		{ "absorbs.name", "r", "behaviour", "Writes the spell name on each shield's bar." },
+		{ "absorbs.tooltips", "o", "behaviour", "Shows the game's tooltip of a shield over its bar, and each shield on you over the total bar: always, out of combat only, or never." },
 		{ "absorbs.school", "o", "behaviour", "Colours a ward by the school of magic it takes." },
 		{ "absorbs.colour", "r", "behaviour", "Sets the colour of shields that take every school, and of the total." },
 		{ "absorbs.priest", "r", "behaviour", "Shows Power Word: Shield and Contingency Plan." },

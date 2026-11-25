@@ -16,7 +16,7 @@ local _, ns = ...
 -- CooldownViewer.lua:2182-2186), until that cooldown is over; and, when the page goes on and after a loading screen, the items in the bags
 -- whose cooldown runs, one for each cooldown they share. A cooldown read out of combat that is shorter than Shortest cooldown does not pulse,
 -- nor the global cooldown, nor what is left out. While test mode is on (TestMode.lua) a test pulse shows at each spot in use every 3 seconds, with
--- the sound the first time only.
+-- the sound the first time only. Out of combat, a change of a row of the look shows a test pulse in the new look (ns.PulseLookChanged).
 --
 -- The end of a cooldown is found without reading what the game withholds in a fight. The flags of a spell's cooldown are never withheld
 -- (isEnabled, isActive and isOnGCD, SpellSharedDocumentation.lua:19-31), and isOnGCD is believed only inside SPELL_UPDATE_COOLDOWN, the one
@@ -1567,6 +1567,18 @@ function P.Test(quiet)
 	for index = 1, P.InUse() do
 		P.Queue({ kind = "test", key = "test", name = "a test", label = first and first.name or "Cooldown pulse", icon = icon, spot = index,
 			quiet = quiet == true or index > 1 })
+	end
+end
+
+-- A row of the look changed (Icon size, How long it shows, Opacity, Sound, Name under the icon, Grow as it fades, the sizes of spots 2 and 3):
+-- the page is refreshed, as without a changed function of the row (Core.lua's Changed), and out of combat a test pulse shows at each spot in
+-- use in the new look, quiet but for the Sound row, which plays the sound picked. P.Queue drops a test while one shows or waits there, so a
+-- slider dragged makes one pulse, not one for each step. Not while test mode is on, whose own test pulses show every 3 seconds.
+function ns.PulseLookChanged(path)
+	ns.Try(KEY, P.Refresh)
+	local mode = ns.TestMode
+	if ns.Enabled(KEY) and not InCombatLockdown() and not (mode and mode.IsOn()) then
+		P.Test(path ~= KEY .. ".sound")
 	end
 end
 
