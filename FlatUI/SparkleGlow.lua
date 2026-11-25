@@ -32,7 +32,11 @@ local ADDON_NAME, ns = ...
 -- SimpleAnimScaleAPIDocumentation.lua, SimpleAnimRotationAPIDocumentation.lua), played only while the sparkle shows. With Glow colour at By what
 -- it is (general.sparkleGlowColour; Gold, the look above, by default), the cursor that told the object's kind also gives its colour (COLOURS):
 -- herbs green, ore copper, quest objects gold, loot, things to pick up and locked chests white; the stars are that colour, lighter. The
--- textures are tinted again (SetVertexColor) only when the colour changes.
+-- textures are tinted again (SetVertexColor) only when the colour changes. Each time the sparkle lands on an object (it was hidden, or it moves to
+-- another plate) the whole frame fades in over FADE_IN seconds (an Alpha animation of its own frame) and, with Glow sound at anything but None
+-- (general.sparkleGlowSound, the Jump sound's choices of ns.SOUNDS, IconRow.lua), plays that sound once on the Gameplay SFX channel, out of a
+-- fight only and at most once every SOUND_EVERY seconds, so a herb that comes into reach rings softly. Picking a sound in the options plays it
+-- once (ns.SparkleGlowSoundPicked), as the combat sounds do.
 -- Nothing of the game's is written: the plate gets no field, no method call of its Lua and no hook, and its frame level and unit are only read.
 -- While the row is off no event is heard, and the frame, once made, is hidden and taken off its plate. An error stops the sparkle until /reload,
 -- with a line for /flatui status. Not a module: Sparkle.lua's ns.SparkleChanged calls ns.SparkleGlowChanged at login, at a change of profile and
@@ -65,10 +69,17 @@ for _, name in ipairs(CURSORS) do
 	KINDS[name:lower()] = name
 end
 local EVENTS = { "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_SOFT_INTERACT_CHANGED", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }
+-- The fade of the sparkle as it lands on an object, and the least time between two of its sounds.
+local FADE_IN, SOUND_EVERY = 0.25, 2
+-- The choices of Glow sound, as the Jump sound's (LavaWalk.lua), by their place in ns.SOUNDS (IconRow.lua).
+local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
+local SOUND_CHANNEL = "Gameplay SFX"
 
 -- The frame of the sparkle (made the first time it shows) and its animations; the plate it is on and the unit of that plate. Its textures for
 -- the colour: tinted.main (the glow and the ring) and tinted.light (the stars), and tinted.colour, the colour they have now.
-local holder, groups
+-- fadeIn: the fade of the whole frame as it lands; landed: the plate it last landed on; lastSound: when its sound last played.
+local holder, groups, fadeIn, landed
+local lastSound = -math.huge
 local tinted = { main = {}, light = {} }
 local anchor, anchorUnit
 -- The frame that hears the events while the row is on, whether it hears them, and the hidden texture that takes an object's cursor.
@@ -272,7 +283,36 @@ local function Build()
 		twinkle:SetLooping("REPEAT")
 		made[#made + 1] = twinkle
 	end
-	holder, groups = frame, made
+	-- The whole sparkle fades in as it lands on an object; it is not in groups, so it plays once and does not loop.
+	local landing = frame:CreateAnimationGroup()
+	local rise = landing:CreateAnimation("Alpha")
+	rise:SetFromAlpha(0)
+	rise:SetToAlpha(1)
+	rise:SetDuration(FADE_IN)
+	rise:SetSmoothing("OUT")
+	holder, groups, fadeIn = frame, made, landing
+end
+
+-- The sound of a choice of Glow sound on the Gameplay SFX channel; nothing for None.
+local function Sound(choice)
+	local sound = ns.SOUNDS and ns.SOUNDS[KITS[choice] or 0]
+	if type(sound) == "table" and type(PlaySound) == "function" then
+		pcall(PlaySound, sound[1], SOUND_CHANNEL)
+	end
+end
+
+-- The sound of a landing, out of a fight and at most once every SOUND_EVERY seconds.
+local function Chime()
+	local choice = ns.Get("general.sparkleGlowSound")
+	if type(choice) ~= "string" or not KITS[choice] or InCombatLockdown() then
+		return
+	end
+	local now = Ask(_G.GetTime)
+	if not ns.Finite(now) or now - lastSound < SOUND_EVERY then
+		return
+	end
+	lastSound = now
+	Sound(choice)
 end
 
 -- The colour of the sparkle: gold, or with Glow colour By what it is, the colour of what the object is. Written only when it changes.
@@ -313,10 +353,21 @@ local function Hide()
 	end
 end
 
+-- Shows the sparkle on its plate. A landing (it was hidden, or it is on another plate now) fades it in and plays the Glow sound.
 local function Show()
-	if holder then
-		holder:Show()
-		Play(true)
+	if not holder then
+		return
+	end
+	local landing = not holder:IsShown() or anchor ~= landed
+	holder:Show()
+	Play(true)
+	if landing then
+		landed = anchor
+		if fadeIn then
+			fadeIn:Stop()
+			fadeIn:Play()
+		end
+		Chime()
 	end
 end
 
@@ -520,6 +571,18 @@ function Hint()
 	end
 	db.sparkleHint = true
 	print(HINT_LINE)
+end
+
+-- Picking a Glow sound plays it once, so it can be chosen by ear, only while the options window shows and out of a fight; None plays nothing.
+function ns.SparkleGlowSoundPicked(path)
+	if type(path) ~= "string" or InCombatLockdown() or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
+		return
+	end
+	local kit = KITS[ns.Get(path)]
+	local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
+	if sound and type(ns.PlayKit) == "function" then
+		ns.PlayKit(sound[1])
+	end
 end
 
 -- The lines of the row: what a pick does, or that it is done.

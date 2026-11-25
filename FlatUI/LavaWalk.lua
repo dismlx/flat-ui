@@ -35,7 +35,9 @@ local _, ns = ...
 -- middle of the box, just under the character), with a box while the row is not Off. A frame of the addon's own hears UNIT_COMBAT for the player
 -- (RegisterUnitEvent, else every unit and the handler keeps the player's), PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA, ZONE_CHANGED,
 -- ZONE_CHANGED_INDOORS and PLAYER_DEAD while the row is not Off, and nothing while it is. Nothing of the game is written. Not a module, as the
--- cursor ring (CursorRing.lua): Core.lua applies the rows at login and when the profile changes, and the rows call ns.LavaChanged themselves.
+-- cursor ring (CursorRing.lua): Core.lua applies the rows at login and when the profile changes, and the rows call ns.LavaChanged themselves;
+-- Jump sound calls ns.LavaSoundPicked, which also plays the sound picked once while the options window shows and out of a fight, as the combat
+-- sounds do (CombatCues.lua), so it can be chosen by ear. None plays nothing.
 -- Test mode (TestMode.lua) cannot run an entry of a file that is no module (TM.Register runs one only while its module is on), so at every On, Off,
 -- pause and resume (TM.Watch) the rows are applied again, and while it is on the bar shows a sample at its spot: a tick every 2 seconds, the
 -- window, the cue and its flash, a Hit and then Dodged and Dodged x2, frozen while the bar's Moving is off. Its sound plays only when
@@ -707,6 +709,24 @@ function ns.LavaChanged()
 	local ok, err = pcall(Apply)
 	if not ok then
 		Stop(err)
+	end
+end
+
+-- Jump sound changed: the rows are applied again, and the sound picked plays once, so it can be chosen by ear, only while the options window shows
+-- and out of a fight, as the combat sounds do (CombatCues.lua). None plays nothing.
+function ns.LavaSoundPicked(path)
+	ns.LavaChanged()
+	if type(path) ~= "string" or InCombatLockdown() or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
+		return
+	end
+	local sound = ns.SOUNDS and ns.SOUNDS[KITS[ns.Get(path)] or 0]
+	if type(sound) ~= "table" then
+		return
+	end
+	if type(ns.PlayKit) == "function" then
+		ns.PlayKit(sound[1])
+	elseif type(PlaySound) == "function" then
+		pcall(PlaySound, sound[1], SOUND_CHANNEL)
 	end
 end
 
