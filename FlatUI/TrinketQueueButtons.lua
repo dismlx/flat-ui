@@ -9,11 +9,12 @@ local _, ns = ...
 -- the slot's left less 5) and its socket display lie there (Camelot/PaperDollFrame.lua:1977-1988; PaperDollFrame.xml:141-151;
 -- EquipmentFlyout.xml:28-36). Show thorns hangs under the second trinket slot, not beside it (CharacterThorns.lua:544-545).
 -- They are never parented to the Character window and write nothing on it or on the slots: of CharacterFrame and the slots they read only whether
--- they are visible (IsVisible, so they hide with the slots on the Reputation and Skills tabs; IsShown for the window), where they are (GetRect and
--- GetEffectiveScale), the window's strata (GetFrameStrata) and whether the game protects them (IsProtected). Each takes the slot's scale against
--- UIParent's (SetScale on its own frame, as GearButton.lua does, GearButton.lua:161-178, 506-511), and lies one strata above the window's at a level
--- of its own (GearButton.lua:553-577), so the window, which the game raises when clicked, never covers it. While the game protects the window or
--- the slot in a fight, only its alpha changes until the fight's end (ns.OutOfCombat), as GearButton.lua's Blocked (GearButton.lua:120-133).
+-- they are visible (IsVisible, so they hide with the slots on the Reputation and Skills tabs; IsShown for the window), the slot's scale
+-- (GetEffectiveScale; where a slot is they never read, as each hangs from its slot with SetPoint), the window's strata (GetFrameStrata) and
+-- whether the game protects them (IsProtected). Each takes the slot's scale against UIParent's (SetScale on its own frame, as GearButton.lua does,
+-- GearButton.lua:161-178, 506-511), and lies one strata above the window's at a level of its own (GearButton.lua:553-577), so the window, which
+-- the game raises when clicked, never covers it. While the game protects the window or the slot in a fight, only its alpha changes until the
+-- fight's end (ns.OutOfCombat), as GearButton.lua's Blocked (GearButton.lua:120-133).
 -- The driver is GearButton.lua's (GearButton.lua:611-722): a frame whose OnUpdate looks four times a second while the buttons are wanted (the module
 -- runs, the part is not stopped and the row is on), started at once by ShowUIPanel and HideUIPanel, which it follows (ns.FollowGlobal,
 -- hooksecurefunc; several followers of a name are fine, Core.lua's FollowOnce), and by ns.TrinketButtonsChanged (the row's changed, and each refresh

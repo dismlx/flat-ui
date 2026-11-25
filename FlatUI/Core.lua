@@ -413,16 +413,17 @@ local ADDON_NAME, ns = ...
 -- UnitAffectingCombat both plainly false: the game changes no slot but the weapons in a fight, Constants.lua:158-162), not while the player casts
 -- or channels, is dead or a ghost, the cursor holds anything, a spell waits for its target, or Sell junk, Deposit, Take out, a clean up, a trade
 -- or the split box is busy, it puts a bound trinket of that slot's list from the bags into slot 13 or 14 with C_Item.EquipItemByName(link, slot),
--- or, for a second copy of an item worn in the other slot, with C_Container.PickupContainerItem and PickupInventoryItem as the game's equipment
--- manager does, giving back anything left on the cursor (ClearCursor); a click on a row of its window puts one on the same way. It reads the
--- items' cooldowns (C_Item.GetItemCooldown, GetInventoryItemCooldown, C_Container.GetContainerItemCooldown) and, where those are withheld, their
--- tooltip data (C_TooltipInfo), every answer through ns.IsSecret and ns.Finite, and hears the player's UNIT_SPELLCAST_SUCCEEDED on a frame of its
--- own (RegisterUnitEvent) while a delay or that fallback needs it. It keeps its lists, Pause all and the slots held by hand in
--- FlatUICharDB.trinketQueue. Its window, FlatUITrinkets, is a frame of its own on UIParent, in UISpecialFrames so Escape closes it, placed by
--- the movers; its two buttons are frames of their own on UIParent hung beside CharacterTrinket0Slot and CharacterTrinket1Slot with SetPoint,
--- never parented to them, and of those slots and the Character window they read only whether they show, where they are, their scale, strata
--- and protection. It follows ShowUIPanel and HideUIPanel with ns.FollowGlobal, writes nothing on the game's frames, and its tooltips are
--- GameTooltip, never in a fight.
+-- or, for a second copy of an item worn in the other slot and while the bags hold a bound and an unbound copy of the item, with
+-- C_Container.PickupContainerItem and PickupInventoryItem as the game's equipment manager does, giving back anything left on the cursor
+-- (ClearCursor); a click on a row of its window puts one on the same way, a bound copy first. It reads the items' cooldowns
+-- (C_Item.GetItemCooldown, GetInventoryItemCooldown, C_Container.GetContainerItemCooldown) and, where those are withheld, their tooltip data
+-- (C_TooltipInfo), every answer through ns.IsSecret and ns.Finite, and hears the player's UNIT_SPELLCAST_SUCCEEDED on a frame of its own
+-- (RegisterUnitEvent) while a delay or that fallback needs it. It keeps its lists, each slot's Auto queue (its two rows read and write it
+-- there with get and set, never in a profile), Pause all and the slots held by hand in FlatUICharDB.trinketQueue. Its window, FlatUITrinkets, is
+-- a frame of its own on UIParent, in UISpecialFrames so Escape closes it, placed by the movers; its two buttons are frames of their own on
+-- UIParent hung beside CharacterTrinket0Slot and CharacterTrinket1Slot with SetPoint, never parented to them, and of those slots and the
+-- Character window they read only whether they show, their scale, strata and protection. It follows ShowUIPanel and HideUIPanel with
+-- ns.FollowGlobal, writes nothing on the game's frames, and its tooltips are GameTooltip, never in a fight.
 -- With Show recent chat after a reload (off by default), Chat and tooltips hears the chat events players write on a frame of its own, keeps the
 -- lines it may read in FlatUICharDB.chatLog and prints those of the last hour with print() after a reload. It hides GameTooltip by the kind of
 -- tooltip, the unit's hostility and place, and the party or raid frame that owns it (Hide, as Tooltips in combat does).
