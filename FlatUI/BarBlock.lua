@@ -30,7 +30,10 @@ local _, ns = ...
 -- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours. Fade the block: the alpha of each
 -- held frame (SetAlpha, which the game allows in a fight) eases to the faded value over Fade time, once the block has not been wanted for Wait
 -- before fading, and back to full in a tenth of a second when it is: in a fight, under the mouse (over its own block), with a target (Full
--- opacity with a target, off by default; UnitExists("target"), a withheld answer counting as a target, read at each pass of the fade),
+-- opacity with a target, off by default; UnitExists("target"), a withheld answer counting as a target, read at each pass of the fade), as you
+-- cast (Full opacity as you cast, off by default: while UnitCastingInfo or UnitChannelInfo of the player gives a plain name, and for a moment
+-- after each spell or item used, UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the fade's own frame, so an instant
+-- use counts too and Wait before fading holds the block after it),
 -- with something on the cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a
 -- child of the totem bar that opens up over the bar, out of the area under the mouse (MultiCastActionBarFrame.xml:106-107,
 -- MultiCastActionBarFrame.lua:637-641). The arrow that opens the totem flyout sticks out over the bar too, and counts as under the mouse while
@@ -558,8 +561,29 @@ local function FlyoutOpen()
 	return Answers("SpellFlyout", "IsShown") or Answers(TOTEM_FLYOUT, "IsVisible")
 end
 
+-- Whether the player casts or channels now, or used a spell or an item a moment ago (state.castAt, from the fade frame's events). A withheld
+-- name does not count.
+local function Casting()
+	if state.castAt and GetTime() - state.castAt < 0.15 then
+		return true
+	end
+	for _, read in ipairs({ "UnitCastingInfo", "UnitChannelInfo" }) do
+		local fn = _G[read]
+		if type(fn) == "function" then
+			local ok, name = pcall(fn, "player")
+			if ok and not ns.IsSecret(name) and type(name) == "string" then
+				return true
+			end
+		end
+	end
+	return false
+end
+
 local function Full(plan)
 	if (Opt("fadeCombat") and InCombatLockdown()) or (Opt("fadeMouse") and Under(plan)) or Holding() or FlyoutOpen() then
+		return true
+	end
+	if Opt("fadeCast") and Casting() then
 		return true
 	end
 	-- Full opacity with a target: a withheld answer counts as a target, as on the Fading page (Fade.lua, HasTarget).
@@ -723,6 +747,13 @@ local function Look()
 			state.fader = CreateFrame("Frame")
 			ns.Own[state.fader] = true
 			state.fader:SetScript("OnUpdate", FadeTick)
+			-- Full opacity as you cast: the time of the player's last spell or item use. An event reaches a hidden frame too.
+			for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_SUCCEEDED" }) do
+				pcall(state.fader.RegisterUnitEvent, state.fader, event, "player")
+			end
+			state.fader:SetScript("OnEvent", function()
+				state.castAt = GetTime()
+			end)
 		end
 		state.fader:Show()
 		Fade()

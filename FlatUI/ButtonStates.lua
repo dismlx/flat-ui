@@ -1,15 +1,21 @@
 local _, ns = ...
 
 -- Button colours and cooldowns on the main and extra action bars: own colours for not enough power and cannot use, a tint on the icon when out of
--- range, and the cooldown sweep, its numbers (size, colour and tenths below a number of seconds, each put back at once when set to the game's
--- again) and a grey icon on cooldown. Pet and stance buttons keep the game's colours. Nothing here hooks a
+-- range, and the cooldown sweep (on or off, its colour and opacity, an edge line in its own colour), its numbers (size, colour and tenths below a
+-- number of seconds, each put back at once when set to the game's again) and a grey icon on cooldown. The restyled pet, stance and totem buttons
+-- keep the game's colours and grey, but their cooldowns take the sweep, its colour and opacity and the numbers too (SweepLook); not the edge line,
+-- which the game's CooldownFrame_Set turns off at each cooldown (Cooldown.lua:2-9). Nothing here hooks a
 -- button method. The game's own handlers run first (ActionButton.lua:415-428 for ACTION_USABLE_CHANGED, UpdateUsable at 721-735); this file
 -- only marks buttons and paints them one frame later. The two hooks are on global functions, ActionButton_UpdateRangeIndicator (1289-1307)
 -- and ActionButton_ApplyCooldown (897-913), and their bodies only record. Every answer is used only when it is plain; a withheld answer leaves
 -- the game's colour and gives one line in /flatui status. A row at its default makes no call. This file is not a module.
--- Flash when ready (off by default) is for Flat UI's own buttons: when a cooldown longer than the global cooldown ends on one (ns.OnOwnReady,
--- OwnPaint.lua), a white flash goes over its icon, from clear to 60% and back in 0.35 s. Each button has one frame of this file's own for it, a
--- child of the button's bar over the icon, made out of combat once the buttons are built and the row is on; in a fight only its animation plays.
+-- Flat UI's own buttons and the pet, stance and totem buttons are looked at only on a pass that follows a change of a row, their build, a change of
+-- the buttons or a new world (lookDirty): their cooldown frames keep the sweep, the edge and the numbers between passes, and OwnPaint.lua paints Flat
+-- UI's buttons itself per slot as their usability, range and cooldowns change, so a power tick costs nothing on them.
+-- Flash when ready (off by default) is for Flat UI's own buttons: when a cooldown longer than the global cooldown ends on one that shows (ns.OnOwnReady,
+-- OwnPaint.lua), a flash in Flash colour (white by default) goes over its icon, from clear to 60% and back in 0.35 s. Each button has one frame of this
+-- file's own for it, a child of the button's bar over the icon, made out of combat once the buttons are built and the row is on; in a fight only its
+-- animation plays, and a change of Flash colour colours the frames made.
 
 local KEY = "actionbars"
 local BARS = {
@@ -37,7 +43,10 @@ local LINES = {
 	sweep = "Cooldown sweep: the game refused the change.",
 	swipe = "Own sweep opacity: the game refused the change.",
 	size = "Cooldown number size: the game refused the change.",
+	edge = "Edge line: the game refused the change.",
 }
+-- The groups of the restyled buttons the game keeps whose cooldowns take the sweep and number rows (ActionBars.lua).
+local SIDE = { pet = true, stance = true, totem = true }
 
 -- name[button]: "main" or "extra", for the buttons this file may paint. The list is made again when the bars change.
 local eligible
@@ -51,17 +60,21 @@ local tinted = setmetatable({}, { __mode = "k" })
 local greyed = setmetatable({}, { __mode = "k" })
 local swipeOff = setmetatable({}, { __mode = "k" })
 local swipeSet = setmetatable({}, { __mode = "k" })
+-- edgeSet[cooldown]: the Edge colour last written while Edge line is on.
+local edgeSet = setmetatable({}, { __mode = "k" })
 -- numbers[cooldown]: the look this file gave the countdown of a cooldown, { font = the game's font { file, size, flags } read before the first size
 -- change (false when it could not be read), sized = true while a size is set, colour = the colour set, tenths = the tenths set }.
 local numbers = setmetatable({}, { __mode = "k" })
 local WHITE = "ffffffff"
 local dirty = setmetatable({}, { __mode = "k" })
 local all, queued, hooked, touched = false, false, false, false
+-- True until the next pass of every button has given Flat UI's buttons and the pet, stance and totem buttons their looks.
+local lookDirty = true
 -- refused.sweep, refused.swipe, refused.size: a call the game refused; the row stops making it.
 local refused = {}
 local watcher
--- The flash of Flash when ready: by button, { frame, group } once made, or false when it could not be made. RISE and FALL are its two halves in
--- seconds, PEAK its opacity at the top.
+-- The flash of Flash when ready: by button, { frame, group, texture } once made, or false when it could not be made. RISE and FALL are its two
+-- halves in seconds, PEAK its opacity at the top.
 local readyFlash = setmetatable({}, { __mode = "k" })
 local READY = { PEAK = 0.6, RISE = 0.1, FALL = 0.25, pending = false }
 
@@ -75,6 +88,21 @@ end
 
 local function Say(which)
 	ns.Note(KEY, LINES[which])
+end
+
+-- True while the button is drawn: a button the layout hid (fewer icons on its bar in Edit Mode) keeps its place, and its effects are not shown.
+local function Visible(button)
+	local ok, shown = pcall(button.IsVisible, button)
+	return ok and not ns.IsSecret(shown) and shown == true
+end
+
+-- The group ActionBars.lua gives a restyled button ("pet", "stance", "totem" and the rest), or nil.
+local function Group(button)
+	if type(ns.ActionButtonGroup) ~= "function" then
+		return nil
+	end
+	local ok, group = pcall(ns.ActionButtonGroup, button)
+	return ok and group or nil
 end
 
 -- One of Flat UI's own buttons (OwnBars.lua) is painted through the icon painter of OwnPaint.lua, which gets the state of the slot, and the hooks on
@@ -221,8 +249,8 @@ end
 
 -- True when a cooldown row is off its default or this file changed a cooldown before, so the game's cooldown call is worth a pass.
 local function CooldownWork()
-	return touched or Opt("sweep") ~= true or Opt("sweepOwn") == true or FONTS[Opt("cdFont")] ~= nil or Opt("cdGrey") == true
-		or Opt("cdColour") ~= WHITE or Tenths() ~= 0
+	return touched or Opt("sweep") ~= true or Opt("sweepOwn") == true or Opt("sweepEdge") == true or FONTS[Opt("cdFont")] ~= nil
+		or Opt("cdGrey") == true or Opt("cdColour") ~= WHITE or Tenths() ~= 0
 end
 
 -- The countdown's font string of a cooldown (Cooldown:GetCountdownFontString, FrameAPICooldownDocumentation.lua:78-89), or nil.
@@ -316,15 +344,10 @@ local function Numbers(cooldown)
 	end
 end
 
-local function Sweep(button)
-	local cooldown = button.cooldown
-	if cooldown == nil or ns.IsSecret(cooldown) then
-		return
-	end
-	if button.actionButtonCastType ~= nil then
-		Grey(button, cooldown)
-		return
-	end
+-- The look of a cooldown, for every restyled button: the sweep on or off and, with Own sweep opacity, its Sweep colour at Sweep opacity, then the
+-- numbers. back is the opacity the game's swipe goes back to, or false for the game's own SetSwipeColor(0, 0, 0) of the pet and stance buttons
+-- (PetActionBar.lua:208, StanceBar.lua:115).
+local function SweepLook(cooldown, back)
 	if not refused.sweep then
 		local off = Opt("sweep") ~= true
 		if off or swipeOff[cooldown] then
@@ -340,8 +363,16 @@ local function Sweep(button)
 	if not refused.swipe then
 		local own = Opt("sweepOwn") == true
 		if own or swipeSet[cooldown] then
-			local alpha = own and Opt("sweepAlpha") / 100 or GAME.swipe
-			if pcall(cooldown.SetSwipeColor, cooldown, 0, 0, 0, alpha) then
+			local ok
+			if own then
+				local r, g, b = ns.Colour(KEY .. ".sweepColour")
+				ok = pcall(cooldown.SetSwipeColor, cooldown, r, g, b, Opt("sweepAlpha") / 100)
+			elseif back then
+				ok = pcall(cooldown.SetSwipeColor, cooldown, 0, 0, 0, back)
+			else
+				ok = pcall(cooldown.SetSwipeColor, cooldown, 0, 0, 0)
+			end
+			if ok then
 				swipeSet[cooldown] = own or nil
 				touched = touched or own
 			else
@@ -351,10 +382,62 @@ local function Sweep(button)
 		end
 	end
 	Numbers(cooldown)
+end
+
+-- Edge line: the bright line along the edge of the sweep in Edge colour (Cooldown:SetDrawEdge and SetEdgeColor, FrameAPICooldownDocumentation.lua),
+-- each written when it changes; off again, the template's drawEdge false comes back (ActionButtonTemplate.xml:111).
+local function Edge(cooldown)
+	if refused.edge then
+		return
+	end
+	local on = Opt("sweepEdge") == true
+	if not on then
+		if edgeSet[cooldown] then
+			edgeSet[cooldown] = nil
+			pcall(cooldown.SetDrawEdge, cooldown, false)
+		end
+		return
+	end
+	local colour = Opt("sweepEdgeColour")
+	if edgeSet[cooldown] == colour then
+		return
+	end
+	local r, g, b = ns.Colour(KEY .. ".sweepEdgeColour")
+	if pcall(cooldown.SetDrawEdge, cooldown, true) and (type(cooldown.SetEdgeColor) ~= "function" or pcall(cooldown.SetEdgeColor, cooldown, r, g, b, 1)) then
+		edgeSet[cooldown], touched = colour, true
+	else
+		refused.edge = true
+		Say("edge")
+	end
+end
+
+local function Sweep(button)
+	local cooldown = button.cooldown
+	if cooldown == nil or ns.IsSecret(cooldown) then
+		return
+	end
+	if button.actionButtonCastType ~= nil then
+		Grey(button, cooldown)
+		return
+	end
+	SweepLook(cooldown, GAME.swipe)
+	Edge(cooldown)
 	-- The grey of an own button is given by the icon painter, from the state the cooldown has.
 	if not IsOwn(button) then
 		Grey(button, cooldown)
 	end
+end
+
+-- A restyled pet, stance or totem button: the look of its cooldown, without colours or grey. A totem button is an action button of the game's, whose
+-- cast animation puts its swipe back to black at 0.64 (ActionButton.lua:1840-1845), so it is left alone while one plays and goes back as for the
+-- main bars.
+local function SideLook(button)
+	local cooldown = button.cooldown
+	if cooldown == nil or ns.IsSecret(cooldown) or button.actionButtonCastType ~= nil then
+		return
+	end
+	local group = Group(button)
+	SweepLook(cooldown, group == "totem" and GAME.swipe or false)
 end
 
 -- The icon painter: the colour of the icon of one of Flat UI's buttons, or nil for the game's own (OwnPaint.lua gives white, blue or grey by usability).
@@ -414,17 +497,37 @@ local function Pass()
 	local list = Eligible()
 	local todo = dirty
 	local everything = all
+	local looks = everything and lookDirty
 	all, dirty = false, setmetatable({}, { __mode = "k" })
 	local ownSeen = false
 	for button in pairs(list) do
 		if everything or todo[button] then
-			if IsOwn(button) then
-				ownSeen = true
-			else
+			if not IsOwn(button) then
 				PaintIcon(button)
+				Sweep(button)
+			elseif looks then
+				-- Flat UI's buttons only after a change (lookDirty): a pass of a power tick or a slot event leaves them to OwnPaint.lua.
+				ownSeen = true
+				Sweep(button)
 			end
-			Sweep(button)
 		end
+	end
+	-- The pet, stance and totem buttons: all of them after a change, else a totem button whose cooldown the game just set.
+	if looks then
+		for _, button in ipairs(type(ns.ActionButtons) == "function" and ns.ActionButtons() or {}) do
+			if list[button] == nil and SIDE[Group(button)] then
+				SideLook(button)
+			end
+		end
+	else
+		for button in pairs(todo) do
+			if list[button] == nil and SIDE[Group(button)] then
+				SideLook(button)
+			end
+		end
+	end
+	if looks then
+		lookDirty = false
 	end
 	-- Flat UI's buttons are painted again, so the icon painter reads the rows as they are.
 	if ownSeen and type(ns.OwnRepaint) == "function" then
@@ -488,7 +591,14 @@ local function Hook()
 			return
 		end
 		local ok, button = pcall(normalCooldown.GetParent, normalCooldown)
-		if not ok or button == nil or ns.IsSecret(button) or Eligible()[button] == nil then
+		if not ok or button == nil or ns.IsSecret(button) then
+			return
+		end
+		if Eligible()[button] == nil then
+			-- A restyled totem button is an action button of the game's: its cooldown takes the look again after the game set it.
+			if SIDE[Group(button)] and CooldownWork() then
+				Ask(button)
+			end
 			return
 		end
 		cdInfo[normalCooldown] = info
@@ -519,7 +629,8 @@ local function MakeReady(button)
 	frame:SetAlpha(0)
 	local texture = frame:CreateTexture(nil, "OVERLAY")
 	texture:SetAllPoints(frame)
-	texture:SetColorTexture(1, 1, 1, 1)
+	local r, g, b = ns.Colour(KEY .. ".readyColour")
+	texture:SetColorTexture(r, g, b, 1)
 	local group = frame:CreateAnimationGroup()
 	local rise = group:CreateAnimation("Alpha")
 	rise:SetFromAlpha(0)
@@ -531,7 +642,17 @@ local function MakeReady(button)
 	fall:SetToAlpha(0)
 	fall:SetDuration(READY.FALL)
 	fall:SetOrder(2)
-	return { frame = frame, group = group }
+	return { frame = frame, group = group, texture = texture }
+end
+
+-- Flash colour on the flash frames made: a colour of Flat UI's own textures, allowed in a fight.
+local function ReadyColour()
+	local r, g, b = ns.Colour(KEY .. ".readyColour")
+	for _, made in pairs(readyFlash) do
+		if made and made.texture then
+			pcall(made.texture.SetColorTexture, made.texture, r, g, b, 1)
+		end
+	end
 end
 
 -- The flash frames of Flat UI's buttons that have none yet, made once the fight is over; nothing while the row is off.
@@ -551,9 +672,9 @@ local function PrepareReady()
 	end)
 end
 
--- A cooldown longer than the global one ended on one of Flat UI's buttons: its flash plays, from the start.
+-- A cooldown longer than the global one ended on one of Flat UI's buttons: its flash plays, from the start. A button the layout hid has no flash.
 local function OnReady(button)
-	if Opt("readyFlash") ~= true or not Wanted() or Eligible()[button] == nil then
+	if Opt("readyFlash") ~= true or not Wanted() or Eligible()[button] == nil or not Visible(button) then
 		return
 	end
 	local made = readyFlash[button]
@@ -573,7 +694,13 @@ function ns.ButtonStatesChanged(path)
 	if refused.sweep and path == KEY .. ".sweep" then
 		refused.sweep = nil
 	end
-	eligible = nil
+	if refused.edge and (path == KEY .. ".sweepEdge" or path == KEY .. ".sweepEdgeColour") then
+		refused.edge = nil
+	end
+	if path == KEY .. ".readyColour" then
+		ReadyColour()
+	end
+	eligible, lookDirty = nil, true
 	Hook()
 	Ask(nil)
 	PrepareReady()
@@ -584,6 +711,11 @@ if type(ns.OnOwnReady) == "function" then
 end
 if type(ns.OnOwnBuilt) == "function" then
 	ns.OnOwnBuilt(PrepareReady)
+	-- Flat UI's buttons are built: they take the looks on the next pass.
+	ns.OnOwnBuilt(function()
+		lookDirty = true
+		Ask(nil)
+	end)
 end
 
 if CreateFrame then
@@ -594,6 +726,7 @@ if CreateFrame then
 			eligible = nil
 		end
 		if event == "PLAYER_ENTERING_WORLD" then
+			lookDirty = true
 			Hook()
 		end
 		Ask(nil)
@@ -606,6 +739,7 @@ end
 -- The buttons hold something else: Flat UI's buttons made after login, or the game's styled after them, are looked at again.
 if type(ns.OnButtonsChanged) == "function" then
 	ns.OnButtonsChanged(function()
+		lookDirty = true
 		if type(ns.OwnOn) == "function" and ns.OwnOn() then
 			eligible = nil
 			Hook()
