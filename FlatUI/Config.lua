@@ -662,7 +662,7 @@ ns.PAGES = {
 		-- CombatCues.lua: alerts of the addon's own in the middle of the screen, at the spot of Combat text: alerts in the movers. No target is on
 		-- by default since 0.5.33 and +Combat and -Combat since 0.5.27 (Jon Default), though the game has its own (floatingCombatTextCombatState_v2
 		-- is 0) and EnhanceQoL has both. Low health and Low mana (0.5.36) take the place of the game's own, which go with Scrolling Combat Text for
-		-- Self.
+		-- Self; since 0.5.37 only in a fight by default (lowFight), and Low mana in a colour of its own.
 		{ key = "noTarget", kind = "bool", default = true, label = "No target warning",
 			tip = "In a fight with no target, or with a dead or friendly one, No target shows in the middle of the screen after a second." },
 		{ key = "noTargetFriendly", kind = "bool", default = true, label = "Warn with a friendly target", needs = "noTarget",
@@ -677,8 +677,11 @@ ns.PAGES = {
 		{ key = "noTargetSize", kind = "number", default = 100, min = 50, max = 200, step = 10, unit = "%", label = "Size of No target", needs = "noTarget",
 			tip = "100% is the size of the game's own combat messages. Low health and Low mana take this size too." },
 		{ key = "lowHealth", kind = "bool", default = true, label = "Low health and mana warning",
-			tip = "Low health in the middle of the screen while your health is under 20%, and Low mana under 20% mana, as the game's own combat text had them. Also in a fight." },
+			tip = "Low health in the middle of the screen while your health is under 20%, and Low mana under 20% mana, as the game's own combat text had them." },
+		{ key = "lowFight", kind = "bool", default = true, label = "Only in a fight", needs = "lowHealth",
+			tip = "Off also shows them out of a fight, as while you eat or drink." },
 		{ key = "lowColour", kind = "colour", default = "ffff6633", label = "Low health colour", needs = "lowHealth" },
+		{ key = "lowManaColour", kind = "colour", default = "ff4d9cff", label = "Low mana colour", needs = "lowHealth" },
 		{ key = "combatState", kind = "bool", default = true, label = "Entering and leaving combat",
 			tip = "+Combat and -Combat in the middle of the screen for a moment as a fight starts and ends." },
 		{ key = "combatEnterColour", kind = "colour", default = "ffff1a1a", label = "Entering combat colour", needs = "combatState" },

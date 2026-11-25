@@ -164,9 +164,11 @@ local LIST = {
 	-- Where the Outgoing scroll area starts, to the right of the character. It has a handle while Where your hits show is not Over enemies.
 	{ name = "FlatUICombatOut", label = "Combat text: your hits", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 40, x = 170, y = -30,
 		gate = "CombatOutShown" },
-	-- Where the combat alerts show (CombatCues.lua): +Combat and -Combat above the middle of the box and No target under it, above the character.
-	-- It has a handle while No target warning or Entering and leaving combat is on.
-	{ name = "FlatUICombatCues", label = "Combat text: alerts", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 60, x = 0, y = 100,
+	-- Where the combat alerts show (CombatCues.lua): +Combat and -Combat above the middle of the box, No target under it and Low health and Low
+	-- mana under that, above the character; the box reaches from +Combat to Low mana at their 100% size (170 units round its middle, so a spot
+	-- saved with the old 60 stays where it was). It has a handle while No target warning, Low health and mana warning or Entering and leaving
+	-- combat is on.
+	{ name = "FlatUICombatCues", label = "Combat text: alerts", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 170, x = 0, y = 100,
 		gate = "CombatCuesShown", changed = "CombatCuesMoved" },
 	-- The boxes of the action bar blocks: one box for each block of the Bar block page, which moves every bar of that block. Each starts where
 	-- BarBlock.lua puts it, and blocks 2 and 3 have a box only while they have a bar.

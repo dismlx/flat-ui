@@ -31,7 +31,7 @@ local DRAWINGS = {
 	actionbars = "mock-action-row", actionbarsText = "mock-action-row", actionbarsColours = "mock-action-row", actionbarsEffects = "mock-action-row",
 	swing = "mock-swing",
 	combattext = "mock-combat-text", combattextScroll = "mock-combat-text", combattextHits = "mock-combat-text", combattextFriendly = "mock-combat-text",
-	combattextYou = "mock-combat-text",
+	combattextYou = "mock-combat-alerts",
 }
 
 -- The page of each frame of the Unit frames drawings, which the Per frame chooser shows.

@@ -21,7 +21,8 @@ local _, ns = ...
 -- seconds, so a cast, a swing and a hit sent together count in any order. It cannot know whose hit it is when a player outside your group hits
 -- an enemy you hold, nor, in a group, a proc that casts nothing.
 -- While test mode is on (TestMode.lua), a sample number shows in each place that shows them every 1.5 seconds (ns.CombatTextTestStep); like the
--- samples of /flatui combat test they are no hit reports and count in no number of /flatui status.
+-- samples of /flatui combat test they are no hit reports and count in no number of /flatui status. /flatui combat test also plays one quiet round
+-- of the combat alerts whose rows are on, two seconds apart, out of a fight while test mode is off (ns.CombatCuesTestRound).
 
 local KEY = "combattext"
 -- 40 is the game's own height above the enemy, and every 5 points are 0.00375 of WorldTextScreenY_v2: 60 gives 0.015, the value Retail ships (CVars_live.lua:1652).
@@ -3942,6 +3943,10 @@ local function Test()
 	if ns.ScrollText.On("out") then
 		Run(OUT_SAMPLES, OutSample)
 	end
+	-- One quiet round of the combat alerts whose rows are on, two seconds apart (CombatCues.lua).
+	if type(ns.CombatCuesTestRound) == "function" then
+		ns.CombatCuesTestRound()
+	end
 	if Opt("where") == "scroll" then
 		-- No numbers over enemies to sample.
 	elseif Opt("source") ~= "front" then
@@ -4046,7 +4051,7 @@ end
 
 local HELP = {
 	"/flatui combat - the game's combat number settings: now, default, wanted",
-	"/flatui combat test - sample numbers for you, over your target and over friendly units",
+	"/flatui combat test - sample numbers for you, over your target and over friendly units, and one round of the combat alerts",
 	"/flatui combat reset - the game's defaults, and Place combat numbers off",
 	"/flatui combat trace - each hit report and signal of yours in chat, until you type it again",
 }
