@@ -1030,6 +1030,7 @@ ns.SETUP_STEPS = {
 		{ "defensives.spacing", "o", "mock-tracker" },
 		{ "defensives.caster", "o", "mock-tracker" },
 		{ "defensives.iconBorder", "o", "mock-tracker" },
+		{ "defensives.tooltips", "o", "behaviour", "Chooses whether the game's tooltip shows over a defensive always, out of combat only, or never." },
 		{ "defensives.own", "c", "behaviour", "Also shows the defensives you cast on yourself." },
 		{ "defensives.add", "o", "behaviour", "Adds a spell to the defensives list." },
 		{ "defensives.remove", "o", "behaviour", "Removes a spell from the defensives list." },

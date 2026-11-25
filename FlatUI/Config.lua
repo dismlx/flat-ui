@@ -1263,6 +1263,8 @@ ns.PAGES = {
 		{ key = "spacing", kind = "number", default = 3, min = 0, max = 20, step = 1, label = "Spacing" },
 		{ key = "caster", kind = "bool", default = true, label = "Caster's name" },
 		{ key = "iconBorder", kind = "bool", default = true, label = "Icon border" },
+		{ key = "tooltips", kind = "choice", default = "on", label = "Buff tooltips", tip = "Settings on the Tooltips page do not change this tooltip. A click still goes through to the world.",
+			choices = { { "on", "On" }, { "out", "Out of combat only" }, { "off", "Off" } } },
 		{ key = "own", kind = "bool", default = true, label = "Your own defensives", tip = "Shield Wall, Ice Barrier and the like that you cast on yourself." },
 		{ section = "Spells" },
 		{ key = "add", kind = "list", default = 0, label = "Add a spell", none = "Choose a spell", items = "DefensiveCandidates", pick = "DefensiveAdd",

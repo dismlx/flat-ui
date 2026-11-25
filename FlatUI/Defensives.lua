@@ -7,6 +7,9 @@ local _, ns = ...
 -- addon code while it hides buffs. A change to those parts, and Icon size on the buttons already shown, waits until the game says buffs
 -- are open; a change to the container itself (its layout of sizes and spacing) is allowed at any time. Where the game will not make the container, the same icons show out of combat from a read of the
 -- player's buffs. The helpers are in one table, D, and the lines of /flatui check are Tracking.lua's.
+-- Buff tooltips (On by default, as on Your buffs) gives the game's buttons the game's own tooltip on hover and never a click, so clicks go
+-- through to the world; Out of combat only has the game hide it in a fight. The samples of test mode follow Icon border, Borderless and the
+-- border colour as the real icons do, and with Caster's name on carry the names of test mode's party under them.
 
 local KEY = "defensives"
 -- The name of the row among the saved spots of the movers.
@@ -26,6 +29,8 @@ local CASTER = { useClassColors = true }
 local NOTE_NO_POSITION = "Defensives on you: the personal resource display has no position, so the row is above the player frame."
 local NOTE_REFUSED = "Defensives on you: the game refused the %s, so icons show without it."
 local NOTE_SIZE = "Defensives on you: the game refused a new icon size, so icons already shown keep their old one until you log in again."
+local NOTE_MOUSE = "Defensives on you: the game refused a mouse setting of the icons, so clicks or tooltips may not work."
+local NOTE_READING = "Defensives on you: Buff tooltips has no effect while the game makes no icon row."
 local LINE_OUT = "Defensives on you: icons show out of combat only."
 local LINE_OWN = "Defensives on you: Your own defensives is off here, since the game made no icon row."
 local LINE_FRAME = "Defensives on you: the game's External Defensives frame is also on. Type /console externalDefensivesEnabled 0."
@@ -184,13 +189,30 @@ function D.PaintEdges(parts)
 	parts.borderKey = EdgeKey()
 end
 
+-- Buff tooltips: the game's tooltip on hover and never a click, as Your buffs does (OwnBuffs.lua's Mouse; Blizzard_CooldownViewer/
+-- CooldownViewer.lua:326-328). Out of combat only keeps the hover and has the game hide the tooltip in a fight (Blizzard_AuraButton.lua:177-183);
+-- Off takes the mouse away, so the row is as it was before the row came. A refused call leaves parts.tips empty, so ApplyTips tries again, and the
+-- status names it.
+function D.Mouse(parts)
+	local button, tips = parts.button, Opt("tooltips")
+	local ok = pcall(button.SetMouseClickEnabled, button, false)
+	ok = pcall(button.SetMouseMotionEnabled, button, tips ~= "off") and ok
+	ok = pcall(button.SetHideTooltipInCombat, button, tips ~= "on") and ok
+	parts.tips = ok and tips or nil
+	D.refused.tips = nil
+	for _, other in ipairs(D.list) do
+		if other.tips == nil then
+			D.refused.tips = true
+		end
+	end
+end
+
 -- Makes the parts of one button. Run by the game inside AddAuraGroup while the button is still open; nothing here may raise, and a
 -- part the game refuses is left out and named in the status.
 function D.Init(button)
 	local parts = { button = button, casterOn = Opt("caster") }
 	D.list[#D.list + 1] = parts
-	pcall(button.EnableMouse, button, false)
-	pcall(button.SetHideTooltipInCombat, button, true)
+	D.Mouse(parts)
 	parts.size = pcall(button.SetSize, button, Opt("size"), Opt("size")) and Opt("size") or nil
 	local function Part(name, fn)
 		if not pcall(fn) then
@@ -329,7 +351,16 @@ function D.ApplyBorder()
 	end
 end
 
-D.apply = { caster = D.ApplyCaster, border = D.ApplyBorder, size = D.ApplySize }
+-- Buff tooltips again where the setting has changed.
+function D.ApplyTips()
+	for _, parts in ipairs(D.list) do
+		if parts.tips ~= Opt("tooltips") then
+			D.Mouse(parts)
+		end
+	end
+end
+
+D.apply = { caster = D.ApplyCaster, border = D.ApplyBorder, size = D.ApplySize, tips = D.ApplyTips }
 
 -- Runs what waited, once the game says buffs are open.
 function D.Flush()
@@ -788,7 +819,8 @@ function D.Pass()
 	for index = 1, math.min(#found, MOST_LISTED) do
 		local item, icon = found[index], D.Icon(index)
 		if icon then
-			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { kind = 3, border = Opt("iconBorder") })
+			-- No kind: the border keeps the colour of the page and Borderless hides it, as on the game's buttons (EdgeColour).
+			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { border = Opt("iconBorder") })
 			local name = nil
 			if Opt("caster") and item.source then
 				name = T.Ask(UnitName, item.source)
@@ -890,6 +922,7 @@ function D.Sync()
 		D.Change("caster")
 		D.Change("border")
 		D.Change("size")
+		D.Change("tips")
 	elseif D.path == "reading" then
 		D.StartReading()
 	end
@@ -978,6 +1011,41 @@ local function Now()
 	return type(GetTime) == "function" and GetTime() or 0
 end
 
+-- The casters of the three samples, test mode's party (TestUnits.lua): a priest's shield, a paladin's protection and a warlock's ward.
+D.CASTERS = { { "Eli", "PRIEST" }, { "Mara", "PALADIN" }, { "Ivo", "WARLOCK" } }
+
+-- The look of a sample: the border of the page's colour, which Borderless and Icon border off take away, as on the game's buttons (EdgeColour).
+function D.SampleLook()
+	return { border = Opt("iconBorder") ~= false }
+end
+
+-- The caster's name under sample `index` while Caster's name is on, in the colour of the caster's class, as under the game's buttons.
+function D.SampleName(icon, index)
+	if not icon.name then
+		local made, name = pcall(icon.frame.CreateFontString, icon.frame, nil, "OVERLAY", "GameFontNormalSmall")
+		if not made or type(name) ~= "table" then
+			return
+		end
+		Own(name)
+		name:SetPoint("TOP", icon.frame, "BOTTOM", 0, -1)
+		icon.name = name
+	end
+	local caster = D.CASTERS[index]
+	if not (caster and Opt("caster") and ns.Enabled(KEY) and Opt("place") ~= "off") then
+		icon.name:Hide()
+		return
+	end
+	icon.name:SetText(caster[1])
+	local colours = RAID_CLASS_COLORS
+	local colour = type(colours) == "table" and colours[caster[2]] or nil
+	if type(colour) == "table" and Plain(colour.r, "number") and Plain(colour.g, "number") and Plain(colour.b, "number") then
+		icon.name:SetTextColor(colour.r, colour.g, colour.b)
+	else
+		icon.name:SetTextColor(1, 1, 1)
+	end
+	icon.name:Show()
+end
+
 -- Ends a test: the sweeps are cleared, the icons hidden, and what the game did is said.
 function D.EndTest(token)
 	local test = D.testing
@@ -990,6 +1058,9 @@ function D.EndTest(token)
 		pcall(icon.cooldown.SetCooldown, icon.cooldown, 0, 0)
 		done = done + (icon.done or 0)
 		ns.IconClear(icon)
+		if icon.name then
+			icon.name:Hide()
+		end
 	end
 	local sound = ns.IconRow.sound
 	local text = sound == "played" and "played" or (sound == nil and "not tried" or "the game played no sound")
@@ -1028,7 +1099,10 @@ function D.Test()
 	ns.IconRow.sound = nil
 	local now = Now()
 	for index, icon in ipairs(list) do
-		ns.IconSample(icon, index, now, 2 * index, KEY)
+		local look = D.SampleLook()
+		look.flash, look.sound, look.key = true, ns.SOUNDS[1][1], KEY
+		ns.IconSet(icon, ns.IconSamplePicture(index), now, 2 * index, look)
+		D.SampleName(icon, index)
 	end
 	ns.IconLayout(list, holder, Opt("size"), Opt("spacing"), "right")
 	local test = { list = list }
@@ -1060,7 +1134,8 @@ function D.Held()
 		end
 	end
 	for index, icon in ipairs(list) do
-		ns.IconSampleHeld(icon, index, KEY)
+		ns.IconSampleHeld(icon, index, KEY, D.SampleLook())
+		D.SampleName(icon, index)
 	end
 	ns.IconLayout(list, holder, Opt("size"), Opt("spacing"), "right")
 end
@@ -1068,6 +1143,9 @@ end
 function D.Drop()
 	for _, icon in ipairs(D.held or {}) do
 		ns.IconSampleDrop(icon)
+		if icon.name then
+			icon.name:Hide()
+		end
 	end
 end
 
@@ -1095,6 +1173,12 @@ function D.Status()
 	end
 	if D.refused.size then
 		lines[#lines + 1] = NOTE_SIZE
+	end
+	if D.refused.tips then
+		lines[#lines + 1] = NOTE_MOUSE
+	end
+	if D.path == "reading" and Opt("tooltips") ~= "off" then
+		lines[#lines + 1] = NOTE_READING
 	end
 	local on = T.Ask(GetCVarBool, "externalDefensivesEnabled")
 	if on == true then
