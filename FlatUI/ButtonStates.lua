@@ -19,6 +19,8 @@ local _, ns = ...
 -- lets a cooldown shorter than it end without a flash: OwnPaint.lua measures each cooldown from its start on its own clock (a plain number). One
 -- already running when a button first holds it (after a stance, form, Stealth or page change, a drag or a reload) takes the start seen for its spell
 -- on another slot, or else its spell's base cooldown, so short ones end quietly in every stance; only an item's of unknown length still flashes.
+-- Sound when ready (actionbars.readySound, None by default) plays as such a flash plays, through ns.PlayKit, so at most once a second; the sweep
+-- sample plays it once each time test mode is turned on, and the page plays a sound as it is picked.
 -- The sweep sample (ns.ButtonStatesSample, out of combat): one Cooldown frame of this file's own (CooldownFrameTemplate) over a Flat UI button, a
 -- child of its bar one level above it, runs a 4 s sweep in the looks of the rows above (sweep, Sweep colour and opacity, Edge line, the numbers
 -- as the game's Show numbers on cooldowns says) and ends with the button's Flash when ready while that row is on. Test mode plays it every 5 s on
@@ -88,6 +90,9 @@ local READY = { PEAK = 0.6, RISE = 0.1, FALL = 0.25, pending = false }
 -- The sweep sample: its Cooldown frame once made, the button it lies over, when it and its flash are over (ends), busy while this file sets or clears
 -- it (its OnCooldownDone then does not count) and TIME, the sample cooldown in seconds. LOOKS: the rows a change of which plays it.
 local SAMPLE = { frame = nil, button = nil, ends = nil, busy = false, TIME = 4 }
+-- The places of the Sound when ready choices in ns.SOUNDS (IconRow.lua), as Party cooldowns has them; TEST: the sound test mode plays once.
+READY.SOUNDS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
+READY.TEST = "actionbars.ready"
 local LOOKS = { sweep = true, sweepOwn = true, sweepColour = true, sweepAlpha = true, sweepEdge = true, sweepEdgeColour = true, cdFont = true,
 	cdColour = true, cdTenths = true, readyFlash = true, readyColour = true }
 
@@ -685,8 +690,18 @@ local function PrepareReady()
 	end)
 end
 
--- A cooldown longer than the global one ended on one of Flat UI's buttons: its flash plays, from the start. A button the layout hid has no flash, nor
--- a cooldown shorter than Shortest cooldown that flashes; seconds, the length OwnPaint.lua measured, is nil when it does not know it.
+-- Sound when ready, through ns.PlayKit, so at most once a second however many buttons flash at once; nothing at None.
+local function ReadySound()
+	local sounds = ns.SOUNDS
+	local sound = type(sounds) == "table" and sounds[READY.SOUNDS[Opt("readySound")] or 0] or nil
+	if type(sound) == "table" and type(ns.PlayKit) == "function" then
+		ns.PlayKit(sound[1], KEY)
+	end
+end
+
+-- A cooldown longer than the global one ended on one of Flat UI's buttons: its flash plays, from the start, with Sound when ready. A button the
+-- layout hid has no flash, nor a cooldown shorter than Shortest cooldown that flashes; seconds, the length OwnPaint.lua measured, is nil when it
+-- does not know it.
 local function OnReady(button, seconds)
 	if Opt("readyFlash") ~= true or not Wanted() or Eligible()[button] == nil or not Visible(button) then
 		return
@@ -695,6 +710,7 @@ local function OnReady(button, seconds)
 	if Plain(least, "number") and least > 0 and ns.Finite(seconds) and seconds < least then
 		return
 	end
+	ReadySound()
 	local made = readyFlash[button]
 	if made == nil then
 		PrepareReady()
@@ -729,7 +745,8 @@ local function SampleLook(frame)
 	end
 end
 
--- The sample's sweep ended: the button's Flash when ready plays while the row is on, its frame made first when it has none.
+-- The sample's sweep ended: the button's Flash when ready plays while the row is on, its frame made first when it has none. Sound when ready plays
+-- with it only in test mode, once each time test mode is turned on (TM.Sound), not on each loop of 5 s.
 local function SampleDone()
 	if SAMPLE.busy then
 		return
@@ -737,6 +754,10 @@ local function SampleDone()
 	local button = SAMPLE.button
 	if not button or Opt("readyFlash") ~= true or not Wanted() or not Visible(button) then
 		return
+	end
+	local mode = ns.TestMode
+	if mode and mode.IsOn() and type(mode.Sound) == "function" and mode.Sound(READY.TEST) then
+		ReadySound()
 	end
 	local made = readyFlash[button]
 	if made == nil and not InCombatLockdown() then

@@ -859,6 +859,10 @@ ns.PAGES = {
 		{ key = "readyMinimum", kind = "number", default = 0, min = 0, max = 120, step = 5, unit = " s", label = "Shortest cooldown that flashes",
 			needs = "readyFlash", changed = "ButtonStatesChanged",
 			tip = "A shorter cooldown ends without a flash, after a stance, form or page change too. 0 flashes every cooldown longer than the global cooldown." },
+		{ key = "readySound", kind = "choice", default = "none", label = "Sound when ready", needs = "readyFlash", changed = "ButtonStatesChanged",
+			tip = "Plays as a cooldown that flashes ends, at most once a second.",
+			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
+				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
 	{
 		key = "swing", label = "Swing timers",
