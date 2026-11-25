@@ -32,7 +32,11 @@ local ADDON_NAME, ns = ...
 -- and cast bar hang under them and are drawn over the table (frameLevel 500, Mainline/TargetFrame.xml:52; Mainline/TargetFrame.lua:534-558, 830-851).
 -- It ends before the edge of the screen the same way. Points are set out of combat only, as Flat UI hangs every frame of its own from the player frame
 -- (Core.lua); a change asked for in a fight waits once for its end (ns.OutOfCombat). /flatui move places it (FlatUIHitTable in Movers.lua, with the
--- table as its box), and a spot saved there wins.
+-- table as its box), and a spot saved there wins; Jon Default gives every new profile one (SetupProfiles.lua). At that spot or on the rail, the
+-- table steps down where it would run into the pet frame while it shows, or into test mode's sample of it (TestUnits.lua, the stand-in "pet"), and
+-- the auras under them: its top a GAP under their lowest, its own spot kept for when the pet goes. On the rail the game already lowers it under a
+-- pet frame in the container, so there it steps only for the sample, or for a pet frame Edit Mode or the movers put under it. /flatui status says
+-- when it stepped.
 --
 -- Its text size is Text size (hud.hitTableSize: 70 to 200%, its ids the percent in text; a number saved while it was a slider, until 0.5.26, reads
 -- as the nearest, Core.lua, Renamed), set in the options window or Flat UI setup; the table takes no mouse, so clicks and drags on it reach the
@@ -44,10 +48,12 @@ local ADDON_NAME, ns = ...
 -- threat events and the target's own target count only when the facing they decide changes, as they come many times a second in a fight. The
 -- cast bar's lock is followed with hooksecurefunc (ns.FollowGlobal, as CastBarSize.lua follows it), and a refresh of the unit frames, a layout of the
 -- Cooldown icons rows (Cooldowns.lua) and a change of the cast bars' sizes (CastBarSize.lua) place the table again (ns.UnitFrameExtra.after.refresh,
--- ns.HitTableMoved). At For tanks and damage dealers the role is worked out in every refresh and again after an event that can change it
--- (ROLE_EVENTS: a role the group gives, talents spent, reset or switched to the other set of dual spec, a new list of the sets of talents, a level,
--- a form, a new world, the player's auras), which the hud module hears for it (ns.AddEvent) also while the table is hidden for a healer; such an
--- event too only marks the table, and the next frame works the role out before the numbers, showing or hiding the table when its answer changed.
+-- ns.HitTableMoved). The player's UNIT_PET places it again a moment later (PET_WAIT), once the game has shown or hidden the pet frame, as do test
+-- mode's On and Off (TM.Watch) and a new size of the table while a pet frame shows. At For tanks and damage dealers the role is worked out in every
+-- refresh and again after an event that can change it (ROLE_EVENTS: a role the group gives, talents spent, reset or switched to the other set of dual
+-- spec, a new list of the sets of talents, a level, a form, a new world, the player's auras), which the hud module hears for it (ns.AddEvent) also
+-- while the table is hidden for a healer; such an event too only marks the table, and the next frame works the role out before the numbers, showing
+-- or hiding the table when its answer changed.
 -- While test mode is on (TestMode.lua), Show lets the table show whatever it says, and Against the target with no enemy targeted counts a boss,
 -- three levels above the player.
 -- Nothing of the game's is written: its frames are read and anchored to, never changed.
@@ -66,10 +72,18 @@ local GAP = 4
 local SMALLEST = 1
 -- How far a pet's buffs and debuffs reach under the container while the pet frame is the last frame in it, in the pet frame's units: the row starts
 -- 42 under the top of a pet frame 49 tall (Mainline/PetFrame.xml:12, 170-176), its icons 15 tall (PartyAuraFrameTemplate,
--- Shared/PartyFrameTemplates.xml:5-6), so 8 under its bottom; and the container ends 1 above that bottom, from the pet frame's bottomPadding of -3
--- (PetFrame.xml:16) and the spacing of 2 before the container's empty last row (Shared/PlayerFrameTemplates.xml:14, 19-26;
+-- Shared/PartyFrameTemplates.xml:5-6), so 8 under its bottom (PET_BELOW); and the container ends 1 above that bottom, from the pet frame's
+-- bottomPadding of -3 (PetFrame.xml:16) and the spacing of 2 before the container's empty last row (Shared/PlayerFrameTemplates.xml:14, 19-26;
 -- Blizzard_SharedXML/LayoutFrame.lua:277-300).
-local PET_AURAS = 42 + 15 - 49 + 1
+local PET_BELOW = 42 + 15 - 49
+local PET_AURAS = PET_BELOW + 1
+-- Seconds after the player's UNIT_PET before the table looks at the pet frame again: the game shows or hides the pet frame on the next frame, as
+-- UNIT_PET sets the secure state driver's timer to 0 (Blizzard_RestrictedAddOnEnvironment/SecureStateDriver.lua:119-140, 142-144, 195), and test
+-- mode looks at its samples every quarter second (TestMode.lua, POLL).
+local PET_WAIT = 0.3
+-- Where a point is on a frame, as shares of its width and height from its bottom left corner, for the table's box at a spot of the movers.
+local SHARE = { TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 }, LEFT = { 0, 0.5 }, CENTER = { 0.5, 0.5 }, RIGHT = { 1, 0.5 },
+	BOTTOMLEFT = { 0, 0 }, BOTTOM = { 0.5, 0 }, BOTTOMRIGHT = { 1, 0 } }
 -- The classes whose own pet the pet frame shows; for another class the room is kept only while the pet frame shows (Mind Control).
 local PET_CLASSES = { HUNTER = true, WARLOCK = true }
 -- The Cooldown icons rows that can hang under the player frame (Cooldowns.lua): the movers' function that gives a row's icons, its Position row, and
@@ -136,6 +150,7 @@ local LINE_WHERE = {
 	screen = "Hit table: the player frame cannot be used, so the table is under the middle of the screen.",
 }
 local LINE_WAITS = "Hit table: a change of place waits for the end of the fight."
+local LINE_PET = "Hit table: lowered under the pet frame, or test mode's sample of it, which it would run into."
 local LINE_SANS = "Hit table: the game did not load Flat UI Sans, so the table uses the game font."
 local LINE_GAP = {
 	withheld = "Hit table: the game withheld your %s, so parts of %s show ?.",
@@ -170,10 +185,11 @@ local IsSecret, Finite = ns.IsSecret, ns.Finite
 -- (HitTableCalc.lua). laid: the key of the layout. placed, edge, anchor: where the table was put; where: what /flatui status says of it; later: a
 -- place waits for the end of the fight. room: the width the table may take under the player frame, in its own units, nil for no bound; roomBy:
 -- what ends it; fit: the share of Text size the text was made to end there, nil while it has its size. hooked: the cast bar's lock is followed.
+-- stepped: the table was lowered under the pet frame (PetStep); petWaits: a look at the pet frame waits after UNIT_PET.
 -- sansRefused: the game refused Flat UI Sans. role and by: the player's role at the last look ("tank", "healer" or "damage", nil before the
 -- first) and what ns.PlayerRole read it from; recheck: an event that can change the role came, so the next frame looks again.
 local S = { heads = {}, rows = {}, widths = {}, measures = {}, measured = 0, units = {}, alone = {}, hearing = false, fighting = false, dirty = false,
-	later = false, recheck = false }
+	later = false, recheck = false, stepped = false, petWaits = false }
 local Update, Later, Off, Dirty, Apply
 
 local function Opt(key)
@@ -454,6 +470,44 @@ local function PetAuras()
 	return PET_AURAS * Scale(pet)
 end
 
+-- The pet frame while it shows, or while test mode shows its sample there (the stand-in "pet" of TestUnits.lua, at the pet frame's place and
+-- scale, TM.Shown): its left, right and top edges and the lowest its auras reach (PET_BELOW under it), in units of scale 1. Nil when neither shows
+-- or the pet frame has no place.
+local function PetRect()
+	local pet = _G.PetFrame
+	if ns.Forbidden(pet) then
+		return nil
+	end
+	local mode = ns.TestMode
+	if not Shown(pet) and not (type(mode) == "table" and type(mode.Shown) == "function" and mode.Shown("pet") == true) then
+		return nil
+	end
+	local left, right, top, bottom = Edge(pet, "GetLeft"), Edge(pet, "GetRight"), Edge(pet, "GetTop"), Edge(pet, "GetBottom")
+	if not (left and right and top and bottom) then
+		return nil
+	end
+	return left, right, top, bottom - PET_BELOW * Scale(pet)
+end
+
+-- The width of the table's own border, outside its frame, in units of scale 1: one border of the hud page's look while it has its background.
+local function Border()
+	if Opt("hitTableBack") == false then
+		return 0
+	end
+	local frame = S.frame
+	return (tonumber(ns.Get("general.thickness")) or 1) * ns.Pixels(frame, 1) * Scale(frame)
+end
+
+-- How far the table goes down to clear the pet frame (PetRect) when its box, border and all, from left to right and down from top `height` tall,
+-- in units of scale 1, runs into the pet frame or its auras: its top then comes a GAP under their lowest. 0 when it is clear or no pet frame shows.
+local function PetStep(left, right, top, height)
+	local petLeft, petRight, petTop, petLow = PetRect()
+	if not petLeft or left >= petRight or right <= petLeft or top <= petLow or top - height >= petTop then
+		return 0
+	end
+	return top - petLow + GAP * Scale(S.frame)
+end
+
 -- How far the spell name hangs under the locked cast bar, in units of scale 1: with Custom player cast bar size on and Player cast bar text Below the
 -- bar, Flat UI puts its top 1 unit above the bar's bottom on every cast (CastBarSize.lua, Size and PlaceText), as tall as its font, read out of
 -- combat (the game's own size when the font cannot be read); 0 otherwise.
@@ -555,7 +609,8 @@ end
 
 -- Places the table, out of combat: at the spot saved in the movers, by the point it was saved by (as Data panels reads it, DataPanels.lua), else
 -- under the player frame from the rail, where its width is bounded (Room), else under the middle of the screen when the player frame cannot be used.
--- A place already taken is not set again.
+-- At the spot or on the rail it is lowered under the pet frame, or test mode's sample of it, where it would run into it (PetStep). A place already
+-- taken is not set again.
 local function Place()
 	local frame = S.frame
 	if not frame then
@@ -572,7 +627,14 @@ local function Place()
 	if type(ns.MoverSpot) == "function" then
 		x, y = ns.MoverSpot(MOVER, point)
 	end
+	local scale, border = Scale(frame), Border()
+	local width, height = frame:GetWidth() * scale, frame:GetHeight() * scale
 	if x then
+		local share = SHARE[point] or SHARE.TOPLEFT
+		local left, top = x * scale - width * share[1], y * scale + height * (1 - share[2])
+		local step = PetStep(left - border, left + width + border, top + border, height + 2 * border) / scale
+		S.stepped = step > 0
+		y = y - step
 		local key = ("spot:%s:%.2f:%.2f"):format(point, x, y)
 		if S.placed ~= key then
 			frame:ClearAllPoints()
@@ -587,6 +649,10 @@ local function Place()
 	local edge = anchor and LeftEdge() or nil
 	if anchor and edge then
 		local offset = Offset(anchor, kind)
+		local bottom, left = Edge(anchor, "GetBottom"), Edge(edge, "GetLeft")
+		local step = bottom and left and PetStep(left - border, left + width + border, bottom - offset * scale + border, height + 2 * border) / scale or 0
+		S.stepped = step > 0
+		offset = offset + step
 		Room(edge, anchor, offset)
 		local key = ("%s:%.2f"):format(kind, offset)
 		if S.placed == key and S.edge == edge and S.anchor == anchor then
@@ -611,7 +677,7 @@ local function Place()
 		frame:SetPoint("TOP", UIParent, "CENTER", 0, -150)
 		S.placed, S.edge, S.anchor = "screen", nil, nil
 	end
-	S.where = "screen"
+	S.where, S.stepped = "screen", false
 	SetRoom(nil, nil)
 end
 
@@ -931,6 +997,10 @@ local function Layout(g, lines)
 	end
 	S.frame:SetSize(width, 2 * padY + rowHeight * (2 + #lines))
 	S.laid = key
+	-- A new size can run the table into the pet frame or clear it: placed again while one shows or it was lowered (Place, in a fight after it).
+	if S.where and (S.stepped or PetRect()) then
+		Place()
+	end
 end
 
 -- Writes the title, the headings and the cells.
@@ -1051,6 +1121,26 @@ Dirty = function()
 	end
 end
 
+-- The player's pet came or went: the table is placed again a moment later (PET_WAIT), once the pet frame, or test mode's sample of it, has shown
+-- or hidden, so it steps under the pet frame or back up (Place). Once for a burst.
+local function PetSoon()
+	if S.petWaits then
+		return
+	end
+	S.petWaits = true
+	local function Look()
+		S.petWaits = false
+		if S.frame and Wanted() then
+			Safe(Place)
+		end
+	end
+	if C_Timer and type(C_Timer.After) == "function" then
+		C_Timer.After(PET_WAIT, Look)
+	else
+		Look()
+	end
+end
+
 local function OnEvent(event, unit)
 	local units = S.units[event]
 	if units then
@@ -1064,6 +1154,11 @@ local function OnEvent(event, unit)
 		S.fighting = true
 	elseif event == "PLAYER_REGEN_ENABLED" then
 		S.fighting = false
+	end
+	-- A pet changes no number, only the place.
+	if event == "UNIT_PET" then
+		PetSoon()
+		return
 	end
 	if PLACE_EVENTS[event] then
 		S.placed = nil
@@ -1143,6 +1238,8 @@ local function Hear(on)
 		HearUnit(ear, event, "player")
 	end
 	HearUnit(ear, "UNIT_LEVEL", "player", "target")
+	-- The player's pet comes or goes, as the secure state driver hears it for the pet frame (SecureStateDriver.lua:195): for the place alone.
+	HearUnit(ear, "UNIT_PET", "player")
 	for _, event in ipairs(TARGET_EVENTS) do
 		HearUnit(ear, event, "target")
 	end
@@ -1307,6 +1404,9 @@ ns.AddStatus(KEY, function()
 		lines[#lines + 1] = LINE_WAITS
 	elseif S.where and LINE_WHERE[S.where] then
 		lines[#lines + 1] = LINE_WHERE[S.where]
+		if S.stepped then
+			lines[#lines + 1] = LINE_PET
+		end
 	end
 	if S.fit and S.room and S.roomBy then
 		lines[#lines + 1] = LINE_FIT:format(math.floor(S.fit * 100 + 0.5), S.roomBy)
@@ -1381,7 +1481,14 @@ ns.AddStatus(KEY, function()
 	return lines
 end)
 
--- Test mode: the table shows whatever Show says, against a boss with no enemy targeted (Allowed, Update); On and Off lay it out again.
+-- Test mode: the table shows whatever Show says, against a boss with no enemy targeted (Allowed, Update); On and Off lay it out again. After every
+-- On, Off, pause and resume (TM.Watch), once test mode has shown or hidden its sample of the pet frame, the table is placed again, so it steps under
+-- the sample or back up (Place).
 if ns.TestMode then
 	ns.TestMode.Register("hittable", { module = KEY, label = "Hit table", Start = ns.HitTableRefresh, Stop = ns.HitTableRefresh })
+	if type(ns.TestMode.Watch) == "function" then
+		ns.TestMode.Watch(function()
+			Moved()
+		end)
+	end
 end
