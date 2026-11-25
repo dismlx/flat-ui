@@ -11,7 +11,8 @@ local _, ns = ...
 --   the spell name of ApplyCastParts and ns.CastText (Bars.lua:707-816), the cover colour of CastColour (956-972), the marks of Marks (1020-1088),
 --   the sizes and the place of the spell name of CastBarSize.lua:92-150, the rank after the spell name of CastRank.lua, the tick marks of a
 --   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks), dim where the channel has passed them, the pushback past
---   the right end of the player bar of CastTime.lua (+0.4 on the first row), and the interrupt colours of Interrupt.lua on the Target row (ready)
+--   the right end of the player bar of CastTime.lua (+0.4 on the first row), the whole cast after the seconds left while Total cast time too is
+--   on (1.0 / 2.5 on the first row), and the interrupt colours of Interrupt.lua on the Target row (ready)
 --   and the Focus row (on cooldown) while Interrupt readiness and Flat fill are on.
 --   resource display: ApplyResourceBar, JoinBar, ApplyResourceFill, ApplyResourceText (Bars.lua:78-165), the custom colours (Bars.lua:195-250).
 --   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530), and the
@@ -275,15 +276,19 @@ end
 
 -- Cast bars ---------------------------------------------------------------------------------------------------
 
+-- time: the seconds left; total: the whole cast, after them while Total cast time too is on (CastTime.lua).
 local CAST_ROWS = {
-	{ opt = "player", label = "Player", name = "Shadow Bolt", rank = "Rank 3", state = "cast", part = 0.6, game = { 208, 11 }, time = "1.0", push = "+0.4" },
-	{ opt = "pet", label = "Pet", name = "Firebolt", state = "cast", part = 0.45, game = { 195, 13 }, time = "1.4" },
-	{ opt = "target", label = "Target", name = "Fireball", state = "cast", part = 0.6, game = { 150, 10 }, small = true, time = "1.2", kick = "ready" },
+	{ opt = "player", label = "Player", name = "Shadow Bolt", rank = "Rank 3", state = "cast", part = 0.6, game = { 208, 11 }, time = "1.0", total = "2.5",
+		push = "+0.4" },
+	{ opt = "pet", label = "Pet", name = "Firebolt", state = "cast", part = 0.45, game = { 195, 13 }, time = "1.4", total = "2.0" },
+	{ opt = "target", label = "Target", name = "Fireball", state = "cast", part = 0.6, game = { 150, 10 }, small = true, time = "1.2", total = "3.5",
+		kick = "ready" },
 	{ opt = "focus", label = "Focus", name = "Arcane Missiles", state = "channel", part = 0.4, game = { 150, 10 }, small = true, time = "1.8",
-		kick = "cooling" },
+		total = "5.0", kick = "cooling" },
 	{ opt = "target", label = "Target, uninterruptible", name = "Polymorph", state = "shield", part = 0.7, game = { 150, 10 }, small = true, time = "0.9",
-		shield = true },
-	{ opt = "player", label = "Player, channel", name = "Drain Life", state = "channel", part = 0.55, game = { 208, 11 }, ticks = 5, time = "2.7" },
+		total = "1.5", shield = true },
+	{ opt = "player", label = "Player, channel", name = "Drain Life", state = "channel", part = 0.55, game = { 208, 11 }, ticks = 5, time = "2.7",
+		total = "5.0" },
 }
 -- The game's size of each bar (the rows above, and the boss bars of TargetFrame.xml:543-548, small bars as the target's).
 local CAST_GAME = { player = { 208, 11 }, pet = { 195, 13 }, target = { 150, 10 }, focus = { 150, 10 }, boss = { 150, 10 } }
@@ -413,6 +418,7 @@ local function BuildCast(stage)
 	end
 	p["castbars.ownTime"] = target.time
 	p["castbars.playerTime"] = player.time
+	p["castbars.timeTotal"] = target.time
 	p["castbars.pushback"] = player.push
 	p["castbars.iconPos"] = target.icon
 	p["castbars.playerIcon"] = player.icon
@@ -641,6 +647,10 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	-- size and outline (CastTime.lua copies the font of the bar's spell name).
 	if row.time then
 		ShowTime(row, look, opt, state)
+		-- A setup row's sample seconds, with the whole cast after them while Total cast time too is on.
+		if spec.time ~= nil and spec.time ~= "" then
+			row.time:SetText((spec.total and enabled and G("castbars.timeTotal") == true) and (spec.time .. " / " .. spec.total) or spec.time)
+		end
 		Look(row.time, look.percent, nil, nil, nil, look.outline)
 	end
 	-- The pushback past the right end of a player bar while Pushback on your bar is on: the setup row's sample, in red in the spell name's size.
@@ -723,9 +733,10 @@ function DC.PaintCast(row, opt, state, part, w, h, name, kick)
 	return w, h
 end
 
--- The moving parts of a painted bar: its fill and spark at `part`, its state's colour, the spell name of a new state, the seconds left, and on a
--- player bar a sample pushback over the second half of a cast (+0.4) or a channel (-0.8, the share left under a half).
-function DC.CastProgress(row, state, part, left, name)
+-- The moving parts of a painted bar: its fill and spark at `part`, its state's colour, the spell name of a new state, the seconds left (and the
+-- whole cast, `total` seconds, after them while Total cast time too is on), and on a player bar a sample pushback over the second half of a cast
+-- (+0.4) or a channel (-0.8, the share left under a half).
+function DC.CastProgress(row, state, part, left, name, total)
 	if not row.look then
 		return
 	end
@@ -743,7 +754,11 @@ function DC.CastProgress(row, state, part, left, name)
 	end
 	row.state = state
 	if row.time and ns.Finite(left) then
-		row.time:SetText(("%.1f"):format(math.max(0, left)))
+		if ns.Finite(total) and total > 0 and G("castbars.timeTotal") == true then
+			row.time:SetText(("%.1f / %.1f"):format(math.max(0, left), total))
+		else
+			row.time:SetText(("%.1f"):format(math.max(0, left)))
+		end
 	end
 	if row.push then
 		local sample = ns.Finite(part) and ((state == "cast" and part >= 0.5 and "+0.4") or (state == "channel" and part <= 0.5 and "-0.8")) or nil

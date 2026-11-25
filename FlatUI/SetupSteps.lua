@@ -568,6 +568,7 @@ ns.SETUP_STEPS = {
 		{ "castbars.textColour", "r", "mock-cast-bar" },
 		{ "castbars.ownTime", "c", "mock-cast-bar" },
 		{ "castbars.playerTime", "o", "mock-cast-bar" },
+		{ "castbars.timeTotal", "o", "mock-cast-bar" },
 		{ "castbars.pushback", "o", "mock-cast-bar" },
 		{ "castbars.iconPos", "c", "mock-cast-bar" },
 		{ "castbars.playerIcon", "c", "mock-cast-bar" },

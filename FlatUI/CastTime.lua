@@ -20,6 +20,10 @@ local _, ns = ...
 -- ahead, out of a fight, at every refresh of the cast bars while their row is on (ns.CastTimeSync), and one a fight kept from being made is made as
 -- it ends (ns.OutOfCombat), so the first cast in a fight shows its seconds also on a bar the game protects then (Edit Mode's Lock to player frame);
 -- /flatui status counts the casts that showed none for want of it, as after a reload in a fight.
+-- Total cast time too (off by default, Text and icon tab of Cast bars; 0.5.37): on the target, focus, player and pet bars (not a nameplate's),
+-- the time reads the seconds left and the whole cast, as 1.2 / 2.5. A cast then skips the binding, which writes one value, and goes by the poll:
+-- SetFormattedText of GetRemainingDuration and GetTotalDuration (LuaDurationObjectAPIDocumentation.lua:271, 319), both of which it takes withheld.
+-- A cast whose whole the game will not give is written as its seconds left alone, and /flatui status says so.
 -- Pushback on your bar (on by default, Text and icon tab of Cast bars): two more font strings of the addon's own on each of the player's two cast
 -- bars, in the font of the bar's spell name and red (1, 0.3, 0.3), made ahead out of a fight as the time is: one just past the right end (LEFT of
 -- the bar's RIGHT, +4) and one just past the game's own time (LEFT of its CastTimeText's RIGHT, +4; that text sits at LEFT of the bar's RIGHT, +10,
@@ -36,6 +40,7 @@ local _, ns = ...
 -- second cast tried during one fails and leaves it). Only SetText, SetFont, Show and Hide reach it in a fight. /flatui status names the last
 -- pushback shown.
 local OWN_ROW, MINE_ROW, PLATE_ROW, PUSH_ROW = "castbars.ownTime", "castbars.playerTime", "nameplates.castTime", "castbars.pushback"
+local TOTAL_ROW = "castbars.timeTotal"
 local EVERY = 0.1
 local FAILED_CASTS = 3
 local weak = { __mode = "k" }
@@ -45,7 +50,8 @@ local MINE = { { "PlayerCastingBarFrame", "player" }, { "OverlayPlayerCastingBar
 
 -- failed: casts both ways failed on. worked: a time was written once. stopped: the part is off for the session, with the reason. missed: the
 -- casts that showed no time, as their bar's font string could not be made yet in a fight.
-local state = { failed = 0, worked = false, stopped = false, why = nil, missed = 0 }
+-- noTotal: a cast whose whole the game would not give, written as its seconds left alone.
+local state = { failed = 0, worked = false, stopped = false, why = nil, missed = 0, noTotal = false }
 -- recs: per cast bar, its record: fs (the font string inside the bar), out (a nameplate bar's one past its end), write (the one the cast writes),
 -- font (the font last copied from the spell name). byFrame: per nameplate unit frame, the record of its cast bar. faded: the player's and the pet's
 -- bars whose own CastTimeText Flat UI faded.
@@ -172,8 +178,21 @@ local function Bind(rec, fs, duration)
 	binding:SetEnabled(true)
 end
 
--- The second way: the remaining seconds, written on each look.
+-- The seconds left and the whole cast, as 1.2 / 2.5 (GetTotalDuration, LuaDurationObjectAPIDocumentation.lua:319).
+local function WriteTotal(rec)
+	local duration = rec.duration
+	rec.write:SetFormattedText("%.1f / %.1f", duration:GetRemainingDuration(), duration:GetTotalDuration())
+end
+
+-- The second way: the remaining seconds, written on each look, with the whole cast after them while Total cast time too asks (rec.total). A cast
+-- whose whole the game will not give is written as its seconds left alone, so the row never stops the part.
 local function Write(rec)
+	if rec.total then
+		if pcall(WriteTotal, rec) then
+			return
+		end
+		rec.total, state.noTotal = false, true
+	end
 	rec.write:SetFormattedText("%.1f", rec.duration:GetRemainingDuration())
 end
 
@@ -236,7 +255,12 @@ local function Start(rec, casting, id, unit)
 		pcall(other.SetText, other, "")
 	end
 	rec.duration, rec.id, rec.chan, rec.write = duration, id, not casting, fs
-	local bound, err = pcall(Bind, rec, fs, duration)
+	-- Total cast time too, on the target, focus, player and pet bars (no nameplate's): the binding writes one value, so such a cast goes by the poll.
+	rec.total = rec.frame == nil and Get(TOTAL_ROW) == true
+	local bound, err = false, nil
+	if not rec.total then
+		bound, err = pcall(Bind, rec, fs, duration)
+	end
 	if bound then
 		rec.mode, rec.active = "binding", true
 		state.worked = true
@@ -699,6 +723,9 @@ local function StatusLine()
 		return nil
 	end
 	local line = state.worked and "Cast time: works" or "Cast time: no cast seen yet"
+	if state.noTotal and Get(TOTAL_ROW) == true then
+		line = line .. ". The game would not give the whole of a cast, so it showed the seconds left alone"
+	end
 	if state.missed > 0 then
 		line = line .. (". Casts that showed no time, as their bar's text is made out of a fight and none was yet: %d"):format(state.missed)
 	end
