@@ -231,67 +231,6 @@ do
 		return S
 	end
 
-	-- The icon of Attack, as the module takes it (C_Spell.GetSpellTexture of 6603, CombatText.lua), else a sword.
-	local function SwingIcon()
-		if type(C_Spell) == "table" and type(C_Spell.GetSpellTexture) == "function" then
-			local ok, file = pcall(C_Spell.GetSpellTexture, 6603)
-			if ok and not ns.IsSecret(file) and type(file) == "number" then
-				return file
-			end
-		end
-		return SWING_ICON
-	end
-
-	-- The numbers of the Outgoing scroll area, while Where your hits show is not Over enemies: moved by Outgoing style, up or down as Outgoing
-	-- direction says, as big as Size of the Outgoing area makes them (ns.ScrollSize), with the icon Spell icons gives a swing (All) or a spell (All
-	-- or Spells only) while Whose hits is Yours, and none on a word, for the life Speed gives them (an old one has gone at Fast). Straight and Arc
-	-- numbers take their lanes by the rule of the game (ns.ScrollLane), the lanes to the right, away from the character; Horizontal and Static
-	-- numbers take a row each. look: file, flags, shadow, pops, palette and bySchool of the drawing.
-	local function DrawOut(S, look)
-		local shown = ns.Get("combattext.enabled") ~= false and ns.Get("combattext.where") ~= "over"
-		local scroll, style = SHAPE.scroll, ns.Get("combattext.outStyle")
-		local dir = ns.Get("combattext.outDir") == "down" and -1 or 1
-		local start0 = dir == 1 and OUT_LOW or OUT_LOW + OUT_LENGTH
-		local life = style == "static" and scroll.still or scroll.life[ns.Get("combattext.speed")] or scroll.life.normal
-		local hold = style == "static" and scroll.stillHold or scroll.hold
-		local base = SHAPE.text * (ns.ScrollSize and ns.ScrollSize("out") or ns.Get("combattext.size")) / 100
-		local path = style == "straight" or style == "arc"
-		local icons = ns.Get("combattext.whose") == "one" and ns.Get("combattext.icons") or "off"
-		local snapshot = OUT_GAP * (#OUT - 1) + 0.1
-		local newest = {}
-		for i, sample in ipairs(OUT) do
-			local fs = S.out[i]
-			fs:SetShown(shown)
-			if shown then
-				local height = base * (sample.crit and scroll.crit or 1)
-				local start, rx, ry = OUT_GAP * (i - 1), 0, dir * (i - 1) * height * scroll.line
-				if path then
-					local lane
-					lane, start = ns.ScrollLane(newest, height, start)
-					newest[lane] = { start = start, height = height, life = life, length = OUT_LENGTH, serial = i }
-					rx, ry = scroll.lanes[lane] * scroll.lane * base, 0
-				end
-				local age = snapshot - start
-				local u = math.max(0, age / life)
-				local dx, dy = ns.ScrollPath(style, u, OUT_LENGTH, dir, 1, scroll.arcs[ns.Get("combattext.arcWidth")])
-				local text, r, g, b = sample.text, 1, 1, 1
-				if sample.word then
-					text = ns.CombatParen(text)
-				else
-					r, g, b = ns.CombatColour(sample.school, look.bySchool, look.palette)
-					local icon = (sample.icon == "swing" and icons == "all" and SwingIcon()) or (sample.icon == "spell" and (icons == "all" or icons == "spells") and SPELL_ICON)
-					if icon then
-						text = INLINE:format(tostring(icon)) .. text
-					end
-				end
-				fs:SetText(text)
-				U.font(fs, look.file, Height(base, sample.crit, math.max(0, age), look.pops), look.flags, look.shadow, { r, g, b })
-				fs:SetAlpha((age < 0 or u >= 1) and 0 or ns.ScrollAlpha(u, hold))
-				U.at(fs, "CENTER", S.root, "BOTTOMLEFT", OUT_X + rx + dx, start0 + ry + dy)
-			end
-		end
-	end
-
 	local function Draw(stage)
 		local S = instances[stage]
 		if not S then
@@ -498,67 +437,6 @@ do
 			return U.WHITE
 		end
 		return nil
-	end
-
-	-- The icon of Attack, as the module takes it (C_Spell.GetSpellTexture of 6603, CombatText.lua), else a sword.
-	local function SwingIcon()
-		if type(C_Spell) == "table" and type(C_Spell.GetSpellTexture) == "function" then
-			local ok, file = pcall(C_Spell.GetSpellTexture, 6603)
-			if ok and not ns.IsSecret(file) and type(file) == "number" then
-				return file
-			end
-		end
-		return SWING_ICON
-	end
-
-	-- The numbers of the Outgoing scroll area, while Where your hits show is not Over enemies: moved by Outgoing style, up or down as Outgoing
-	-- direction says, as big as Size of the Outgoing area makes them (ns.ScrollSize), with the icon Spell icons gives a swing (All) or a spell (All
-	-- or Spells only) while Whose hits is Yours, and none on a word, for the life Speed gives them (an old one has gone at Fast). Straight and Arc
-	-- numbers take their lanes by the rule of the game (ns.ScrollLane), the lanes to the right, away from the character; Horizontal and Static
-	-- numbers take a row each. look: file, flags, shadow, pops, palette and bySchool of the drawing.
-	local function DrawOut(S, look)
-		local shown = ns.Get("combattext.enabled") ~= false and ns.Get("combattext.where") ~= "over"
-		local scroll, style = SHAPE.scroll, ns.Get("combattext.outStyle")
-		local dir = ns.Get("combattext.outDir") == "down" and -1 or 1
-		local start0 = dir == 1 and OUT_LOW or OUT_LOW + OUT_LENGTH
-		local life = style == "static" and scroll.still or scroll.life[ns.Get("combattext.speed")] or scroll.life.normal
-		local hold = style == "static" and scroll.stillHold or scroll.hold
-		local base = SHAPE.text * (ns.ScrollSize and ns.ScrollSize("out") or ns.Get("combattext.size")) / 100
-		local path = style == "straight" or style == "arc"
-		local icons = ns.Get("combattext.whose") == "one" and ns.Get("combattext.icons") or "off"
-		local snapshot = OUT_GAP * (#OUT - 1) + 0.1
-		local newest = {}
-		for i, sample in ipairs(OUT) do
-			local fs = S.out[i]
-			fs:SetShown(shown)
-			if shown then
-				local height = base * (sample.crit and scroll.crit or 1)
-				local start, rx, ry = OUT_GAP * (i - 1), 0, dir * (i - 1) * height * scroll.line
-				if path then
-					local lane
-					lane, start = ns.ScrollLane(newest, height, start)
-					newest[lane] = { start = start, height = height, life = life, length = OUT_LENGTH, serial = i }
-					rx, ry = scroll.lanes[lane] * scroll.lane * base, 0
-				end
-				local age = snapshot - start
-				local u = math.max(0, age / life)
-				local dx, dy = ns.ScrollPath(style, u, OUT_LENGTH, dir, 1, scroll.arcs[ns.Get("combattext.arcWidth")])
-				local text, r, g, b = sample.text, 1, 1, 1
-				if sample.word then
-					text = ns.CombatParen(text)
-				else
-					r, g, b = ns.CombatColour(sample.school, look.bySchool, look.palette)
-					local icon = (sample.icon == "swing" and icons == "all" and SwingIcon()) or (sample.icon == "spell" and (icons == "all" or icons == "spells") and SPELL_ICON)
-					if icon then
-						text = INLINE:format(tostring(icon)) .. text
-					end
-				end
-				fs:SetText(text)
-				U.font(fs, look.file, Height(base, sample.crit, math.max(0, age), look.pops), look.flags, look.shadow, { r, g, b })
-				fs:SetAlpha((age < 0 or u >= 1) and 0 or ns.ScrollAlpha(u, hold))
-				U.at(fs, "CENTER", S.root, "BOTTOMLEFT", OUT_X + rx + dx, start0 + ry + dy)
-			end
-		end
 	end
 
 	local function Draw(stage)
