@@ -1472,6 +1472,8 @@ ns.PAGES = {
 		{ key = "spacing", kind = "number", default = 3, min = 0, max = 12, step = 1, label = "Spacing" },
 		{ key = "layout", kind = "choice", default = "row", label = "Layout", choices = { { "row", "Horizontal" }, { "column", "Vertical" } } },
 		{ key = "colours", kind = "bool", default = true, label = "Borders in the ping's colour" },
+		{ key = "keys", kind = "bool", default = true, label = "Keys on the buttons",
+			tip = "The key you bound under Flat UI in the game's Key Bindings, short, in the corner of each button." },
 	},
 	{
 		key = "windows", label = "Windows",

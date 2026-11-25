@@ -1580,6 +1580,7 @@ ns.SETUP_STEPS = {
 		{ "pingbar.spacing", "r", "behaviour", "Sets the room between the buttons." },
 		{ "pingbar.layout", "o", "behaviour", "Lays the buttons out horizontally or vertically." },
 		{ "pingbar.colours", "r", "behaviour", "Gives the border of each button the colour of its ping." },
+		{ "pingbar.keys", "o", "behaviour", "Shows the key you bound for each ping, short, in the corner of its button." },
 	} },
 	{ id = "bags", area = "Bags", title = "Bags", draw = "mock-screen", built = false, rows = {
 		{ "bags.enabled", "c", "behaviour", "Puts all your bags in one Flat UI window with sections and a search, and shows your bank and your other characters' bags anywhere." },
