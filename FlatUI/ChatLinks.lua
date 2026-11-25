@@ -30,8 +30,11 @@ local _, ns = ...
 -- instance, guild, officer and numbered channel lines (not whispers, not the game's own lines), colours each whole-word match of the player's own
 -- name (UnitName, case aside) in the plain text of a line another player wrote, in Your name colour. Links, textures and colour codes are passed
 -- over whole, as for the addresses, and so is a web address; a line of the chat lockdown never comes. With Sound when you are named, the sound
--- plays once for each line (its lineID), at most one a second (ns.PlayKit). The text alone changes; the filters chain, each rewriting what the
--- last gave.
+-- plays once for each line (its lineID), at most one a second (ns.PlayKit); picking it in the options window plays it once
+-- (ns.ChatMentionSoundPicked, 0.5.37). The text alone changes; the filters chain, each rewriting what the last gave.
+-- Other words to colour (0.5.37): /flatui words add, remove and list (ns.AddSlash) keep up to 20 more words for the account
+-- (ns.Account().chatWords, lower case, 2 to 24 bytes, no space), each coloured and sounded as your name is, whole words only, each look on what
+-- the last gave; the row Other words to colour lists them and a pick takes one off (ns.ChatWordLines, ns.ChatWordPick).
 -- These follow the clickable addresses and the link tooltips of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoLChatSocial/ChatIcons.lua). Left out: its item and currency icons and the item levels in links.
 
@@ -61,6 +64,19 @@ local MENTION_EVENTS = { "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_EMOTE", "CHA
 	"CHAT_MSG_CHANNEL" }
 -- The sound choices of Sound when you are named, as ns.SOUNDS (IconRow.lua) numbers them.
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
+-- Other words to colour (0.5.37): the shortest and longest word in bytes, and how many the list holds at most; the lines of /flatui words.
+local WORDS = { SHORT = 2, LONG = 24, MOST = 20,
+	ADDED = "Flat UI: \"%s\" is coloured in chat now, as your name is.",
+	OFF = " Turn on Your name in chat (Chat text) for it to show.",
+	HAVE = "Flat UI: \"%s\" is coloured already.",
+	FULL = "Flat UI: at most 20 other words; /flatui words remove one first.",
+	BAD = "Flat UI: give one word of 2 to 24 letters, with no space, as /flatui words add tank.",
+	REMOVED = "Flat UI: \"%s\" is no longer coloured in chat.",
+	MISSING = "Flat UI: \"%s\" is not in the list; /flatui words lists them.",
+	LIST = "Flat UI: other words coloured in chat: %s.",
+	NONE = "Flat UI: no other words are coloured in chat; /flatui words add tank adds one.",
+	HELP = "/flatui words - the other words coloured in chat as your name is; words add <word>, words remove <word>",
+}
 
 -- The state of the file: whether the filter is in the registry, whether each callback was given (true) or refused (false), the last line
 -- rewritten (the same line comes once for each window that shows it), the lines with a link made, the lines that named you, the copy box and
@@ -449,7 +465,8 @@ local function MarkWord(word, lower, colour)
 end
 
 -- The line with the name coloured in its plain text, or nil when it is not named there. Links, textures, names and colour codes are passed
--- over whole, as Rewrite passes them.
+-- over whole, as Rewrite passes them. MarkAll looks for each word on what the last look gave: the words differ and match whole, so no word
+-- is wrapped twice.
 local function MarkLine(msg, lower, colour)
 	if not msg:lower():find(lower, 1, true) then
 		return nil
@@ -481,6 +498,47 @@ local function MarkLine(msg, lower, colour)
 	return table.concat(parts)
 end
 
+-- Other words to colour: the list kept for the account (ns.Account().chatWords), or nil before the saved variables load; make makes it.
+local function WordList(make)
+	local db = ns.Account()
+	if type(db) ~= "table" then
+		return nil
+	end
+	if type(db.chatWords) ~= "table" then
+		if not make then
+			return nil
+		end
+		db.chatWords = {}
+	end
+	return db.chatWords
+end
+
+-- A word fit for the list: a plain string in lower case of SHORT to LONG bytes, with no space and no escape bar.
+local function Fit(word)
+	return type(word) == "string" and #word >= WORDS.SHORT and #word <= WORDS.LONG and word == word:lower() and not word:find("[%s|]")
+end
+
+-- The words a line is looked at for, lower case, each once: your name first, then the other words (at most MOST of them).
+local function Targets(name)
+	local list, seen = { name:lower() }, { [name:lower()] = true }
+	for _, word in ipairs(WordList(false) or {}) do
+		if Fit(word) and not seen[word] and #list <= WORDS.MOST then
+			seen[word] = true
+			list[#list + 1] = word
+		end
+	end
+	return list
+end
+
+-- The line with your name and each other word coloured, each look on what the last gave, or nil when none is there.
+local function MarkAll(msg, name)
+	local colour, out = MentionColour(), nil
+	for _, lower in ipairs(Targets(name)) do
+		out = MarkLine(out or msg, lower, colour) or out
+	end
+	return out
+end
+
 -- One line of one window: S.marked is the line to show in its place, or nil to leave it. A line you wrote is left. The same line comes once for
 -- each window that shows it, so the last answer is kept and the sound plays once for each lineID.
 local function Mark(_, msg, author, lineID)
@@ -492,7 +550,7 @@ local function Mark(_, msg, author, lineID)
 		return
 	end
 	if S.mentionIn ~= msg then
-		S.mentionIn, S.mentionOut = msg, MarkLine(msg, name:lower(), MentionColour())
+		S.mentionIn, S.mentionOut = msg, MarkAll(msg, name)
 	end
 	if S.mentionOut == nil then
 		return
@@ -508,6 +566,23 @@ local function Mark(_, msg, author, lineID)
 	end
 	S.mentionLine = id
 	S.marked = S.mentionOut
+end
+
+-- Picking a sound in the options window plays it once, so it can be chosen by ear: the changed handler of Sound when you are named (Config.lua,
+-- 0.5.37), as UnitGroupMarks.lua's ns.DispelSoundPicked. Only while the options window shows and out of a fight; None plays nothing.
+function ns.ChatMentionSoundPicked(path)
+	if type(path) ~= "string" or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
+		return
+	end
+	local okFight, fighting = pcall(InCombatLockdown)
+	if not okFight or ns.IsSecret(fighting) or fighting == true then
+		return
+	end
+	local kit = KITS[ns.Get(path)]
+	local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
+	if sound and type(ns.PlayKit) == "function" then
+		ns.PlayKit(sound[1])
+	end
 end
 
 -- The game's registry calls it with the window, the event and the values of the line: the text first, its author second ("Name" or
@@ -549,6 +624,83 @@ local function SyncMentions()
 		end
 		S.mentions = false
 	end
+end
+
+-- /flatui words (0.5.37): add a word, remove one, or list them. A change forgets the last line, so the next shows it.
+local function EditWord(verb, typed)
+	local word = type(typed) == "string" and typed:lower() or ""
+	if not Fit(word) then
+		return WORDS.BAD
+	end
+	local list = WordList(verb == "add")
+	if not list then
+		return WORDS.BAD
+	end
+	local name = MyName()
+	for index, have in ipairs(list) do
+		if have == word then
+			if verb == "add" then
+				return WORDS.HAVE:format(word)
+			end
+			table.remove(list, index)
+			S.mentionIn, S.mentionOut = nil, nil
+			return WORDS.REMOVED:format(word)
+		end
+	end
+	if verb ~= "add" then
+		return WORDS.MISSING:format(word)
+	elseif name and name:lower() == word then
+		return WORDS.HAVE:format(word)
+	elseif #list >= WORDS.MOST then
+		return WORDS.FULL
+	end
+	list[#list + 1] = word
+	S.mentionIn, S.mentionOut = nil, nil
+	return WORDS.ADDED:format(word) .. (Opt("mentions") == true and "" or WORDS.OFF)
+end
+
+local function WordsSlash(rest)
+	local verb, word = (type(rest) == "string" and rest or ""):match("^%s*(%S*)%s*(.-)%s*$")
+	verb = (verb or ""):lower()
+	if verb == "add" or verb == "remove" then
+		print(EditWord(verb, word))
+	elseif verb == "" or verb == "list" then
+		local words = {}
+		for _, have in ipairs(WordList(false) or {}) do
+			if Fit(have) then
+				words[#words + 1] = have
+			end
+		end
+		print(#words > 0 and WORDS.LIST:format(table.concat(words, ", ")) or WORDS.NONE)
+	else
+		print(WORDS.HELP)
+	end
+end
+
+ns.AddSlash(KEY, "words", WordsSlash, { WORDS.HELP })
+
+-- The row Other words to colour (Config.lua): the words of the list, and a pick that stops colouring one, as Items always sold does
+-- (ErrandsMerchant.lua's ErrandsSellLines and ErrandsSellPick).
+function ns.ChatWordLines()
+	local rows = {}
+	for index, word in ipairs(WordList(false) or {}) do
+		if Fit(word) then
+			rows[#rows + 1] = { index, word }
+		end
+	end
+	table.sort(rows, function(a, b)
+		return a[2] < b[2]
+	end)
+	return rows
+end
+
+function ns.ChatWordPick(id)
+	local list = WordList(false)
+	local word = list and type(id) == "number" and list[id] or nil
+	if not Fit(word) then
+		return false
+	end
+	return true, EditWord("remove", word)
 end
 
 -- The copy box --------------------------------------------------------------------------------
@@ -871,7 +1023,9 @@ ns.AddStatus(KEY, function()
 		if S.noRegistry and Windows() then
 			lines[#lines + 1] = "Your name in chat: this game has no chat filters, so it is not coloured."
 		elseif S.mentioned > 0 then
-			lines[#lines + 1] = ("Your name in chat: coloured in %d chat %s."):format(S.mentioned, S.mentioned == 1 and "line" or "lines")
+			local words = #Targets(MyName() or "") - 1
+			lines[#lines + 1] = ("Your name in chat: coloured in %d chat %s%s."):format(S.mentioned, S.mentioned == 1 and "line" or "lines",
+				words > 0 and (" (with %d other %s)"):format(words, words == 1 and "word" or "words") or "")
 		end
 	end
 	return lines

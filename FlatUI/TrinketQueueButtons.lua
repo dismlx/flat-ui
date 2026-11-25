@@ -25,10 +25,14 @@ local _, ns = ...
 -- or a delay (and in a fight whenever Auto queue is on), red while the queue is paused, the slot is held or stopped, or the game refused a trinket.
 -- The colour is never all that says it: the tooltip says it in words.
 -- Clicks: a left click opens the Trinket queue window on that slot, shows it there while the window shows the other slot, and closes it while it
--- shows this one (ns.TrinketWindowToggle, TrinketQueueWindow.lua); a right click turns the slot's Auto queue on or off (Q.SetAuto), a Shift-right
--- click pauses or resumes every swap (Q.SetPaused); a trinket dropped on it (OnReceiveDrag), or clicked on it from the cursor, goes in that slot's
--- list (Q.Add), and one lifted from a bag or a worn slot goes back there with ClearCursor, as GearButton.lua's Compare (GearButton.lua:300-356).
+-- shows this one (ns.TrinketWindowToggle, TrinketQueueWindow.lua); a Shift-click is Queue now for that slot (Q.Now, as the window's Queue now
+-- button, with one line in chat, 0.5.37), which clears a red square (held, held empty, refused); a right click turns the slot's Auto queue on or
+-- off (Q.SetAuto), a Shift-right click pauses or resumes every swap (Q.SetPaused); a trinket dropped on it (OnReceiveDrag), or clicked on it from
+-- the cursor, goes in that slot's list (Q.Add), and one lifted from a bag or a worn slot goes back there with ClearCursor, as GearButton.lua's
+-- Compare (GearButton.lua:300-356).
 -- Its tooltip is GameTooltip (SetOwner, AddLine, Show, and Hide only while IsOwned says the button owns it), never in a fight (GearButton.lua:285-298).
+-- While the cursor is on a button (over, from OnEnter to OnLeave or OnHide), each click and each look of the driver out of a fight says the
+-- tooltip again as soon as its words changed (0.5.37): a click's change shows at once, and a cooldown or the next trinket's time counts down.
 -- Everything runs as the part "slot buttons" (ns.EachPart, a count of its own first), so three faults stop the buttons alone with a line for
 -- /flatui status, and they hide then. Every frame, texture and font string here is Flat UI's own. There is no movers entry: the buttons belong to
 -- their slots, as the item levels on the slots have none, and the slots never move.
@@ -47,13 +51,16 @@ local T = {
 	TITLE = { top = "Top trinket queue", bottom = "Bottom trinket queue" },
 	NEXT = "Next: %s in %s",
 	PAUSED = "Pause all is on: no trinket is swapped.",
-	TIPS = { "Click: the queue window.", "Right-click: turn this slot's queue on or off.", "Shift-right-click: pause or resume every swap.",
-		"Drop a trinket here to add it to this list." },
+	TIPS = { "Click: the queue window.", "Shift-click: Queue now for this slot.", "Right-click: turn this slot's queue on or off.",
+		"Shift-right-click: pause or resume every swap.", "Drop a trinket here to add it to this list." },
+	NOW = "Flat UI: the %s trinket queue looks again now.",
+	OFF = "Flat UI: the trinket queue's swaps are off. /flatui status says why.",
 	REPORT = "Flat UI, Trinket queue buttons, %s: %s",
 }
 
--- The buttons by slot ({ button, dot, hover, outline, anchored, scale, strata, level, tone, over }); the driver and its clock; whether the buttons
--- are wanted and the window shows at the last look; whether a change waits for the end of a fight; the look painted.
+-- The buttons by slot ({ button, dot, hover, outline, anchored, scale, strata, level, tone, over, said: the words of the tooltip it showed });
+-- the driver and its clock; whether the buttons are wanted and the window shows at the last look; whether a change waits for the end of a
+-- fight; the look painted.
 local B = { top = {}, bottom = {}, driver = nil, clock = 0, wanted = false, shown = false, waiting = false, look = nil, runs = 0, faults = {} }
 
 local Start
@@ -210,26 +217,63 @@ local function Untip(b)
 	end
 end
 
--- The title, the slot's state in words, the next trinket when known, and dim lines; never in a fight.
-local function Say(b, n)
-	local tip, q = Tooltip(), Q()
-	if Fighting() or not (tip and q) or not pcall(tip.SetOwner, tip, b.button, "ANCHOR_RIGHT") then
-		return
-	end
+-- The lines of a slot's tooltip, each { text, colour }: the title, the slot's state in words, the next trinket when known, Pause all, and dim
+-- lines; and their words in one string, which says whether the tooltip changed.
+local function Lines(q, n)
 	local state = q.State(n)
-	pcall(tip.AddLine, tip, T.TITLE[n], PLAIN[1], PLAIN[2], PLAIN[3])
-	pcall(tip.AddLine, tip, q.Sentence(n, state), PLAIN[1], PLAIN[2], PLAIN[3], true)
+	local lines = { { T.TITLE[n], PLAIN }, { q.Sentence(n, state), PLAIN } }
 	if state.next and state.nextAt then
 		local now = type(GetTime) == "function" and GetTime() or 0
-		pcall(tip.AddLine, tip, T.NEXT:format(q.Info(state.next).name, q.Clock(state.nextAt - now)), PLAIN[1], PLAIN[2], PLAIN[3], true)
+		lines[#lines + 1] = { T.NEXT:format(q.Info(state.next).name, q.Clock(state.nextAt - now)), PLAIN }
 	end
 	if q.Paused() then
-		pcall(tip.AddLine, tip, T.PAUSED, TONES.halt[1], TONES.halt[2], TONES.halt[3], true)
+		lines[#lines + 1] = { T.PAUSED, TONES.halt }
 	end
 	for _, line in ipairs(T.TIPS) do
-		pcall(tip.AddLine, tip, line, DIM[1], DIM[2], DIM[3], true)
+		lines[#lines + 1] = { line, DIM }
+	end
+	local words = {}
+	for index, line in ipairs(lines) do
+		words[index] = line[1]
+	end
+	return lines, table.concat(words, "\n")
+end
+
+-- The tooltip of a slot's button; never in a fight.
+local function Say(b, n)
+	local tip, q = Tooltip(), Q()
+	if Fighting() or not (tip and q) then
+		return
+	end
+	local lines, said = Lines(q, n)
+	if not pcall(tip.SetOwner, tip, b.button, "ANCHOR_RIGHT") then
+		return
+	end
+	for index, line in ipairs(lines) do
+		local colour = line[2]
+		pcall(tip.AddLine, tip, line[1], colour[1], colour[2], colour[3], index > 1 or nil)
 	end
 	pcall(tip.Show, tip)
+	b.said = said
+end
+
+-- While the cursor is on a button, out of a fight: its tooltip is said again once its words changed (a click, a swap, a countdown), and once a
+-- fight that held it back ended. Never while another frame took the tooltip.
+local function Again(b, n)
+	local tip, q = Tooltip(), Q()
+	if not (b.over and tip and q) or Fighting() then
+		return
+	end
+	if b.said ~= nil then
+		local ok, owned = pcall(tip.IsOwned, tip, b.button)
+		if not (ok and not IsSecret(owned) and owned == true) then
+			return
+		end
+	end
+	local _, said = Lines(q, n)
+	if said ~= b.said then
+		Say(b, n)
+	end
 end
 
 -- Clicks and drops -----------------------------------------------------------------------------------------------------------------------------
@@ -294,13 +338,24 @@ local function Click(n, mouse)
 	if not q or Drop(n) then
 		return
 	end
+	local shift = type(IsShiftKeyDown) == "function" and IsShiftKeyDown() == true
 	if mouse == "RightButton" then
-		local shift = type(IsShiftKeyDown) == "function" and IsShiftKeyDown() == true
 		if shift then
 			q.SetPaused(not q.Paused())
 		else
 			q.SetAuto(n, not q.Auto(n))
 		end
+		B[n].tone = nil
+		return
+	end
+	-- Shift-click: Queue now for this slot (header).
+	if shift then
+		if not q.Running() then
+			print(T.OFF)
+			return
+		end
+		q.Now(n)
+		print(T.NOW:format(n))
 		B[n].tone = nil
 		return
 	end
@@ -332,21 +387,31 @@ local function Make(n)
 	hover:SetAllPoints(button)
 	b.button, b.dot, b.hover = button, dot, hover
 	b.outline = ns.SetOutlineArea(ns.Outline(button, button), "windows")
+	-- After a click or a drop the tooltip says the change at once (header).
 	button:SetScript("OnClick", function(_, mouse)
 		Run(Click, n, mouse)
+		if b.over then
+			Run(Say, b, n)
+		end
 		Start()
 	end)
 	button:SetScript("OnReceiveDrag", function()
 		Run(Drop, n)
+		if b.over then
+			Run(Say, b, n)
+		end
 		Start()
 	end)
 	button:SetScript("OnEnter", function()
+		b.over = true
 		Run(Say, b, n)
 	end)
 	button:SetScript("OnLeave", function()
+		b.over, b.said = false, nil
 		Untip(b)
 	end)
 	button:SetScript("OnHide", function()
+		b.over, b.said = false, nil
 		Untip(b)
 	end)
 	Paint(b)
@@ -453,6 +518,7 @@ local function Looks()
 				end
 				PaintDot(b, n)
 				Shown(b, true)
+				Again(b, n)
 			else
 				Later()
 			end

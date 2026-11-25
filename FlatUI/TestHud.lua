@@ -319,7 +319,8 @@ local function AuraStandIn(id, game, label, list, filter)
 			end
 		end,
 		Paint = function(holder)
-			local white = ns.Get("hud.enabled") == true and ns.Get("hud.durationColour") == "white"
+			local colour = ns.Get("hud.durationColour")
+			local white = ns.Get("hud.enabled") == true and (colour == "white" or colour == "warn")
 			for index, aura in ipairs(list) do
 				local cell = holder.cells[index]
 				ns.DrawHud.PaintAura(cell, aura.kind)

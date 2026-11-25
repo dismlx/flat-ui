@@ -690,7 +690,7 @@ ns.SETUP_STEPS = {
 		{ "hud.colourOther", "r", "mock-buff-row" },
 		{ "hud.durationSize", "c", "mock-buff-row" },
 		{ "hud.durationFormat", "o", "behaviour", "Chooses whether the time on a buff, debuff or totem shows 8m with no space, or 8 m as the game has it." },
-		{ "hud.durationColour", "o", "behaviour", "Chooses whether the time on a buff, debuff or totem is white, or gold as the game has it." },
+		{ "hud.durationColour", "o", "behaviour", "Chooses whether the time on a buff, debuff or totem is white, white turning red in its last 10 seconds, or gold as the game has it." },
 		{ "hud.countSize", "c", "mock-buff-row" },
 	} },
 	{ id = "hud-bars", area = "HUD", title = "Experience and menu bars", draw = "mock-xp-micro", built = true, rows = {
@@ -904,6 +904,7 @@ ns.SETUP_STEPS = {
 		{ "chat.mentions", "o", "behaviour", "Colours your name where other players write it in say, party, raid, guild and the numbered channels." },
 		{ "chat.mentionColour", "r", "behaviour", "Sets the colour your name takes in other players' chat lines." },
 		{ "chat.mentionSound", "o", "behaviour", "Plays a sound once for each chat line that names you." },
+		{ "chat.mentionWords", "r", "behaviour", "Lists the other words /flatui words colours in chat as your name; choose one to stop colouring it." },
 	} },
 	{ id = "tips", area = "Tooltips", title = "Tooltips", draw = "mock-tooltip", built = true, rows = {
 		{ "chat.tooltips", "c", "mock-tooltip" },
@@ -918,6 +919,7 @@ ns.SETUP_STEPS = {
 		{ "chat.unitBorder", "c", "mock-tooltip" },
 		{ "chat.nameClass", "c", "mock-tooltip" },
 		{ "chat.classLine", "c", "behaviour", "Colours the line with a player's level, race and class in the class colour." },
+		{ "chat.guildLine", "c", "behaviour", "Colours a player's guild line, green for your own guild and blue for another, with the member's rank after it." },
 		{ "chat.tipScale", "c", "mock-tooltip" },
 		{ "chat.tipTitleSize", "o", "mock-tooltip" },
 		{ "chat.tipTextSize", "o", "mock-tooltip" },

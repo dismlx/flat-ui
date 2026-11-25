@@ -13,6 +13,8 @@ local _, ns = ...
 -- profile holds it), so a profile switch, by hand or by the Profiles page's automatic switch, never turns it on or off and an alt on the same
 -- profile keeps its own; held, { top, bottom }, the item the player put on by hand in each slot, or 0 for a slot the player emptied. The first
 -- read of a session cleans it, as Cooldowns.lua's Own.List does (Cooldowns.lua:612-640), and writes it back only when something changed.
+-- Q.Copy puts the other slot's list at the end of a list, in its order with each Delay and Stop, passing over a trinket it holds already, and
+-- Q.Clear empties a list (0.5.37): /flatui queue copy top or bottom and clear top or bottom, and the window's Copy button on an empty list.
 -- When it looks: never on a ticker. An event or an edit asks for a look (Q.Soon), which comes SETTLE seconds later, once however many asked; each
 -- look arms at most one timer (C_Timer.After, WL/apis.yaml:28390) for the first moment a decision can change, and a token makes an older timer
 -- do nothing. Nothing runs while both Auto queue rows are off, Pause all is on, or the module or its part "swaps" is off. The module's events
@@ -63,7 +65,7 @@ local _, ns = ...
 -- emptied by hand stays empty until a trinket goes in by hand; either hold also ends with Queue now, the slot's Auto queue turned on or Pause all
 -- turned off.
 -- Each swap is said in chat (Say each swap in chat) and may play a sound of ns.SOUNDS (IconRow.lua:17-25, PlaySound in pcall; not ns.PlayKit,
--- whose note speaks of a flash). Everything runs as the part "swaps" of the module (ns.EachPart, each run with a count of its own as its first
+-- whose note speaks of a flash); picking Sound on a swap in the options window plays it once (ns.TrinketSoundPicked, through ns.PlayKit, 0.5.37). Everything runs as the part "swaps" of the module (ns.EachPart, each run with a count of its own as its first
 -- argument, as GearWindow.lua's Run), so three faults stop the swaps alone with a line for /flatui status; the first fault of each kind also goes
 -- to the game's error handler. It never writes a field of a game frame, calls no mixin, adds no hook, makes no secure frame and never swaps in a
 -- fight; its frames are its own.
@@ -116,7 +118,13 @@ local T = {
 	LIST_OFF = " (Auto queue off)",
 	LIST_EMPTY = "  (empty)",
 	LIST_LINE = "  %d. %s%s",
-	HELP = "/flatui queue - the trinket queue window; queue top, bottom, pause, now, list",
+	HELP = "/flatui queue - the trinket queue window; queue top, bottom, pause, now, list, copy top or bottom, clear top or bottom",
+	COPIED = "Flat UI: the %s trinket list took %d from the %s list, in its order, with each Delay and Stop.",
+	COPY_NONE = "Flat UI: nothing to copy: every trinket of the %s list is in the %s trinket list already, or it is full.",
+	COPY_EMPTY = "Flat UI: nothing to copy: the %s trinket list is empty.",
+	CLEARED = "Flat UI: the %s trinket list is empty now (%d taken out).",
+	CLEAR_NONE = "Flat UI: the %s trinket list is empty already.",
+	WHICH = "Flat UI: say which list: /flatui queue %s top or %s bottom.",
 	STATUS_PAUSED = "Trinket queue: paused.",
 	STATUS_OFF = "Trinket queue, %s: auto queue off.",
 	STATUS_SLOT = "Trinket queue, %s: wearing %s; %s%s.",
@@ -149,7 +157,7 @@ local WHY = {
 	next = { "on", "Waits for a trinket of the list to be ready" },
 	higher = { "on", "Putting it on" },
 	cooling = { "on", "Putting it on" },
-	refused = { "halt", "The game refused it" },
+	refused = { "halt", "The game refused it: Queue now tries it again" },
 }
 
 -- The words of the reasons whose sentence takes a number, without it.
@@ -1184,6 +1192,23 @@ function R.Sound()
 	end
 end
 
+-- Picking Sound on a swap in the options window plays it once, so it can be chosen by ear: the row's changed handler (Config.lua, 0.5.37), as
+-- UnitGroupMarks.lua's ns.DispelSoundPicked. Only while the options window shows and out of a fight; None plays nothing.
+function ns.TrinketSoundPicked(path)
+	if type(path) ~= "string" or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
+		return
+	end
+	local okFight, fighting = Call(InCombatLockdown)
+	if not okFight or IsSecret(fighting) or fighting == true then
+		return
+	end
+	local kit = KITS[ns.Get(path)]
+	local sound = kit and type(ns.SOUNDS) == "table" and ns.SOUNDS[kit]
+	if sound and type(ns.PlayKit) == "function" then
+		ns.PlayKit(sound[1])
+	end
+end
+
 -- The slot holds the item the swap asked for.
 function Q.Confirmed(pending)
 	S.pending = nil
@@ -1483,6 +1508,42 @@ function Q.ToggleStop(n, index)
 	end
 end
 
+-- Copies the other slot's list to the end of n's, in its order, each entry with its Delay and Stop (0.5.37): a trinket already in n's list is
+-- passed over, and the copy stops at MOST. How many were added.
+function Q.Copy(n)
+	if not SLOTS[n] then
+		return 0
+	end
+	local added = 0
+	for _, entry in ipairs(Q.List(OTHER[n])) do
+		if #Q.List(n) >= MOST then
+			break
+		end
+		if not Q.Find(Q.List(n), entry.item) then
+			local list = Q.List(n, true)
+			list[#list + 1] = { item = entry.item, delay = Finite(entry.delay) and entry.delay or 0, stop = entry.stop == true or nil }
+			added = added + 1
+		end
+	end
+	if added > 0 then
+		R.Edited()
+	end
+	return added
+end
+
+-- Empties a slot's list (0.5.37): how many entries it held.
+function Q.Clear(n)
+	local count = #Q.List(n)
+	if SLOTS[n] and count > 0 then
+		local list = Q.List(n, true)
+		for index = #list, 1, -1 do
+			list[index] = nil
+		end
+		R.Edited()
+	end
+	return count
+end
+
 -- Queue now: the hold goes, refusals and back-offs of the list are forgotten, and the next decision of the slot leaves Stop and Delay aside once.
 function Q.Now(n)
 	for _, name in ipairs(n and { n } or ORDER) do
@@ -1747,6 +1808,27 @@ function R.EntryLine(index, entry)
 	return T.LIST_LINE:format(index, R.Named(entry.item), extra)
 end
 
+-- /flatui queue copy and clear, with the list they act on (0.5.37): copy bottom fills the Bottom list from the Top one; clear top empties the Top
+-- list. One line in chat each.
+function R.SlashList(word, n)
+	if not SLOTS[n] then
+		print(T.WHICH:format(word, word))
+		return
+	end
+	if word == "clear" then
+		local count = Q.Clear(n)
+		print(count > 0 and T.CLEARED:format(WORD[n], count) or T.CLEAR_NONE:format(WORD[n]))
+		return
+	end
+	local from = OTHER[n]
+	if #Q.List(from) == 0 then
+		print(T.COPY_EMPTY:format(WORD[from]))
+		return
+	end
+	local added = Q.Copy(n)
+	print(added > 0 and T.COPIED:format(WORD[n], added, WORD[from]) or T.COPY_NONE:format(WORD[from], WORD[n]))
+end
+
 -- /flatui queue and /flatui trinkets.
 function Q.Slash(rest)
 	local word = type(rest) == "string" and rest:lower():match("^%s*(%S*)") or ""
@@ -1765,6 +1847,8 @@ function Q.Slash(rest)
 		end
 		Q.Now(nil)
 		print(T.NOW)
+	elseif word == "copy" or word == "clear" then
+		R.SlashList(word, rest:lower():match("^%s*%S+%s+(%S+)"))
 	elseif word == "list" then
 		for _, n in ipairs(ORDER) do
 			print(T.LIST:format(WORD[n], Q.Auto(n) and "" or T.LIST_OFF))
