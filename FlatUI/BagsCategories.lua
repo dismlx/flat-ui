@@ -36,10 +36,13 @@ local _, ns = ...
 -- Hidden sections: the player may hide any section of Flat UI's own but New items, Free slots and Other (a title's right-click menu, BagsOrder.lua),
 -- in both windows and for every character, a set of keys for the whole account in FlatUIDB.bags.hidden, { [key] = true }, beside the order and the
 -- folds, read with a type test at each use; an empty set is not kept. A hidden section is passed by as if it were not there: its items go to the
--- next rule that takes them, a hidden kind of a split group to the group's rest while that shows (Potions to Consumables), and Other at worst.
--- Junk hidden changes only where junk shows (IsJunk, the sell list, Sell junk and the junk coin stay), and Keep in place hidden leaves the pins as
--- they are, their items filed by kind. A placement by hand in a hidden section is kept but skipped, and counts again once it shows. Keys of the set
--- that are no such section are skipped, so a section that is gone, or one of a choice not in use, errs nowhere.
+-- next rule that takes them, a hidden kind of a split group to the section that holds the group's rest under its row's choice while that shows
+-- (Potions to Consumables, Rings to Equipment, Weapons to Armour at Weapons, armour and jewellery), and Other at worst; the explosives and devices
+-- of Trade goods, which Consumables only claims, go on to Trade goods' rule then. Junk hidden changes only where junk shows (IsJunk, the sell list,
+-- Sell junk and the junk coin stay, and a drop takes no item off the sell list), and Keep in place hidden leaves the pins as they are, their items
+-- filed by kind, and a drop on another section unpins no slot (B.Pins.Left). A placement by hand in a hidden section is kept but skipped, and
+-- counts again once it shows. Keys of the set that are no such section are skipped, so a section that is gone, or one of a choice not in use, errs
+-- nowhere.
 --
 -- The sections are shown in an order of their own (LIST), which is
 -- not the order their rules are tried in: New items first, Keep in place next, Junk and Free slots last, and each section of a group where its group
@@ -76,15 +79,16 @@ local _, ns = ...
 -- CursorDocumentation.lua:11-19, read from the fields of its ItemLocation, Blizzard_ObjectAPI/Mainline/ItemLocation.lua:35-44) and gives the
 -- item back to its slot with ClearCursor. Dropped on Junk, the item goes on Errands' sell list; an item of Junk dropped on another section comes
 -- off the sell list, and a grey one goes on the keep list (ns.ErrandsJunkMark), as /flatui sell and /flatui keep put them there and take them off
--- (ErrandsMerchant.lua:824-848): a placement of Flat UI's own in or out of Junk would make the section and the selling disagree. Whether a dropped
--- item is of Junk is the test of its slot for a slot of the bags (Categories.IsJunk), so a grey item of a bag left out of junk selling, which is
--- not in Junk, goes on no list; for the bank, and an item whose slot the game does not say, it is the two lists (ns.ErrandsJunkRule). An item the
--- game gives no value, or no sell price (C_Item.GetItemInfo, ItemDocumentation.lua:626-657), and a quest item cannot go in Junk, since Errands
--- never sells them. Dropped on the section it reaches by itself, an item loses its placement. An item whose slot the game does not say is judged by
--- its ID alone, with its quality from C_Item.GetItemQualityByID. New items and Free slots take no drop, and no drop is taken in a fight
--- (InCombatLockdown and UnitAffectingCombat, through Errands.Fighting): the item only goes back. The lines said in chat name an item as Errands
--- does, by C_Item.GetItemNameByID and its ID. The row Items placed by hand lists the placements and takes one off, or, from its first line while
--- two or more are placed, every one; with none it says how to place an item.
+-- (ErrandsMerchant.lua:824-848): a placement of Flat UI's own in or out of Junk would make the section and the selling disagree. While Junk is
+-- hidden no drop changes the lists, since its items show in other sections then (DropOn). Whether a dropped item is of Junk is the test of its
+-- slot for a slot of the bags (Categories.IsJunk), so a grey item of a bag left out of junk selling, which is not in Junk, goes on no list; for
+-- the bank, and an item whose slot the game does not say, it is the two lists (ns.ErrandsJunkRule). An item the game gives no value, or no sell
+-- price (C_Item.GetItemInfo, ItemDocumentation.lua:626-657), and a quest item cannot go in Junk, since Errands never sells them. Dropped on the
+-- section it reaches by itself, an item loses its placement. An item whose slot the game does not say is judged by its ID alone, with its quality
+-- from C_Item.GetItemQualityByID. New items and Free slots take no drop, and no drop is taken in a fight (InCombatLockdown and
+-- UnitAffectingCombat, through Errands.Fighting): the item only goes back. The lines said in chat name an item as Errands does, by
+-- C_Item.GetItemNameByID and its ID. The row Items placed by hand lists the placements and takes one off, or, from its first line while two or
+-- more are placed, every one; with none it says how to place an item.
 -- Sections the player makes and names (keys custom1, custom2 and on, in FlatUIDB.bags.custom; B.Custom.Is, BagsCustom.lua) take placements too,
 -- within the same MOST_PLACED; a placement in a section that is not there is skipped, and deleting a section of the player's own takes its
 -- placements away. Categories.File is the same drop without the cursor, which BagsCustom calls for an item it put in a free slot of the bags and
@@ -573,18 +577,24 @@ end
 -- Filing ---------------------------------------------------------------------------------------------------------------------------------
 
 -- The section a record reaches by its own rules, after New items, Junk and placement: the first rule it meets (or its group claims it, Claims),
--- as its group's row shows it (Fit). A hidden section is passed by as if it were not there: a hidden kind of a split group falls to the group's
--- rest while the row shows that and it is not hidden too, else the next rule takes the record; Other, which cannot be hidden, takes the rest.
+-- as its group's row shows it (Fit). A hidden section is passed by as if it were not there: a hidden kind of a split group falls to the section
+-- that holds the group's rest under its row's choice (to[base]: Equipment at Each kind, Armour at Weapons, armour and jewellery, Consumables at
+-- Food, potions and the rest) while that is not hidden too, else the next rule takes the record. Only a record of the group's own class falls
+-- back: one the group only claims (the explosives and devices of Trade goods) goes on to its own class's rule, as it would with no such section.
+-- Other, which cannot be hidden, takes the rest.
 local function Rules(record)
 	for _, key in ipairs(PRIORITY) do
 		local group = GROUP_OF[key]
-		if TESTS[key](record) or (group ~= nil and Claims(group, record)) then
+		local own = TESTS[key](record) == true
+		if own or (group ~= nil and Claims(group, record)) then
 			local fitted = Fit(key, record)
 			if not Hidden(fitted) then
 				return fitted
 			end
-			if group and fitted ~= group.base and Shows(group, group.base) and not Hidden(group.base) then
-				return group.base
+			local to = own and group and group.to[Mode(group)] or nil
+			local rest = to and to[group.base] or nil
+			if rest and rest ~= fitted and not Hidden(rest) then
+				return rest
 			end
 		end
 	end
@@ -1027,11 +1037,12 @@ local function DroppedJunk(id, record)
 end
 
 -- A drop on another section: an item of Junk leaves the lists first, then the item is kept there, or loses its placement when that is the
--- section it reaches by itself. True when either changed what the window shows.
+-- section it reaches by itself. True when either changed what the window shows. While Junk is hidden its items show in other sections, so a drop
+-- between them leaves the lists as they are: hiding Junk changes no selling.
 local function DropOn(key, id, record)
 	local mark = ns.ErrandsJunkMark
 	local unlisted = false
-	if type(mark) == "function" and DroppedJunk(id, record) then
+	if type(mark) == "function" and not Hidden("junk") and DroppedJunk(id, record) then
 		mark(id, false)
 		unlisted = true
 	end

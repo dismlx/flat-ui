@@ -81,20 +81,21 @@ local _, ns = ...
 -- as the window's close does, then B.Categories.New.Clear lets New items go.
 -- A drop on Keep in place goes to B.Pins.Drop instead, which pins the slot the item came from; a drop on any other section that takes one reads
 -- the item's slot first (B.Pins.Held) and, once B.Categories.Drop took it, calls B.Pins.Left, which unpins that slot when it was pinned for the
--- item. Each title of the Sections view but the top shelf's and Free slots' is registered for a drag with the left button when it is placed
--- (RegisterForDrag; every other title for none, so its clicks stay clicks), and its OnDragStart and OnDragStop go to B.Order (BagsOrder.lua), which
--- moves the section; a right click on such a title with no item on the cursor opens B.Order's menu of it, and its tooltip says how. A left click
--- on it with no item on the cursor, and not the end of a drop, folds the section or opens it again (B.Order.Fold, one set for the account, in both
--- windows), and such a title is lit under the cursor as a title that takes a click is. A folded section is laid out as its title alone, as the
--- empty Junk title is, with a + after its count; its items keep their cells, so a slot of it that changes while the window is open stays in it
--- and does not go to the top shelf, but no button is placed for them, so its title's tooltip lists them from their records (FoldedTip): each
--- item once with its icon, its name in its quality's colour and its stacks counted together, the most first, at most FOLD_LINES. While a search
--- is typed, Layout.Dim writes on every section's title, open or folded, how many of its items match ("3 of 24") in the Highlight colour, and its
--- count alone again once the search is cleared, with no layout: a folded title is measured for the widest of those texts, and an open one keeps
--- the width of its plain count and says the matches alone ("3") where "3 of 24" would not fit. A section with no match, or a bag's label in Bag
--- by bag, fades to 40% meanwhile (SetAlpha of its text and rule); the top shelf and Free slots keep theirs. A title still under the mouse after a
--- layout (a fold clicked, which keeps the window's height, BagsWindow.lua) draws its tooltip again, so it says what the next click does. A window
--- that closes ends a drag in it (B.Order.Cancel). These run as the parts order and pins of the module, so a fault of theirs stops them alone.
+-- item and Keep in place is not hidden. Each title of the Sections view but the top shelf's and Free slots' is registered for a drag with the
+-- left button when it is placed (RegisterForDrag; every other title for none, so its clicks stay clicks), and its OnDragStart and OnDragStop go
+-- to B.Order (BagsOrder.lua), which moves the section; a right click on such a title with no item on the cursor opens B.Order's menu of it, and
+-- its tooltip says how. A left click on it with no item on the cursor, and not the end of a drop, folds the section or opens it again
+-- (B.Order.Fold, one set for the account, in both windows), and such a title is lit under the cursor as a title that takes a click is. A folded
+-- section is laid out as its title alone, as the empty Junk title is, with a + after its count; its items keep their cells, so a slot of it that
+-- changes while the window is open stays in it and does not go to the top shelf, but no button is placed for them, so its title's tooltip lists
+-- them from their records (FoldedTip): each item once with its icon, its name in its quality's colour and its stacks counted together, the most
+-- first, at most FOLD_LINES. While a search is typed, Layout.Dim writes on every section's title, open or folded, how many of its items match
+-- ("3 of 24") in the Highlight colour, and its count alone again once the search is cleared, with no layout: a folded title is measured for the
+-- widest of those texts, and an open one keeps the width of its plain count and says the matches alone ("3") where "3 of 24" would not fit. A
+-- section with no match, or a bag's label in Bag by bag, fades to 40% meanwhile (SetAlpha of its text and rule); the top shelf and Free slots
+-- keep theirs. A title still under the mouse after a layout (a fold clicked, which keeps the window's height, BagsWindow.lua) draws its tooltip
+-- again, so it says what the next click does. A window that closes ends a drag in it (B.Order.Cancel). These run as the parts order and pins of
+-- the module, so a fault of theirs stops them alone.
 -- The + slot, the catcher and the flash are BagsCustom.lua's, as the part custom: each pass starts and ends them (B.Custom.Begin, Done) and places
 -- them with each section (B.Custom.Place: the + slot's cell, and the rectangle of the section's cells for its catcher, a frame under the buttons
 -- that takes the mouse only while the cursor holds an item or a merchant's item, in both windows); Watch tells it when the cursor comes to hold one,
@@ -2114,7 +2115,7 @@ local function Take(st, sec)
 		end)
 	elseif takes then
 		-- An item from a pinned slot dropped on another section unpins that slot once the section took it. Where it came from is read first,
-		-- since the drop gives the item back; a drop refused leaves the pin.
+		-- since the drop gives the item back; a drop refused leaves the pin, and so does every drop while Keep in place is hidden (B.Pins.Left).
 		local okFrom, fromId, fromBag, fromSlot = pcall(Call, B.Pins, "Held")
 		taken = Call(Categories, "Drop", id, sec.key) == true
 		if taken and okFrom and fromId then

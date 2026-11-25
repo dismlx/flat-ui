@@ -70,18 +70,19 @@ local _, ns = ...
 -- another item, the reagent bag or the keyring. The section is asked first (B.Categories.Takes: Junk takes no quest item and none that cannot be
 -- sold, and no section a placement past the most), so a drop it refuses moves nothing, buys nothing and says why. Then
 -- C_Container.PickupContainerItem (:8767, not protected) on that empty slot puts the item there, or buys the merchant's item into it, as the
--- game's own slot click does (ContainerFrame.lua:1517-1535); the item is kept in the section by its ID (B.Categories.File), and a slot pinned
--- for it is unpinned (B.Pins.Left), as a title's drop unpins the slot an item came from, so it shows in that section and not in Keep in place. A
--- merchant's item the game asks about first (a cost in items, or 150 gold or more: MerchantFrame.extendedCost and highPrice, read only, as the
--- slot click reads them) is refused with a line, so that question is never skipped, and so is a merchant's item on Keep in place, which pins
--- slots of the bags only. A bag from the bag bar (a worn slot past 19) is refused, as is an item for which the bags have no room, with a line in
--- chat (items named by C_Item.GetItemNameByID, :16685). When the moved item has arrived (BagsLayout's Layout.Update asks Arrived), the window is
--- laid out afresh, so it shows in its section and not on the top shelf. BagsLayout's Watch reads a merchant's item as held too (st.holding, with
--- st.merchant), so every + slot, catcher and title that would buy it lights at once, and a catcher takes it: let go among a section's slots it is
--- bought into a free slot, as on the + slot, while let go on a real empty slot it is the game's buy into that slot. A swap of the item on the
--- cursor (a click on another slot) is read again (Holding). A drop on the + New section title (DropNew) gives the item back and asks for a name:
--- the item is kept in the new section by its ID where it lies; a merchant's item, an item the game gives no place for and a bag from the bag bar
--- are refused there with a line, since none of them lies in the bags. A cursor that holds no item (a spell or money) takes no drop.
+-- game's own slot click does (ContainerFrame.lua:1517-1535); the item is kept in the section by its ID (B.Categories.File), and a slot pinned for
+-- it is unpinned (B.Pins.Left, while Keep in place is not hidden), as a title's drop unpins the slot an item came from, so it shows in that
+-- section and not in Keep in place. A merchant's item the game asks about first (a cost in items, or 150 gold or more: MerchantFrame.extendedCost
+-- and highPrice, read only, as the slot click reads them) is refused with a line, so that question is never skipped, and so is a merchant's item
+-- on Keep in place, which pins slots of the bags only. A bag from the bag bar (a worn slot past 19) is refused, as is an item for which the bags
+-- have no room, with a line in chat (items named by C_Item.GetItemNameByID, :16685). When the moved item has arrived (BagsLayout's Layout.Update
+-- asks Arrived), the window is laid out afresh, so it shows in its section and not on the top shelf. BagsLayout's Watch reads a merchant's item
+-- as held too (st.holding, with st.merchant), so every + slot, catcher and title that would buy it lights at once, and a catcher takes it: let go
+-- among a section's slots it is bought into a free slot, as on the + slot, while let go on a real empty slot it is the game's buy into that slot.
+-- A swap of the item on the cursor (a click on another slot) is read again (Holding). A drop on the + New section title (DropNew) gives the item
+-- back and asks for a name: the item is kept in the new section by its ID where it lies; a merchant's item, an item the game gives no place for
+-- and a bag from the bag bar are refused there with a line, since none of them lies in the bags. A cursor that holds no item (a spell or money)
+-- takes no drop.
 --
 -- The bells: the section that took an item flashes in the Highlight colour and says what happened for a moment ("Kept: Linen Cloth", "Moved in: ...",
 -- "Bought: ...", "On your sell list", "Pinned", "Made", "Renamed", "Back"), on a frame of its own over the section. The words are on a tag of their

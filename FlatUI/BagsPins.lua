@@ -36,8 +36,9 @@ local _, ns = ...
 -- Other ways in and out: an item dropped on the title of Keep in place gets the slot it came from pinned (the cursor's slot, from
 -- C_Cursor.GetCursorItem, as BagsCategories reads it); an item from a pinned slot dropped on another section's title unpins that slot once that
 -- section took the drop (BagsLayout.lua reads the slot with Pins.Held before B.Categories.Drop gives the item back, then calls Pins.Left; out
--- of combat only); the row Pinned slots unpins one slot or all; and the menu of Keep in place's title has Put pinned items back now and Unpin all.
--- While this character has a pin, the bag window always has the title of Keep in place (Pins.Any), even when no pinned slot holds its item.
+-- of combat only; while Keep in place is hidden no drop unpins a slot); the row Pinned slots unpins one slot or all; and the menu of Keep in
+-- place's title has Put pinned items back now and Unpin all. While this character has a pin, the bag window always has the title of Keep in place
+-- (Pins.Any), even when no pinned slot holds its item, unless the player hid that section (B.Categories.Hidden).
 --
 -- The mark (Pins.Mark, from B.Buttons.Draw for live slots, in both views): a square at the top right of the slot, a corner the slot does not use,
 -- in the Highlight colour of the Windows page. Solid with a dark edge while the slot holds its item; hollow (a dark middle in a coloured edge)
@@ -574,15 +575,20 @@ function Pins.Held()
 	return Held()
 end
 
--- An item of Pins.Held was taken by another section's title (BagsLayout.lua, once B.Categories.Drop took it): the pinned slot it came from is
--- unpinned. A drop the section refused leaves the pin as it is.
+-- An item of Pins.Held was taken by another section's title (BagsLayout.lua, once B.Categories.Drop took it), or put in a section by BagsCustom.lua:
+-- the pinned slot it came from is unpinned. A drop the section refused leaves the pin as it is, and so does any drop while Keep in place is hidden
+-- (B.Categories.Hidden): the pinned item showed in another section by its kind already, and hiding Keep in place changes no pin.
 function Pins.Left(id, bag, slot)
+	local categories = B.Categories
+	if type(categories) == "table" and type(categories.Hidden) == "function" and categories.Hidden("keep") == true then
+		return
+	end
 	if Whole(id) and InBags(bag) and Pins.Get(bag, slot) == id then
 		Unpin(bag, slot, false)
 	end
 end
 
--- True while this character has a pin: the bag window then always has the title of Keep in place (BagsLayout.lua).
+-- True while this character has a pin: the bag window then always has the title of Keep in place (BagsLayout.lua), unless the player hid it.
 function Pins.Any()
 	return #List() > 0
 end
