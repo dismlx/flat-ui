@@ -1441,7 +1441,7 @@ ns.PAGES = {
 			tip = "When you rank below the last bar, your bar takes the place of the last one, with your place before your name." },
 		{ section = "Warning" },
 		{ key = "warn", kind = "bool", default = true, label = "Warn near aggro",
-			tip = "For damage dealers and healers: your bar pulses red while you are not tanking and your share passes Warn at. Not on bosses, where the game hides threat." },
+			tip = "For damage dealers and healers: your bar pulses red while you are not tanking and your share passes Warn at, and keeps it red while you hold the enemy's aggro. Not on bosses, where the game hides threat." },
 		{ key = "warnAt", kind = "number", default = 90, min = 50, max = 100, step = 5, unit = "%", label = "Warn at", needs = "warn" },
 		{ key = "lost", kind = "bool", default = true, label = "Warn when you lose aggro",
 			tip = "While you are a tank (your group role, else your stance or form): your bar pulses red and Warning sound plays once when an enemy you held turns to someone else. Not on bosses, where the game hides threat." },
@@ -1493,13 +1493,15 @@ ns.PAGES = {
 			choices = { { "row", "In a row" }, { "rows", "Markers above the rest" }, { "column", "In a column" } } },
 		{ key = "markColours", kind = "bool", default = true, label = "Borders in the marker's colour",
 			tip = "Star yellow, circle orange, diamond purple, triangle green, moon silver-blue, square blue, cross red and skull white, as in the game's menu." },
+		{ key = "fade", kind = "bool", default = false, label = "Fade until you point at it",
+			tip = "The buttons stay faint until the mouse comes over one, and fade again a second after it leaves; they still take clicks. Full during a ready check or a countdown, also in a fight." },
 	},
 	-- PingBar.lua: a bar of Flat UI's own with a button for each ping of the game, with its key. On by default; it shows in a group. /flatui move
 	-- places it.
 	{
 		key = "pingbar", label = "Ping bar",
 		{ key = "enabled", kind = "bool", default = true, label = "Show the ping bar",
-			tip = "A button for each ping of the game: Ping, Attack, Warning, On My Way and Assist. Click one, then click where to ping, also in a fight: the button lights up while its ping waits. Click another to switch to it; click it again, right-click or Esc to cancel. Shift-click pings your target at once. Each has a key under Flat UI in the game's Key Bindings that pings what is under the mouse at once: hover the spot, press the key. /flatui move places it." },
+			tip = "A button for each ping of the game: Ping, Attack, Warning, On My Way and Assist. Click one, then click where to ping, also in a fight: the button lights up while its ping waits. Click another to switch to it; click it again, right-click or Esc to cancel. A waiting ping gives up after 10 seconds, or as the fight ends. Shift-click pings your target at once. Each has a key under Flat UI in the game's Key Bindings that pings what is under the mouse at once: hover the spot, press the key. /flatui move places it." },
 		{ section = "When it shows" },
 		{ key = "show", kind = "choice", default = "group", label = "Show",
 			tip = "Hidden while pings are off in the game's options or your group lets only some members ping and you are not one; the tooltip of a button says why while a fight keeps it shown.",
@@ -1514,6 +1516,8 @@ ns.PAGES = {
 		{ key = "colours", kind = "bool", default = true, label = "Borders in the ping's colour" },
 		{ key = "keys", kind = "bool", default = true, label = "Keys on the buttons",
 			tip = "The key you bound under Flat UI in the game's Key Bindings, short, in the corner of each button." },
+		{ key = "fade", kind = "bool", default = false, label = "Fade until you point at it",
+			tip = "The buttons stay faint until the mouse comes over one, and fade again a second after it leaves; they still take clicks and keys. Full while a ping waits, also in a fight." },
 	},
 	{
 		key = "windows", label = "Windows",

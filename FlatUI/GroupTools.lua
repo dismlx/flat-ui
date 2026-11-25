@@ -25,7 +25,8 @@ local _, ns = ...
 -- icon can be greyed in a fight while its secure button is not touched. The secure buttons make the frame of the row protected, so the row and
 -- its buttons are made, placed, sized, shown, hidden and given attributes only out of combat: a change in a fight (a group joined, a row of the
 -- page changed, the row moved) waits for its end (ns.OutOfCombat), and in a fight nothing on them changes. Nothing of the module runs but on
--- its events, the mouse and, only while a countdown runs, a ticker of one second; no OnUpdate.
+-- its events, the mouse and, only while a countdown runs, a ticker of one second, and with Fade until you point at it a wait of a second
+-- and a short ticker as the icons fade; no OnUpdate.
 -- The tally of a ready check: from READY_CHECK to READY_CHECK_FINISHED (and on each READY_CHECK_CONFIRM: PartyInfoDocumentation.lua:839-870)
 -- the tick's icon shows how many are ready of those asked, as 3/5, read with GetReadyCheckStatus for the player and party1 to party4, or raid1
 -- to the size of the raid (the call the game's own frames make, CompactUnitFrame.lua:1371; plain answers only): green when all are ready, in
@@ -45,6 +46,10 @@ local _, ns = ...
 -- GameTooltip (SetOwner on the icon, SetText, AddLine, Show, and Hide when the mouse leaves), as the data panels do; a marker's and the clear's
 -- name the game's own key for them where one is bound (RAIDTARGET1 to 8 and RAIDTARGETNONE, Blizzard_FrameXML/Bindings_Standard.xml:1573-1597),
 -- written again on UPDATE_BINDINGS.
+-- Fade until you point at it (off by default): the icons stay at 30% until the mouse comes over any button, back to full at once, and fade again
+-- over a quarter of a second a second after the mouse leaves (ns.IconFader, IconRow.lua). They stay full during a ready check and its tally, a
+-- countdown and while test mode is on. Only the opacity of the icons changes, frames of Flat UI's own and no secure button, so in a fight too, and
+-- the faint buttons take their clicks and keys as ever.
 -- Adapted from the Mark Bar of the data panels and the Group Tools panel of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoL/Core/Streams/Stream_MarkBarCommon.lua:4-16, Stream_MarkBarTarget.lua:20-40, Stream_MarkBarUtility.lua:51-75,
 -- EnhanceQoLDungeonRaid/GroupTools.lua:29-31, 272-289, 472): its secure buttons for the markers, the ready check and the countdown and the
@@ -562,6 +567,7 @@ function G.Lay()
 	G.ShowTally()
 	G.Place()
 	G.panel:Show()
+	G.fader.Settle()
 end
 
 -- A change in a fight waits for its end, once however many come. Should the game still say it is in a fight then, PLAYER_REGEN_ENABLED of the
@@ -644,6 +650,7 @@ function G.Paint()
 			G.Tip(entry)
 		end
 	end
+	G.fader.Settle()
 end
 
 local function Tooltip()
@@ -740,6 +747,7 @@ end
 
 function G.Enter(entry)
 	entry.hover = true
+	G.Wake()
 	G.Shade(entry)
 	G.Tip(entry)
 end
@@ -749,6 +757,7 @@ function G.Leave(entry)
 		return
 	end
 	entry.hover = false
+	G.Faint()
 	G.Shade(entry)
 	if G.Owned(entry) then
 		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
@@ -826,6 +835,7 @@ end
 -- READY_CHECK and READY_CHECK_CONFIRM: the answers so far.
 function G.Checking()
 	G.check = G.Tally()
+	G.Wake()
 	G.ShowTally()
 end
 
@@ -841,10 +851,12 @@ function G.Checked()
 		if G.check == check then
 			G.check = nil
 			ns.Try(KEY, G.ShowTally)
+			ns.Try(KEY, G.Faint)
 		end
 	end) then
 		G.check = nil
 		G.ShowTally()
+		G.Faint()
 	end
 end
 
@@ -867,6 +879,7 @@ function G.CountdownOver()
 		pcall(ticker.Cancel, ticker)
 	end
 	G.PullText(G.Entry("pull"))
+	G.Faint()
 end
 
 -- True while test mode is on (TestMode.lua).
@@ -911,6 +924,7 @@ function G.TimerStarted(kind, remaining)
 		return
 	end
 	G.ends, G.sampleCount = now + remaining, nil
+	G.Wake()
 	G.StartTicker()
 	-- With no ticker the number shows the length the countdown started with, until it ends.
 	if not G.ticker then
@@ -959,6 +973,35 @@ function G.SampleOff()
 		G.CountdownOver()
 	end
 	G.ShowTally()
+end
+
+-- Fade until you point at it -------------------------------------------------------------------------------------------------------------
+
+-- True while the icons stay full: the row off, test mode on, the mouse over a button, a ready check or its tally, or a countdown.
+function G.Held()
+	if Opt("fade") ~= true or Testing() then
+		return true
+	end
+	for _, entry in ipairs(G.buttons) do
+		if entry.hover then
+			return true
+		end
+	end
+	local check = G.check
+	return (check ~= nil and ns.Finite(check.total) and check.total > 0) or G.ends ~= nil
+end
+
+G.fader = ns.IconFader(function()
+	return G.buttons
+end, G.Held)
+
+-- Full at once; faint a second after nothing holds the icons full; or at once as G.Held says, after a layout or a paint.
+function G.Wake()
+	G.fader.Wake()
+end
+
+function G.Faint()
+	G.fader.Faint()
 end
 
 -- The module ---------------------------------------------------------------------------------------------------------------------------------

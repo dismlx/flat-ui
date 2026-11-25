@@ -3,7 +3,14 @@ local _, ns = ...
 -- A row of flat square icons with a sweep, for the modules that show cooldowns and buffs: the icon, its sweep, its border, a
 -- flash and a sound when the sweep ends. This file is no module of its own. An icon is made as Cooldowns.lua makes one (three
 -- frames and six textures, all in ns.Own), without a count. A number of seconds goes to the sweep as a start and a length; a
--- duration object goes to the sweep and is never read, compared or kept as a key.
+-- duration object goes to the sweep and is never read, compared or kept as a key. The flash is a white square that fades from full
+-- to nothing in half a second and hides itself as its fade ends (OnFinished, with the final opacity kept, so it never blinks back
+-- before it hides); a new flash on the same icon starts the fade again from full, and the half-second timer that backs it up hides
+-- only its own flash (icon.flashes), so an older one never cuts a newer one short.
+-- ns.IconFader is the Fade until you point at it of Group tools and the Ping bar: the icons of a row of buttons of the addon's own (never
+-- its secure buttons or its frame, so in a fight too) stay at 30% until held() says they must be full (the mouse over one of them, a
+-- ready check, a countdown or a waiting ping), come back to full at once and fade again over a quarter of a second, a second after
+-- the last reason to be full went (a C_Timer.After wait, then a short C_Timer.NewTicker).
 
 local I = {}
 
@@ -207,7 +214,9 @@ function ns.IconExtent(count, size, spacing, extra)
 	return width, size + (extra or 0)
 end
 
--- The flash: a white square over the icon that fades in half a second. Made with the first flash.
+-- The flash: a white square over the icon that fades in half a second and hides as its fade ends. Made with the first flash. A
+-- flash while one plays starts it again from full. The timer hides the square where the client made no fade, and backs the fade up
+-- a moment after its end, only while no newer flash (icon.flashes) has started and the fade is not playing.
 function ns.IconFlash(icon)
 	local flash = icon.flash
 	if not flash then
@@ -221,20 +230,118 @@ function ns.IconFlash(icon)
 			alpha:SetFromAlpha(1)
 			alpha:SetToAlpha(0)
 			alpha:SetDuration(FLASH)
+			pcall(made.SetToFinalAlpha, made, true)
+			made:SetScript("OnFinished", function()
+				flash:Hide()
+				flash:SetAlpha(1)
+			end)
 			return made
 		end)
 		icon.flashGroup = ok and group or false
 	end
-	flash:Show()
-	if icon.flashGroup then
-		pcall(icon.flashGroup.Play, icon.flashGroup)
+	local group = icon.flashGroup
+	if group and group:IsPlaying() then
+		pcall(group.Stop, group)
 	end
+	flash:SetAlpha(1)
+	flash:Show()
+	local playing = group and pcall(group.Play, group) or false
 	icon.flashes = (icon.flashes or 0) + 1
+	local mine = icon.flashes
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
-		C_Timer.After(FLASH, function()
-			flash:Hide()
+		C_Timer.After(playing and FLASH + 0.1 or FLASH, function()
+			if icon.flashes == mine and not (group and group:IsPlaying()) then
+				flash:Hide()
+				flash:SetAlpha(1)
+			end
 		end)
 	end
+end
+
+-- Fade until you point at it: the faint opacity of the icons, how long they wait at full once nothing holds them, how long they take to
+-- fade, in how many steps.
+local FAINT, FAINT_WAIT, FAINT_TIME, FAINT_STEPS = 0.3, 1, 0.25, 5
+
+-- A fader of the icons of a row of buttons of the addon's own (Group tools, the Ping bar). list() gives the entries, each with its icon as
+-- `frame`; held() is true while the icons must be full (the row off, the mouse over one, what the row is doing). Wake brings them to full
+-- at once and drops a fade under way; Faint fades them FAINT_WAIT after the call while held() stays false, held() asked again as the wait
+-- ends; Settle puts them at full or faint at once as held() says, but leaves a wait or a fade under way to end. Only the icons' opacity
+-- changes, so every call is safe in a fight.
+function ns.IconFader(list, held)
+	local fader = { alpha = 1 }
+	local function Set(alpha)
+		fader.alpha = alpha
+		for _, entry in ipairs(list()) do
+			if entry.frame then
+				entry.frame:SetAlpha(alpha)
+			end
+		end
+	end
+	local function Stop()
+		fader.token = nil
+		local ticker = fader.ticker
+		fader.ticker = nil
+		if ticker and type(ticker.Cancel) == "function" then
+			pcall(ticker.Cancel, ticker)
+		end
+	end
+	function fader.Wake()
+		Stop()
+		if fader.alpha ~= 1 then
+			Set(1)
+		end
+	end
+	function fader.Settle()
+		if held() then
+			fader.Wake()
+		elseif not fader.token and fader.alpha ~= FAINT then
+			Set(FAINT)
+		end
+	end
+	function fader.Faint()
+		Stop()
+		if held() then
+			fader.Wake()
+			return
+		end
+		local token = {}
+		fader.token = token
+		local function Fall()
+			if fader.token ~= token then
+				return
+			elseif held() then
+				fader.Wake()
+				return
+			end
+			local from, step = fader.alpha, 0
+			local function Step()
+				if fader.token ~= token then
+					return
+				end
+				step = step + 1
+				if step >= FAINT_STEPS then
+					Stop()
+					Set(FAINT)
+				else
+					Set(from + (FAINT - from) * step / FAINT_STEPS)
+				end
+			end
+			local ok, ticker = false, nil
+			if type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
+				ok, ticker = pcall(C_Timer.NewTicker, FAINT_TIME / FAINT_STEPS, Step, FAINT_STEPS)
+			end
+			if ok and ticker then
+				fader.ticker = ticker
+			else
+				Stop()
+				Set(FAINT)
+			end
+		end
+		if not (type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, FAINT_WAIT, Fall)) then
+			Fall()
+		end
+	end
+	return fader
 end
 
 -- Plays a sound kit, at most once a second. True when the game said it will play. A client without PlaySound, or a call that
