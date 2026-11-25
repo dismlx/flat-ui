@@ -51,7 +51,8 @@ local _, ns = ...
 -- written as fully as the room left allows, the word Free left out first.
 -- The row above the bank window's footer, at the live bank only, is BagsBank.lua's (B.Bank.Slots), as high and as wide as that file says. A bank
 -- never seen says how to keep one. The row above the bag window's footer, while it shows the player's own live bags and Bag slots is on, is the
--- bag slots of BagsSlots.lua (B.Slots.Row): the backpack, the four bags and the reagent bag, to put a bag in or swap one.
+-- bag slots of BagsSlots.lua (B.Slots.Row): the backpack, the four bags and the reagent bag, to put a bag in or swap one. Either row stands a
+-- little apart from the content under a thin line of the separators' look, so its slots never read as one more row of the keyring or a bag.
 -- Escape closes either window: both are named in UISpecialFrames, as the options window is (Panel.lua:2700-2708), whose windows the game's
 -- CloseSpecialWindows hides (UIParentPanelManager.lua:21-27). Whatever hid a window (its close button, a key, Escape, the page going off), its
 -- OnHide ends what is the window's own: a drag (where it was let go is kept), the keyboard of the search box, a menu and the busy sort button.
@@ -109,11 +110,12 @@ local BOXES = { bags = { 360, 260, -60, 110 }, bank = { 420, 300, 25, -110 } }
 local RIGHT_BARS = { "MultiBarRight", "MultiBarLeft" }
 local BAR_SLACK, BAR_ROOM = 12, 10
 -- Units: the padding on each side, the title bar, the footer, the space between them and the content, a button of the title bar and the space
--- between two, the close button, the least room of the picker and of the search box, and the row of BagsBank.lua before it sizes it.
+-- between two, the close button, the least room of the picker and of the search box, and the row of BagsBank.lua before it sizes it, with the
+-- space on each side of the thin line over that row, so it does not read as one more row of the content.
 local PAD, BAR, FOOT, INNER = 8, 26, 22, 4
 local ICON, ICON_GAP, CLOSE = 18, 3, 18
 local PICKER_LEAST, PICKER_MOST, SEARCH_LEAST, SEARCH_HEIGHT = 64, 0.5, 70, 18
-local STRIP = 26
+local STRIP, STRIP_GAP = 26, 6
 -- How far off the left edge of the screen the window stands while the warm-up shows it.
 local PARK = 200
 -- The least height of the content, and of the room for a message; the share of the screen a window may take.
@@ -1354,13 +1356,18 @@ local function MakeFoot(w)
 	w.free = FootLabel(w, FreeTip)
 	w.free.text:SetJustifyH(w.which == "bags" and "RIGHT" or "LEFT")
 	-- The row above the footer: the bank bag slots and the Buy button of BagsBank.lua in the bank window, the bag slots of BagsSlots.lua in the bag
-	-- window. Hidden until the row gives its height (Slots).
+	-- window. Hidden until the row gives its height (Slots). A thin line over it, STRIP_GAP from it and from the content, shows and hides with it, so
+	-- the bag slots do not read as one more row of the keyring or of the last bag.
 	local strip = Own(CreateFrame("Frame", nil, frame))
 	strip:SetPoint("BOTTOMLEFT", foot, "TOPLEFT", 0, INNER)
 	strip:SetPoint("BOTTOMRIGHT", foot, "TOPRIGHT", 0, INNER)
 	strip:SetHeight(STRIP)
 	strip:Hide()
 	w.strip = strip
+	local stripRule = Rule(strip)
+	stripRule:SetPoint("BOTTOMLEFT", strip, "TOPLEFT", 0, STRIP_GAP)
+	stripRule:SetPoint("BOTTOMRIGHT", strip, "TOPRIGHT", 0, STRIP_GAP)
+	w.rules[#w.rules + 1] = stripRule
 	if w.which == "bags" then
 		w.gold = FootLabel(w, GoldTip)
 		w.gold.text:SetJustifyH("LEFT")
@@ -1572,7 +1579,7 @@ function Resize(w, keep)
 		least = math.max(least, math.ceil((w.stripW or 0) + 2 * PAD))
 	end
 	local width = math.max(least, math.ceil(cw + 2 * PAD))
-	local fixed = BAR + INNER + INNER + FOOT + (strip > 0 and (strip + INNER) or 0)
+	local fixed = BAR + INNER + INNER + FOOT + (strip > 0 and (strip + 2 * STRIP_GAP) or 0)
 	local okScreen, screen = pcall(UIParent.GetHeight, UIParent)
 	screen = okScreen and Finite(screen) and screen > 0 and screen or 768
 	local most = math.max(fixed + LEAST_VIEW, math.floor(screen * MOST))

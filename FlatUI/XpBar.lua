@@ -20,6 +20,9 @@ local _, ns = ...
 -- row is live. Only Flat UI's own frames are placed and sized, so this goes on in a fight too.
 -- The experience fill takes Rested colour while the player is rested (GetRestState 1), as the game's bar turns blue, only with Rested experience
 -- on; with it off the fill is Experience colour.
+-- The empty part of a bar is its background (Bar background), in the general Background colour at the general Background opacity, inside its
+-- thin border while Bar border is on: the border is the bar's own row, so it is drawn with the Flat UI page's Borderless on too (ns.KeepOutline),
+-- and a bar at low experience still reads as a bar from end to end.
 -- With Clicks on the bar (on by default) a Shift-click on a bar puts its progress in the chat box ("Level 34: 12,345 / 27,000 (45%), 1h 20m to
 -- level", "Stormwind: Honored 4,200 / 12,000 (35%)", ns.PutInChat), and a plain click on the reputation bar opens the Reputation tab of the
 -- Character window out of a fight (ToggleCharacter("ReputationFrame"), the call of the game's own key); the tooltip ends with a dim hint.
@@ -516,6 +519,8 @@ function F.NewBar(root, id)
 	bar.quest:Hide()
 	bar.ticks = {}
 	bar.outline = ns.Outline(frame, frame)
+	-- Bar border draws the edges whatever Borderless says; off, F.Look leaves the background alone (ns.SetOutlineBare).
+	ns.KeepOutline(bar.outline)
 	ns.Count(KEY)
 	bar.over = CreateFrame("Frame", nil, frame)
 	ns.Own[bar.over] = true
@@ -756,7 +761,7 @@ function F.Look(bar, index, width, height, gap)
 		bar.file = file
 		frame:SetStatusBarTexture(file)
 	end
-	-- The background stays under the fill with the border off.
+	-- The background stays under the fill with the border off, and the border is drawn with Borderless on (kept in F.NewBar).
 	ns.SetOutline(bar.outline, true, Opt("xpBack"))
 	ns.SetOutlineBare(bar.outline, not Opt("xpFrame"))
 	F.Ticks(bar, width, height)

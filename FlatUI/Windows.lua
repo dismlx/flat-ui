@@ -9,7 +9,9 @@ local _, ns = ...
 -- (out of combat when the tab is protected). The state textures of check boxes, item slots,
 -- sidebar tabs and list lines are recoloured and re-anchored instead, and only /reload undoes
 -- that. An open menu gets a frame of this addon's inside the menu, since the game refuses
--- textures made on it.
+-- textures made on it. The Spellbook's parchment is faded too, and its text, written in a dark
+-- ink for the parchment, takes a light colour; the colour each text had is kept and given back
+-- exactly with the parchment (Spellbook parchment, the ink kind).
 
 local KEY = "windows"
 
@@ -288,6 +290,30 @@ local function FadeArray(frame, key, on)
 		for _, region in ipairs(list) do
 			Fade(region, on)
 		end
+	end
+end
+
+-- Gives a font string a colour and keeps the colour it had; with no colour, gives that one back, exactly. A colour the client will not report is
+-- left as it is, since it could not be given back.
+local inked = setmetatable({}, { __mode = "k" })
+local function Ink(text, colour)
+	if not (Usable(text) and type(text.GetTextColor) == "function" and type(text.SetTextColor) == "function") then
+		return
+	end
+	local had = inked[text]
+	if colour then
+		if had == nil then
+			local ok, r, g, b, a = pcall(text.GetTextColor, text)
+			if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b) and ns.Finite(a)) then
+				return
+			end
+			had = { r, g, b, a }
+			inked[text] = had
+		end
+		pcall(text.SetTextColor, text, colour[1], colour[2], colour[3], had[4])
+	elseif had ~= nil then
+		inked[text] = nil
+		pcall(text.SetTextColor, text, had[1], had[2], had[3], had[4])
 	end
 end
 
@@ -759,6 +785,21 @@ Kind("fades", "window pictures", nil,
 		local fade = on and not (own.unless and Opt(own.unless))
 		for _, region in ipairs(own.list) do
 			Fade(region, fade)
+		end
+	end)
+
+-- Page text: text written for a picture the addon fades, such as the dark ink of the spellbook's parchment, takes a light colour while the picture
+-- is faded, and the colour it had comes back exactly with the picture. flag.list holds { font string, colour } pairs, and flag.unless names the
+-- setting that keeps the picture, as for the pictures above. Only for text whose colour the game's templates set and its code never sets again.
+Kind("ink", "page text", nil,
+	function(frame, own, flag)
+		own.list = flag.list
+		own.unless = flag.unless
+	end,
+	function(frame, own, on)
+		local light = on and not (own.unless and Opt(own.unless))
+		for _, entry in ipairs(own.list) do
+			Ink(entry[1], light and entry[2] or nil)
 		end
 	end)
 
@@ -2022,13 +2063,96 @@ local function ToastExtras(root, group)
 	Style("window", Held(root, "TooltipFrame"), group, "solid")
 end
 
--- The spellbook keeps its pages: the game draws every text in it in a dark colour made for them. The talent tab has a backdrop,
--- a frame and a class picture of its own, which the setting bookArt gives back.
+-- The spellbook has dark pages with light text while the setting bookPages is off. Its parchment, the bar over it, the bookmark and the turning corner
+-- of the book frame (SpellBook/Blizzard_SpellBookFrame.xml:8-27, Camelot/SpellBook/Blizzard_SpellBookTemplates.xml:31-55) are faded, and so are the
+-- plate and the divider of each header (Blizzard_SpellBookTemplates.xml:16-34). Every text of the book is written in SPELLBOOK_FONT_COLOR, a dark ink
+-- made for the parchment, by the templates alone (Blizzard_SpellBookItem.xml:79-93, Blizzard_SpellBookTemplates.xml:16, and the page number by way of
+-- Blizzard_SpellBookFrame.xml:149 and Blizzard_PagingControls.lua:16); no code of the game's colours it again. So the text takes a light colour (ink):
+-- a spell's name white, the lines under it grey, a header and the page number gold. bookPages gives the parchment and the dark ink back, exactly.
+-- The talent tab has a backdrop, a frame and a class picture of its own, which the setting bookArt gives back.
 local TALENT_ART = { "Background", "BackgroundBorder", "ClassBackground" }
+-- art: the pictures of the book frame. header: those of a header. texts: the font strings of a spell or a header, with the colour each takes. page:
+-- the colour of the page number.
+local SPELL_BOOK = { art = { "BookBGLeft", "BookBGRight", "BookBGHalved", "TopBar", "Bookmark", "BookCornerFlipbook" }, header = { "Backplate", "Border" },
+	texts = { { "Name", { 1, 1, 1 } }, { "SubName", { 0.75, 0.75, 0.75 } }, { "RequiredLevel", { 0.75, 0.75, 0.75 } }, { "Text", { 1, 0.82, 0 } } },
+	page = { 1, 0.82, 0 } }
+
+-- The book shows a page's spells and headers on frames it keeps in pools, and lays them out each time it turns a page, changes tab or searches, with a
+-- new list of the frames on show in its frames field each time (DisplayViewsForCurrentPage, Blizzard_PagedContentFrame.lua:494-576). A frame of the
+-- addon's own looks at that field on each frame while the book is shown (its OnShow and OnHide followed with HookScript, which writes nothing) and
+-- styles what a new list holds. A frame styled once keeps its light ink when the book takes it from its pool again.
+Watch.book = {}
+
+function Watch.Page(book, group)
+	local paged = Held(book, "PagedSpellsFrame")
+	local list = paged and Field(paged, "frames")
+	if type(list) ~= "table" or rawequal(list, Watch.book.last) then
+		return
+	end
+	Watch.book.last = list
+	for _, frame in ipairs(list) do
+		if Usable(frame) and not ns.Forbidden(frame) then
+			local texts = {}
+			for _, entry in ipairs(SPELL_BOOK.texts) do
+				local text = Part(frame, entry[1])
+				if text then
+					texts[#texts + 1] = { text, entry[2] }
+				end
+			end
+			Style("ink", frame, group, { list = texts, unless = "bookPages" })
+			-- A spell's own plate is the game's to fade in and out under the mouse, so only a header's pictures are faded.
+			if Part(frame, "Text") and not Part(frame, "Name") then
+				Style("fades", frame, group, { list = Keyed(frame, SPELL_BOOK.header), unless = "bookPages" })
+			end
+		end
+	end
+end
+
+function Watch.BookShown()
+	local watch = Watch.book
+	if watch.frame then
+		watch.frame:SetScript("OnUpdate", watch.step)
+	end
+end
+
+function Watch.BookHidden()
+	local watch = Watch.book
+	if watch.frame then
+		watch.frame:SetScript("OnUpdate", nil)
+	end
+end
+
+-- Styles the book's pictures, its page number and the page on show, and starts looking at its pages.
+function Watch.Book(book, group)
+	local watch = Watch.book
+	watch.target, watch.group, watch.last = book, group, nil
+	Style("fades", book, group, { list = Keyed(book, SPELL_BOOK.art), unless = "bookPages" })
+	local controls = Held(Held(book, "PagedSpellsFrame"), "PagingControls")
+	Style("ink", controls, group, { list = { { Held(controls, "PageText"), SPELL_BOOK.page } }, unless = "bookPages" })
+	Watch.Page(book, group)
+	if not watch.frame then
+		watch.frame = Mine(CreateFrame("Frame"))
+		watch.step = function()
+			if ns.Enabled(KEY) then
+				ns.EachPart(KEY, "window details", Watch.Page, watch.target, watch.group)
+			end
+		end
+	end
+	HookScript(book, "OnShow", Watch.BookShown)
+	HookScript(book, "OnHide", Watch.BookHidden)
+	local ok, visible = pcall(book.IsVisible, book)
+	if ok and not ns.IsSecret(visible) and visible == true then
+		Watch.BookShown()
+	end
+end
 
 local function SpellsExtras(root, group)
 	local talents = Held(root, "TalentsFrame")
 	Style("fades", talents, group, { list = Keyed(talents, TALENT_ART), unless = "bookArt" })
+	local book = Held(root, "SpellBookFrame")
+	if book then
+		Watch.Book(book, group)
+	end
 end
 
 -- Each of the three pages of the Legacy window draws a background of its own, which the setting bookArt gives back.

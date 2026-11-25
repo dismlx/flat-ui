@@ -448,8 +448,9 @@ function W.Build()
 	ns.Own[frame] = true
 	frame:SetPoint("TOP", UIParent, "TOP", 0, -100)
 	frame:SetFrameStrata("HIGH")
-	-- Above the options window, which is in the same strata.
-	frame:SetFrameLevel(200)
+	-- Above the options window, which is in the same strata at level 500 (Panel.lua's LEVEL), and the drawings on its rows, and above the frames of
+	-- the HUD and the stand-ins of test mode there, which lie under that window.
+	frame:SetFrameLevel(800)
 	frame:EnableMouse(true)
 	local outline = ns.Outline(frame, frame, true)
 	kit.Painted(function()

@@ -16,6 +16,8 @@ local _, ns = ...
 -- a window would lose its clicks to a frame of the addon's above it, so a press in the corner counts as the grip's
 -- only where the frame under the cursor is not a control. The Map & Quest Log window has both while it is small; at full size and
 -- in the gamepad interface the game keeps it, with the scale the game gave it.
+-- A window with no spot that the game opens over the player or target frame at the top of the screen goes down, with the windows beside it, until
+-- it is clear of them (Open windows under the unit frames, win.ClearUnits). Nothing is saved, and nothing is written on the game's panel layout.
 -- A frame Edit Mode owns is placed with SetPointBase, ClearAllPointsBase and SetScaleBase, the engine's own
 -- widget methods that Edit Mode keeps on the frame when it replaces SetPoint, ClearAllPoints and SetScale with
 -- Lua. That Lua is never called by the addon. A frame that is protected (every action bar) is placed inside a SecureHandlerBaseTemplate
@@ -73,7 +75,10 @@ local WIN = { height = 22, right = 28, level = 2, start = 4, corner = 18, min = 
 	margin = 4, noMove = "This window cannot be moved in combat.", noSize = "This window cannot be sized in combat.",
 	controls = { "Button", "EditBox", "Slider", "Model", "ModelScene", "ColorSelect", "SimpleHTML", "MessageFrame", "ScrollingMessageFrame", "MovieFrame", "Minimap" },
 	loose = { Model = true, ModelScene = true },
-	scripts = { "OnMouseDown", "OnMouseUp", "OnDragStart" } }
+	scripts = { "OnMouseDown", "OnMouseUp", "OnDragStart" },
+	-- Windows open clear of the unit frames (win.ClearUnits). units: the frames a window opens under. gap: how far under the lowest of them its top
+	-- goes. floor: how far above the bottom of the screen its bottom stays, the game's own clamp (ClampUIPanelY, UIParentPanelManager.lua:1007-1019).
+	clear = { units = { "PlayerFrame", "TargetFrame" }, gap = 6, floor = 140 } }
 local HOW = "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back, Shift and right-click hides a HUD frame of the game. Drag the tab on a bar of a bar block to give it another place in the block, or to put it in another block."
 -- A bag has a menu button on its portrait, and another over its title that opens the same menu. The title bar of a bag starts to the right
 -- of the portrait, like the title bar of every window two levels above it, so the title drags the bag and the portrait still opens the menu.
@@ -1509,7 +1514,7 @@ function hold.Pass()
 	end
 end
 
--- Windows are placed after the panel manager has placed them.
+-- Windows are placed after the panel manager has placed them, and the windows with no spot are then taken clear of the unit frames.
 local windowsPending = false
 local function PlaceWindows()
 	local saved = Saved()
@@ -1525,6 +1530,7 @@ local function PlaceWindows()
 		end
 	end
 	win.SizeOpen()
+	ns.EachPart(KEY, WIN.part, win.ClearUnits)
 end
 
 local function PlaceWindowsLater()
@@ -2282,9 +2288,10 @@ function ResetFrame(name, was)
 	ScaleRowMoved(name)
 	stopped[name], corrections[name], refused[name] = nil, nil, nil
 	Uncount(name)
-	-- Under Every window together a window with no spot has the one size of every window.
+	-- Under Every window together a window with no spot has the one size of every window, and a window with no spot opens clear of the unit frames.
 	if frame and win.IsWindow(name) then
 		ns.Each(KEY, win.SizeWindow, name, frame)
+		PlaceWindowsLater()
 	end
 	-- The panel manager places a window again the next time it opens.
 	if moved and released then
@@ -4260,6 +4267,110 @@ function win.Reset()
 	end
 end
 
+-- Windows clear of the unit frames ------------------------------------------------------------------
+
+-- The panel manager puts a window at its top left spot, 116 under the top of the screen (UIPanelLayoutFrame.lua:3-4, UpdateUIPanelPositions,
+-- UIParentPanelManager.lua:627-643), where the player and target frames the game starts at the top of the screen reach down over its title. So
+-- once the game has placed the windows (PlaceWindows, after each window it shows, hides or lays out again), the open windows that have no spot of
+-- their own and that the game hangs by their top from the top of the screen go down together, each with its left edge where it is, until their tops
+-- are WIN.clear.gap under the lowest of the drawn player and target frames, when one of those frames reaches into one of them from above. The
+-- windows beside each other stay in one row. A unit frame the player has put lower down, inside the window's height, moves nothing. A window's bottom
+-- stays WIN.clear.floor above the bottom of the screen, as the game keeps it, or where the game put it when that is lower, so a window too tall to
+-- clear the frames goes only as far as that allows. Nothing is saved and nothing is written on the panel manager: the game puts the window at its own
+-- spot again each time it lays the windows out, and the pass after it takes the window clear again. The window is placed with the calls Move uses: a
+-- protected one in a snippet, never in combat.
+
+-- True when a frame has one point, its top left or its top on the same point of UIParent: how the panel manager hangs a window.
+function win.Hung(frame)
+	local okCount, count = pcall(frame.GetNumPoints, frame)
+	if not (okCount and Number(count) and count == 1) then
+		return false
+	end
+	local ok, point, relativeTo, relativePoint = pcall(frame.GetPoint, frame, 1)
+	if not ok or ns.IsSecret(point) or ns.IsSecret(relativeTo) or ns.IsSecret(relativePoint) then
+		return false
+	end
+	return (point == "TOPLEFT" or point == "TOP") and relativePoint == point and (relativeTo == nil or relativeTo == UIParent)
+end
+
+-- True when a frame is drawn, with every parent shown: a frame Hidden frames keeps under a hidden frame of its own does not count.
+function win.Drawn(frame)
+	local ok, visible = pcall(frame.IsVisible, frame)
+	return ok and not ns.IsSecret(visible) and visible == true
+end
+
+-- The lowest bottom, in the units of UIParent, of the drawn unit frames that reach into a window from above: across its width, from over its top to
+-- under it. Nil when none does.
+function win.UnitsOver(left, right, top)
+	local lowest
+	for _, unit in ipairs(WIN.clear.units) do
+		local frame = GameFrame(unit)
+		local l, b, w, h
+		if frame and not ns.Forbidden(frame) and win.Drawn(frame) then
+			l, b, w, h = Rect(frame)
+		end
+		if l and w > 0 and h > 0 and l < right and l + w > left and b < top and b + h >= top then
+			lowest = math.min(lowest or b, b)
+		end
+	end
+	return lowest
+end
+
+-- The open windows with no spot that the game hangs from the top of the screen, each with its rectangle in the units of UIParent. A window being
+-- dragged, a window a module holds and one that fills the screen are left out.
+function win.Hanging()
+	local saved = Saved() or {}
+	local list = {}
+	win.Each(function(name)
+		local frame = GameFrame(name)
+		if frame and not ns.Forbidden(frame) and type(saved[name]) ~= "table" and hold.by[name] == nil and not (win.drag and win.drag.name == name)
+			and IsShown(frame) == true and not Parked(frame) and not win.Fills(frame) and win.Hung(frame) then
+			local left, bottom, width, height = Rect(frame)
+			if left and width > 0 and height > 0 then
+				list[#list + 1] = { frame = frame, left = left, bottom = bottom, width = width, top = bottom + height }
+			end
+		end
+	end)
+	return list
+end
+
+-- Takes the open windows clear of the unit frames, while Open windows under the unit frames is on.
+function win.ClearUnits()
+	if not (win.On() and ns.Get("movers.clearUnits") == true) then
+		return
+	end
+	local windows = win.Hanging()
+	local line
+	for _, rect in ipairs(windows) do
+		local under = win.UnitsOver(rect.left, rect.left + rect.width, rect.top)
+		if under then
+			line = math.min(line or under, under)
+		end
+	end
+	if line then
+		for _, rect in ipairs(windows) do
+			ns.Each(KEY, win.Lower, rect.frame, rect, line - WIN.clear.gap)
+		end
+	end
+end
+
+-- Moves one window down until its top is at the line, with its bottom no lower than the floor or where the game put it. Its point stays the one the
+-- game gave it, with another height: one SetPoint, so a call refused leaves the window where it was.
+function win.Lower(frame, rect, line)
+	local lowest = math.min(rect.bottom, WIN.clear.floor)
+	local top = math.max(line, lowest + rect.top - rect.bottom)
+	if top >= rect.top - TOLERANCE or (InCombatLockdown() and ns.MaybeProtected(frame)) then
+		return
+	end
+	local k = Ratio(frame)
+	local ok, point, _, relativePoint, x, y = pcall(frame.GetPoint, frame, 1)
+	if not (k and ok and Number(x) and Number(y)) or ns.IsSecret(point) or ns.IsSecret(relativePoint) then
+		return
+	end
+	local setPoint = Calls(frame)
+	setPoint(frame, point, UIParent, relativePoint, x, y + (top - rect.top) / k)
+end
+
 -- Opening and closing ----------------------------------------------------------------------------
 
 local function BuildBar()
@@ -4633,6 +4744,7 @@ local function Refresh()
 	Grips()
 	win.Sweep()
 	win.SizeOpen()
+	ns.EachPart(KEY, WIN.part, win.ClearUnits)
 	centre.Refresh()
 	UpdateDriver()
 end
@@ -4640,6 +4752,8 @@ end
 local function Resized()
 	if running and ns.Enabled(KEY) then
 		ApplyAll()
+		-- The game lays its windows out again for the new size of the screen, which takes them back to its own spot.
+		PlaceWindowsLater()
 		ShowHandles()
 		centre.LineLook()
 		ns.MoversMode.Resized()

@@ -11,6 +11,9 @@ local _, ns = ...
 -- inventory slot is C_Container.ContainerIDToInventoryID(bag), its icon GetInventoryItemTexture("player", slot) or, for an empty slot, the art the
 -- game gives that slot (GetInventorySlotInfo, its second answer), and a bag whose inventory slot the client does not give (no reagent bag) has no
 -- button. The backpack is fixed: its icon is the game's own of its bag bar (Camelot/MainMenuBarBagButtons.xml, bagIcon), and it takes no drag.
+-- The backpack and every bag in a slot show their free slots (C_Container.GetContainerNumFreeSlots) in the bottom right corner, in the game's
+-- font of item counts with an outline, white, and red once the bag is full, as a full bag's label is in Bag by bag; an empty slot shows none.
+-- BagsWindow.lua puts the row a little apart from the content under a thin line, so it does not read as more slots of the keyring or a bag.
 -- Every answer goes through ns.IsSecret or ns.Finite.
 --
 -- The clicks are the game's own bag buttons' (Blizzard_MainMenuBarBagButtons/Shared/MainMenuBarBagButtons.lua:68-95), out of combat only: a drop,
@@ -42,6 +45,10 @@ local SLOT_NAMES = { [1] = "Bag0Slot", [2] = "Bag1Slot", [3] = "Bag2Slot", [4] =
 -- The tint under the cursor, as on the slots of the windows (Windows.lua:59), and the colour of the plain lines of a tooltip.
 local HOVER = { 1, 1, 1, 0.3 }
 local DIM = { 0.8, 0.8, 0.8 }
+-- The free count in a slot's corner: the game's font of item counts at a size of its own with an outline, white, and the red of a full bag's label
+-- in Bag by bag (BagsLayout.lua, FULL_HEX) when the bag has no room.
+local COUNT_FONT, COUNT_SIZE = "NumberFontNormal", 11
+local ROOM, FULL = { 1, 1, 1 }, { 1, 0.35, 0.24 }
 -- The crop of an icon when the Windows page does not say.
 local CROP = 8
 local FIGHT_LINE = "Flat UI: the bag slots of the bag window take no clicks in a fight."
@@ -241,6 +248,15 @@ local function MakeSlot(bag)
 	ns.Own[hover] = true
 	hover:SetAllPoints(button)
 	hover:SetColorTexture(HOVER[1], HOVER[2], HOVER[3], HOVER[4])
+	slot.count = ns.OwnText(button, "OVERLAY", COUNT_FONT)
+	if slot.count then
+		local ok, file = pcall(slot.count.GetFont, slot.count)
+		if ok and type(file) == "string" and not ns.IsSecret(file) and file ~= "" then
+			pcall(slot.count.SetFont, slot.count, file, COUNT_SIZE, "OUTLINE")
+		end
+		slot.count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
+		slot.count:SetJustifyH("RIGHT")
+	end
 	button:RegisterForClicks("LeftButtonUp")
 	button:RegisterForDrag("LeftButton")
 	button:SetScript("OnClick", function()
@@ -267,7 +283,24 @@ local function MakeSlot(bag)
 	return slot
 end
 
--- Draws a slot: the bag's icon, cropped, or the game's art of an empty slot, faded.
+-- The free slots of a held bag in the slot's corner, red when it is full; nothing on an empty slot or when the client does not say.
+local function DrawCount(slot, bag, held)
+	local text = slot.count
+	if not text then
+		return
+	end
+	local free = held and Room(bag) or nil
+	if not free then
+		text:Hide()
+		return
+	end
+	local colour = free == 0 and FULL or ROOM
+	text:SetTextColor(colour[1], colour[2], colour[3], 1)
+	text:SetText(tostring(free))
+	text:Show()
+end
+
+-- Draws a slot: the bag's icon, cropped, with its free slots in the corner, or the game's art of an empty slot, faded.
 local function DrawSlot(slot, bag, crop)
 	local icon = BagIcon(bag)
 	if icon then
@@ -280,6 +313,7 @@ local function DrawSlot(slot, bag, crop)
 		slot.icon:SetAlpha(0.5)
 	end
 	slot.icon:Show()
+	DrawCount(slot, bag, icon ~= nil)
 	Paint(slot.box)
 end
 

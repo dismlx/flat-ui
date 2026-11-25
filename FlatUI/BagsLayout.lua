@@ -39,7 +39,9 @@ local _, ns = ...
 -- up to four, and four more once every slot up to it is filled), worked out here from the records, since the game's function reads the logged-in
 -- character's keyring only. A bag's label is its name (C_Container.GetBagName, WL/apis.yaml:8530) for the player's own live bags, else the label of
 -- its kind, with the kind after a special bag's name, and the number of its free slots, after the bag's icon: the item's (C_Item.GetItemIconByID)
--- for a bag, the game's own for the backpack and the keyring, none for the bank's own slots. A click on the label of one of the player's own bags
+-- for a bag, the game's own for the backpack and the keyring, none for the bank's own slots. Two or more bags of a window with the same name each
+-- have their number after it ("Journeyman's Backpack · bag 3": bags 1 to 4 and the reagent bag 5, bank bags 1 to 8), so they can be told apart;
+-- the backpack, the keyring and the bank's own slots keep their names. A click on the label of one of the player's own bags
 -- opens a
 -- menu of Flat UI's own with what the game's bag menu sets, which is out of reach while Bags keeps the game's bag windows hidden (Mainline/
 -- ContainerFrame.lua:643-711, 765-776): Assign To on bags 1 to 4 that are not special bags, with the six filters of the game's list (:2383-2390;
@@ -1228,6 +1230,33 @@ local function BagIcon(st, bag, kind)
 	return ("|T%s:%d:%d:0:0:64:64:5:59:5:59|t "):format(tostring(icon), size, size)
 end
 
+-- The number of a bag in its window, as the game counts its bag slots: bags 1 to 4 and the reagent bag 5 of the player's bags, and bank bags 1 to
+-- 8 after the bank's own slots; none for the backpack, the keyring and the bank's own slots, whose names are their own.
+local function BagNumber(st, bag)
+	if bag == 0 or bag == KEYRING or bag == BANK_SLOTS or not Finite(bag) then
+		return nil
+	end
+	if st.which == "bank" then
+		return bag > BANK_SLOTS and bag - BANK_SLOTS or nil
+	end
+	return bag > 0 and bag or nil
+end
+
+-- Bags with the same name (three Journeyman's Backpacks, or another character's bags, each named by its kind) tell themselves apart by their
+-- number after the name: "Journeyman's Backpack · bag 3".
+local function NumberSameNames(st, blocks)
+	local seen = {}
+	for _, block in ipairs(blocks) do
+		seen[block.name] = (seen[block.name] or 0) + 1
+	end
+	for _, block in ipairs(blocks) do
+		local number = seen[block.name] > 1 and BagNumber(st, block.bag)
+		if number then
+			block.name = ("%s · bag %d"):format(block.name, number)
+		end
+	end
+end
+
 local function BuildBlocks(st)
 	local blocks = {}
 	for _, bag in ipairs(st.containers) do
@@ -1246,9 +1275,12 @@ local function BuildBlocks(st)
 				end
 			end
 			Recount(st, block)
-			block.titleWidth = Measure(st, TitleText(block))
 			blocks[#blocks + 1] = block
 		end
+	end
+	NumberSameNames(st, blocks)
+	for _, block in ipairs(blocks) do
+		block.titleWidth = Measure(st, TitleText(block))
 	end
 	st.sections, st.strip, st.free = blocks, nil, nil
 end
