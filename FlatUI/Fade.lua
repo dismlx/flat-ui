@@ -23,7 +23,8 @@ local _, ns = ...
 -- PetFrame, and under MinimapCluster the Tracking and IndicatorFrame frames, GameTimeFrame, TimeManagerClockButton and AddonCompartmentFrame
 -- (Blizzard_Minimap/Mainline/Minimap.xml:3, 25 and 46, GameTime.xml:3, Camelot/AddonCompartment.xml:3, Blizzard_TimeManager/Mainline/Blizzard_TimeManager.xml:178).
 -- The Experience bar row fades FlatUIXpBar, Flat UI's own experience and reputation bar (XpBar.lua), while it is the one in use (ns.XpOwn); the
--- bar itself is the hover area. While block 1 of the Bar block page holds it with Fade the block on, the block's fade takes it over by its name
+-- bar itself is the hover area, and a gain, the fill sliding up or a level or standing flash on it holds it at full while it runs (busy,
+-- ns.XpBarLively). While block 1 of the Bar block page holds it with Fade the block on, the block's fade takes it over by its name
 -- (ns.BarBlockFades), as it does the action bars; with the game's bar in use the row has nothing to fade and gives the bar its alpha back.
 -- The Player frame row also fades the frames of Flat UI's own that Unit frames puts on PlayerFrame itself, outside its container and its content: the
 -- body, the name row and the shadow (ns.UnitFrameExtra.pieces, UnitFrames.lua), so the plate and its border fade with the bars and the portrait. The
@@ -165,6 +166,10 @@ local function XpBarFrames()
 	local frame = ns.XpBarFrame()
 	return frame ~= nil and { { frame = frame, name = XP_BAR } } or nil
 end
+-- A gain rising over the bar, its fill sliding up or a level or standing flash holds the bar at full while it runs (ns.XpBarLively).
+local function XpBarBusy()
+	return type(ns.XpBarLively) == "function" and ns.XpBarLively() == true
+end
 -- Questie's tracker, which takes the place of the objective tracker while the Questie addon is loaded (QuestieSkin.lua). None without it.
 local QUESTIE = "Questie_BaseFrame"
 local function QuestieFrame()
@@ -203,7 +208,7 @@ local ENTRIES = {
 	{ row = "playerFrame", label = "Player frame", frames = { "PlayerFrame.PlayerFrameContainer", "PlayerFrame.PlayerFrameContent" }, hover = "PlayerFrame",
 		more = PlayerPieces },
 	{ row = "petFrame", label = "Pet frame", frames = { "PetFrame" } },
-	{ row = "xpBar", label = "Experience bar", frames = {}, more = XpBarFrames },
+	{ row = "xpBar", label = "Experience bar", frames = {}, more = XpBarFrames, busy = XpBarBusy },
 	{ row = "minimapButtons", label = "Minimap buttons", hover = "MinimapCluster", more = "MapAddonButtons",
 		frames = { "MinimapCluster.Tracking", "MinimapCluster.IndicatorFrame", "GameTimeFrame", "TimeManagerClockButton", "AddonCompartmentFrame" } },
 	{ rule = true, targeted = true, row = "targetFrame", label = "Target frame", frames = { "TargetFrame" } },
@@ -333,7 +338,7 @@ local function Casting()
 	if state.castAt and GetTime() - state.castAt < CAST_HOLD then
 		return true
 	end
-	for _, name in ipairs({ "UnitCastingInfo", "UnitChannelInfo" }) do
+	for _, name in ipairs(CAST_READS) do
 		local read = _G[name]
 		if type(read) == "function" then
 			local ok, spell = pcall(read, "player")
@@ -345,9 +350,16 @@ local function Casting()
 	return false
 end
 
+-- While /flatui move is open (Movers.lua), so a faded frame is seen whole as its box is lined up.
+local function MoversOpen()
+	local kit = ns.MoverKit
+	return type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
+end
+
 -- What keeps every row at full opacity, whatever the mouse does. With a target is asked apart (Step), as it does not hold a targeted row.
 local function Wanted()
-	return (Opt("combat") and Fighting()) or Holding() or FlyoutOpen() or ns.EditModeOpen() or (Opt("cast") == true and Casting())
+	return (Opt("combat") and Fighting()) or Holding() or FlyoutOpen() or ns.EditModeOpen() or MoversOpen()
+		or (Opt("cast") == true and Casting())
 end
 
 -- In a party or a raid.

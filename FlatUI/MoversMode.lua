@@ -13,7 +13,9 @@ local _, ns = ...
 -- over its middle, by a frame of the addon's own that takes no mouse, so the smaller box under the cursor still takes it.
 -- Each control of the toolbar has a tooltip that says what it does (TIPS): the grid's Off, Dim and Bright, Snap, Samples, Frame list, Undo with the
 -- steps it holds ("Puts back the last change, 3 to undo.") and Done. Ctrl-Z does what Undo does while the movers are open (the keys frame, unless
--- the question of a close shows or a box of the inspector has the keyboard).
+-- the question of a close shows or a box of the inspector has the keyboard), and Ctrl-Y or Ctrl-Shift-Z puts back what Undo took away, step by
+-- step, a group as one (S.redo); a new move, size or reset empties it. The grid's segments, Snap and Samples light up under the mouse, and the
+-- two switches click and slide as the switches of the options window do (ns.PanelKit.SwitchClick and Slider).
 
 local MM = {}
 ns.MoversMode = MM
@@ -41,7 +43,8 @@ local LABEL_INSET, LABEL_MIN_W, LINE_H, FRONT_LEVEL = 3, 24, 10, 600
 
 -- The session: spots at the start (snapshot), the last seen spot of each frame (last), the steps for Undo, the handles hidden by the eye,
 -- the chosen frame and the handle under the cursor. paused: the session waits for the end of a fight. panel: the options window was open.
-local S = { snapshot = {}, last = {}, undo = {}, hidden = {}, list = true, texts = {} }
+-- redo: the steps Undo took away, for Redo, emptied by a new step.
+local S = { snapshot = {}, last = {}, undo = {}, redo = {}, hidden = {}, list = true, texts = {} }
 -- The frames this file makes and what they show.
 local ui = { lines = {}, paints = {}, rows = {} }
 
@@ -109,6 +112,8 @@ function MM.Changed(name)
 		if #S.undo > STEPS_KEPT then
 			table.remove(S.undo, 1)
 		end
+		-- A new step: what Undo took away can no longer be put back.
+		S.redo = {}
 		S.last[name] = now
 	end
 end
@@ -129,7 +134,7 @@ function MM.ProfileChanged()
 		return
 	end
 	local saved = Kit().Saved()
-	S.snapshot, S.last, S.undo = CopyAll(saved), CopyAll(saved), {}
+	S.snapshot, S.last, S.undo, S.redo = CopyAll(saved), CopyAll(saved), {}, {}
 	if ui.list then
 		MM.Layout()
 		MM.Refresh(true)
@@ -141,23 +146,38 @@ function MM.Group(on)
 	S.group = on and {} or nil
 end
 
-function MM.Undo()
-	local step = table.remove(S.undo)
+-- Takes the last step from one list (S.undo or S.redo) and puts its spot back, with the steps of the same group; each spot it replaces goes on
+-- the other list as a step of the same group, so Redo puts back what Undo took away and Undo takes it away again.
+local function Step(from, to)
+	local step = table.remove(from)
 	if not step then
 		return
 	end
 	local last
 	repeat
+		to[#to + 1] = { step[1], Copy((Kit().Saved() or {})[step[1]]) or false, step[3] }
 		S.undoing = true
 		Kit().Restore(step[1], step[2] or nil)
 		S.undoing = false
 		S.last[step[1]] = Copy((Kit().Saved() or {})[step[1]])
 		last = step[1]
-		local nextStep = S.undo[#S.undo]
-		step = nextStep and step[3] and nextStep[3] == step[3] and table.remove(S.undo) or nil
+		local nextStep = from[#from]
+		step = nextStep and step[3] and nextStep[3] == step[3] and table.remove(from) or nil
 	until not step
+	while #to > STEPS_KEPT do
+		table.remove(to, 1)
+	end
 	MM.Select(last)
 	MM.Refresh(true)
+end
+
+function MM.Undo()
+	Step(S.undo, S.redo)
+end
+
+-- Ctrl-Y or Ctrl-Shift-Z: puts back what Undo took away, a step at a time.
+function MM.Redo()
+	Step(S.redo, S.undo)
 end
 
 -- Puts every spot back as it was when the session began.
@@ -167,7 +187,7 @@ function MM.Discard()
 		Kit().Restore(name, S.snapshot[name])
 	end
 	S.undoing = false
-	S.undo, S.last = {}, CopyAll(Kit().Saved())
+	S.undo, S.redo, S.last = {}, {}, CopyAll(Kit().Saved())
 end
 
 -- Drawing helpers -------------------------------------------------------------------------------------
@@ -248,12 +268,19 @@ local function HideTip(owner)
 	end
 end
 
--- A control of the toolbar that has nothing to paint on the mouse: its tooltip only.
-local function Tipped(frame, tip)
+-- The tooltip of a control of the toolbar. hover, when given, runs with true as the mouse comes over it and false as it leaves, so the control
+-- lights up under the mouse (it marks the control and paints it again).
+local function Tipped(frame, tip, hover)
 	frame:SetScript("OnEnter", function()
+		if hover then
+			hover(true)
+		end
 		ShowTip(frame, tip)
 	end)
 	frame:SetScript("OnLeave", function()
+		if hover then
+			hover(false)
+		end
 		HideTip(frame)
 	end)
 end
@@ -1007,10 +1034,10 @@ end
 local GRID_CHOICES = { { "off", "Off", "No grid behind the frames." }, { "dim", "Dim", "A faint grid behind the frames, the middle of the screen marked." },
 	{ "bright", "Bright", "A brighter grid behind the frames, the middle of the screen marked." } }
 
--- The steps Undo holds: the steps of a group (Space across, Space down) count as one, as Undo puts them back together.
-local function UndoSteps()
+-- The steps Undo (or Redo, with S.redo) holds: the steps of a group (Space across, Space down) count as one, as Undo puts them back together.
+local function UndoSteps(list)
 	local count, group = 0, nil
-	for _, step in ipairs(S.undo) do
+	for _, step in ipairs(list or S.undo) do
 		if not (step[3] ~= nil and step[3] == group) then
 			count = count + 1
 		end
@@ -1033,23 +1060,26 @@ local TIPS = {
 		return "Frame list", "Shows or hides the list of frames at the left. Click a name to choose its frame; the arrow keys move it, Shift ten at a time."
 	end,
 	undo = function()
-		local count = UndoSteps()
+		local count, again = UndoSteps(), UndoSteps(S.redo)
+		local redo = again > 0 and (" Ctrl-Y puts it back again, %d to redo."):format(again) or " Ctrl-Y puts back what it took away."
 		if count == 0 then
-			return "Undo", "Nothing to undo yet. Ctrl-Z does the same."
+			return "Undo", "Nothing to undo yet. Ctrl-Z does the same." .. redo
 		end
-		return "Undo", ("Puts back the last change, %d to undo. Ctrl-Z does the same."):format(count)
+		return "Undo", ("Puts back the last change, %d to undo. Ctrl-Z does the same."):format(count) .. redo
 	end,
 	done = function()
 		return "Done", "Ends the session and keeps the changes. Escape asks first."
 	end,
 }
 
+-- A chosen segment is in the accent, and one under the mouse takes the hover backing with its word in full, as on the test mode bar.
 local function PaintSegments()
 	local L = Look()
 	for _, segment in ipairs(ui.segments or {}) do
 		local chosen = L.Get("grid") == segment.id
-		L.Backing(segment.outline, chosen and "accent" or "card", chosen and 0.18 or 1, chosen and "accent" or "line")
-		segment.label:SetTextColor(L.Colour(chosen and "text" or "text-dim"))
+		local hover = segment.hover == true and not chosen
+		L.Backing(segment.outline, chosen and "accent" or hover and "hover" or "card", chosen and 0.18 or 1, chosen and "accent" or "line")
+		segment.label:SetTextColor(L.Colour((chosen or hover) and "text" or "text-dim"))
 	end
 end
 
@@ -1058,24 +1088,44 @@ local function SnapOn()
 	return ns.Get("movers.snap") == "middle" or Look().Get("snapFrames") == "on"
 end
 
-local function PaintToggle()
-	local on = SnapOn()
+-- A switch of the toolbar: its track in the accent while on, in the hover tone under the mouse, and its knob sliding to its end
+-- (ns.PanelKit.Slider, place) as the switches of the options window do, or set there where the kit has no slider.
+local function PaintSwitch(on, hover, back, knob, track, place)
 	local L = Look()
-	L.Solid(ui.trackBack, on and "accent" or "raised")
-	L.Solid(ui.knob, on and "on-accent" or "text-dim")
-	ui.knob:ClearAllPoints()
-	ui.knob:SetPoint("LEFT", ui.toggle, "LEFT", on and 18 or 2, 0)
+	if hover then
+		L.Solid(back, on and "accent-hover" or "hover")
+	else
+		L.Solid(back, on and "accent" or "raised")
+	end
+	L.Solid(knob, on and "on-accent" or "text-dim")
+	if place then
+		place(on)
+	else
+		knob:ClearAllPoints()
+		knob:SetPoint("LEFT", track, "LEFT", on and 18 or 2, 0)
+	end
+end
+
+-- The click of a switch the player pressed: the game's checkbox sound, higher for on (ns.PanelKit.SwitchClick).
+local function SwitchClick(on)
+	local kit = ns.PanelKit
+	if type(kit) == "table" and type(kit.SwitchClick) == "function" then
+		kit.SwitchClick(on == true)
+	end
+end
+
+local function PaintToggle()
+	PaintSwitch(SnapOn(), ui.snapHover, ui.trackBack, ui.knob, ui.toggle, ui.placeSnap)
 end
 
 -- Samples is on while test mode is (TestMode.lua), paused included.
-local function PaintSamples()
+local function SamplesOn()
 	local test = ns.TestMode
-	local on = type(test) == "table" and test.Source() ~= nil
-	local L = Look()
-	L.Solid(ui.samplesBack, on and "accent" or "raised")
-	L.Solid(ui.samplesKnob, on and "on-accent" or "text-dim")
-	ui.samplesKnob:ClearAllPoints()
-	ui.samplesKnob:SetPoint("LEFT", ui.samples, "LEFT", on and 18 or 2, 0)
+	return type(test) == "table" and test.Source() ~= nil
+end
+
+local function PaintSamples()
+	PaintSwitch(SamplesOn(), ui.samplesHover, ui.samplesBack, ui.samplesKnob, ui.samples, ui.placeSamples)
 end
 
 -- Test mode turned on or off from anywhere: Samples shows it.
@@ -1094,6 +1144,18 @@ local function BuildToolbar()
 	bar:EnableMouse(true)
 	Surface(bar, "card")
 	ui.bar = bar
+	-- The toolbar hid: nothing of it stays lit for the mouse that left with it.
+	bar:SetScript("OnHide", function()
+		ui.snapHover, ui.samplesHover = nil, nil
+		for _, entry in ipairs(ui.segments or {}) do
+			entry.hover = nil
+		end
+		if ui.samplesKnob then
+			PaintSegments()
+			PaintToggle()
+			PaintSamples()
+		end
+	end)
 	local title = Text(bar, "GameFontNormal", "text")
 	title:SetPoint("LEFT", bar, "LEFT", 12, 0)
 	title:SetText("Movers")
@@ -1120,6 +1182,9 @@ local function BuildToolbar()
 		end)
 		Tipped(segment, function()
 			return "Grid: " .. choice[2], choice[3] .. " Kept for your account."
+		end, function(over)
+			entry.hover = over
+			PaintSegments()
 		end)
 		ui.segments[index] = entry
 	end
@@ -1137,12 +1202,16 @@ local function BuildToolbar()
 	ui.trackBack:SetAllPoints(toggle)
 	ui.knob = Fill(toggle, "ARTWORK")
 	ui.knob:SetSize(12, 12)
+	local kit = ns.PanelKit
+	local slider = type(kit) == "table" and type(kit.Slider) == "function" and kit.Slider or nil
+	ui.placeSnap = slider and slider(ui.knob, toggle, toggle) or nil
 	toggle:SetScript("OnMouseUp", function(_, mouseButton)
 		if mouseButton == "LeftButton" then
 			local on = SnapOn()
 			Try(ns.Set, "movers.snap", on and "off" or "middle")
 			Try(ns.Set, "panel.snapFrames", on and "off" or "on")
 			PaintToggle()
+			SwitchClick(SnapOn())
 			ShowTip(toggle, function()
 				return TIPS.snap(SnapOn())
 			end)
@@ -1150,6 +1219,9 @@ local function BuildToolbar()
 	end)
 	Tipped(toggle, function()
 		return TIPS.snap(SnapOn())
+	end, function(over)
+		ui.snapHover = over
+		PaintToggle()
 	end)
 	Painted(PaintToggle)
 	-- Samples: test mode (TestMode.lua), so the boxes of hidden frames hold their samples while they are placed.
@@ -1165,6 +1237,7 @@ local function BuildToolbar()
 	ui.samplesBack:SetAllPoints(samples)
 	ui.samplesKnob = Fill(samples, "ARTWORK")
 	ui.samplesKnob:SetSize(12, 12)
+	ui.placeSamples = slider and slider(ui.samplesKnob, samples, samples) or nil
 	samples:SetScript("OnMouseUp", function(_, mouseButton)
 		if mouseButton == "LeftButton" and type(ns.TestMode) == "table" then
 			local ok, err = pcall(ns.TestMode.Toggle, "movers")
@@ -1172,11 +1245,14 @@ local function BuildToolbar()
 				geterrorhandler()(err)
 			end
 			PaintSamples()
+			SwitchClick(SamplesOn())
 		end
 	end)
 	Tipped(samples, function()
-		local test = ns.TestMode
-		return TIPS.samples(type(test) == "table" and test.Source() ~= nil)
+		return TIPS.samples(SamplesOn())
+	end, function(over)
+		ui.samplesHover = over
+		PaintSamples()
 	end)
 	Painted(PaintSamples)
 	local listButton = Button(bar, "Frame list", 80, function()
@@ -1320,6 +1396,11 @@ local function BuildKeys()
 			else
 				Try(MM.Request)
 			end
+		elseif (key == "Y" or (key == "Z" and type(IsShiftKeyDown) == "function" and IsShiftKeyDown())) and type(IsControlKeyDown) == "function"
+			and IsControlKeyDown() and not (ui.ask and ui.ask:IsShown()) then
+			-- Ctrl-Y or Ctrl-Shift-Z: Redo, what Undo just took away.
+			handled = true
+			Try(MM.Redo)
 		elseif key == "Z" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and not (ui.ask and ui.ask:IsShown()) then
 			-- Ctrl-Z: Undo, the last move, size or reset.
 			handled = true
@@ -1426,7 +1507,7 @@ function MM.Opened(source)
 		S.session = true
 		S.snapshot = CopyAll(kit.Saved())
 		S.last = CopyAll(kit.Saved())
-		S.undo, S.hidden, S.selected, S.hover, S.offset = {}, {}, nil, nil, 0
+		S.undo, S.redo, S.hidden, S.selected, S.hover, S.offset = {}, {}, {}, nil, nil, 0
 		S.panel = false
 		ns.MoversSnap.Clear()
 	end
@@ -1454,7 +1535,7 @@ function MM.Closed()
 		return
 	end
 	S.session = false
-	S.snapshot, S.last, S.undo, S.hidden, S.selected, S.hover = {}, {}, {}, {}, nil, nil
+	S.snapshot, S.last, S.undo, S.redo, S.hidden, S.selected, S.hover = {}, {}, {}, {}, {}, nil, nil
 	ns.MoversSnap.Clear()
 	if S.panel then
 		S.panel = false
