@@ -6,8 +6,9 @@ local _, ns = ...
 -- chat.spellTotal; 0.5.20) and its rates (chat.spellRates: the expected value with crits, misses and a spell's piercing, a second of cast time, a
 -- point of mana), its threat on WoW: Forever with each multiplier in force (Threat lines), the lines a stance, form, aura or talent tooltip needs
 -- that its own text leaves out, while a number shown is from before the fight now on, one dim line that says so, and last, on a spell whose next
--- rank the player has yet to learn, the level of that rank or that it can be learned now (Next rank, chat.spellNextRank; 0.5.35, NextRank, made
--- fresh for each build from the rank's level in SpellData.lua, the player's level and ns.SpellKnown of Cooldowns.lua). SpellModel.lua makes
+-- rank the player has yet to learn, the level of that rank, that it can be learned now, or for a rank of the class books of Ahn'Qiraj that it
+-- comes from a book (Next rank, chat.spellNextRank; 0.5.35, NextRank, made fresh for each build from the rank's level in SpellData.lua, SL.BOOKS,
+-- the player's level and ns.SpellKnown of Cooldowns.lua). SpellModel.lua makes
 -- the texts (M.PowerLines, M.TotalLines, M.ThreatLines, M.RuleLines, each a block with its title) from the data of SpellData.lua and the player's
 -- state and stats, and listens to the game while a part wants it (M.Want); this file finds the spell, keeps its lines and adds them. It registers
 -- no event, adds to the chat module and has no switch of its own, as ChatTips.lua. SpellModel.lua, SpellData.lua and ns.ActionSpell of
