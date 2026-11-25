@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Flat UI
 ## Notes: Thin dark borders on the default interface. /flatui
-## Version: 0.5.38
+## Version: 0.5.39
 ## Author: dismlx
 ## X-License: MIT
 ## X-Curse-Project-ID: 1750813
@@ -32,6 +32,7 @@ PlateClick.lua
 PlateThreatText.lua
 PlateOverpower.lua
 PlateQuest.lua
+PlateCombo.lua
 CombatBurst.lua
 CombatTextSpells.lua
 CombatText.lua

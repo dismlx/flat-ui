@@ -9,6 +9,9 @@ local _, ns = ...
 -- between two passes, or as the button's own cooldown frame finishes its swipe (OnCooldownDone, hooked on Flat UI's own frame), once a cooldown. When
 -- the global cooldown outlasts the end of such a cooldown, the action reads as on the global cooldown while it still cools; the call then waits for
 -- the end of that sweep, when the button really is ready. Each call says how long the cooldown ran, measured from the pass that saw it start (st.cdSince).
+-- A cooldown found already running (after a stance, form, Stealth or page change, a drag or a reload) takes the start seen for its spell on another slot
+-- while that lies within the spell's base cooldown (GetSpellBaseCooldown), and otherwise the base cooldown as its length; only an item's, or a spell's
+-- without a base cooldown, has none.
 -- The cooldown sweep shows for the global cooldown too unless Global cooldown sweep (actionbars.sweepGcd, on by default) is off while Restyle action bars is
 -- on: a button that only waits for the global cooldown then shows no sweep, and real cooldowns still do, also one whose last moments the global
 -- cooldown covers, whose sweep runs to the end of the global cooldown and ends with its ready call. The countdown numbers follow the game's Show
@@ -69,6 +72,8 @@ local P = {
 	painters = { icon = {}, hotkey = {}, empty = {} },
 	procs = {},
 	ready = {},
+	-- the start (GetTime) of the last cooldown longer than the global one seen to start, by spell ID, for one found cooling after a stance or page change
+	starts = {},
 	-- true while a pass sets or clears a cooldown frame, whose OnCooldownDone is then not a cooldown that ended
 	sweeping = false,
 	-- tip: the Flat UI button whose tooltip is up, set again every TOOLTIP_UPDATE_TIME (tipClock) while it owns GameTooltip; nil when none
@@ -359,14 +364,39 @@ local function Sweep(frame, show, name, slot)
 	end
 end
 
+-- The spell of a slot, for the length of a cooldown whose start was not seen: a spell, or a macro's spell (not a macro that uses an item), as ButtonEffects.lua
+-- UsesSpell reads it. nil for an item or anything else.
+local function SpellOf(slot)
+	local kind, id, sub = Call("GetActionInfo", slot)
+	if not Plain(kind, "string") or not Plain(id, "number") then
+		return nil
+	elseif kind == "spell" or (kind == "macro" and not (Plain(sub, "string") and sub == "item")) then
+		return id
+	end
+	return nil
+end
+
+-- The base cooldown of a spell in seconds (GetSpellBaseCooldown, as Cooldowns.lua reads it), or nil when it has none or the game cannot say.
+local function BaseOf(spellID)
+	if spellID == nil or type(GetSpellBaseCooldown) ~= "function" then
+		return nil
+	end
+	local ok, milliseconds = pcall(GetSpellBaseCooldown, spellID)
+	if ok and Plain(milliseconds, "number") and milliseconds > 0 then
+		return milliseconds / 1000
+	end
+	return nil
+end
+
 -- A cooldown longer than the global cooldown ended on a button: the listeners hear it once for that cooldown (cdFired, cleared when the next one starts),
--- with how long it ran in seconds, measured from its start on Flat UI's side (cdSince), or nil when its start was not seen.
+-- with how long it ran in seconds, measured from its start on Flat UI's side (cdSince); for one whose start was not seen, its spell's base cooldown
+-- (cdBase), or nil when that is not known either (an item, a spell with no base cooldown).
 local function Ready(button, st)
 	if st.cdFired then
 		return
 	end
 	st.cdFired = true
-	local seconds = st.cdSince and GetTime() - st.cdSince or nil
+	local seconds = st.cdSince and GetTime() - st.cdSince or st.cdBase
 	for _, fn in ipairs(P.ready) do
 		local ok, err = pcall(fn, button, seconds)
 		if not ok then
@@ -425,8 +455,23 @@ function STEP.cooldown(button, st)
 		Ready(button, st)
 	elseif long and not was then
 		st.cdFired, st.cdWait = false, nil
-		-- Its start, on Flat UI's own clock (a plain number), for Shortest cooldown that flashes; false when it did not start in sight.
-		st.cdSince = seen and GetTime() or false
+		-- Its start, on Flat UI's own clock (a plain number), for Shortest cooldown that flashes, kept per spell too (P.starts). One that did not start in
+		-- sight (a stance, form, Stealth or page change, a drag, a reload) takes the start kept for its spell while that lies within the spell's base
+		-- cooldown; otherwise cdSince is false and its length is the base cooldown (cdBase).
+		local spell = SpellOf(slot)
+		if seen then
+			st.cdSince, st.cdBase = GetTime(), nil
+			if spell ~= nil then
+				P.starts[spell] = st.cdSince
+			end
+		else
+			local base, start = BaseOf(spell), spell ~= nil and P.starts[spell] or nil
+			if base ~= nil and start ~= nil and GetTime() - start < base then
+				st.cdSince, st.cdBase = start, nil
+			else
+				st.cdSince, st.cdBase = false, base
+			end
+		end
 	end
 	-- Global cooldown sweep off: a button that only waits for the global cooldown shows no sweep. A button whose real cooldown ends under the global
 	-- one (cdWait) keeps its sweep to the end of it, so it does not look ready before it is and its swipe's end says when it is (CooldownDone).
@@ -1100,7 +1145,8 @@ function ns.OnOwnProc(fn)
 end
 
 -- fn(button, seconds) once when a cooldown longer than the global cooldown has ended on one of Flat UI's buttons. seconds is how long it ran, from the
--- pass that saw it start to its end, or nil when it was already running when first seen (at login, after a page change or a drag).
+-- pass that saw it start to its end. One already running when first seen (at login, after a stance, form or page change, or a drag) gives the start seen
+-- for its spell on another slot when there is one, else its spell's base cooldown, and nil only for an item or a spell with no base cooldown.
 function ns.OnOwnReady(fn)
 	if type(fn) == "function" then
 		P.ready[#P.ready + 1] = fn

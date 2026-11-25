@@ -1,8 +1,8 @@
 local _, ns = ...
 
 -- Marks on the game's party and raid frames: the colour of a debuff the player can dispel on a border just inside the health bar, with the icon of its
--- type on a party frame, the raid marker of the unit of a raid frame or a party frame, the leader and assistant icons of a raid frame and an outline round
--- the party frame of your target. With Also on your player, target and focus frames the border is on those frames too. All are textures of the addon's own
+-- type on a party frame, the raid marker of the unit of a raid frame or a party frame, the leader and assistant icons of a raid frame, an outline round
+-- the party frame of your target, and on a party frame the game's icon of a resurrection cast on the member. With Also on your player, target and focus frames the border is on those frames too. All are textures of the addon's own
 -- on a frame of its own over the game's frame, made and anchored out of combat; in a fight only their colour, opacity and visibility change, and which
 -- raid marker shows.
 --
@@ -49,7 +49,7 @@ local _, ns = ...
 
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
-local DISPEL, MARKER, LEADER, AIM = "Dispel highlight", "Raid frame marker", "Leader icons", "Target border"
+local DISPEL, MARKER, LEADER, AIM, REZ = "Dispel highlight", "Raid frame marker", "Leader icons", "Target border", "Resurrection icon"
 local FILTER = "HARMFUL|RAID"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local MARKER_FILE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
@@ -272,6 +272,9 @@ local function Blink(holder)
 	end)
 	return group
 end
+
+-- The same blink for the drawings of the setup and test mode (SetupDrawUnits.lua MakeMarks), so they blink in the same steps.
+X.blink = Blink
 
 local function StopBlink(d)
 	if d.flash then
@@ -697,8 +700,8 @@ local function AfterFight(rec, flag, part, fn)
 	end)
 end
 
--- The frame of the addon's own over a party or raid frame that holds its raid marker and, on a raid frame, its leader and assistant icons: six levels above
--- the game's frame, made out of combat by the first row that needs it.
+-- The frame of the addon's own over a party or raid frame that holds its raid marker, on a raid frame its leader and assistant icons and on a party frame
+-- its resurrection icon: six levels above the game's frame, made out of combat by the first row that needs it.
 local function Holder(rec)
 	if rec.over == nil then
 		local frame = rec.frame
@@ -839,6 +842,96 @@ ns.AddEvent(KEY, "RAID_TARGET_UPDATE", function()
 	for _, rec in pairs(X.records) do
 		if MARKER_ROWS[rec.kind] and rec.marker then
 			X.run(MARKER, Marker, rec, X.active(rec))
+		end
+	end
+end)
+
+-- Resurrection icon on party frames -----------------------------------------------------------------------------------------------------------------
+
+-- The game's classic party frames show no resurrection cast on a member (Mainline/PartyFrameTemplates.xml:79-368; the only resurrect text is the
+-- ResurrectableIndicator of WoW Labs, Shared/PartyMemberFrame.lua:210, Mainline/PartyMemberFrame.lua:786), while its raid frames and raid-style party
+-- frames put the icon RaidFrame-Icon-Rez in the middle of the frame (CompactUnitFrame_GetCenterStatusIconState, Shared/CompactUnitFrame.lua:1411-1414,
+-- 1473-1474). A summon its party frames show already, in the icon right of the frame (UpdateNotPresentIcon, Mainline/PartyMemberFrame.lua:589-616, on
+-- INCOMING_SUMMON_CHANGED, :716-717), so that is left to the game. With Resurrection icon on party frames (on by default) a texture of the addon's own on
+-- the holder of the marks, REZ_SIZE units, centred on the spot of the raid marker (the picture Flat UI draws, the game's portrait, else the health bar,
+-- MarkerSpot) and a sublevel under it, shows that atlas while someone resurrects the member. UnitHasIncomingResurrection is not in the generated docs,
+-- so its answer goes unread to the icon's opacity (FromAnswer). The icon is drawn again on INCOMING_RESURRECT_CHANGED (UnitDocumentation.lua:3622-3630),
+-- which the game's raid frames hear (CompactUnitFrame.lua:48, 155), for every party frame, since the payload is not read, and on a new member of the
+-- frame; a texture's opacity changes in a fight too, so a combat resurrection shows. A client without the atlas shows none.
+local REZ_SIZE = 20
+local REZ_ATLAS = "RaidFrame-Icon-Rez"
+
+-- Anchors the icon, out of combat and again only when its spot changed. False when it changed in a fight: it keeps its place until the end.
+local function PlaceRez(rec)
+	local r = rec.rezIcon
+	local to = MarkerSpot(rec)
+	if to == nil or r.to == to then
+		return true
+	elseif InCombatLockdown() then
+		return false
+	end
+	r.icon:ClearAllPoints()
+	r.icon:SetPoint("CENTER", to, "CENTER", 0, 0)
+	r.to = to
+	return true
+end
+
+local function MakeRez(rec)
+	local icon = Own(Holder(rec):CreateTexture(nil, "OVERLAY", nil, 6))
+	icon:SetSize(REZ_SIZE, REZ_SIZE)
+	icon:SetAlpha(0)
+	icon:Hide()
+	local r = { icon = icon }
+	r.art = AtlasExists(REZ_ATLAS) and pcall(icon.SetAtlas, icon, REZ_ATLAS) or false
+	rec.rezIcon = r
+	PlaceRez(rec)
+	return r
+end
+
+local function Rez(rec, on)
+	if rec.kind ~= "party" then
+		return
+	end
+	local r = rec.rezIcon
+	if not (on and rec.made and not ns.PartStopped(KEY, REZ) and Opt("partyRezIcon") == true and type(_G.UnitHasIncomingResurrection) == "function") then
+		if r then
+			r.icon:Hide()
+		end
+		return
+	end
+	if r == nil then
+		if InCombatLockdown() then
+			AfterFight(rec, "rezQueued", REZ, Rez)
+			return
+		end
+		r = MakeRez(rec)
+	elseif not PlaceRez(rec) then
+		AfterFight(rec, "rezQueued", REZ, Rez)
+	end
+	if not r.art then
+		return
+	end
+	-- The member of the frame, not a vehicle it is in.
+	local unit = X.unitOf(rec)
+	if unit ~= nil then
+		FromAnswer(r.icon, _G.UnitHasIncomingResurrection, unit)
+	else
+		pcall(r.icon.SetAlpha, r.icon, 0)
+	end
+	r.icon:Show()
+end
+
+-- The picture of a party frame was drawn again, or the game's portrait is shown in its place: the icon follows it, out of combat.
+local function FollowRez(rec)
+	if rec.rezIcon ~= nil and not PlaceRez(rec) then
+		AfterFight(rec, "rezQueued", REZ, Rez)
+	end
+end
+
+ns.AddEvent(KEY, "INCOMING_RESURRECT_CHANGED", function()
+	for _, rec in pairs(X.records) do
+		if rec.kind == "party" and rec.made then
+			X.run(REZ, Rez, rec, X.active(rec))
 		end
 	end
 end)
@@ -1049,6 +1142,9 @@ function X.unitChanged(rec)
 	if rec.aim then
 		X.run(AIM, Aim, rec, X.active(rec))
 	end
+	if rec.rezIcon then
+		X.run(REZ, Rez, rec, X.active(rec))
+	end
 end
 
 -- The lines of /flatui status: the frames that show the dispel border now, and Border for your target while a party or raid frame is styled.
@@ -1095,7 +1191,9 @@ table.insert(X.after.apply, { part = DISPEL, fn = Dispel })
 table.insert(X.after.apply, { part = MARKER, fn = Marker })
 table.insert(X.after.apply, { part = LEADER, fn = Leader })
 table.insert(X.after.apply, { part = AIM, fn = Aim })
+table.insert(X.after.apply, { part = REZ, fn = Rez })
 table.insert(X.after.raid, { part = DISPEL, fn = Dispel })
 table.insert(X.after.raid, { part = MARKER, fn = Marker })
 table.insert(X.after.raid, { part = LEADER, fn = Leader })
 table.insert(X.after.picture, { part = MARKER, fn = Follow })
+table.insert(X.after.picture, { part = REZ, fn = FollowRez })

@@ -53,11 +53,13 @@ local _, ns = ...
 -- while it shows, out of a fight only, as EnableKeyboard and SetPropagateKeyboardInput are protected in one; a fight that starts hides it). The
 -- next key, with Shift, Ctrl or Alt held (CreateKeyChordStringUsingMetaKeyState, Blizzard_SharedXML/BindingUtil.lua:116-140), is kept in
 -- FlatUIDB.mountKey for the account, and Escape or a left or right click on the prompt cancels (it is not placed with /flatui move and has no test
--- mode sample: it shows only while it waits for a key). The middle button, the side buttons and the wheel over the prompt are keys too, as in the
--- game's Key Bindings (BUTTON4 by GetConvertedKeyOrButton, BindingUtil.lua:66, and MOUSEWHEELUP or MOUSEWHEELDOWN, with the modifiers held), which
--- SetOverrideBindingClick takes and GetBindingText names ("Mouse Button 4"). A key the player's own bindings make move the character (MOVES: Move
--- Forward, Jump and the rest, read with GetBindingAction) is taken only when pressed again: the prompt says first "W moves you forward. Press it
--- again to use it anyway, or press another key.", and keeps the keyboard while it asks. While the module is on and the button is made, that key is
+-- mode sample: it shows only while it waits for a key). A dim last line names the key in use now ("Now: Shift-Z"). The middle button, the side
+-- buttons and the wheel over the prompt are keys too, as in the game's Key Bindings (BUTTON4 by GetConvertedKeyOrButton, BindingUtil.lua:66, and
+-- MOUSEWHEELUP or MOUSEWHEELDOWN, with the modifiers held), which SetOverrideBindingClick takes and GetBindingText names ("Mouse Button 4"). A key
+-- the player's own bindings make move the character or zoom the camera (MOVES: Move Forward, Jump, Zoom Out and the rest, read with
+-- GetBindingAction) is taken only when pressed again, at least CONFIRM_GAP seconds after it last came: the prompt says first "W moves you
+-- forward. Press it again to use it anyway, or press another key.", or "Mouse Wheel Down zooms the camera out. Turn it again ...", and keeps the
+-- keyboard while it asks. While the module is on and the button is made, that key is
 -- an override binding owned by a frame of the module's own (SetOverrideBindingClick, out of combat, as BagKey.lua does with SetOverrideBinding), so
 -- the player's own binding of the key (GetBindingAction, named in chat: "it was Toggle Sheathe") stays and comes back when the module goes off
 -- (ClearOverrideBindings). Clear Flat UI's key forgets it. A key bound in the game's Key Bindings works beside it, and Flat UI's key counts as
@@ -89,15 +91,20 @@ local LINE_KEY_REFUSED = "Mount key: the game would not bind %s to it."
 local LINE_IN_FIGHT = "Flat UI: not in a fight. Pick it again after the fight."
 -- The keys that are only held with another (CreateKeyChordStringUsingMetaKeyState puts them in front of it).
 local META = { LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true, LALT = true, RALT = true, LMETA = true, RMETA = true }
--- The actions of the game's Key Bindings that move the character (Bindings.xml of the game, the Movement Keys section), with what a key bound to
--- one does: such a key is taken only when it is pressed a second time, so a slip never takes the player's forward or jump. MOUSE_KEYS: the keys
--- of the mouse buttons the prompt takes, where the client lacks GetConvertedKeyOrButton (Blizzard_SharedXML/BindingUtil.lua:28-66).
+-- The actions of the game's Key Bindings that move the character (Bindings.xml of the game, the Movement Keys section) or zoom the camera (the
+-- wheel's own, CAMERAZOOMIN and CAMERAZOOMOUT, Blizzard_FrameXML/Bindings_Standard.xml:1507-1520), with what a key bound to one does: such a key
+-- is taken only when it is pressed a second time, so a slip or a scroll over the box never takes the player's forward, jump or zoom. A second
+-- press counts only CONFIRM_GAP seconds after the one before, so a held key's repeats and the notches of one scroll are one press. MOUSE_KEYS:
+-- the keys of the mouse buttons the prompt takes, where the client lacks GetConvertedKeyOrButton (Blizzard_SharedXML/BindingUtil.lua:28-66).
 local MOVES = { MOVEFORWARD = "moves you forward", MOVEBACKWARD = "moves you back", STRAFELEFT = "strafes left", STRAFERIGHT = "strafes right",
 	TURNLEFT = "turns you left", TURNRIGHT = "turns you right", JUMP = "makes you jump", TOGGLEAUTORUN = "turns on auto-run",
-	MOVEANDSTEER = "moves and steers you" }
+	MOVEANDSTEER = "moves and steers you", CAMERAZOOMIN = "zooms the camera in", CAMERAZOOMOUT = "zooms the camera out" }
+local CONFIRM_GAP = 0.4
 local MOUSE_KEYS = { MiddleButton = "BUTTON3", Button4 = "BUTTON4", Button5 = "BUTTON5" }
 local PROMPT = "Press the key for Mount or travel form, or a mouse button or the wheel over this box.\nEscape or a left click cancels."
-local PROMPT_MOVES = "%s %s.\nPress it again to use it anyway, or press another key."
+local PROMPT_MOVES = "%s %s.\n%s it again to use it anyway, or press another key."
+-- The dim line under the prompt with the key in use now.
+local PROMPT_NOW = "\n|cffa9ae9fNow: %s|r"
 local LINE_NOTHING = "Mount key: no mount or travel form to use yet."
 -- The character has mounts in the journal, but the game lets none of them be used now: GetMountUsabilityByID answers false with the reason as
 -- useError (MountJournalDocumentation.lua:340-357), and the journal shows that reason on the tooltip of its Mount button, also while the button
@@ -121,10 +128,11 @@ local IsSecret = ns.IsSecret
 -- moment; later: one waits for the end of the fight. fall: the name of the spell of the falling safety, nil while it is off; fallText: its macro.
 -- scripted: the button has the PreClick and the PostClick of the safety. held: the button holds the falling macro, which the PostClick takes away.
 -- owner: the frame that owns the override binding of Flat UI's key; chord: the key bound now, refused: the key the game would not bind. prompt:
--- the frame that waits for a key; confirm: the key that moves the character, pressed once, which a second press takes.
+-- the frame that waits for a key; confirm: the key that moves the character, pressed once, which a second press takes; confirmAt: when it was
+-- last pressed, held or turned (GetTime).
 local S = { button = nil, broken = false, text = nil, texts = nil, cast = false, mount = nil, list = nil, dirty = true, pick = nil, moving = false,
 	listener = nil, hearing = false, soonMove = false, soon = false, later = false, fall = nil, fallText = nil, scripted = false, held = false,
-	owner = nil, chord = nil, refused = nil, prompt = nil, confirm = nil }
+	owner = nil, chord = nil, refused = nil, prompt = nil, confirm = nil, confirmAt = nil }
 local M = {}
 
 local function Opt(key)
@@ -762,7 +770,7 @@ local function Prompt()
 	ns.Own[frame] = true
 	frame:Hide()
 	frame:SetFrameStrata("DIALOG")
-	frame:SetSize(480, 64)
+	frame:SetSize(480, 78)
 	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
 	ns.Outline(frame, frame, true)
 	local text = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -775,26 +783,43 @@ local function Prompt()
 	if not pcall(frame.EnableKeyboard, frame, true) then
 		return nil
 	end
+	-- The dim last line: the key in use now, Flat UI's own else the one of the game's Key Bindings, or nothing with none.
+	local function Now()
+		local ok, line = pcall(function()
+			local chord = OwnKey() or GameKey()
+			return chord and PROMPT_NOW:format(KeyText(chord)) or ""
+		end)
+		return ok and line or ""
+	end
 	-- Each showing starts with the plain line and no key waiting for a second press.
 	frame:SetScript("OnShow", function()
-		S.confirm = nil
-		text:SetText(PROMPT)
+		S.confirm, S.confirmAt = nil, nil
+		text:SetText(PROMPT .. Now())
 	end)
 	frame:SetScript("OnHide", function()
-		S.confirm = nil
+		S.confirm, S.confirmAt = nil, nil
 	end)
-	-- A key that moves the character waits for a second press, with the prompt and its keyboard kept; any other key hides the prompt first,
-	-- whatever follows, so the keyboard is never kept by an error. Nothing but reads runs before the hide.
+	-- A key that moves the character or zooms the camera waits for a second press, with the prompt and its keyboard kept: "Turn it again" for the
+	-- wheel. The same key within CONFIRM_GAP seconds of the last time it came (a held key's repeat, another notch of one scroll) is not the second
+	-- press, and waits on. Any other key hides the prompt first, whatever follows, so the keyboard is never kept by an error. Nothing but reads runs
+	-- before the hide.
 	local function Take(self, key)
 		if key ~= "ESCAPE" then
 			local ok, chord, does = pcall(function()
 				local pressed = Chord(key)
 				return pressed, Moves(pressed)
 			end)
-			if ok and does and S.confirm ~= chord then
-				S.confirm = chord
-				text:SetText(PROMPT_MOVES:format(KeyText(chord), does))
-				return
+			if ok and does then
+				local now = GetTime()
+				if S.confirm ~= chord then
+					S.confirm, S.confirmAt = chord, now
+					local verb = type(key) == "string" and key:find("^MOUSEWHEEL") and "Turn" or "Press"
+					text:SetText(PROMPT_MOVES:format(KeyText(chord), does, verb) .. Now())
+					return
+				elseif ns.Finite(now) and ns.Finite(S.confirmAt) and now - S.confirmAt < CONFIRM_GAP then
+					S.confirmAt = now
+					return
+				end
 			end
 		end
 		self:Hide()

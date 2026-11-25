@@ -17,12 +17,13 @@ local _, ns = ...
 -- (with Shift to the top or the bottom) and a cross that takes it out; while the list is empty and the other slot's is not, Copy the Top (or Bottom)
 -- trinket list under its empty line, which puts the other list here in its order with each Delay and Stop (Q.Copy, 0.5.37; /flatui queue copy top or
 -- bottom does the same); the trinkets in the bags and the two worn not in the list (Q.Candidates), two lines of eleven, a click adding one at the end
--- and a Shift-click first; and a foot line. With a chat box open, a Shift-click (the Chat link key, IsModifiedClick "CHATLINK") on a row's icon, the
+-- and a Shift-click first; and a foot line, which for SAY_FOR seconds also says what Copy and Queue now did, before the line of a fight (0.5.39;
+-- the Copy tooltip names the list and the command for the slot shown). With a chat box open, a Shift-click (the Chat link key, IsModifiedClick "CHATLINK") on a row's icon, the
 -- worn trinket's icon or a cell of the bags puts the trinket's link in the chat line and does nothing else (U.Linked, ChatFrameUtil.GetActiveWindow
--- and InsertLink, out of a fight, as GearSearch.lua links; 0.5.37). A trinket dropped on the window (OnReceiveDrag, or the click that ends the drag,
--- GetCursorInfo, :36258) goes in the list shown; one lifted from a bag or a worn slot, locked while it rides the cursor (C_Cursor.GetCursorItem,
--- :10071, and C_Item.IsLocked, :17097), goes back there (ClearCursor, :34956), as GearButton.lua's Lifted; any other item
--- stays on the cursor and the foot says only trinkets go in.
+-- and InsertLink, as GearSearch.lua links; 0.5.37; in a fight too since 0.5.39, as Flat UI's bags link). A trinket dropped on the window
+-- (OnReceiveDrag, or the click that ends the drag, GetCursorInfo, :36258) goes in the list shown; one lifted from a bag or a worn slot, locked
+-- while it rides the cursor (C_Cursor.GetCursorItem, :10071, and C_Item.IsLocked, :17097), goes back there (ClearCursor, :34956), as
+-- GearButton.lua's Lifted; any other item stays on the cursor and the foot says only trinkets go in.
 -- Frame, as GearWindow.lua's Make, Open and Raise (GearWindow.lua:3149-3338): CreateFrame on UIParent, in ns.Own, made the first time it opens and
 -- only out of combat (an opening asked for in a fight waits for its end once, ns.OutOfCombat, Core.lua:2323-2329); MEDIUM strata, or DIALOG while
 -- the options window shows (ns.PanelShown, Panel.lua:3300); toplevel and raised as it opens and when asked again, kept on the screen, moved by Flat
@@ -33,9 +34,11 @@ local _, ns = ...
 -- GearWindow.lua's OnShow and OnHide (GearWindow.lua:3254-3274); neither while /flatui move hides and shows it (MoversMode's Holding), nor as
 -- the module or the part goes off (U.Close(true)). Switching Top trinket and Bottom trinket shows the window no new time, so it plays nothing.
 -- Placing: its top left corner at its spot in the movers (ns.MoverSpot, Movers.lua:982; entry FlatUITrinkets), else where it was let go this
--- session, else 680 and -120 from the screen's top left, the Gear comparison window's corner; a drag of its title bar (StartMoving and
--- StopMovingOrSizing, SetUserPlaced false) saves where it is let go as its spot (ns.MoverKit.Commit, Movers.lua:1868), as GearWindow.lua's
--- DragStart and Dropped (GearWindow.lua:2168-2201). Movers asks ns.TrinketWindowShown whether it has a handle and calls ns.TrinketWindowMoved.
+-- session, else where it starts (0.5.39; U.Start, also the entry's start, ns.TrinketWindowStart): right of the Gear comparison window while that
+-- shows (or of its item finder docked at its right; its box while /flatui move is open), or 28 px right of and under its corner on a screen with no
+-- room there, else 680 and -120 from the screen's top left, the Gear comparison window's own corner. Each opening places it again; a drag of its
+-- title bar (StartMoving and StopMovingOrSizing, SetUserPlaced false) saves where it is let go as its spot (ns.MoverKit.Commit, Movers.lua:1868),
+-- as GearWindow.lua's DragStart and Dropped (GearWindow.lua:2168-2201). Movers asks ns.TrinketWindowShown whether it has a handle and calls ns.TrinketWindowMoved.
 -- The look is the Windows page's, as GearWindow.lua's PaintLook (GearWindow.lua:680-733): the general backdrop at Window opacity with a thin border
 -- (ns.Outline, SetOutlineArea "windows", Core.lua:2081, 2134), boxes in Button and slot colour, the chosen word, the hover and the Auto queue tick in
 -- the Highlight colour, icons cut by Icon crop, rules at SEPARATOR; GameFontHighlight for the title and the names, GameFontHighlightSmall for the
@@ -102,7 +105,7 @@ local T = {
 		up = { "Move up", "Shift-click: to the top of the list." },
 		down = { "Move down", "Shift-click: to the bottom of the list." },
 		cross = { "Remove", "Takes this trinket out of the list." },
-		copy = { "Copy the other list", "Puts the other slot's trinkets here in the same order, with their Delay and Stop. /flatui queue copy top or bottom does the same." },
+		copy = { "Copy the other list", "Puts the %s list here in the same order, with each Delay and Stop. /flatui queue copy %s does the same." },
 		more = { "%d more", "Click for the next ones." },
 		top = { "Top trinket", "The list of the top trinket slot." },
 		bottom = { "Bottom trinket", "The list of the bottom trinket slot." },
@@ -117,6 +120,11 @@ local T = {
 	STOP_TIP = "Stop: the queue does not take it off while you wear it.",
 	GONE_TIP = "Not in your bags.",
 	LEVEL_TIP = "Needs level %d.",
+	-- The foot after Copy and Queue now (0.5.39), for SAY_FOR seconds.
+	COPIED_FOOT = "Took %d from the %s list, with each Delay and Stop.",
+	COPY_NONE_FOOT = "Nothing to copy: each of those trinkets is here already, or the list is full.",
+	NOW_FOOT = "Queue now: the %s list looks again now.",
+	NOW_FOOT_FIGHT = "Queue now: the %s list looks again as the fight ends.",
 }
 
 -- The window's state (W), its making (U) and its painting (Z), in tables of their own to keep the file under the client's count of locals, as
@@ -528,10 +536,11 @@ function U.Drop()
 end
 
 -- With a chat box open, a Shift-click (the game's Chat link key, IsModifiedClick "CHATLINK") puts the trinket's link in the chat line and does
--- nothing else, as the item finder links (GearSearch.lua's LinkInChat, ChatFrameUtil.InsertLink): true then. Out of a fight only, as there.
+-- nothing else, as the item finder links (GearSearch.lua's LinkInChat, ChatFrameUtil.InsertLink): true then. In a fight too, as Flat UI's bags
+-- link (BagsItems.lua): InsertLink is not protected, and the click then never reaches Wear or Add (0.5.39).
 function U.Linked(id)
 	local modified = Fn(_G, "IsModifiedClick")
-	if not Finite(id) or not modified or Fighting() then
+	if not Finite(id) or not modified then
 		return false
 	end
 	local okKey, key = pcall(modified, "CHATLINK")
@@ -721,7 +730,9 @@ function U.MakeSlot(frame)
 	local now, label = U.Word(frame, T.NOW, 66)
 	now:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -(Y.SLOT - 2))
 	U.Click(now, function()
-		Q().Now(W.n)
+		local q = Q()
+		q.Now(W.n)
+		W.message, W.messageAt = (q.Fighting() and T.NOW_FOOT_FIGHT or T.NOW_FOOT):format(T.WORDS[W.n]), GetTime()
 	end)
 	U.Says(now, "now")
 	W.slot = { icon = icon, name = name, state = state, next = nextLine, now = now, nowLabel = label }
@@ -911,10 +922,16 @@ function U.MakeFoot(frame)
 	W.copy:SetPoint("TOP", frame, "TOPLEFT", SIZE.W / 2, -(Y.ROWS + 5 * L.ROW))
 	W.copy:Hide()
 	U.Click(W.copy, function()
-		Q().Copy(W.n)
+		local added = Q().Copy(W.n)
+		local other = W.n == "top" and "bottom" or "top"
+		W.message, W.messageAt = added > 0 and T.COPIED_FOOT:format(added, T.WORDS[other]) or T.COPY_NONE_FOOT, GetTime()
 		Z.Untip(W.copy)
 	end)
-	U.Says(W.copy, "copy")
+	-- Its tooltip names the list it copies and the command for this slot.
+	U.Tip(W.copy, function()
+		local tip = T.TIPS.copy
+		Z.Say(W.copy, tip[1], { tip[2]:format(T.WORDS[W.n == "top" and "bottom" or "top"], W.n) })
+	end)
 	W.thumb = U.Texture(frame, "OVERLAY")
 	W.thumb:SetWidth(2)
 end
@@ -934,6 +951,63 @@ function U.Rect(frame)
 	return left * k, bottom * k, width * k, height * k
 end
 
+-- A frame of Flat UI's own by its name (the Gear comparison window, FlatUIGear, and its item finder, FlatUIGearSearch), while it shows; nil else.
+function U.OwnShown(name)
+	local frame = _G[name]
+	if type(frame) ~= "table" or IsSecret(frame) or not ns.Own[frame] then
+		return nil
+	end
+	local ok, shown = pcall(frame.IsShown, frame)
+	return ok and shown == true and frame or nil
+end
+
+-- Where the window starts while no spot is saved for it (0.5.39; Movers.lua's start, ns.TrinketWindowStart, which ns.MoverSpot asks and U.Place
+-- uses), as the offsets of its top left corner from the screen's: with the Gear comparison window shown, or its box while /flatui move is open,
+-- right of it (or of the item finder docked at its right, within DOCKED px) at its top, GAP px off, while the screen has room for the whole window
+-- there, else STEP px right of and under its corner, so both title bars show; else x and y, the entry's corner.
+local START = { GAP = 6, STEP = 28, DOCKED = 12 }
+function U.Start(x, y)
+	local okW, screen = pcall(UIParent.GetWidth, UIParent)
+	local okH, tall = pcall(UIParent.GetHeight, UIParent)
+	if not (okW and okH and Finite(screen) and Finite(tall)) then
+		return x, y
+	end
+	local left, top, right
+	local gear = U.OwnShown("FlatUIGear")
+	if gear then
+		local gl, gb, gw, gh = U.Rect(gear)
+		if gl then
+			left, top, right = gl, gb + gh, gl + gw
+			local finder = U.OwnShown("FlatUIGearSearch")
+			local fl, _, fw = nil, nil, nil
+			if finder then
+				fl, _, fw = U.Rect(finder)
+			end
+			if fl and fl >= right - 1 and fl <= right + START.DOCKED then
+				right = fl + fw
+			end
+		end
+	else
+		local kit = ns.MoverKit
+		local info = type(kit) == "table" and type(kit.BY_NAME) == "table" and kit.BY_NAME.FlatUIGear or nil
+		local open = info and type(kit.IsOpen) == "function" and kit.IsOpen() == true
+		if open and type(kit.BoxSize) == "function" and type(ns.MoverSpot) == "function" then
+			local ok, gx, gy = pcall(ns.MoverSpot, "FlatUIGear", "TOPLEFT")
+			local okSize, gw = pcall(kit.BoxSize, info)
+			if ok and okSize and Finite(gx) and Finite(gy) and Finite(gw) then
+				left, top, right = gx, gy, gx + gw
+			end
+		end
+	end
+	if not left then
+		return x, y
+	end
+	if right + START.GAP + SIZE.W <= screen then
+		return right + START.GAP, top - tall
+	end
+	return left + START.STEP, top - START.STEP - tall
+end
+
 -- Puts the window at its spot in the movers, else where it was let go this session, else where its entry starts. Not while it is dragged.
 function U.Place()
 	local frame = W.frame
@@ -951,7 +1025,8 @@ function U.Place()
 		x, y, anchor = W.dropped[1], W.dropped[2], "BOTTOMLEFT"
 	end
 	if not x then
-		x, y, anchor = BOX.x, BOX.y, "TOPLEFT"
+		x, y = U.Start(BOX.x, BOX.y)
+		anchor = "TOPLEFT"
 	end
 	local key = ("%s:%.2f:%.2f"):format(anchor, x, y)
 	if W.placed == key then
@@ -1244,12 +1319,13 @@ end
 function Z.Foot()
 	local q = Q()
 	local text = T.FOOT
+	-- A line of what was just done comes before the fight's line (0.5.39), so Queue now says in a fight when it acts.
 	if q.Paused() then
 		text = T.FOOT_PAUSED
-	elseif q.Fighting() then
-		text = T.FOOT_FIGHT
 	elseif W.message and GetTime() - W.messageAt < SAY_FOR then
 		text = W.message
+	elseif q.Fighting() then
+		text = T.FOOT_FIGHT
 	end
 	W.foot:SetText(text)
 end
@@ -1536,6 +1612,15 @@ end
 -- The window has a handle in the movers while it may show, open or not, as GearWindow.lua's GearWindowShown.
 function ns.TrinketWindowShown()
 	return Allowed()
+end
+
+-- Where the window and its box in the movers start while no spot is saved (Movers.lua's start): beside the Gear comparison window (U.Start).
+function ns.TrinketWindowStart(x, y)
+	local ok, sx, sy = pcall(U.Start, x, y)
+	if ok and Finite(sx) and Finite(sy) then
+		return sx, sy
+	end
+	return x, y
 end
 
 -- The movers set or put back the window's spot: it hangs from it now.

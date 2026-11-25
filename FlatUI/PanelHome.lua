@@ -4,9 +4,12 @@ local _, ns = ...
 -- with their switches, and the changes that need a reload. A recent change says what it was, from the value before to the value now ("Off to On",
 -- "300 ms to 450 ms"), in the words of the reset arrow's tooltip (ns.PanelTrust.ValueText), and its Undo names the value it puts back. A click on a
 -- recent change or on a line of Needs a reload opens the tab of its setting, scrolls to the row and flashes it, as a search result does
--- (host.Arrive). Also the record of the changes made in the window, which Panel.lua feeds; Ctrl+Z on any page puts back the newest (Home.UndoNewest),
--- and a whole Reset page in one press. A change whose value was taken away since (Reset profile, Copy from, an import, setup's Finish) is left off the
--- list until the value comes back, and a renamed profile keeps its changes (Home.Renamed).
+-- (host.Arrive). A batch (a Reset page, the reload notice's Undo) is one line, "Reset page on Cast bars > Size" and its count, with one Undo that
+-- puts the whole batch back, and counts as one line of the MAX kept (Home.Lines). Every Undo says in the strip what it did, as Ctrl+Z does. Also the
+-- record of the changes made in the window, which Panel.lua feeds; Ctrl+Z on any page puts back the newest line (Home.UndoNewest), and Ctrl+Y or
+-- Ctrl+Shift+Z makes again what Undo or Ctrl+Z took back, a batch in one press, until a new change is made (Home.Redo). A change whose value was
+-- taken away since (Reset profile, Copy from, an import, setup's Finish) is left off the list until the value comes back, and a renamed profile
+-- keeps its changes (Home.Renamed).
 
 local Home = {}
 ns.PanelHome = Home
@@ -22,6 +25,8 @@ local TILE_H, CARD_H = 64, 140
 -- The record --------------------------------------------------------------------------------------------
 
 local log = {}
+-- What Undo and Ctrl+Z took back, newest last, for Ctrl+Y: groups { entries, batch }, a group being one Undo (one change, or a whole batch).
+local undone = {}
 
 -- The changes that need a reload, as ns.ReloadLines (Core.lua) gives them from the values at login, so a change made before the window was opened,
 -- in setup, by a profile switch or a slash command, is listed too. Entries { label, field, path, value, was }, was being the value at login.
@@ -59,14 +64,33 @@ local function Stands(entry)
 	return Same(now, entry.new)
 end
 
+-- The record keeps MAX lines of Recent changes: a batch counts as one, and its changes go together.
+local function Trim()
+	local count, last = 0, nil
+	for index, entry in ipairs(log) do
+		if not entry.batch or entry.batch ~= last then
+			count = count + 1
+			if count > MAX then
+				for at = #log, index, -1 do
+					log[at] = nil
+				end
+				return
+			end
+		end
+		last = entry.batch
+	end
+end
+
 -- A change made in the window: the setting, the profile it was saved in, the value it had and the value it has. A setting has one line: a new change
 -- to it replaces the line and keeps the first value, so a slider that moves 20 times is one line, and a change back to the first value takes the line
 -- away. A line whose value was taken away meanwhile (Stands) is replaced without its first value. A change of a batch (Reset page: { label }) is a line
--- of its own, merged with nothing, so the line of an earlier change of the setting waits under it, hidden while the reset stands (Log).
+-- of its own, merged with nothing, so the line of an earlier change of the setting waits under it, hidden while the reset stands (Log). The record
+-- keeps MAX lines (Trim). A new change ends what Ctrl+Y can do again.
 function Home.Noted(item, before, after, batch)
 	if type(item) ~= "table" or not item.path or before == after then
 		return
 	end
+	undone = {}
 	local where = Where(item)
 	if type(batch) == "table" then
 		table.insert(log, 1, { item = item, profile = where, old = before, new = after, batch = batch })
@@ -84,9 +108,7 @@ function Home.Noted(item, before, after, batch)
 			table.insert(log, 1, { item = item, profile = where, old = before, new = after })
 		end
 	end
-	while #log > MAX do
-		table.remove(log)
-	end
+	Trim()
 end
 
 -- The changes made in the profile in use and in the window, newest first. A change made in another profile is not listed, nor one whose value no
@@ -102,17 +124,48 @@ function Home.Log()
 	return list
 end
 
--- A renamed profile keeps its changes (ns.RenameProfile, Core.lua).
+-- The lines of Recent changes: Log with each run of the changes of one batch (a Reset page, the reload notice's Undo) folded into one line, newest
+-- first. A line is { entry (its first change, whose row a click opens), entries, batch }.
+function Home.Lines(list)
+	local lines = {}
+	for _, entry in ipairs(list or Home.Log()) do
+		local last = lines[#lines]
+		if entry.batch and last and last.batch == entry.batch then
+			last.entries[#last.entries + 1] = entry
+		else
+			lines[#lines + 1] = { entry = entry, entries = { entry }, batch = entry.batch }
+		end
+	end
+	return lines
+end
+
+-- A renamed profile keeps its changes (ns.RenameProfile, Core.lua), and what Ctrl+Y can do again.
 function Home.Renamed(old, new)
 	for _, entry in ipairs(log) do
 		if entry.profile == old then
 			entry.profile = new
 		end
 	end
+	for _, group in ipairs(undone) do
+		for _, entry in ipairs(group.entries) do
+			if entry.profile == old then
+				entry.profile = new
+			end
+		end
+	end
 end
 
--- Puts a setting back to the value it had before the change.
-function Home.Undo(entry)
+-- The words of a setting and of a value, as the reset arrow's tooltip has them.
+local function LabelOf(entry)
+	return type(entry.item.label) == "string" and entry.item.label or "a setting"
+end
+
+local function ValueOf(entry, value)
+	return ns.PanelTrust and ns.PanelTrust.ValueText(entry.item, value) or "changed"
+end
+
+-- Takes a change out of the record and puts its setting back to the value before it.
+local function Take(entry)
 	for index, other in ipairs(log) do
 		if other == entry then
 			table.remove(log, index)
@@ -122,8 +175,44 @@ function Home.Undo(entry)
 	ns.Set(entry.item.path, entry.old)
 end
 
--- Ctrl+Z on the options pages (Panel.lua, BuildKeys): the newest change of Log goes back, as its Undo does, and each press goes one change further
--- back. A Reset page goes back whole in one press, every row it reset. Returns what the strip says.
+-- What the strip says of one change put back: "Undid Border colour: back to #000000."
+function Home.UndoText(entry)
+	local old = ValueOf(entry, entry.old)
+	if old == "changed" then
+		return ("Undid %s."):format(LabelOf(entry))
+	end
+	return ("Undid %s: back to %s."):format(LabelOf(entry), old)
+end
+
+-- Puts a setting back to the value it had before the change, and keeps the change for Ctrl+Y. Returns what the strip says.
+function Home.Undo(entry)
+	Take(entry)
+	undone[#undone + 1] = { entries = { entry } }
+	return Home.UndoText(entry)
+end
+
+-- Puts back every change of a batch that Log (or list) still shows, newest first, as one step of Ctrl+Y. Returns what the strip says: a batch of one
+-- change says it as that change's Undo does.
+function Home.UndoBatch(batch, list)
+	local taken = {}
+	for _, other in ipairs(list or Home.Log()) do
+		if other.batch == batch then
+			Take(other)
+			taken[#taken + 1] = other
+		end
+	end
+	if #taken == 0 then
+		return "Nothing to undo."
+	end
+	undone[#undone + 1] = { entries = taken, batch = batch }
+	if #taken == 1 then
+		return Home.UndoText(taken[1])
+	end
+	return ("Undid %s: %d settings back."):format(batch.label or "Reset page", #taken)
+end
+
+-- Ctrl+Z on the options pages (Panel.lua, BuildKeys): the newest line of Recent changes goes back, as its Undo does, and each press goes one line
+-- further back. A Reset page goes back whole in one press, every row it reset. Returns what the strip says.
 function Home.UndoNewest()
 	local list = Home.Log()
 	local entry = list[1]
@@ -131,22 +220,55 @@ function Home.UndoNewest()
 		return "Nothing to undo."
 	end
 	if entry.batch then
-		local batch, count = entry.batch, 0
-		for _, other in ipairs(list) do
-			if other.batch == batch then
-				Home.Undo(other)
-				count = count + 1
+		return Home.UndoBatch(entry.batch, list)
+	end
+	return Home.Undo(entry)
+end
+
+-- A change Undo took back can be made again while its setting still has the value Undo gave it, in the profile it was made in.
+local function Redoable(entry)
+	if entry.profile ~= Where(entry.item) then
+		return false
+	end
+	local ok, now = pcall(ns.Get, entry.item.path)
+	return ok and not ns.IsSecret(now) and Same(now, entry.old)
+end
+
+-- Ctrl+Y or Ctrl+Shift+Z on the options pages (Panel.lua, BuildKeys): the newest step that Undo or Ctrl+Z took back is made again, a whole batch in
+-- one press, and goes back into Recent changes where it was. A step of another profile waits for that profile; a new change ends them all (Noted).
+-- Returns what the strip says.
+function Home.Redo()
+	for index = #undone, 1, -1 do
+		local group = undone[index]
+		local redo = {}
+		for _, entry in ipairs(group.entries) do
+			if Redoable(entry) then
+				redo[#redo + 1] = entry
 			end
 		end
-		return ("Undid %s: %d setting%s back."):format(batch.label or "Reset page", count, count == 1 and "" or "s")
+		if #redo > 0 then
+			table.remove(undone, index)
+			-- Oldest first, so the record reads as it did before the Undo.
+			for at = #redo, 1, -1 do
+				local entry = redo[at]
+				ns.Set(entry.item.path, entry.new)
+				table.insert(log, 1, entry)
+			end
+			Trim()
+			if #redo == 1 then
+				local new = ValueOf(redo[1], redo[1].new)
+				if new == "changed" then
+					return ("Redid %s."):format(LabelOf(redo[1]))
+				end
+				return ("Redid %s: %s again."):format(LabelOf(redo[1]), new)
+			end
+			return ("Redid %s: %d settings again."):format(group.batch and group.batch.label or "the change", #redo)
+		elseif group.entries[1] and group.entries[1].profile == Where(group.entries[1].item) then
+			-- Its settings were changed since by something else (a slash command, setup's Finish): it cannot come back.
+			table.remove(undone, index)
+		end
 	end
-	local old = ns.PanelTrust and ns.PanelTrust.ValueText(entry.item, entry.old) or "changed"
-	local label = type(entry.item.label) == "string" and entry.item.label or "a setting"
-	Home.Undo(entry)
-	if old == "changed" then
-		return ("Undid %s."):format(label)
-	end
-	return ("Undid %s: back to %s."):format(label, old)
+	return "Nothing to redo."
 end
 
 -- A change made on Home goes into the record like the same change on the Flat UI page: with the row of Config.lua of the key.
@@ -508,18 +630,26 @@ function Home.Build(host)
 		kit.Painted(function()
 			Look.Solid(rule, "line-faint")
 		end)
+		-- Undo puts back the change, or every change of a batch line, and the strip says what it did, as Ctrl+Z does.
 		local undo = kit.Button(frame, "Undo", 70, function()
 			if line.entry then
-				Home.Undo(line.entry)
+				local text = line.batch and Home.UndoBatch(line.batch) or Home.Undo(line.entry)
+				kit.Say(text)
 				kit.Refresh()
 			end
 		end)
 		undo:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
-		-- Its tip in the strip names the value it puts back; the hover fill of kit.Button stays (HookScript on a frame of Flat UI's own).
+		-- Its tip in the strip names the value it puts back, or how many settings a batch line puts back; the hover fill of kit.Button stays (HookScript
+		-- on a frame of Flat UI's own).
 		undo:HookScript("OnEnter", function()
 			if line.entry then
+				local keys = " Ctrl+Z puts back the newest change; Ctrl+Y does it again."
+				if line.batch and line.count > 1 then
+					kit.Tip(("Puts back the %d settings %s changed."):format(line.count, line.batch.what or "this") .. keys)
+					return
+				end
 				local old = ns.PanelTrust.ValueText(line.entry.item, line.entry.old)
-				kit.Tip((old == "changed" and "Puts back the value before this change." or ("Puts back: " .. old)) .. " Ctrl+Z puts back the newest change.")
+				kit.Tip((old == "changed" and "Puts back the value before this change." or ("Puts back: " .. old)) .. keys)
 			end
 		end)
 		undo:HookScript("OnLeave", function()
@@ -615,8 +745,8 @@ function Home.Build(host)
 		for _, refresh in ipairs(refreshers) do
 			refresh()
 		end
-		-- The recent changes
-		local mine = Home.Log()
+		-- The recent changes, a batch of more than one change (a Reset page) on one line with its count and no crumb.
+		local mine = Home.Lines()
 		local total = #mine
 		local shownLines = view.all and total or math.min(total, SHOWN)
 		more:SetShown(total > SHOWN)
@@ -626,20 +756,30 @@ function Home.Build(host)
 		empty:SetPoint("TOPLEFT", recent, "TOPLEFT", 16, -(32 + (rowH - 14) / 2))
 		for index = 1, math.max(shownLines, #lines) do
 			if index <= shownLines then
-				local line, entry = Line(index), mine[index]
-				line.entry = entry
-				line.label:SetText(entry.item.label or "")
-				-- Two values that read alike (a list, a value with no words of its own) say nothing.
-				local Value = ns.PanelTrust.ValueText
-				local old, new = Value(entry.item, entry.old), Value(entry.item, entry.new)
-				line.value:SetText(old ~= new and ("%s to %s"):format(old, new) or "")
-				line.crumb:SetText(Crumb(model, entry.item))
+				local line, group = Line(index), mine[index]
+				local entry = group.entry
+				line.entry, line.batch, line.count = entry, group.batch, #group.entries
+				if group.batch and line.count > 1 then
+					-- The batch's name takes the room of the crumb it does not have.
+					line.label:SetWidth(400)
+					line.label:SetText(group.batch.label or "Reset page")
+					line.value:SetText(("%d settings"):format(line.count))
+					line.crumb:SetText("")
+				else
+					line.label:SetWidth(200)
+					line.label:SetText(entry.item.label or "")
+					-- Two values that read alike (a list, a value with no words of its own) say nothing.
+					local Value = ns.PanelTrust.ValueText
+					local old, new = Value(entry.item, entry.old), Value(entry.item, entry.new)
+					line.value:SetText(old ~= new and ("%s to %s"):format(old, new) or "")
+					line.crumb:SetText(Crumb(model, entry.item))
+				end
 				line.frame:ClearAllPoints()
 				line.frame:SetPoint("TOPLEFT", recent, "TOPLEFT", 16, -(32 + (index - 1) * rowH))
 				line.frame:SetPoint("TOPRIGHT", recent, "TOPRIGHT", -16, -(32 + (index - 1) * rowH))
 				line.frame:Show()
 			elseif lines[index] then
-				lines[index].entry = nil
+				lines[index].entry, lines[index].batch = nil, nil
 				lines[index].frame:Hide()
 			end
 		end

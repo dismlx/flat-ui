@@ -4,7 +4,9 @@ local _, ns = ...
 -- border and background, and a fade of the enemies whose threat you want. The threat core (PlateThreat.lua, ns.PlateThreat) reads the threat of each
 -- plate and says when it changes; this file draws what that state says and asks the game nothing about threat. Before the core is there every row
 -- here does nothing.
--- The ring is a frame of Flat UI's own on the health bar with an outline of its own (ns.Outline), made and anchored out of combat on a plate the game
+-- The ring is a frame of Flat UI's own on the health bar with an outline of its own (ns.Outline), Threat ring thickness screen pixels thick (2 by
+-- default, 1 to 6; its edges lie outside its frame, so a thicker ring grows outward and stays clear of an elite's border), made, anchored and given
+-- its thickness out of combat on a plate the game
 -- may protect, as the low health border is (HealthColour.lua); in a fight only its colour and visibility change, which are texture calls, and its
 -- flash and eases play: with Flash the ring when threat goes wrong (on by default) the ring flashes twice as an enemy's threat turns to threat you do
 -- not want (it turns to you, or away from you while you tank), an animation of the ring's own frame (ns.PlateRingFlash); any other ring fades in
@@ -34,7 +36,8 @@ local _, ns = ...
 local KEY = "nameplates"
 local RING, BORDER, BACK, FADE = "threat ring", "threat border", "threat background", "threat fade"
 local HOOK = "CompactUnitFrame_UpdateCenterStatusIcon"
--- The edges of the ring in screen pixels, and its gap from the health bar beyond the border thickness, which clears the 2 px border of an Elite or a Rare.
+-- The edges of the ring in screen pixels when Threat ring thickness cannot be read, and its gap from the health bar beyond the border thickness,
+-- which clears the 2 px border of an Elite or a Rare.
 local RING_PX, GAP_PX = 2, 2
 -- The flash of the ring as threat goes wrong: FLASHES times down to FLASH_LOW of its opacity and back, FLASH_SECONDS each way. RING_EASE: the
 -- seconds a ring fades in as it comes and out as it goes.
@@ -49,8 +52,8 @@ local HEALTH_HOOK = "CompactUnitFrame_UpdateHealthColor"
 local EASE_SECONDS = 0.2
 
 -- Per unit frame: levelBox (Flat UI's square level box sits beside the bar, from the layout hook), ring ({ frame, outline, right: the frame its right
--- side follows, d: its gap, shown, flash, appear and vanish: its animation groups, nil on a client without them }), want (the want of the state
--- the ring last drew), waiting (the plate waits for the end of a fight), border (the colour given to Nameplates.lua), back ({ r, g, b, a,
+-- side follows, d: its gap, px: its thickness, shown, flash, appear and vanish: its animation groups, nil on a client without them }), want (the
+-- want of the state the ring last drew), waiting (the plate waits for the end of a fight), border (the colour given to Nameplates.lua), back ({ r, g, b, a,
 -- outline: the fill given to the outline of the health bar }) and fade ({ orig: the alpha the frame had, sent: the alpha written, goal: the
 -- alpha it eases to, back: it eases back to orig and ends there }). A record is kept when the plate leaves, so its ring is made once.
 local recs = setmetatable({}, { __mode = "k" })
@@ -163,6 +166,13 @@ local function Marks()
 end
 
 -- The ring -------------------------------------------------------------------------------------------------------------------------------------------
+
+-- Threat ring thickness, in screen pixels (RING_PX when the row cannot be read). The edges of an outline lie outside its frame (ns.Outline), so a
+-- thicker ring grows outward and its inside stays at the gap.
+local function RingPx()
+	local px = Opt("threatRingPx")
+	return ns.Finite(px) and px >= 1 and math.floor(px + 0.5) or RING_PX
+end
 
 -- The ring's distance from the health bar: the general border thickness and two pixels more, in the units of the ring's own frame. That frame ignores
 -- the plate's scale (Make), so the distance stays the same on screen while the game scales the plate with distance and selection; a gap worked out
@@ -309,7 +319,8 @@ local function Make(frame, rec)
 	-- Four edges just outside the frame, on a holder that ignores the plate's scale, without a backdrop, and drawn without borders too.
 	local outline = ns.Outline(holder, holder)
 	ring.outline = outline
-	ns.SetOutlineThickness(outline, RING_PX)
+	ring.px = RingPx()
+	ns.SetOutlineThickness(outline, ring.px)
 	ns.KeepOutline(outline)
 	ns.SetOutline(outline, false, false)
 	ring.flash = ns.PlateRingFlash(holder)
@@ -321,11 +332,20 @@ local function Make(frame, rec)
 	return ring
 end
 
--- Anchors the ring again when the level box came or went or the gap changed, only out of combat.
+-- Anchors the ring again when the level box came or went or the gap changed, and gives it Threat ring thickness when that changed, only out of combat.
 local function Place(frame, rec)
 	local ring, bar = rec.ring, Bar(frame)
 	if ring == nil or bar == nil then
 		return
+	end
+	local px = RingPx()
+	if ring.px ~= px then
+		if InCombatLockdown() then
+			Wait(frame, rec)
+		else
+			ns.SetOutlineThickness(ring.outline, px)
+			ring.px = px
+		end
 	end
 	local right = rec.levelBox and Level(frame) or bar
 	if ring.right == right and ring.d ~= nil and math.abs(ring.d - Gap(ring, bar)) < 0.01 and Sane(ring, bar) then

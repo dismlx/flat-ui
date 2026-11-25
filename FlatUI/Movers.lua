@@ -39,8 +39,9 @@ local _, ns = ...
 -- Shift and a right-click on a box hides its frame, or shows it again, when the Hidden frames page has a row for it (Hide.lua, ns.HideFrames), and
 -- the box of a hidden frame says so, as does the box of a frame that hangs from one. On any other box it resets nothing and says so in chat.
 -- /flatui move in a fight (the options window's Move frames row and test mode's Move button give the same command) opens the movers as the
--- fight ends: chat says so once, and a second one in the same fight takes it back (win.waitOpen). Every chat line of the movers starts with
--- "Flat UI:" (win.Say).
+-- fight ends: chat says so once, and a second one in the same fight takes it back (win.waitOpen). Movers a fight paused open again as it
+-- ends, and /flatui move in that fight ends their session instead: they stay closed. /flatui grab in a fight opens the movers and starts the
+-- pick as the fight ends, and a second one takes it back (win.waitPick). Every chat line of the movers starts with "Flat UI:" (win.Say).
 
 local KEY = "movers"
 local TOOLTIP = "FlatUITooltip"
@@ -282,12 +283,13 @@ local LIST = {
 	{ name = "FlatUIGearButton", label = "Compare gear button", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 112, height = 20,
 		x = 485, y = -1, from = "CharacterFrame", gate = "GearButtonShown", changed = "GearButtonMoved", start = "GearButtonStart" },
 	-- The Trinket queue window (TrinketQueueWindow.lua), which shows while /flatui queue, its row or a trinket slot's square has it open: its top left
-	-- corner is the top left corner of the box, 320 by 404, its fixed size. It starts at the Gear comparison window's corner, right of the Character
-	-- window (680, -120, as FlatUIGear above); both raise when they open, and a drag of either title bar gives it a spot of its own. It has a handle
-	-- while the trinket queue runs and its window part is not stopped, open or not (gate: ns.TrinketWindowShown), and a spot saved or put back is
-	-- told to the window (changed: ns.TrinketWindowMoved).
+	-- corner is the top left corner of the box, 320 by 404, its fixed size. With no spot saved it starts right of the Gear comparison window while
+	-- that shows, and its box right of that window's box while the movers are open, or 28 px right of and under that corner on a screen with no room
+	-- there (start: ns.TrinketWindowStart, 0.5.39), else at the Gear comparison window's corner, right of the Character window (680, -120, as
+	-- FlatUIGear above); a drag of its title bar gives it a spot of its own. It has a handle while the trinket queue runs and its window part is not
+	-- stopped, open or not (gate: ns.TrinketWindowShown), and a spot saved or put back is told to the window (changed: ns.TrinketWindowMoved).
 	{ name = "FlatUITrinkets", label = "Trinket queue", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 320, height = 404,
-		x = 680, y = -120, gate = "TrinketWindowShown", changed = "TrinketWindowMoved" },
+		x = 680, y = -120, gate = "TrinketWindowShown", changed = "TrinketWindowMoved", start = "TrinketWindowStart" },
 	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
 	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
@@ -449,7 +451,8 @@ local resettingAll, systemReset, barsLeft = false, false, false
 -- last: the last press on a window that started no drag.
 local win = { grips = {}, corners = {}, art = {}, clocks = {}, levels = {}, why = {}, resizes = {}, heard = false, barUsed = false }
 -- Every chat line of the movers starts with "Flat UI:", as the rest of the addon's do. waitOpen: the source of a /flatui move given in a fight,
--- which opens the movers as the fight ends (Open; a second one in the same fight takes it back).
+-- which opens the movers as the fight ends (Open; a second one in the same fight takes it back). waitPick: a /flatui grab given in a fight,
+-- which opens them and starts the pick as the fight ends.
 function win.Say(text)
 	print("Flat UI: " .. tostring(text))
 end
@@ -4498,7 +4501,14 @@ function Open(source)
 		return
 	end
 	if InCombatLockdown() then
-		-- In a fight the movers wait for its end; a second call in the same fight takes that back.
+		-- In a fight the movers wait for its end; a second call in the same fight takes that back. Movers that a fight
+		-- paused would open again as it ends, so a call then ends that session and they stay closed.
+		if ns.MoversMode.Resume() ~= nil then
+			ns.MoversMode.Abandon()
+			win.waitOpen, win.waitPick = nil, nil
+			win.Say("/flatui move stays closed after the fight.")
+			return
+		end
 		if win.waitOpen then
 			win.waitOpen = nil
 			win.Say("/flatui move will not open after the fight.")
@@ -5002,6 +5012,16 @@ ns.Register(KEY, {
 					win.Say(HOW)
 				end
 			end
+			-- A /flatui grab given in the fight opens the movers now and starts the pick.
+			if win.waitPick then
+				win.waitPick = nil
+				if not Unavailable() then
+					Open("slash")
+					if open and not pick.on then
+						StartPick()
+					end
+				end
+			end
 			if win.waiting then
 				win.waiting = false
 				Grips()
@@ -5033,6 +5053,17 @@ ns.Register(KEY, {
 			local why = Unavailable()
 			if why then
 				win.Say(why)
+				return
+			end
+			if InCombatLockdown() then
+				-- The pick waits for the end of the fight; a second one in the same fight takes it back.
+				if win.waitPick then
+					win.waitPick = nil
+					win.Say("/flatui grab will not start after the fight.")
+				else
+					win.waitPick = true
+					win.Say("/flatui grab starts when the fight ends.")
+				end
 				return
 			end
 			Open("slash")

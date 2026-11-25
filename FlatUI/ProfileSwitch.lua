@@ -3,7 +3,8 @@ local ADDON_NAME, ns = ...
 -- Switch automatically: a profile for each kind of place, chosen on the Profiles page. The rules belong to the character, so they are saved in
 -- FlatUIDB.profileRules under "Name - Realm" beside FlatUIDB.profileOf, outside every profile and outside the text form of a profile.
 -- A rule with no profile is No change, which is what every character has until a rule is chosen. A rule picked for the kind of place the character
--- is in now asks whether to switch now (Switch now or Later); otherwise the switch waits for the next change of place.
+-- is in now asks whether to switch now (Switch now or Later); otherwise the switch waits for the next change of place. A switch due in a fight
+-- waits for its end, unless a profile is picked by hand meanwhile (Switch.Drop).
 
 local Switch = {}
 ns.ProfileSwitch = Switch
@@ -147,6 +148,11 @@ function Switch.Entered(initialLogin, reloadingUi)
 		last = kind
 		Run()
 	end
+end
+
+-- A profile picked by hand in a fight (Panel.lua's KeepProfile) wins over the rule's switch that waits for the fight's end.
+function Switch.Drop()
+	pending = false
 end
 
 function Switch.CombatEnded()

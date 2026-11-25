@@ -1,11 +1,16 @@
 local _, ns = ...
 
--- Overpower over the enemy that dodged you, a part of Nameplates.lua (ns.PlateExtra), for a warrior who knows Overpower: when an enemy dodges an
--- attack of yours, Overpower's own icon (C_Spell.GetSpellTexture, SpellDocumentation.lua:595) shows above that enemy's name, centred, with Flat UI's
--- thin border (ns.Outline) at Overpower icon size: over the row of the enemy's debuffs while the game shows it (the icon stands on a guide frame of
+-- Overpower over the enemy that dodged you, a part of Nameplates.lua (ns.PlateExtra), for a warrior who knows Overpower, and Mongoose Bite for a
+-- hunter who knows it: the game lets a hunter use Mongoose Bite for 5 seconds after an enemy dodges them, the rule of Overpower (ProcData.lua's
+-- HUNTER row: reactive, lights 1495, 14269, 14270, 14271, 5 seconds, triggered by usable, the shape of the WARRIOR row of Overpower), so a
+-- hunter's spell is read the same way; below, Overpower names the spell of your class (Ranks, from UnitClassBase of the player, plain). When an
+-- enemy dodges an attack of yours, the spell's own icon (C_Spell.GetSpellTexture, SpellDocumentation.lua:595) shows above that enemy's name,
+-- centred, with Flat UI's thin border (ns.Outline) at Overpower icon size, moved by Overpower icon horizontal and vertical offset: over the row of
+-- the enemy's debuffs while the game shows it (the icon stands on a guide frame of
 -- Flat UI's own whose top is the row's top, so it rises as the row wraps to a second line, in a fight too, and shows the debuffs under it), else
--- over the name, and over the bar while the name is inside it. A row whose icons Nameplates.lua fades to nothing (Show auras Only on the target,
--- on another plate; ns.PlateAurasSeen) counts as hidden, and the guides stand anew as the target changes. With Threat value position at Above the
+-- over the name, and over the bar while the name is inside it. A row whose icons Nameplates.lua fades to nothing (Show auras Only on the target or
+-- On the target and focus, on another plate; ns.PlateAurasSeen) counts as hidden, and the guides stand anew as the target or the focus changes.
+-- With Threat value position at Above the
 -- icon stands over the threat value, which stands on the guide (ns.PlateOverpowerPlace places it again as the value moves). ns.PlateDebuffTop
 -- gives the same guide to PlateQuest.lua's mark and PlateThreatText.lua's value at Above, and ns.PlateOverpowerIcon the icon to that mark, which
 -- stands over it while it shows (the mark is placed again as the icon pops in and once it has gone).
@@ -54,30 +59,32 @@ if type(EXTRA) ~= "table" then
 	return
 end
 
--- RANKS: Overpower's ranks, the lowest first (ProcData.lua's WARRIOR row). WINDOW: the window when that row gives none. MATCH: the seconds between a
--- dodge and Overpower turning usable that tie them. LOOK: the seconds between two looks while the icon shows. GAP: nameplate units between the icon
--- and the name. LEVEL: frame levels above the plate's unit frame, over its auras. DIM: the opacity of a grey icon. PULSE_LOW and PULSE_SECONDS: the
--- pulse of this file's own, from full to PULSE_LOW and back, PULSE_SECONDS each way. CROP: the share of each edge of the icon cut off, as the
--- aura icons of the plates have it. ICON: Overpower's icon file, for a client that does not give it. POP_FROM, POP_IN and POP_SCALE: the pop as the
--- icon lights (a fade in over POP_IN seconds and a shrink from POP_FROM of its size over POP_SCALE); RENEW_FROM and RENEW_SECONDS: the smaller pop
--- as a new dodge renews the window (from RENEW_FROM of its size back to whole); FADE_OUT: the seconds it fades as its window runs out.
+-- RANKS: the ranks of the spell of each class, the lowest first (ProcData.lua's WARRIOR row of Overpower and HUNTER row of Mongoose Bite); ICONS:
+-- each spell's icon file, for a client that does not give it; NAMES: each spell's name, for /flatui status. WINDOW: the window when that row gives
+-- none. MATCH: the seconds between a dodge and Overpower turning usable that tie them. LOOK: the seconds between two looks while the icon shows.
+-- GAP: nameplate units between the icon and the name. LEVEL: frame levels above the plate's unit frame, over its auras. DIM: the opacity of a grey
+-- icon. PULSE_LOW and PULSE_SECONDS: the pulse of this file's own, from full to PULSE_LOW and back, PULSE_SECONDS each way. CROP: the share of each
+-- edge of the icon cut off, as the aura icons of the plates have it. POP_FROM, POP_IN and POP_SCALE: the pop as the icon lights (a fade in over
+-- POP_IN seconds and a shrink from POP_FROM of its size over POP_SCALE); RENEW_FROM and RENEW_SECONDS: the smaller pop as a new dodge renews the
+-- window (from RENEW_FROM of its size back to whole); FADE_OUT: the seconds it fades as its window runs out.
 local K = {
-	RANKS = { 7384, 7887, 11584, 11585 },
+	RANKS = { WARRIOR = { 7384, 7887, 11584, 11585 }, HUNTER = { 1495, 14269, 14270, 14271 } },
+	ICONS = { WARRIOR = "Interface\\Icons\\Ability_MeleeDamage", HUNTER = "Interface\\Icons\\Ability_Hunter_SwiftStrike" },
+	NAMES = { WARRIOR = "Overpower", HUNTER = "Mongoose Bite" },
 	WINDOW = 5, MATCH = 0.5, LOOK = 0.1, GAP = 2, LEVEL = 20, DIM = 0.45, PULSE_LOW = 0.55, PULSE_SECONDS = 1.2, CROP = 0.08,
-	AUTO_ATTACK = 6603, SIZE = 26, ICON = "Interface\\Icons\\Ability_MeleeDamage", POP_FROM = 1.3, POP_IN = 0.12, POP_SCALE = 0.15, FADE_OUT = 0.25,
+	AUTO_ATTACK = 6603, SIZE = 26, POP_FROM = 1.3, POP_IN = 0.12, POP_SCALE = 0.15, FADE_OUT = 0.25,
 	RENEW_FROM = 1.15, RENEW_SECONDS = 0.15,
 	ACTIVE = { "UNIT_COMBAT", "SPELL_UPDATE_USABLE", "ACTION_USABLE_CHANGED", "SPELL_UPDATE_COOLDOWN", "PLAYER_ENTER_COMBAT", "PLAYER_LEAVE_COMBAT",
 		"NAME_PLATE_UNIT_REMOVED" },
 }
+-- RANK[spellID]: true for each rank of the spell of the player's class, filled once the game names the class (Ranks).
 local RANK = {}
-for _, id in ipairs(K.RANKS) do
-	RANK[id] = true
-end
 
 -- recs[unitFrame]: holder (the icon's frame), icon (its texture), outline, swipe (its Cooldown frame, false when the client gave none), at (the dodge
 -- the swipe runs from), glow (the soft look of ProcGlow.lua) or pulse (this file's own), to and size (what it was anchored to and sized at), file
--- (the texture it shows), shown, usable (the look it shows), glowing, pop, renew and fadeOut (its animation groups, nil on a client without them),
--- owner (the plate's unit frame), waiting (for the end of a fight). Kept when the plate leaves, so a plate's icon is made once.
+-- (the texture it shows), ox and oy (the offsets it was anchored with), shown, usable (the look it shows), glowing, pop, renew and fadeOut (its
+-- animation groups, nil on a client without them), owner (the plate's unit frame), waiting (for the end of a fight). Kept when the plate leaves,
+-- so a plate's icon is made once.
 local recs = setmetatable({}, { __mode = "k" })
 -- guides[unitFrame]: { frame (a frame of Flat UI's own on the plate, the icon's anchor), top and bottom (the regions its corners are on) }. Kept when
 -- the plate leaves, as the icons are.
@@ -86,11 +93,11 @@ local guides = setmetatable({}, { __mode = "k" })
 -- unit, at, target }.
 local lit
 local pending = {}
--- S: frame (the file's own, false when it could not be made), on (the events are heard), warrior (true or false once the game said), rank (the rank
--- known, false for none, nil before it is asked), texture, state (the last usable state: usable, power or blocked), turned (when Overpower last turned
--- usable), ready (its cooldown is off or the global cooldown, nil when not known), attacking (auto attack on), clock (since the last look), and the
--- counts for /flatui status.
-local S = { frame = nil, on = false, warrior = nil, rank = nil, texture = nil, state = nil, turned = -math.huge, ready = nil, attacking = false,
+-- S: frame (the file's own, false when it could not be made), on (the events are heard), class (the player's class token, false for a class with no
+-- such spell, nil before the game said), rank (the rank known, false for none, nil before it is asked), texture, state (the last usable state:
+-- usable, power or blocked), turned (when the spell last turned usable), ready (its cooldown is off or the global cooldown, nil when not known),
+-- attacking (auto attack on), clock (since the last look), and the counts for /flatui status.
+local S = { frame = nil, on = false, class = nil, rank = nil, texture = nil, state = nil, turned = -math.huge, ready = nil, attacking = false,
 	clock = 0, dodges = 0, mine = 0, waited = 0 }
 local Sync, Draw, Prepare, Look
 
@@ -123,24 +130,32 @@ local function Now()
 	return type(now) == "number" and now or 0
 end
 
--- The player's class, read once a plain answer comes (UnitClassBase, plain for the player).
-local function Warrior()
-	if S.warrior == nil then
+-- The ranks of the spell of the player's class (Overpower for a warrior, Mongoose Bite for a hunter), or nil for any other class; the class is read
+-- once a plain answer comes (UnitClassBase, plain for the player).
+local function Ranks()
+	if S.class == nil then
 		local token = Ask(UnitClassBase, "player")
 		if type(token) == "string" then
-			S.warrior = token == "WARRIOR"
+			S.class = K.RANKS[token] and token or false
+			for _, id in ipairs(K.RANKS[token] or {}) do
+				RANK[id] = true
+			end
 		end
 	end
-	return S.warrior == true
+	return S.class and K.RANKS[S.class] or nil
 end
 
--- The highest rank of Overpower the player knows, or nil; asked again when the spells change.
+-- The highest rank of the spell the player knows, or nil; asked again when the spells change.
 local function KnownRank()
+	local ranks = Ranks()
+	if ranks == nil then
+		return nil
+	end
 	if S.rank == nil then
 		S.rank = false
 		local book = type(C_SpellBook) == "table" and C_SpellBook or {}
-		for index = #K.RANKS, 1, -1 do
-			local id = K.RANKS[index]
+		for index = #ranks, 1, -1 do
+			local id = ranks[index]
 			local known = Ask(book.IsSpellKnownOrInSpellBook, id)
 			if known == nil then
 				known = Ask(book.IsSpellKnown, id)
@@ -151,16 +166,17 @@ local function KnownRank()
 			end
 		end
 		local file = S.rank and Ask(Spell("GetSpellTexture"), S.rank)
-		S.texture = (type(file) == "number" or type(file) == "string") and file or K.ICON
+		S.texture = (type(file) == "number" or type(file) == "string") and file or K.ICONS[S.class]
 	end
 	return S.rank or nil
 end
 
--- The time of Overpower's window: its row in ProcData.lua, else WINDOW.
+-- The time of the spell's window: its row in ProcData.lua (the row of the class whose first light is the spell's lowest rank), else WINDOW.
 local function Window()
-	local rows = type(ns.ProcData) == "table" and ns.ProcData.WARRIOR
+	local ranks = Ranks()
+	local rows = ranks and type(ns.ProcData) == "table" and ns.ProcData[S.class]
 	for _, row in ipairs(type(rows) == "table" and rows or {}) do
-		if type(row) == "table" and type(row.lights) == "table" and row.lights[1] == K.RANKS[1] and type(row.seconds) == "number" and row.seconds > 0 then
+		if type(row) == "table" and type(row.lights) == "table" and row.lights[1] == ranks[1] and type(row.seconds) == "number" and row.seconds > 0 then
 			return row.seconds
 		end
 	end
@@ -168,7 +184,7 @@ local function Window()
 end
 
 local function Wanted()
-	return ns.Enabled(KEY) and not ns.IsStopped(KEY) and not ns.PartStopped(KEY, PART) and Opt("overpower") == true and Warrior()
+	return ns.Enabled(KEY) and not ns.IsStopped(KEY) and not ns.PartStopped(KEY, PART) and Opt("overpower") == true and Ranks() ~= nil
 		and KnownRank() ~= nil
 end
 
@@ -239,7 +255,8 @@ local function AnchorOf(unitFrame)
 	return bars or name
 end
 
--- False on a plate whose auras Nameplates.lua fades to nothing (Show auras Only on the target, on another plate), as PlateThreatText.lua reads it
+-- False on a plate whose auras Nameplates.lua fades to nothing (Show auras Only on the target or On the target and focus, on another plate), as
+-- PlateThreatText.lua reads it
 -- for the rows beside the bar (ns.PlateAurasSeen); true where that cannot be asked.
 local function Seen(unitFrame)
 	if type(ns.PlateAurasSeen) ~= "function" then
@@ -488,17 +505,19 @@ local function AboveValue(unitFrame)
 	return ok and type(value) == "table" and side == "above" and Ask(value.IsShown, value) == true and value or nil
 end
 
--- Sizes and anchors the icon on the plate's guide (Guide), or on the threat value while it shows above the plate, when its size or what it stands
--- on changed or it has none yet, out of combat on a plate that may be protected.
+-- Sizes and anchors the icon on the plate's guide (Guide), or on the threat value while it shows above the plate, moved by Overpower icon horizontal
+-- and vertical offset, when its size, its offsets or what it stands on changed or it has none yet, out of combat on a plate that may be protected.
 local function Place(unitFrame, rec)
 	local to, stale = Guide(unitFrame)
 	to = AboveValue(unitFrame) or to
 	local size = Opt("overpowerSize")
 	size = type(size) == "number" and size > 0 and size or K.SIZE
+	local ox, oy = Opt("overpowerX"), Opt("overpowerY")
+	ox, oy = ns.Finite(ox) and ox or 0, ns.Finite(oy) and oy or 0
 	if stale then
 		Wait(unitFrame)
 	end
-	if to == nil or (rec.to == to and rec.size == size) then
+	if to == nil or (rec.to == to and rec.size == size and rec.ox == ox and rec.oy == oy) then
 		return
 	end
 	if Locked(unitFrame) then
@@ -507,15 +526,15 @@ local function Place(unitFrame, rec)
 	end
 	local holder = rec.holder
 	holder:SetSize(size, size)
-	if rec.to ~= to then
+	if rec.to ~= to or rec.ox ~= ox or rec.oy ~= oy then
 		holder:ClearAllPoints()
-		holder:SetPoint("BOTTOM", to, "TOP", 0, K.GAP)
+		holder:SetPoint("BOTTOM", to, "TOP", ox, K.GAP + oy)
 	end
 	local level = Ask(unitFrame.GetFrameLevel, unitFrame)
 	if type(level) == "number" then
 		pcall(holder.SetFrameLevel, holder, level + K.LEVEL)
 	end
-	rec.to, rec.size = to, size
+	rec.to, rec.size, rec.ox, rec.oy = to, size, ox, oy
 end
 
 -- An enemy plate gets its icon ready, so the first dodge of a fight shows at once. A plate whose side is not known yet gets it too.
@@ -877,7 +896,7 @@ local function OnEvent(_, event, ...)
 	end
 end
 
--- The file's own frame, made for a warrior: it hears SPELLS_CHANGED always, the rest while the row is on.
+-- The file's own frame, made for a warrior or a hunter: it hears SPELLS_CHANGED always, the rest while the row is on.
 local function Frame()
 	if S.frame == nil then
 		local ok, frame = pcall(CreateFrame, "Frame")
@@ -910,7 +929,7 @@ end
 
 -- Starts or stops the part as the row, the page, the class and the spells say, and sizes and anchors the icons again.
 function Sync()
-	if Warrior() then
+	if Ranks() then
 		Frame()
 	end
 	local want = Wanted() and S.frame and true or false
@@ -1005,13 +1024,10 @@ function ns.PlateOverpowerPlace(unitFrame)
 	end
 end
 
--- The target changed while Show auras is Only on the target: the debuff rows of the old target and the new one faded or came back, so each guide
--- stands on the row or on the name again, and the icon, the quest mark and the threat value at Above with it. Out of combat on a plate that may be
--- protected; a guide that must wait has its plate's icon wait for the end of the fight.
-ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
-	if Opt("aurasWhen") ~= "target" then
-		return
-	end
+-- The target changed while Show auras is not On every nameplate, or the focus while it is On the target and focus: the debuff rows of the old plate
+-- and the new one faded or came back, so each guide stands on the row or on the name again, and the icon, the quest mark and the threat value at
+-- Above with it. Out of combat on a plate that may be protected; a guide that must wait has its plate's icon wait for the end of the fight.
+local function GuidesMoved()
 	for unitFrame in pairs(guides) do
 		if not ns.Forbidden(unitFrame) then
 			local ok, _, stale = pcall(Guide, unitFrame)
@@ -1020,15 +1036,26 @@ ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
 			end
 		end
 	end
+end
+ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
+	if Opt("aurasWhen") ~= "always" then
+		GuidesMoved()
+	end
+end)
+ns.AddEvent(KEY, "PLAYER_FOCUS_CHANGED", function()
+	if Opt("aurasWhen") == "focus" then
+		GuidesMoved()
+	end
 end)
 
 EXTRA.status[#EXTRA.status + 1] = function()
-	if Opt("overpower") ~= true or not Warrior() then
+	if Opt("overpower") ~= true or not Ranks() then
 		return nil
 	end
+	local name = K.NAMES[S.class]
 	if not KnownRank() then
-		return "Overpower on enemy nameplates: you do not know Overpower yet."
+		return ("%s on enemy nameplates: you do not know %s yet."):format(name, name)
 	end
-	return ("Overpower on enemy nameplates: %d dodges heard, %d yours, %d plates waited for the end of a fight for their icon."):format(S.dodges,
+	return ("%s on enemy nameplates: %d dodges heard, %d yours, %d plates waited for the end of a fight for their icon."):format(name, S.dodges,
 		S.mine, S.waited)
 end

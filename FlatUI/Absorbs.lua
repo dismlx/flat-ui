@@ -21,7 +21,9 @@ local _, ns = ...
 -- button, and a later change to them waits until the game says buffs are open. A shield that goes before its time while buffs are read,
 -- and is still listed, broke: a sound plays, if chosen, and a red wash over every bar shown fades out; out of combat, a pick of the sound plays
 -- both once, on the samples when no bar shows (ns.AbsorbSoundChanged). Out of combat with no shield up, a change of a row of the look shows
--- the samples in the new look for 4 seconds, with no line in the chat (ns.AbsorbLookChanged). The target's total can have a bar of its own.
+-- the samples in the new look for 4 seconds, with no line in the chat (ns.AbsorbLookChanged). The target's total can have a bar of its own;
+-- the samples of the test and of a preview draw it too, and turning it on out of combat shows them. The time left on a bar, Flat UI's own
+-- (A.Clock) and the game's in a fight (A.TimeOptions), turns amber in its last 5 seconds.
 -- Out of a fight the totals follow the game's events; in one, a step a few times a second. While test mode is on (TestMode.lua) the sample
 -- bars of /flatui absorbs test stay, with the target's (A.Hold). Bar tooltips (On by default) shows the game's tooltip of a shield over its bar and the shields on you over
 -- the total bar, and never takes a click (A.TipShow). Every frame is Flat UI's own, and nothing of the game is changed or hooked. The helpers are
@@ -650,16 +652,43 @@ function A.Fill(row, item)
 	A.Clock(row, item)
 end
 
--- The time left on a bar, and on its strip.
+-- The time left on a bar, and on its strip; the time amber in its last A.LOW seconds, as on Your buffs and Defensives on you, else white.
+A.LOW, A.AMBER = 5, { 1, 0.7, 0.2 }
 function A.Clock(row, item)
 	if item.expires <= 0 then
 		row.time:SetText("")
+		A.Tint(row, false)
 		return
 	end
 	local left = item.expires - Now()
 	row.time:SetText(Seconds(left))
 	row.strip:SetValue(math.max(0, left))
+	A.Tint(row, left > 0 and left <= A.LOW)
 	return left
+end
+
+function A.Tint(row, low)
+	if row.low ~= low then
+		row.low = low
+		local amber = A.AMBER
+		row.time:SetTextColor(low and amber[1] or 1, low and amber[2] or 1, low and amber[3] or 1)
+	end
+end
+
+-- The options of the game's time text on its buttons in a fight: white, amber in the last A.LOW seconds, by a step curve of the time left
+-- (DurationTextBindingProperty.RemainingDuration) that the game reads itself. Made once; nil where the game has no colour curve.
+function A.TimeOptions()
+	if A.timeOptions == nil then
+		local ok, options = pcall(function()
+			local curve = C_CurveUtil.CreateColorCurve()
+			curve:SetType(Enum.LuaCurveType.Step)
+			curve:AddPoint(0, CreateColor(A.AMBER[1], A.AMBER[2], A.AMBER[3], 1))
+			curve:AddPoint(A.LOW, CreateColor(1, 1, 1, 1))
+			return { textColor = { curve = curve, property = Enum.DurationTextBindingProperty.RemainingDuration } }
+		end)
+		A.timeOptions = ok and type(options) == "table" and options or false
+	end
+	return A.timeOptions or nil
 end
 
 -- The bars of the shields of a list, newest first, and the rest hidden.
@@ -1307,7 +1336,11 @@ function A.BindText(parts, kind)
 	if want then
 		text:Show()
 		if kind == "time" then
-			button:SetDurationText(text, nil)
+			-- Amber in its last seconds where the game takes the colour, else white.
+			local options = A.TimeOptions()
+			if not (options and pcall(button.SetDurationText, button, text, options)) then
+				button:SetDurationText(text, nil)
+			end
 		else
 			button:SetSpellName(text)
 		end
@@ -1735,6 +1768,10 @@ function A.Samples(seconds)
 	if total and total.frame:IsShown() then
 		SampleTotal(total, 1525, 1855, 1855)
 	end
+	-- The target's sample too, as test mode draws it (A.Hold); A.Pass writes the real total again as the samples end.
+	if A.target and Opt("target") == true then
+		SampleTotal(A.target, 640, 2400, nil)
+	end
 	if not After(seconds, function()
 		if A.sample == token then
 			A.sample = nil
@@ -1767,9 +1804,10 @@ function A.Preview()
 end
 
 -- A row of the look changed (Show, Total bar is full at, Bar width and height, Spacing, Bars grow, Bar texture, Time strip, Amount, Time left,
--- Spell name, Colour by school, Shield colour): the page is refreshed, as without a changed function of the row (Core.lua's Changed), and out
--- of combat with no shield up the samples show in the new look for a few seconds (A.Preview). A.Pass leaves bars alone while samples show, so
--- the samples are drawn again after the refresh.
+-- Spell name, Colour by school, Shield colour), or Your target's total: the page is refreshed, as without a changed function of the row
+-- (Core.lua's Changed), which makes and shows the target's bar when it is on, and out of combat with no shield up the samples show in the new
+-- look for a few seconds (A.Preview), the target's among them, so its bar shows where it sits with nothing targeted. A.Pass leaves bars alone
+-- while samples show, so the samples are drawn again after the refresh, and writes the real totals again after them.
 function ns.AbsorbLookChanged()
 	ns.Try(KEY, A.Refresh)
 	ns.Try(KEY, A.Preview)

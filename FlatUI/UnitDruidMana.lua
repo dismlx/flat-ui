@@ -22,7 +22,8 @@ local _, ns = ...
 -- ends at the health bar, and the bar hangs from that. Its frame is a frame of the addon's own on the frame that
 -- holds the bars (PlayerFrameContentMain), so it fades with the content of the frame, which Fading fades (Fade.lua:70), and stays when Power bar
 -- makes the power bar transparent (UnitParts.lua, Power). It is made and laid out out of
--- combat, on a frame the game protects; it is no protected frame itself, so it shows and hides in a fight. It hears UNIT_POWER_UPDATE and
+-- combat, on a frame the game protects; it is no protected frame itself, so it shows and hides in a fight. While the options window is open, chat says
+-- once a fight that the bar changes when the fight ends, as the row is turned on or Mana bar height changed in one. It hears UNIT_POWER_UPDATE and
 -- UNIT_MAXPOWER of mana and UNIT_DISPLAYPOWER for the player on a frame of its own (RegisterUnitEvent, as UnitGroupMarks.lua hears the auras of
 -- one member, so no other unit's power reaches Flat UI; UnitDocumentation.lua:4234-4243, 4406-4416, 4551-4561), and UPDATE_SHAPESHIFT_FORM
 -- (SpellBookDocumentation.lua:989-994), only while it is wanted. The value glides to each new one (the interpolation ExponentialEaseOut of SetValue, never
@@ -59,6 +60,8 @@ local UNIT_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" 
 local EVENTS = { "UPDATE_SHAPESHIFT_FORM", "PLAYER_ENTERING_WORLD" }
 local LINE_SHOWN = "Unit frames: Druid mana: shown under the player frame while your power is not mana."
 local LINE_WAITS = "Unit frames: Druid mana: the bar waits for the end of the fight."
+-- What chat says, once a fight and only while the options window is open, when the bar waits for the end of the fight to be made or hung again (Tell).
+local TELL_WAITS = "Flat UI: the druid mana bar changes when the fight ends."
 local LINE_REFUSED = "Unit frames: Druid mana: the game refused the texture of the bar, so it does not show."
 
 local IsSecret = ns.IsSecret
@@ -435,6 +438,22 @@ local function Hear(d, on)
 	d.hearing = true
 end
 
+-- While the options window is open, chat says once a fight that the bar waits for its end, as Hide.lua and /flatui move say theirs, so Druid mana in
+-- forms turned on or a new Mana bar height in a fight does not look broken. A refresh in a fight with the window closed stays silent. The flag goes once
+-- the fight is over.
+local told = false
+
+local function Tell()
+	if told or type(ns.PanelShown) ~= "function" or ns.PanelShown() ~= true then
+		return
+	end
+	told = true
+	print(TELL_WAITS)
+	ns.OutOfCombat(function()
+		told = false
+	end)
+end
+
 -- The bar of the player frame: made for a druid out of combat, laid out out of combat, and shown in any form whose power is not mana.
 local function DruidMana(rec)
 	if rec.kind ~= "player" then
@@ -455,6 +474,7 @@ local function DruidMana(rec)
 		end
 		if InCombatLockdown() then
 			-- Made on a frame the game protects, which waits for the end of the fight once.
+			Tell()
 			if not rec.druidQueued then
 				rec.druidQueued = true
 				ns.OutOfCombat(function()
@@ -471,12 +491,15 @@ local function DruidMana(rec)
 	end
 	if not InCombatLockdown() then
 		Place(rec, d)
-	elseif not rec.druidPlaceQueued and not Placed(rec, d) then
-		rec.druidPlaceQueued = true
-		ns.OutOfCombat(function()
-			rec.druidPlaceQueued = nil
-			X.run(PART, DruidMana, rec)
-		end)
+	elseif not Placed(rec, d) then
+		Tell()
+		if not rec.druidPlaceQueued then
+			rec.druidPlaceQueued = true
+			ns.OutOfCombat(function()
+				rec.druidPlaceQueued = nil
+				X.run(PART, DruidMana, rec)
+			end)
+		end
 	end
 	Paint(d)
 	Hear(d, true)

@@ -14,6 +14,8 @@ local _, ns = ...
 -- The time left under or on an icon turns amber in its last 5 seconds: the game colours its text by a colour curve (B.TimeOptions), so also
 -- in a fight, and the samples do the same. Out of combat with test mode off and none of the row's buffs up, a change of Time left, Icon size,
 -- Spacing, Icon border or Bar texture shows the samples for 4 seconds in the new look, with no line in the chat (ns.OwnBuffsLookChanged).
+-- The numbers on an icon, the time left on it and the charges, follow Icon size: today's heights at the default of 40, grown and shrunk with
+-- it (B.SizeText), on the game's buttons, the icons of a read and the samples; the time under the icon keeps its height.
 
 local KEY = "ownbuffs"
 -- The name of the row among the saved spots of the movers.
@@ -420,6 +422,26 @@ local function Mouse(parts)
 	end
 end
 
+-- The numbers on an icon follow Icon size: the time left on the icon (NumberFontNormal) and the charges (NumberFontNormalSmall) at their own
+-- heights at the default Icon size of BASE, grown and shrunk with it, 8 to 24 (IconRow.lua). The time under the icon keeps its height, in the
+-- room under the row. True when the game took them.
+B.BASE = 40
+function B.SizeText(parts, size)
+	local time = ns.IconNumberHeight(ns.IconFontHeight("NumberFontNormal", 14), size, B.BASE)
+	local count = ns.IconNumberHeight(ns.IconFontHeight("NumberFontNormalSmall", 12), size, B.BASE)
+	local ok = true
+	if parts.on then
+		ok = pcall(parts.on.SetTextHeight, parts.on, time) and ok
+	end
+	if parts.count then
+		ok = pcall(parts.count.SetTextHeight, parts.count, count) and ok
+	end
+	if ok then
+		parts.textSize = size
+	end
+	return ok
+end
+
 -- Makes the parts of one button. Run by the game inside AddAuraGroup while the button is still open; nothing here may raise, and a part the
 -- game refuses is left out and named in the status.
 function B.Init(button)
@@ -498,6 +520,7 @@ function B.Init(button)
 		parts.edges = edges
 		B.PaintEdges(parts)
 	end)
+	pcall(B.SizeText, parts, Opt("size"))
 end
 
 -- Changes that wait for the game to open its buttons ------------------------------------------------------------------------------------
@@ -550,6 +573,10 @@ function B.ApplySize()
 			else
 				refused = true
 			end
+		end
+		-- The numbers on the icon grow and shrink with it; refused, they are tried again at the next change.
+		if parts.textSize ~= size then
+			B.SizeText(parts, size)
 		end
 	end
 	B.refused.size = refused
@@ -763,6 +790,7 @@ function B.Pass()
 		local item, icon = found[index], B.Icon(index)
 		if icon then
 			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { numbers = Opt("time") ~= "off", border = Opt("iconBorder") })
+			ns.IconCountdownHeight(icon, Opt("size"), B.BASE)
 			shown[#shown + 1] = icon
 		end
 	end
@@ -1062,6 +1090,7 @@ function ns.OwnBuffsTest(quiet)
 		B.sample[index] = icon
 		list[index] = icon
 		ns.IconSet(icon, ({ 135940, 135964, 136089 })[index], now, 2 * index + 2, { numbers = Opt("time") == "on", border = Opt("iconBorder") })
+		ns.IconCountdownHeight(icon, Opt("size"), B.BASE)
 		B.SampleTime(icon, now, 2 * index + 2)
 	end
 	B.Row(list)
@@ -1125,6 +1154,7 @@ function B.Held()
 	local look = { numbers = Opt("time") == "on", border = Opt("iconBorder"), flash = false, sound = false }
 	for index, icon in ipairs(list) do
 		ns.IconSampleHeld(icon, index, KEY, look)
+		ns.IconCountdownHeight(icon, Opt("size"), B.BASE)
 		B.SampleTime(icon)
 	end
 	B.Row(list)

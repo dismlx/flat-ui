@@ -19,8 +19,10 @@ local _, ns = ...
 -- motion only, never a click, so clicks go through to the party frame below (SetMouseClickEnabled false, as Your buffs does). The border of an
 -- icon takes the colour of its ability's kind (Border colour by kind), and with Flash when ready a white flash plays as its sweep ends
 -- (IconRow.lua's flash); with Show on Only while on cooldown the row waits that half second before the ready icon goes. Sound (None by
--- default, the eight sounds of Enemy cooldowns) plays as an icon's sweep ends, through ns.PlayKit, so at most once a second. The helpers are in
--- one table, P.
+-- default, the eight sounds of Enemy cooldowns) plays as an icon's sweep ends, through ns.PlayKit, so at most once a second, only for a cooldown
+-- at least Shortest cooldown that sounds long (0 by default: every one), so a short interrupt can end quietly. Picking a Sound in the options
+-- window plays it once, out of a fight (Panel.lua plays every sound row as it is picked), and /flatui test icons follows Flash when ready and
+-- Sound. The helpers are in one table, P.
 
 local KEY = "partycd"
 local SPACING = 2
@@ -474,8 +476,13 @@ function P.Sweep(a)
 end
 
 -- The sound of Sound (ns.SOUNDS, IconRow.lua) that plays as an icon's sweep ends, or nil for None. IconRow.lua plays it through ns.PlayKit, at most
--- once a second however many icons end together.
-function P.Kit()
+-- once a second however many icons end together. seconds: the plain length of the cooldown; one shorter than Shortest cooldown that sounds
+-- gets none, so a short interrupt ends quietly. No length (test mode) always gets the sound.
+function P.Kit(seconds)
+	local least = Opt("soundMinimum")
+	if ns.Finite(seconds) and ns.Finite(least) and seconds < least then
+		return nil
+	end
 	local sound = ns.SOUNDS[KITS[Opt("sound")] or 0]
 	return sound and sound[1] or nil
 end
@@ -490,8 +497,8 @@ function P.Draw(row, slot, item)
 		if row.own and item.start then
 			seconds = P.Sweep(item.a) or seconds
 		end
-		key = ("%s:%s:%s:%s:%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), type(seconds) == "table" and "object" or "number", tostring(Opt("seconds")),
-			Opt("numbersFont"), tostring(Opt("iconBorder")), tostring(Opt("kindBorder")), tostring(Opt("flash")), tostring(Opt("sound")))
+		key = ("%s:%s:%s:%s:%s:%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), type(seconds) == "table" and "object" or "number", tostring(Opt("seconds")),
+			Opt("numbersFont"), tostring(Opt("iconBorder")), tostring(Opt("kindBorder")), tostring(Opt("flash")), tostring(Opt("sound")), tostring(Opt("soundMinimum")))
 	end
 	if row.drawn[slot] == key then
 		return
@@ -507,7 +514,8 @@ function P.Draw(row, slot, item)
 	if not used then
 		pcall(icon.cooldown.Clear, icon.cooldown)
 	end
-	local kit = used and P.Kit() or nil
+	-- item.seconds is the plain length Tracking.lua keeps, also on the own row, whose sweep is a duration object that is never read.
+	local kit = used and P.Kit(item.seconds) or nil
 	ns.IconSet(icon, P.Texture(item.a), item.start, seconds, { kind = Opt("kindBorder") ~= false and item.a.kind or nil, numbers = Opt("seconds") == true,
 		font = Opt("numbersFont"), border = Opt("iconBorder"), flash = Opt("flash") == true and used, sound = kit, key = KEY })
 	local level = used and DARK or 1
@@ -1833,7 +1841,7 @@ end
 
 -- The test and the status -----------------------------------------------------------------------------------------------------------------
 
--- /flatui test icons: three sample icons on every row, for a few seconds.
+-- /flatui test icons: three sample icons on every row, for a few seconds, flashing and sounding at their end as Flash when ready and Sound say.
 function ns.PartyTest()
 	if not ns.Enabled(KEY) or InCombatLockdown() or not LIVE[P.state] then
 		if ns.Enabled(KEY) then
@@ -1845,12 +1853,13 @@ function ns.PartyTest()
 	P.testing = token
 	local now = T.Now()
 	local shown = 0
+	local cue = { flash = Opt("flash") == true, sound = P.Kit() or false }
 	for _, row in pairs(P.assigned) do
 		row.testing = token
 		for slot = 1, math.min(3, #row.icons) do
 			local icon = row.icons[slot]
 			row.drawn[slot] = nil
-			ns.IconSample(icon, slot, now, 2 * slot, KEY)
+			ns.IconSample(icon, slot, now, 2 * slot, KEY, cue)
 			icon.texture:SetDesaturated(false)
 			icon.texture:SetVertexColor(1, 1, 1)
 		end

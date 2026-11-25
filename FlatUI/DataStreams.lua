@@ -5,7 +5,8 @@ local ADDON_NAME, ns = ...
 -- ToggleCalendar, ToggleWorldMap, as its keys and buttons do): at once out of a fight, and in one as the fight ends, with a line in chat once
 -- ("Flat UI: the quest log opens when the fight ends.", ns.OpenAfterFight, MapText.lua, as the time by the minimap and the quest count do). The
 -- tooltip's dim last line says so ("Click: open the quest log, after the fight." in one). Every other button is the panels' own (DataPanels.lua:
--- the right click opens the slot's menu).
+-- the right click opens the slot's menu, where a stream that shows nothing for this character now reads dim with its idle words, as "Soul shards
+-- (only for a warlock)").
 --   Bag space: free and total slots of the general bags the player wears, the backpack and the bags of family 0, the only room for any item
 --     (C_Container.GetContainerNumSlots and GetContainerNumFreeSlots). A special bag (a trade bag, a quiver, an ammo pouch, a soul bag: its
 --     family is not 0) and the reagent bag (Enum.BagIndex 5, of family 0 but for reagents only) hold only certain items, so they count apart,
@@ -15,7 +16,9 @@ local ADDON_NAME, ns = ...
 --     character of the account that logged in with the data panels on, kept in FlatUIDB.datapanels.gold by "Name - Realm", and under them what
 --     this character made (in green) or spent (in red) since it logged in, kept over a /reload (ns.SessionMoney, BagsData.lua, the count the
 --     bag window's gold tooltip says too), and from HOURLY_AFTER seconds into the session what that is an hour (its second answer, the seconds
---     since the session began); nothing while it made and spent nothing. The slot itself keeps its width.
+--     since the session began); nothing while it made and spent nothing. The slot itself keeps its width. Each change of the money (PLAYER_MONEY)
+--     floats from the slot as "+38s 2c" in green or "-1g 4s" in red, a quick run of them as one growing sum (P.Float, DataPanels.lua), never at
+--     login, after a loading screen or in test mode.
 --   Durability: of all the equipped items together (GetInventoryItemDurability), coloured by how worn it is, then in red how many items are
 --     broken (at 0%: "1 broken"), else how many are at 50% or less; the tooltip opens with a red line while any is broken ("1 item broken: no
 --     stats until repaired"), lists each item, the lowest first, and out of a fight the repair cost of the worn items under 100% (repairCost of
@@ -300,12 +303,29 @@ local function Characters()
 	return list
 end
 
+-- The money as last read plainly, by a drawing of the slot or by PLAYER_MONEY: a change against it floats from the Gold slots (P.Float,
+-- DataPanels.lua). Nil until one of them reads it, so nothing floats at login; a loading screen draws the slots again first (P.Start), and test
+-- mode floats nothing.
+local lastMoney
+
+-- PLAYER_MONEY: the money is kept for the account, and a change floats from the slot.
+local function MoneyChanged()
+	Record()
+	local money = Count((Ask(GetMoney)))
+	local mode = ns.TestMode
+	if money and lastMoney and money ~= lastMoney and not (mode ~= nil and mode.IsOn() == true) then
+		P.Float("gold", money - lastMoney)
+	end
+	lastMoney = money
+end
+
 P.Stream({
 	id = "gold", label = "Gold",
-	events = { PLAYER_MONEY = Record },
+	events = { PLAYER_MONEY = MoneyChanged },
 	Start = Record,
 	Text = function()
 		local money = Count((Ask(GetMoney)))
+		lastMoney = money
 		return money and P.Money(money, P.size) or nil
 	end,
 	Tip = function()
@@ -450,7 +470,7 @@ local function RepairCost(items)
 end
 
 P.Stream({
-	id = "durability", label = "Durability", sample = "Durability 100%",
+	id = "durability", label = "Durability", sample = "Durability 100%", idle = "gear does not wear here",
 	events = { UPDATE_INVENTORY_DURABILITY = true, PLAYER_EQUIPMENT_CHANGED = true },
 	Text = function()
 		if NoWear() then
@@ -610,7 +630,7 @@ local function Ammunition()
 end
 
 P.Stream({
-	id = "ammo", label = "Ammunition", sample = "Ammo 8,888",
+	id = "ammo", label = "Ammunition", sample = "Ammo 8,888", idle = "no bow, crossbow, gun or thrown weapon",
 	events = { BAG_UPDATE_DELAYED = true, PLAYER_EQUIPMENT_CHANGED = true, UNIT_INVENTORY_CHANGED = true },
 	Text = function()
 		local ammo = Ammunition()
@@ -667,7 +687,7 @@ local function Warlock()
 end
 
 P.Stream({
-	id = "shards", label = "Soul shards", sample = "Shards 88",
+	id = "shards", label = "Soul shards", sample = "Shards 88", idle = "only for a warlock",
 	events = { BAG_UPDATE_DELAYED = true },
 	Text = function()
 		local count = Warlock() and type(C_Item) == "table" and Count((Ask(C_Item.GetItemCount, AMMO.shard))) or nil
@@ -718,7 +738,7 @@ end
 local hearthLeft = 0
 
 P.Stream({
-	id = "hearth", label = "Hearthstone",
+	id = "hearth", label = "Hearthstone", idle = "no hearthstone bound",
 	events = { HEARTHSTONE_BOUND = true, BAG_UPDATE_COOLDOWN = true },
 	every = function()
 		return hearthLeft > 0 and 1 or nil
@@ -767,7 +787,7 @@ local function Position()
 end
 
 P.Stream({
-	id = "coords", label = "Coordinates", sample = "88.8, 88.8",
+	id = "coords", label = "Coordinates", sample = "88.8, 88.8", idle = "none here",
 	events = { ZONE_CHANGED_NEW_AREA = true, ZONE_CHANGED = true, ZONE_CHANGED_INDOORS = true },
 	every = 0.5,
 	live = true,
@@ -788,13 +808,14 @@ P.Stream({
 	Hint = function()
 		return WindowHint("Click: open the world map.") .. " Shift-click: put this in chat."
 	end,
-	-- A left click opens the world map (ToggleWorldMap, in a fight as it ends), as the coordinates by the minimap do (MapText.lua). Shift and a left
-	-- click put the zone and the coordinates in the chat box (ns.PutInChat, MapText.lua), in a fight too: "Elwynn Forest 45.2, 61.8".
+	-- A left click opens the world map (ToggleWorldMap, in a fight as it ends), as the coordinates by the minimap do (MapText.lua), with the
+	-- minimap's own words, so a click on both in one fight says it once (ns.OpenAfterFight says a line only when it differs from the one waiting).
+	-- Shift and a left click put the zone and the coordinates in the chat box (ns.PutInChat, MapText.lua), in a fight too: "Elwynn Forest 45.2, 61.8".
 	Click = function(_, button)
 		if button ~= "LeftButton" then
 			return
 		elseif not Shift() then
-			Toggle("ToggleWorldMap", "Flat UI: the world map opens when the fight ends.")
+			Toggle("ToggleWorldMap", "Flat UI: the map opens when the fight ends.")
 			return
 		elseif type(ns.PutInChat) ~= "function" then
 			return
@@ -1051,7 +1072,7 @@ local function XpChatLine()
 end
 
 P.Stream({
-	id = "xp", label = "Experience", sample = "XP 88.8%  +88%",
+	id = "xp", label = "Experience", sample = "XP 88.8%  +88%", idle = "at the top level or with experience off",
 	events = { PLAYER_XP_UPDATE = true, UPDATE_EXHAUSTION = true, PLAYER_LEVEL_UP = true, PLAYER_UPDATE_RESTING = true, ENABLE_XP_GAIN = true,
 		DISABLE_XP_GAIN = true },
 	Text = function()
@@ -1175,7 +1196,7 @@ local function RepChatLine()
 end
 
 P.Stream({
-	id = "rep", label = "Reputation", sample = "Stormwind Revered 88%",
+	id = "rep", label = "Reputation", sample = "Stormwind Revered 88%", idle = "no faction to show",
 	events = { UPDATE_FACTION = true },
 	Text = function()
 		local rep = Reputation()

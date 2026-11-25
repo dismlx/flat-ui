@@ -43,8 +43,10 @@ local _, ns = ...
 -- Test mode (TestMode.lua) cannot run an entry of a file that is no module (TM.Register runs one only while its module is on), so at every On, Off,
 -- pause and resume (TM.Watch) the rows are applied again, and while it is on the bar shows a sample at its spot: a tick every 2 seconds, the
 -- window, the cue and its flash, a Hit and then Dodged and Dodged x2, frozen while the bar's Moving is off. Its sound plays only when
--- TM.Sound('lava') allows it, the first time after an On. /flatui lava test shows the same sample for 8 seconds, with one sound. A real tick takes
--- over from the sample. /flatui lava says the mode, the place and its IDs, the ticks seen, dodged (with the most in a row) and not seen this
+-- TM.Sound('lava') allows it, the first time after an On. /flatui lava test shows the same sample for 8 seconds, with one sound. A change of one
+-- of the rows (its size, Jump lead, Flash, the colours, Jump sound, or In lava zones and Anywhere) while the options window shows and out of a
+-- fight shows it too, silent, until PREVIEW seconds after the last change, then fades it out (ns.LavaChanged). A real tick takes over from the
+-- sample. /flatui lava says the mode, the place and its IDs, the ticks seen, dodged (with the most in a row) and not seen this
 -- session, the last hit on the player, the last gaps between ticks and the latency used; /flatui lava trace prints a line for every UNIT_COMBAT of
 -- the player with what the timer made of it, the way to check in lava that this client reports its ticks at all. /flatui status has a line only
 -- when the hits could not be heard, or after an error, which stops the timer until /reload.
@@ -61,8 +63,9 @@ local MODES = { zones = true, anywhere = true }
 local PERIOD, SLACK, GRACE, HIDE, DODGE_MAX, AIR, KEEP = 2, 0.25, 0.3, 5, 10, 0.1, 4
 -- The sample ticks once every this many periods and dodges the others.
 local SAMPLE_EVERY = 3
--- The highest latency counted, the time of a flash, of a word after a tick, and of /flatui lava test.
-local RTT_MAX, FLASH_TIME, SAY_TIME, TEST_TIME = 0.4, 0.3, 0.6, 8
+-- The highest latency counted, the time of a flash, of a word after a tick, of /flatui lava test, and of the silent sample a change of a row
+-- shows (from its last step).
+local RTT_MAX, FLASH_TIME, SAY_TIME, TEST_TIME, PREVIEW = 0.4, 0.3, 0.6, 8, 4
 -- The seconds the bar takes to fade in as it shows, and to fade out once you left the lava.
 local FADE_IN, FADE_OUT = 0.15, 0.4
 -- The fire school (CombatText.lua:98).
@@ -754,18 +757,32 @@ local function Apply()
 	Refresh()
 end
 
--- A row of the timer changed, the player logged in, the profile changed, or test mode turned on, paused, resumed or ended.
-function ns.LavaChanged()
+-- A row of the timer changed (path, as Core.lua's Changed passes it), the player logged in, the profile changed, or test mode turned on, paused,
+-- resumed or ended (no path). A change of a row while the options window shows, out of a fight and with no real timeline running, shows the
+-- sample in the new look, silent, until PREVIEW seconds after the change, so a slider drag keeps it up to its last step; then it fades out.
+function ns.LavaChanged(path)
 	local ok, err = pcall(Apply)
+	if not ok then
+		Stop(err)
+		return
+	end
+	if type(path) ~= "string" or S.broken or S.live or Mode() == nil or InCombatLockdown()
+		or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
+		return
+	end
+	ok, err = pcall(function()
+		S.sampleUntil = math.max(S.sampleUntil or 0, GetTime() + PREVIEW)
+		Refresh()
+	end)
 	if not ok then
 		Stop(err)
 	end
 end
 
--- Jump sound changed: the rows are applied again, and the sound picked plays once, so it can be chosen by ear, only while the options window shows
--- and out of a fight, as the combat sounds do (CombatCues.lua). None plays nothing.
+-- Jump sound changed: the rows are applied again (with the silent sample, as for the other rows), and the sound picked plays once, so it can be
+-- chosen by ear, only while the options window shows and out of a fight, as the combat sounds do (CombatCues.lua). None plays nothing.
 function ns.LavaSoundPicked(path)
-	ns.LavaChanged()
+	ns.LavaChanged(path)
 	if type(path) ~= "string" or InCombatLockdown() or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
 		return
 	end

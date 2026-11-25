@@ -25,7 +25,8 @@ local _, ns = ...
 -- SetFormattedText of GetRemainingDuration and GetTotalDuration (LuaDurationObjectAPIDocumentation.lua:271, 319), both of which it takes withheld.
 -- A cast whose whole the game will not give is written as its seconds left alone, and /flatui status says so.
 -- Pushback on your bar (on by default, Text and icon tab of Cast bars): two more font strings of the addon's own on each of the player's two cast
--- bars, in the font of the bar's spell name and red (1, 0.3, 0.3), made ahead out of a fight as the time is: one just past the right end (LEFT of
+-- bars, in the font of the bar's spell name and Pushback colour (0.5.39, red at first: 1, 0.3, 0.3, the colour before; set at each start and when
+-- the row changes), made ahead out of a fight as the time is: one just past the right end (LEFT of
 -- the bar's RIGHT, +4) and one just past the game's own time (LEFT of its CastTimeText's RIGHT, +4; that text sits at LEFT of the bar's RIGHT, +10,
 -- Mainline/CastingBarFrame.xml:319-323, so the two would overlap). Each write takes the second while the game shows its time (Edit Mode's Show Cast
 -- Time, CastTimeText shown, a plain answer) and Flat UI does not fade it (Cast time on your bars off), so the bar reads "1.3  +0.5"; else the first,
@@ -37,10 +38,21 @@ local _, ns = ...
 -- 0.05 either way. A stop or an interrupt empties it when its castGUID is the one kept, or once the player no longer casts or channels: one of
 -- another cast (a queued one, a key pressed during the cast) leaves it, as the game's bar ignores a stop whose castID is not its cast
 -- (Shared/CastingBarFrame.lua:448, 530). A channel's stop empties it at once, and a failed cast once the player no longer casts or channels (a
--- second cast tried during one fails and leaves it). Only SetText, SetFont, Show and Hide reach it in a fight. /flatui status names the last
--- pushback shown.
+-- second cast tried during one fails and leaves it). Each new delay that makes the total larger by PUSH_LEAST or more pops the text that shows
+-- (0.5.39): a Scale animation in Vertex mode of its own, made with the font string, from 130% down to its size in 0.15 seconds, grown from its
+-- left end, as CombatCues.lua pops +Combat; a client that will not make it shows the text still. Only SetText, SetFont, SetTextColor, Show, Hide
+-- and the Stop and Play of that animation group reach it in a fight. /flatui status names the last pushback shown.
+-- Target of enemy casts (on by default, Text and icon tab of Cast bars; 0.5.39): the target and focus bars have no CastTargetNameText of the
+-- game's (SmallCastingBarFrameTemplate, Mainline/CastingBarFrame.xml:399-470, so UpdateTargetNameText returns at once for them,
+-- Shared/CastingBarFrame.lua:932-935), so a font string of the addon's own on each, made ahead out of a fight as the time is, names whom an
+-- enemy's cast or channel is aimed at, as "> Bex", just past the bar's right end (LEFT of its RIGHT, +4), or past the icon while Target and focus
+-- bar icon puts it right of the bar (anchored again out of a fight when that row changes). On each look of the poll, while the unit is plainly an
+-- enemy (UnitCanAttack) and its bar casts or channels, UnitShouldDisplaySpellTargetName (a plain answer, UnitDocumentation.lua:3116-3130) says
+-- whether to show it, and UnitSpellTargetName, a withheld return (:3165-3180), goes to SetFormattedText untouched, never compared or joined in
+-- Lua; it is white, since the class of that target (UnitSpellTargetClass) is withheld too. It takes the font of the bar's spell name and
+-- empties as the cast ends. /flatui status counts the casts that named their target.
 local OWN_ROW, MINE_ROW, PLATE_ROW, PUSH_ROW = "castbars.ownTime", "castbars.playerTime", "nameplates.castTime", "castbars.pushback"
-local TOTAL_ROW = "castbars.timeTotal"
+local TOTAL_ROW, AIM_ROW = "castbars.timeTotal", "castbars.castTarget"
 local EVERY = 0.1
 local FAILED_CASTS = 3
 local weak = { __mode = "k" }
@@ -51,11 +63,15 @@ local MINE = { { "PlayerCastingBarFrame", "player" }, { "OverlayPlayerCastingBar
 -- failed: casts both ways failed on. worked: a time was written once. stopped: the part is off for the session, with the reason. missed: the
 -- casts that showed no time, as their bar's font string could not be made yet in a fight.
 -- noTotal: a cast whose whole the game would not give, written as its seconds left alone.
-local state = { failed = 0, worked = false, stopped = false, why = nil, missed = 0, noTotal = false }
+-- aimed: the casts on the target and focus bars whose target was named (Target of enemy casts).
+local state = { failed = 0, worked = false, stopped = false, why = nil, missed = 0, noTotal = false, aimed = 0 }
 -- recs: per cast bar, its record: fs (the font string inside the bar), out (a nameplate bar's one past its end), write (the one the cast writes),
 -- font (the font last copied from the spell name). byFrame: per nameplate unit frame, the record of its cast bar. faded: the player's and the pet's
 -- bars whose own CastTimeText Flat UI faded.
 local recs, byFrame, faded = setmetatable({}, weak), setmetatable({}, weak), setmetatable({}, weak)
+-- aims: per target or focus bar, the name of its cast's target { fs, shown, place, font, queued }, false when it could not be made; aimQueued: a
+-- make waits for the end of the fight.
+local aims, aimQueued = setmetatable({}, weak), setmetatable({}, weak)
 local driver, clock = nil, 0
 local Tick
 
@@ -73,6 +89,10 @@ end
 
 local function PlateRow()
 	return Get(PLATE_ROW) == true and ns.Enabled("nameplates")
+end
+
+local function AimOn()
+	return Get(AIM_ROW) == true and ns.Enabled("castbars")
 end
 
 -- True for a plain true: a field the game keeps and does not withhold.
@@ -368,7 +388,148 @@ local function LookList(list, on)
 	end
 end
 
+-- Target of enemy casts ---------------------------------------------------------------------------------------
+
+-- Where the name goes: just past the bar's right end, or past the icon while Target and focus bar icon puts it right of the bar (Bars.lua hangs
+-- it at the bar's RIGHT +5). Anchored out of a fight only; a change in one waits for its end.
+local function AimPlace(bar, aim)
+	local icon = bar.Icon
+	local right = ns.Enabled("castbars") and Get("castbars.iconPos") == "right" and not ns.Forbidden(icon)
+	local place = right and "icon" or "bar"
+	if aim.place == place then
+		return
+	end
+	if InCombatLockdown() and ns.MaybeProtected(bar) then
+		if not aim.queued then
+			aim.queued = true
+			ns.OutOfCombat(function()
+				aim.queued = nil
+				pcall(AimPlace, bar, aim)
+			end)
+		end
+		return
+	end
+	local fs = aim.fs
+	fs:ClearAllPoints()
+	if not (right and pcall(fs.SetPoint, fs, "LEFT", icon, "RIGHT", 4, 0)) then
+		fs:SetPoint("LEFT", bar, "RIGHT", 4, 0)
+		place = "bar"
+	end
+	aim.place = place
+end
+
+-- The font string of a bar's cast target, made once out of a fight on a bar the game may protect; a fight that keeps it from being made makes it
+-- as it ends. Nil while it cannot be made.
+local function MakeAim(bar)
+	local aim = aims[bar]
+	if aim ~= nil then
+		return aim or nil
+	end
+	if InCombatLockdown() and ns.MaybeProtected(bar) then
+		if not aimQueued[bar] then
+			aimQueued[bar] = true
+			ns.OutOfCombat(function()
+				aimQueued[bar] = nil
+				pcall(MakeAim, bar)
+			end)
+		end
+		return nil
+	end
+	local fs = ns.OwnText(bar, "OVERLAY", "GameFontHighlightSmall")
+	if fs == nil then
+		aims[bar] = false
+		return nil
+	end
+	fs:SetJustifyH("LEFT")
+	fs:SetText("")
+	fs:Hide()
+	aim = { fs = fs, shown = false }
+	aims[bar] = aim
+	AimPlace(bar, aim)
+	return aim
+end
+
+-- The face, size and flags of the bar's spell name on the name, copied when they changed.
+local function AimFont(bar, aim)
+	local name = bar.Text
+	if ns.IsSecret(name) or type(name) ~= "table" or type(name.GetFont) ~= "function" then
+		return
+	end
+	local ok, file, size, flags = pcall(name.GetFont, name)
+	if not ok or ns.IsSecret(file) or ns.IsSecret(size) or ns.IsSecret(flags) or type(file) ~= "string" or not ns.Finite(size) or size <= 0 then
+		return
+	end
+	flags = type(flags) == "string" and flags or ""
+	local key = ("%s|%s|%s"):format(file, size, flags)
+	if aim.font ~= key and pcall(aim.fs.SetFont, aim.fs, file, size, flags) then
+		aim.font = key
+	end
+end
+
+local function AimHide(aim)
+	if aim and aim.shown then
+		pcall(aim.fs.SetText, aim.fs, "")
+		pcall(aim.fs.Hide, aim.fs)
+		aim.shown = false
+	end
+end
+
+-- The name goes to the font string untouched: UnitSpellTargetName is a withheld return (UnitDocumentation.lua:3165-3180), never compared here. A
+-- cast with no target, for which the game returns nothing, raises in SetFormattedText, and the name hides.
+local function AimWrite(fs, unit)
+	fs:SetFormattedText("> %s", UnitSpellTargetName(unit))
+end
+
+-- True for a unit the player can attack, a plain answer.
+local function Hostile(unit)
+	local ok, hostile = pcall(UnitCanAttack, "player", unit)
+	return ok and not ns.IsSecret(hostile) and hostile == true
+end
+
+-- One look at a target or focus bar: the name of its cast's target past its end while an enemy casts or channels at someone and the game would
+-- show that name (UnitShouldDisplaySpellTargetName, a plain answer, UnitDocumentation.lua:3116-3130), asked on every look, so a new target or a
+-- new cast counts at once.
+local function AimLook(bar, unit, on)
+	local aim = aims[bar]
+	if not (on and (Flag(bar.casting) or Flag(bar.channeling)) and Hostile(unit)) then
+		AimHide(aim)
+		return
+	end
+	aim = aim or MakeAim(bar)
+	if not aim then
+		return
+	end
+	local asked, named = pcall(UnitShouldDisplaySpellTargetName, unit)
+	if not (asked and not ns.IsSecret(named) and named == true) then
+		AimHide(aim)
+		return
+	end
+	if not aim.shown then
+		AimFont(bar, aim)
+	end
+	if not pcall(AimWrite, aim.fs, unit) then
+		AimHide(aim)
+		return
+	end
+	if not aim.shown then
+		aim.fs:Show()
+		aim.shown = true
+		state.aimed = state.aimed + 1
+	end
+end
+
+-- One look at the target and focus bars while the row is on, and at those that showed a name when it went off.
+local function LookAims(on)
+	for _, entry in ipairs(OWN) do
+		local bar = _G[entry[1]]
+		if bar ~= nil and not ns.IsSecret(bar) and not ns.Forbidden(bar) and (on or aims[bar]) then
+			AimLook(bar, entry[2], on)
+		end
+	end
+end
+
 local function Step()
+	pcall(LookAims, AimOn())
 	LookList(OWN, OwnOn())
 	LookList(MINE, MineOn())
 	ns.EachPlate(LookPlate, PlateRow())
@@ -394,6 +555,15 @@ local function Fades()
 end
 
 local function Wanted()
+	-- The name of a cast's target goes on while the time has stopped.
+	if AimOn() then
+		return true
+	end
+	for _, aim in pairs(aims) do
+		if aim and aim.shown then
+			return true
+		end
+	end
 	if state.stopped then
 		return false
 	end
@@ -435,14 +605,18 @@ end
 
 -- The player's two bars, the colour of the text, the least total shown, and what each event of the player's cast does.
 local PUSH_BARS = { "PlayerCastingBarFrame", "OverlayPlayerCastingBarFrame" }
-local PUSH_COLOUR, PUSH_LEAST = { 1, 0.3, 0.3 }, 0.05
+-- PUSH_COLOUR: the colour when Pushback colour has none. PUSH_POP and PUSH_POP_TIME: the scale a new delay pops the text from, and the seconds it
+-- takes to settle.
+local PUSH_COLOUR, PUSH_LEAST, PUSH_COLOUR_ROW = { 1, 0.3, 0.3 }, 0.05, "castbars.pushbackColour"
+local PUSH_POP, PUSH_POP_TIME = 1.3, 0.15
 local PUSH_EVENTS = { UNIT_SPELLCAST_START = "start", UNIT_SPELLCAST_CHANNEL_START = "start", UNIT_SPELLCAST_DELAYED = "move",
 	UNIT_SPELLCAST_CHANNEL_UPDATE = "move", UNIT_SPELLCAST_STOP = "ended", UNIT_SPELLCAST_CHANNEL_STOP = "stop",
 	UNIT_SPELLCAST_INTERRUPTED = "ended", UNIT_SPELLCAST_FAILED = "failed" }
 -- texts: per bar, its two font strings (near and after). queued: per bar, a make waits for the end of the fight. P: frame (the file's own, false
 -- when it could not be made), on (the events are heard), lastEnd and chan (the end in milliseconds of the cast now and whether it is a channel),
 -- guid (the castGUID of its start, a plain string, else nil), total (the seconds it moved), last (the last total shown, for /flatui status).
-local pushTexts, pushQueued = setmetatable({}, weak), setmetatable({}, weak)
+-- pushPops: per font string, its pop (an animation group), false when the client would not make one.
+local pushTexts, pushQueued, pushPops = setmetatable({}, weak), setmetatable({}, weak), setmetatable({}, weak)
 local P = { frame = nil, on = false, lastEnd = nil, chan = nil, guid = nil, total = 0, last = nil }
 
 local function PushOn()
@@ -455,6 +629,39 @@ local function PlayerBar(name)
 		return nil
 	end
 	return bar
+end
+
+-- The pop of a new delay on one font string: a Scale animation in Vertex mode (UISharedDocumentation.lua:6-15) from PUSH_POP down to whole, grown
+-- from its left end. Nil when the client will not make it.
+local function PushPop(fs)
+	local ok, group = pcall(function()
+		fs:SetScaleAnimationMode(Enum and Enum.FontStringScaleAnimationMode and Enum.FontStringScaleAnimationMode.Vertex or 1)
+		local made = fs:CreateAnimationGroup()
+		local scale = made:CreateAnimation("Scale")
+		scale:SetScaleFrom(PUSH_POP, PUSH_POP)
+		scale:SetScaleTo(1, 1)
+		scale:SetDuration(PUSH_POP_TIME)
+		scale:SetOrigin("LEFT", 0, 0)
+		return made
+	end)
+	return ok and not ns.IsSecret(group) and type(group) == "table" and group or nil
+end
+
+-- Pushback colour on the two font strings of a bar, set again only when the row changed.
+local function PushColour(entry)
+	local hex = Get(PUSH_COLOUR_ROW)
+	if entry.hex == hex then
+		return
+	end
+	local r, g, b = ns.Colour(PUSH_COLOUR_ROW)
+	if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		r, g, b = PUSH_COLOUR[1], PUSH_COLOUR[2], PUSH_COLOUR[3]
+	end
+	pcall(entry.near.SetTextColor, entry.near, r, g, b)
+	if entry.after ~= nil then
+		pcall(entry.after.SetTextColor, entry.after, r, g, b)
+	end
+	entry.hex = hex
 end
 
 -- The two font strings of a bar, made once out of a fight on a bar the game may protect; a fight that keeps them from being made makes them as it
@@ -484,9 +691,9 @@ local function PushText(bar)
 			return nil
 		end
 		fs:SetJustifyH("LEFT")
-		fs:SetTextColor(PUSH_COLOUR[1], PUSH_COLOUR[2], PUSH_COLOUR[3])
 		fs:SetText("")
 		fs:Hide()
+		pushPops[fs] = PushPop(fs) or false
 		return fs
 	end
 	local near = Make(bar, 4)
@@ -499,6 +706,7 @@ local function PushText(bar)
 	if not ns.IsSecret(game) and type(game) == "table" and not ns.Forbidden(game) then
 		entry.after = Make(game, 4)
 	end
+	PushColour(entry)
 	pushTexts[bar] = entry
 	return entry
 end
@@ -550,8 +758,9 @@ local function CastEnd()
 	return nil
 end
 
--- Writes the total on both bars, or hides it while it is under PUSH_LEAST either way. restyle: a new cast, whose font is copied first.
-local function PushShow(restyle)
+-- Writes the total on both bars, or hides it while it is under PUSH_LEAST either way. restyle: a new cast, whose font and colour are set first.
+-- grew: a delay made the total larger, which pops the text that shows.
+local function PushShow(restyle, grew)
 	local shown = math.abs(P.total) >= PUSH_LEAST
 	for _, name in ipairs(PUSH_BARS) do
 		local bar = PlayerBar(name)
@@ -559,6 +768,7 @@ local function PushShow(restyle)
 		if entry then
 			if restyle then
 				PushFont(bar, entry)
+				PushColour(entry)
 			end
 			local fs, other = PushSpot(bar, entry)
 			if other ~= nil then
@@ -568,6 +778,11 @@ local function PushShow(restyle)
 				fs:SetFormattedText("%+.1f", P.total)
 			end
 			fs:SetShown(shown)
+			local pop = pushPops[fs]
+			if shown and grew and pop then
+				pcall(pop.Stop, pop)
+				pcall(pop.Play, pop)
+			end
 		end
 	end
 	if shown then
@@ -604,8 +819,9 @@ local function PushHeard(what, guid)
 	elseif what == "move" then
 		local endMs, chan = CastEnd()
 		if endMs and P.lastEnd and chan == P.chan then
+			local before = math.abs(P.total)
 			P.total = P.total + (endMs - P.lastEnd) / 1000
-			PushShow(false)
+			PushShow(false, math.abs(P.total) - before >= PUSH_LEAST)
 		end
 		if endMs then
 			P.lastEnd, P.chan = endMs, chan
@@ -704,6 +920,20 @@ local function MakeAhead()
 	end
 end
 
+-- The name of a cast's target on the target and focus bars, made ahead out of a fight, and its place again for a change of Target and focus bar
+-- icon. Apart from the time, so that a time that stopped leaves it.
+local function AimAhead()
+	if AimOn() then
+		for _, entry in ipairs(OWN) do
+			local bar = PlayerBar(entry[1])
+			local aim = bar and MakeAim(bar)
+			if aim then
+				AimPlace(bar, aim)
+			end
+		end
+	end
+end
+
 -- Called by Bars.lua at the end of a refresh of the cast bars: the frame starts or stops with the rows, the game's own time on the player's and
 -- the pet's bars is faded or given back, the font strings are made ahead out of a fight, and the pushback events start or stop with their row.
 function ns.CastTimeSync()
@@ -711,7 +941,16 @@ function ns.CastTimeSync()
 	if not InCombatLockdown() and not state.stopped then
 		pcall(MakeAhead)
 	end
+	if not InCombatLockdown() then
+		pcall(AimAhead)
+	end
 	pcall(PushListen, PushOn())
+	-- A change of Pushback colour reaches a total that shows at once.
+	for _, entry in pairs(pushTexts) do
+		if entry then
+			pcall(PushColour, entry)
+		end
+	end
 	Sync()
 end
 
@@ -738,6 +977,9 @@ function ns.StatusLines()
 	local line = StatusLine()
 	if line ~= nil then
 		lines[#lines + 1] = line
+	end
+	if AimOn() then
+		lines[#lines + 1] = ("Target of enemy casts: %d casts named their target."):format(state.aimed)
 	end
 	if PushOn() then
 		lines[#lines + 1] = P.last and ("Pushback on your bar: the last shown was %+.1f."):format(P.last) or "Pushback on your bar: no pushback seen yet."

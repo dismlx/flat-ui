@@ -18,7 +18,9 @@ local _, ns = ...
 -- way back (C_DeathInfo.GetSelfResurrectOptions gives anything but nothing or an empty table: a soulstone, Reincarnation), so it is left to you;
 -- not in an arena, the open world or a dungeon. While the game holds the release (HasNoReleaseAura, or IsFalling, when the game greys the
 -- button) it is tried again every RELEASE_WAIT seconds, RELEASE_TRIES times. The popup is left to the game, which hides it as you become a
--- ghost. Hold a key to release does not hold it back: the row is the choice to release.
+-- ghost. Hold a key to release does not hold it back: the row is the choice to release. The same check runs RELEASE_WAIT seconds after each
+-- loading screen (PLAYER_ENTERING_WORLD), since the game shows the death popup again then without a new PLAYER_DEAD
+-- (GameEvent.CheckPlayerEnteringWorldDeath), so a /reload or a relog while dead in a battleground is released too.
 -- Accept summons: CONFIRM_SUMMON is answered with C_SummonInfo.ConfirmSummon when the game's own popup would let you: not in a fight and while
 -- PlayerCanTeleport, tried every second while the summon is open (time left and a summoner). The game does not close its summon popup after
 -- an accept made by code, and a stale one cancels the next summon when the game reuses it; so once the game says the summon is no longer
@@ -632,6 +634,16 @@ E.Listen(part, "PLAYER_DEAD", function()
 	C_Timer.After(0, function()
 		if ns.Enabled("errands") then
 			E.Run(part, Guard)
+			E.Run(part, ReleaseInBattleground)
+		end
+	end)
+end)
+
+-- A loading screen while dead (a /reload, a relog) shows the death popup again with no PLAYER_DEAD, and the follow of StaticPopup_Show may not
+-- be in yet: the battleground release is asked for a moment later, for the death counted now (0 after a /reload).
+E.Listen(part, "PLAYER_ENTERING_WORLD", function()
+	C_Timer.After(RELEASE_WAIT, function()
+		if ns.Enabled("errands") then
 			E.Run(part, ReleaseInBattleground)
 		end
 	end)

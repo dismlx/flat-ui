@@ -4,7 +4,8 @@ local _, ns = ...
 -- you, UnitCanAttack; 0.5.35), in a group a line naming who in it targets the unit (Who in your group targets it, TargetedBy: the targets of party1-4
 -- or raid1-40 by UnitIsUnit, GetNumSubgroupMembers and GetNumGroupMembers; 0.5.35), the class colour on the line with a player's class, the colour of
 -- a player's guild line with the member's rank (0.5.37), the icon of an item, a spell or a buff before its name, the ID of the temporary enchant on a
--- weapon you wear, the ID of the icon file, and Show IDs, the key the ID lines wait for. A buff or a debuff counts as a spell: its data has the
+-- weapon you wear, the ID of the icon file, the NPC ID of a creature or a vehicle (ns.ChatTipNpcId, 0.5.39; Chat.lua adds it last, after the Elite
+-- and Rare word, as the ID lines of an item), and Show IDs, the key the ID lines wait for. A buff or a debuff counts as a spell: its data has the
 -- spell's id (Enum.TooltipDataType.UnitAura), which the game withholds while it restricts auras, and then it gets nothing. So do the buffs of the
 -- target and focus frames, whose tooltip is forbidden
 -- (Blizzard_AuraContainer/Mainline/Blizzard_AuraButtonTooltip.xml:3-4). This file adds to the chat module and has no switch of its own. Chat.lua
@@ -204,6 +205,24 @@ function ns.ChatTipIds(lines, data, item, id)
 	local enchant = item and Opt("enchantId") == true and EnchantId(data)
 	if enchant then
 		lines[#lines + 1] = "Temporary enchant ID: " .. enchant
+	end
+end
+
+-- Asked by the extra lines of Chat.lua for a unit (0.5.39): the NPC ID of a creature or a vehicle, the sixth part of its GUID
+-- ("Creature-0-<server>-<instance>-<zone>-<NPC ID>-<spawn>", as ErrandsQuests.lua reads it), while Item, spell and NPC IDs is on and Show IDs
+-- lets it show. A player, a pet and a GUID the game withholds get none.
+function ns.ChatTipNpcId(lines, data)
+	if Opt("ids") ~= true or not KeyHeld(Opt("idsWhen")) then
+		return
+	end
+	local guid = data.guid
+	if not Plain(guid, "string") then
+		return
+	end
+	local kind = guid:match("^(%a+)%-")
+	local id = tonumber(guid:match("^%a+%-[^%-]*%-[^%-]*%-[^%-]*%-[^%-]*%-(%d+)%-"))
+	if (kind == "Creature" or kind == "Vehicle") and id and id > 0 then
+		lines[#lines + 1] = ("NPC ID: %d"):format(id)
 	end
 end
 

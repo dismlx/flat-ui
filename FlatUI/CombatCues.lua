@@ -36,13 +36,15 @@ local _, ns = ...
 -- status names the last fight's.
 -- Low health and mana warning (on by default): the game's own combat text says Low Health and Low Mana as the player's health or mana falls to
 -- 20% (Blizzard_CombatText/Shared/CombatText.lua:61-90, CombatTextConstants.lua:12-13), but only with Scrolling Combat Text for Self, which
--- Combat text for you turns off. Here Low health, and for a mana user Low mana, stand under No target while the share is under 20%, in Low health
+-- Combat text for you turns off. Here Low health, and for a mana user Low mana, stand under No target while the share is under Low health below
+-- or Low mana below (0.5.39, 5 to 50%, both 20% at first, the game's own share; 20% for both before), in Low health
 -- colour and Low mana colour (0.5.37; both took Low health colour before) at the size of No target, breathing as it does. With Only in a fight on
 -- (the default since 0.5.37) both show only from PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED, each of which paints them again, so eating or
 -- drinking at 10% after a pull shows neither and no breath loops out of sight; off keeps them out of a fight too, as before. The player's health
 -- and mana may be withheld in a fight, so they are never compared:
--- each line is on a holder frame of its own whose opacity is UnitHealthPercent or UnitPowerPercent of the player through a step curve, 1 under
--- 20% and 0 from it (C_CurveUtil, as HealthColour.lua's low health border), set at each UNIT_HEALTH, UNIT_MAXHEALTH, UNIT_POWER_UPDATE,
+-- each line is on a holder frame of its own whose opacity is UnitHealthPercent or UnitPowerPercent of the player through a step curve of its own,
+-- 1 under the line's share and 0 from it (C_CurveUtil, as HealthColour.lua's low health border; made again when the row changes, and a refresh
+-- of the page paints the lines at once), set at each UNIT_HEALTH, UNIT_MAXHEALTH, UNIT_POWER_UPDATE,
 -- UNIT_MAXPOWER and UNIT_DISPLAYPOWER of the player, which a frame of the addon's own hears while the row is on, and at each refresh. Low mana
 -- shows only while UnitPowerType is plainly mana (not in a druid's cat or bear form), and both hide while the player is plainly dead or a ghost
 -- (PLAYER_DEAD, PLAYER_ALIVE, PLAYER_UNGHOST). A client that refuses the curve or the call leaves the line off, and /flatui status says so.
@@ -63,7 +65,9 @@ local _, ns = ...
 -- between sounds, and the colour of No target.
 -- While test mode is on (TestMode.lua), +Combat, No target with Low health under it (and Low mana under that for a mana user), and -Combat (as
 -- -Combat  0:42 while Fight length on -Combat is on) show in turn, two seconds each, while their rows are on, whatever Only in a fight says, and
--- count in no number of /flatui status (ns.CombatCuesTestStep); +Combat and -Combat play no sound there. /flatui combat test plays the same
+-- count in no number of /flatui status (ns.CombatCuesTestStep); +Combat and -Combat play no sound there. A change of a row of the page while a
+-- sample shows (its colour, size or words: Name the key to target an enemy, Fight length on -Combat) repaints it at once, as Apply looks every
+-- line that shows again; the sample of No target stays until the next step (0.5.39; it went at any change before). /flatui combat test plays the same
 -- round once, quietly, out of a fight while test mode is off (ns.CombatCuesTestRound). Setup's picture of the alerts (mock-combat-alerts,
 -- SetupDrawChat.lua) takes the words of the lines from ns.CombatCueWords.
 -- Picking a sound in No target sound, Entering combat sound or Leaving combat sound plays it once (ns.CombatCueSoundPicked, the rows' changed
@@ -90,8 +94,8 @@ local NO_TARGET = "No target"
 -- The rows of each line's colour and size. Low health and Low mana are the size of No target, each in its own colour.
 local LOOKS = { enter = { "combatEnterColour", "combatStateSize" }, leave = { "combatLeaveColour", "combatStateSize" }, warn = { "noTargetColour", "noTargetSize" },
 	low = { "lowColour", "noTargetSize" }, mana = { "lowManaColour", "noTargetSize" } }
--- The share of health or mana under which Low health or Low mana shows (CombatTextConstants.lua:12-13), the mana power type
--- (Enum.PowerType.Mana), the two lines in the order they stand under No target, and the player's events that change them: health, mana, the
+-- The share of health or mana under which Low health or Low mana shows when its row has no number (CombatTextConstants.lua:12-13), the mana
+-- power type (Enum.PowerType.Mana), the two lines in the order they stand under No target, and the player's events that change them: health, mana, the
 -- power type (a druid's form) and death.
 local LOW_AT, MANA = 0.2, 0
 local LOW_KINDS = { "health", "mana" }
@@ -105,15 +109,16 @@ local AGAIN = 1
 local TARGET_EVENTS = { "UNIT_HEALTH", "UNIT_FLAGS", "UNIT_FACTION" }
 
 -- frame, flash and warn: the frame and its two lines, once made; file: the font file of the lines; unmade: the game would not make them.
--- flashAt and flashKind: when +Combat or -Combat started, and which. ticker: the token of the fade timer. fighting: between PLAYER_REGEN_DISABLED
--- and PLAYER_REGEN_ENABLED. missingAt: since when the target is missing; waiting: the token of the timer that judges again when the second is up.
+-- flashAt and flashKind: when +Combat or -Combat started, and which; flashExtra: the fight's length -Combat says while its row is on. ticker:
+-- the token of the fade timer. fighting: between PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED. missingAt: since when the target is missing;
+-- waiting: the token of the timer that judges again when the second is up.
 -- warned: No target shows. soundAt: when its sound last played. listener and listening: the frame that hears the target, and whether it does.
 -- flashes, warnings, withheld and stateSounds (the +Combat and -Combat sounds played): what /flatui status counts. silent: the No target sounds
 -- the game has not played since it last played one; /flatui status says so while there are any. blind: the last judgement had an answer the game
 -- withheld. healer: the player heals (ns.PlayerRole), read out of a fight. breathe and pop: the animation groups of No target and of the flash line.
 -- fightAt: GetTime as this fight started; lastFight: the seconds the last fight lasted. low: the Low health and Low mana lines ({ holder, line,
--- breathe, on } by kind), lowCurve their step curve, lowListener and lowListening the frame that hears the player and whether it does, lowSampled:
--- test mode shows Low health; lowRefused and manaRefused: the game refused the curve or the call.
+-- breathe, on } by kind), lowCurves their step curves ({ at, curve } by kind), lowListener and lowListening the frame that hears the player
+-- and whether it does, lowSampled: test mode shows Low health; lowRefused and manaRefused: the game refused the curve or the call.
 local S = { fighting = false, warned = false, listening = false, blind = false, healer = false, flashes = 0, warnings = 0, withheld = 0, silent = 0,
 	stateSounds = 0 }
 
@@ -404,7 +409,14 @@ local function Length(seconds)
 	return ("%d:%02d"):format(minutes, rest)
 end
 
--- +Combat or -Combat for a moment, with its sound unless quiet (test mode), and extra after the words when given (the fight's length).
+-- The words of +Combat or -Combat: -Combat with the fight's length after it (S.flashExtra, kept by Flash) while Fight length on -Combat is on,
+-- read each time so that a change of the row rewrites a line that shows.
+local function FlashText(kind)
+	local extra = kind == "leave" and Opt("combatLength") == true and S.flashExtra or nil
+	return extra and (Words(kind) .. "  " .. extra) or Words(kind)
+end
+
+-- +Combat or -Combat for a moment, with its sound unless quiet (test mode), and extra, the fight's length, kept for -Combat's words.
 local function Flash(kind, quiet, extra)
 	if not FlashWanted() or not InterfaceShown() then
 		return
@@ -414,7 +426,8 @@ local function Flash(kind, quiet, extra)
 		return
 	end
 	local line = S.flash
-	line:SetText(extra and (Words(kind) .. "  " .. extra) or Words(kind))
+	S.flashExtra = extra
+	line:SetText(FlashText(kind))
 	Look(line, kind)
 	line:SetAlpha(1)
 	line:Show()
@@ -503,24 +516,40 @@ end
 
 -- Low health and Low mana --------------------------------------------------------------------------------------------------------------
 
--- The step curve of both lines: 1 under LOW_AT, 0 from it (C_CurveUtil, as HealthColour.lua makes its low health border's). Made once; a client
--- that will not make it leaves both lines off, and the status says so.
-local function LowCurve()
-	if S.lowCurve == nil and not S.lowRefused then
-		local ok, curve = pcall(function()
-			local made = C_CurveUtil.CreateCurve()
-			made:SetType(Enum.LuaCurveType.Step)
-			made:AddPoint(0, 1)
-			made:AddPoint(LOW_AT, 0)
-			return made
-		end)
-		if ok and curve ~= nil and not ns.IsSecret(curve) then
-			S.lowCurve = curve
-		else
-			S.lowRefused = true
-		end
+-- The share under which a line shows: Low health below or Low mana below (0.5.39, 20% at first), LOW_AT for a value that is not a number.
+local function LowAt(kind)
+	local at = Opt(kind == "mana" and "lowManaAt" or "lowHealthAt")
+	if ns.Finite(at) and at > 0 and at <= 100 then
+		return at / 100
 	end
-	return S.lowCurve
+	return LOW_AT
+end
+
+-- The step curve of one line: 1 under its share, 0 from it (C_CurveUtil, as HealthColour.lua makes its low health border's). Kept by kind with
+-- its share, and made again when the row's share changed; a client that will not make it leaves both lines off, and the status says so.
+local function LowCurve(kind)
+	if S.lowRefused then
+		return nil
+	end
+	local at = LowAt(kind)
+	S.lowCurves = S.lowCurves or {}
+	local kept = S.lowCurves[kind]
+	if kept and kept.at == at then
+		return kept.curve
+	end
+	local ok, curve = pcall(function()
+		local made = C_CurveUtil.CreateCurve()
+		made:SetType(Enum.LuaCurveType.Step)
+		made:AddPoint(0, 1)
+		made:AddPoint(at, 0)
+		return made
+	end)
+	if ok and curve ~= nil and not ns.IsSecret(curve) then
+		S.lowCurves[kind] = { at = at, curve = curve }
+		return curve
+	end
+	S.lowRefused = true
+	return nil
 end
 
 -- Makes the two lines under No target, once: each a font string on a holder frame of its own on the frame of the lines, so that the holder's
@@ -596,7 +625,7 @@ local function PaintLow(kind)
 		return
 	end
 	local fight = Opt("lowFight") ~= true or S.fighting
-	local curve = LowWanted() and fight and not S.lowRefused and Ask(UnitIsDeadOrGhost, "player") ~= true and LowCurve()
+	local curve = LowWanted() and fight and not S.lowRefused and Ask(UnitIsDeadOrGhost, "player") ~= true and LowCurve(kind)
 	local on = false
 	if curve and kind == "health" then
 		on = pcall(HealthAlpha, rec.holder, curve)
@@ -726,6 +755,14 @@ end
 local Wait
 
 local function Judge()
+	-- Test mode's sample of No target stays out of a fight while its row is on, also through a refresh of the page, which looks it again:
+	-- HideSample and the next step take it away. With the row off it goes here.
+	if S.sampled and not S.fighting then
+		if WarnWanted() then
+			return
+		end
+		S.sampled = nil
+	end
 	if not (WarnWanted() and S.fighting) then
 		HideWarning()
 		return
@@ -854,10 +891,14 @@ local function Apply()
 	Listen(warn and S.fighting)
 	if S.frame then
 		Place()
+		-- A line that shows, a sample of test mode too, takes a changed row at once: its look and its words (the key to target an enemy, the
+		-- fight's length).
 		if S.flashAt and S.flashKind then
+			pcall(S.flash.SetText, S.flash, FlashText(S.flashKind))
 			Look(S.flash, S.flashKind)
 		end
 		if S.warned then
+			pcall(S.warn.SetText, S.warn, WarnText())
 			Look(S.warn, "warn")
 		end
 	end
@@ -899,7 +940,7 @@ ns.AddEvent(KEY, "PLAYER_REGEN_ENABLED", function()
 		Run(function()
 			Listen(false)
 			Judge()
-			Flash("leave", nil, length and Opt("combatLength") == true and Length(length) or nil)
+			Flash("leave", nil, length and Length(length) or nil)
 		end)
 	end
 end)
@@ -955,8 +996,9 @@ ns.AddStatus(KEY, function()
 		elseif S.manaRefused then
 			lines[#lines + 1] = "Low mana warning: the game would not give your mana through a curve, so Low mana does not show."
 		end
-		if not S.lowRefused and Opt("lowFight") == true then
-			lines[#lines + 1] = "Low health warning: only in a fight."
+		if not S.lowRefused then
+			lines[#lines + 1] = ("Low health warning: under %d%% health, under %d%% mana%s."):format(math.floor(LowAt("health") * 100 + 0.5),
+				math.floor(LowAt("mana") * 100 + 0.5), Opt("lowFight") == true and ", only in a fight" or "")
 		end
 	end
 	return lines
@@ -997,7 +1039,7 @@ local function TestStep(quiet)
 		local phase = S.testStep % 3
 		HideSample()
 		if phase ~= 1 then
-			Flash(phase == 0 and "enter" or "leave", true, phase == 2 and Opt("combatLength") == true and "0:42" or nil)
+			Flash(phase == 0 and "enter" or "leave", true, phase == 2 and "0:42" or nil)
 		elseif InterfaceShown() then
 			if WarnWanted() and Make() then
 				local line = S.warn

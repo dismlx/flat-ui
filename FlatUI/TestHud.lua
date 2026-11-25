@@ -12,7 +12,8 @@ local _, ns = ...
 --   The target's, the focus's and the pet's at TargetFrameSpellBar, FocusFrameSpellBar and PetCastingBarFrame, and the first boss's at
 --   Boss1TargetFrameSpellBar, each only while the stand-in of its unit shows (TM.Shown of "target", "focus", "pet" and "boss", TestUnits.lua): an enemy
 --   cast, the target's and the focus's in the colour of the player's interrupt while Interrupt readiness on enemy casts and Flat fill are on (the
---   target's ready, the focus's ready but out of range), then one that cannot be interrupted, a little later than the player's. Each bar takes the size of the game's frame. The boss bar keeps the game's look, as Bars.lua
+--   target's ready, the focus's ready but out of range), then one that cannot be interrupted, a little later than the player's, each with "> You"
+--   past its end while Target of enemy casts is on. Each bar takes the size of the game's frame. The boss bar keeps the game's look, as Bars.lua
 --   styles no boss bar, and hangs on the unit frames' module, whose boss stand-in it follows.
 --   Swing timers: at SwingTimerMainHandFrame for every class, SwingTimerOffHandFrame for a warrior and a rogue with an off-hand weapon,
 --   SwingTimerRangedFrame for a hunter with a ranged weapon (UnitAttackSpeed, as the game's HasOffHandWeapon and HasRangedWeapon), while the game's
@@ -22,8 +23,8 @@ local _, ns = ...
 --   Debuffs and buffs: three icons each, from the top right corner of DebuffFrame while the player has no harmful aura and of BuffFrame while the
 --   player has no helpful aura at all (C_UnitAuras.GetAuraSlots, read out of combat only, when its answer is plain), only while the game shows that
 --   frame (its Edit Mode Visibility, Blizzard_BuffFrame/BuffFrame.lua:380-411) and not while Edit Mode is open, where it shows its example auras: a
---   magic, a curse and a poison debuff in the colours of their types, and times that count down and loop in the time format of Minimap and HUD
---   (AuraTime.lua).
+--   magic, a curse and a poison debuff in the colours of their types, and times that count down and loop in the time format and Duration colour
+--   of Minimap and HUD (AuraTime.lua): gold, white, or white that turns red under 10 seconds.
 --   Loot rolls: two rolls at the box Loot rolls of /flatui move, where the game's rolls show (ns.MoverSpot: the saved spot, else where the game
 --   stacks them), up or down as Rolls stack says once a spot is saved, the game's 100 apart (Hud.lua, ROLL), while none of GroupLootFrame1 to 4
 --   shows; their timers drain over 10 seconds and loop, with the seconds of a 60 second roll counting down over them, red under 10, while Seconds
@@ -33,7 +34,8 @@ local _, ns = ...
 --   under 10, as Hud.lua draws the real one with Breath and fatigue timers and Seconds on the timers on, or in the game's look while the first is
 --   off (ns.DrawHud.Mirror, SetupDrawHud.lua).
 --   The sample nameplate: an enemy plate with its cast bar, auras and quest mark with its kill count (while Quest mark on enemies you need for a
---   quest is on and the marks are not left to Questie), and for a warrior the Overpower icon with its swipe over the auras, at the middle of the
+--   quest is on and the marks are not left to Questie), for a warrior the Overpower icon (a hunter's Mongoose Bite) with its swipe over the auras,
+--   and for a rogue or a druid the row of combo points under the cast bar (SetupDrawPlates.lua's P.Combo), at the middle of the
 --   screen, 160 units up, with a dim Sample nameplate under it, as plates have no place of their own. Its cast fills, and it takes the threat states
 --   in turn every 3 seconds (You want, Changing hands, You do not want) while Threat on nameplates is on: its health bar in the threat colour while
 --   Colour health bars by threat is on, the threat ring as Threat glow asks (flashing as it reaches You do not want, with Flash the ring when threat
@@ -41,7 +43,10 @@ local _, ns = ...
 --   the threat colour, the threat colour on the border and the background as their rows ask, the name of the enemy's target right of the bar ([Gorvak]
 --   in the warrior colour, and you on You do not want unless Not when it attacks you), and the fade of Fade enemies held for you
 --   (SetupDrawPlates.lua's P.Threat); the quest mark moves past a value and the enemy's target on its side, and its kill count goes up with each
---   threat round (3/8 to 7/8), popping as it does. While Moving is off the Overpower swipe holds still with the rest (the stage's still).
+--   threat round (3/8 to 8/8), popping as it does, turns green at 8/8, and the mark and count fade just after that pop settles and fade back in at
+--   3/8 the round after, as a live mark does (P.QuestFade). The combo points gain one each threat round (1 to 5, then 1 again), the newest popping
+--   as it lands. The Overpower icon pops and fades on its own 5-second rounds whatever Time left on the Overpower icon says, which only sets its
+--   swipe. While Moving is off all of it holds still with the rest (the stage's still).
 -- The cursor ring is no module, so it cannot register with test mode (TM.Register runs an entry only while its module is on): at every On, Off,
 -- pause and resume (TM.Watch) the ring applies its rows again (ns.CursorRingChanged, which reads TM.IsOn: In combat only reads as shown while it
 -- is on), and while test mode is on and Moving a frame of this file gives the ring a sample cast and global cooldown every 3 seconds
@@ -56,14 +61,15 @@ end
 
 -- The cast bars: their stand-in, game frame, module, place on the Cast bars page (opt), the stand-in of their unit, how much later their round
 -- starts, and their spell names by state. kick: the interrupt colour an enemy bar shows, ready on the target's and out of range on the focus's (the
--- setup picture shows on cooldown); the boss bar keeps the game's look, which takes none.
+-- setup picture shows on cooldown); the boss bar keeps the game's look, which takes none. aim: the sample name of the cast's target past the end of
+-- the target's and the focus's bars while Target of enemy casts is on (CastTime.lua).
 local CASTS = {
 	{ id = "castPlayer", game = "PlayerCastingBarFrame", module = "castbars", opt = "player", label = "Cast bar", offset = 0, ticks = 5,
 		names = { channel = "Drain Life" } },
 	{ id = "castTarget", game = "TargetFrameSpellBar", module = "castbars", opt = "target", label = "Target cast bar", unit = "target", offset = 0.8,
-		small = true, kick = "ready", names = { cast = "Fireball", shield = "Polymorph" } },
+		small = true, kick = "ready", aim = "> You", names = { cast = "Fireball", shield = "Polymorph" } },
 	{ id = "castFocus", game = "FocusFrameSpellBar", module = "castbars", opt = "focus", label = "Focus cast bar", unit = "focus", offset = 1.6,
-		small = true, kick = "far", names = { cast = "Frostbolt", shield = "Fear" } },
+		small = true, kick = "far", aim = "> You", names = { cast = "Frostbolt", shield = "Fear" } },
 	{ id = "castPet", game = "PetCastingBarFrame", module = "castbars", opt = "pet", label = "Pet cast bar", unit = "pet", offset = 2.4,
 		round = "pet", names = { cast = "Firebolt" } },
 	{ id = "castBoss", game = "Boss1TargetFrameSpellBar", module = "unitframes", opt = "boss", label = "Boss cast bar", unit = "boss", offset = 1.2,
@@ -93,6 +99,8 @@ local DEBUFFS = {
 local BUFFS = { { kind = nil, seconds = 25 }, { kind = nil, seconds = 290 }, { kind = nil, seconds = 1700 } }
 -- The game's colour of an aura's time (GameFontNormalSmall), which Duration colour White replaces.
 local AURA_GOLD = { 1, 0.82, 0 }
+-- White, red in the last 10 s: the seconds under which a sample's time is red, and the red, as AuraTime.lua's WARN and RED paint the real ones.
+local AURA_WARN, AURA_RED = 10, { 1, 0.3, 0.3 }
 -- The rolls: the box of /flatui move, the game's room for each roll (GroupLootFrame.lua:15, Hud.lua's ROLL.step), its width (GroupLootFrame.xml:292),
 -- the seconds its timer runs, and the items, those of mock-loot.
 local ROLL_BOX, ROLL_STEP, ROLL_W, ROLL_TIME = "FlatUILootRolls", 100, 277, 10
@@ -176,7 +184,7 @@ local function CastStandIn(spec)
 		Build = function(holder)
 			holder.row = ns.DrawCasts.Cast(holder, { opt = spec.opt, small = spec.small, shield = true, time = "",
 				name = spec.opt == "player" and "Shadow Bolt" or spec.names.cast, rank = spec.opt == "player" and "Rank 3" or nil,
-				ticks = spec.ticks })
+				ticks = spec.ticks, aim = spec.aim })
 			holder.row.bar:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
 		end,
 		Paint = function(holder, w, h)
@@ -298,6 +306,14 @@ local function AuraStandIn(id, game, label, list, filter)
 			if cell.left ~= left then
 				cell.left = left
 				cell.time:SetText(AuraTime(left))
+				-- Under White, red in the last 10 s, each loop turns red under 10 seconds and white again as it starts over.
+				if holder.warn then
+					if left < AURA_WARN then
+						cell.time:SetTextColor(AURA_RED[1], AURA_RED[2], AURA_RED[3])
+					else
+						cell.time:SetTextColor(1, 1, 1)
+					end
+				end
 			end
 		end
 	end
@@ -328,6 +344,7 @@ local function AuraStandIn(id, game, label, list, filter)
 		Paint = function(holder)
 			local colour = ns.Get("hud.durationColour")
 			local white = ns.Get("hud.enabled") == true and (colour == "white" or colour == "warn")
+			holder.warn = ns.Get("hud.enabled") == true and colour == "warn"
 			for index, aura in ipairs(list) do
 				local cell = holder.cells[index]
 				ns.DrawHud.PaintAura(cell, aura.kind)
@@ -456,6 +473,15 @@ TM.StandIn({
 
 -- The sample nameplate --------------------------------------------------------------------------------------------------------------------------
 
+-- What counts up with each threat round: the kill count, 3/8 to 8/8 and back to 3/8, and a rogue's or a druid's combo points, 1 to 5 and back to 1.
+local function Rounds(spec, now)
+	local round = math.floor(now / THREAT_EVERY)
+	spec.questHave = 3 + round % 6
+	if spec.combo ~= nil then
+		spec.combo = 1 + round % 5
+	end
+end
+
 local function PlateMoves(holder, now)
 	local P, p, spec = ns.SetupDrawPlates, holder.plate, holder.spec
 	local t = now % PLATE_ROUND
@@ -464,10 +490,12 @@ local function PlateMoves(holder, now)
 	local threat = THREAT[math.floor(now / THREAT_EVERY) % #THREAT + 1]
 	if spec.threat ~= threat then
 		spec.threat = threat
-		spec.questHave = 3 + math.floor(now / THREAT_EVERY) % 5
+		Rounds(spec, now)
 		P.Health(p, spec)
-		-- The ring, the value and the fade of the new state, and the quest mark again past a value of another width.
+		-- The combo points of the round (the value at Below hangs under them), the ring, the value and the fade of the new state, and the quest mark
+		-- again past a value of another width.
 		if p.o and p.m then
+			P.Combo(p, spec, p.o, p.m)
 			P.Threat(p, spec, p.o, p.m)
 			P.QuestMark(p, spec, p.o, p.m)
 		end
@@ -493,8 +521,11 @@ TM.StandIn({
 			holder.caption:SetText("Sample nameplate")
 			holder.caption:SetTextColor(DIM[1], DIM[2], DIM[3])
 		end
-		-- A warrior's sample also dodged them, so it carries the Overpower icon.
-		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, quest = true, overpower = Class() == "WARRIOR",
+		-- A warrior's sample also dodged them, so it carries the Overpower icon (a hunter's, Mongoose Bite); a rogue's or a druid's has their combo
+		-- points under it.
+		local class = Class()
+		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, quest = true,
+			overpower = class == "WARRIOR" or class == "HUNTER", combo = (class == "ROGUE" or class == "DRUID") and 1 or nil,
 			cast = { name = "Shadow Bolt", share = 0, left = PLATE_CAST } }
 	end,
 	Paint = function(holder)
@@ -503,7 +534,7 @@ TM.StandIn({
 		local run = math.min(1, (now % PLATE_ROUND) / PLATE_CAST)
 		spec.cast.share, spec.cast.left = run, PLATE_CAST * (1 - run)
 		spec.threat = THREAT[math.floor(now / THREAT_EVERY) % #THREAT + 1]
-		spec.questHave = 3 + math.floor(now / THREAT_EVERY) % 5
+		Rounds(spec, now)
 		local box = P.Plate(p, spec, P.Sets())
 		p.f:ClearAllPoints()
 		p.f:SetPoint("BOTTOM", holder, "CENTER", 0, PLATE_UP)

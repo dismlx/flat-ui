@@ -65,10 +65,11 @@ local _, ns = ...
 -- emptied by hand stays empty until a trinket goes in by hand; either hold also ends with Queue now, the slot's Auto queue turned on or Pause all
 -- turned off.
 -- Each swap is said in chat (Say each swap in chat) and may play a sound of ns.SOUNDS (IconRow.lua:17-25, PlaySound in pcall; not ns.PlayKit,
--- whose note speaks of a flash); picking Sound on a swap in the options window plays it once (ns.TrinketSoundPicked, through ns.PlayKit, 0.5.37). Everything runs as the part "swaps" of the module (ns.EachPart, each run with a count of its own as its first
--- argument, as GearWindow.lua's Run), so three faults stop the swaps alone with a line for /flatui status; the first fault of each kind also goes
--- to the game's error handler. It never writes a field of a game frame, calls no mixin, adds no hook, makes no secure frame and never swaps in a
--- fight; its frames are its own.
+-- whose note speaks of a flash); picking Sound on a swap in the options window plays it once, as every sound row of Panel.lua's AddChoice does
+-- (the row's own handler of 0.5.37 went in 0.5.39: it played it again and on an undo). Everything runs as the part "swaps" of the module
+-- (ns.EachPart, each run with a count of its own as its first argument, as GearWindow.lua's Run), so three faults stop the swaps alone with a line
+-- for /flatui status; the first fault of each kind also goes to the game's error handler. It never writes a field of a game frame, calls no
+-- mixin, adds no hook, makes no secure frame and never swaps in a fight; its frames are its own.
 
 local KEY, PART = "trinkets", "swaps"
 -- The slots (INVSLOT_TRINKET1 and 2, Blizzard_FrameXMLBase/Constants.lua:148-149), their order, the other slot, the Auto queue row, the slot of
@@ -1189,23 +1190,6 @@ function R.Sound()
 	local ok, played = Call(PlaySound, kit[1])
 	if not ok or played == false then
 		ns.Note(KEY, T.NO_SOUND)
-	end
-end
-
--- Picking Sound on a swap in the options window plays it once, so it can be chosen by ear: the row's changed handler (Config.lua, 0.5.37), as
--- UnitGroupMarks.lua's ns.DispelSoundPicked. Only while the options window shows and out of a fight; None plays nothing.
-function ns.TrinketSoundPicked(path)
-	if type(path) ~= "string" or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
-		return
-	end
-	local okFight, fighting = Call(InCombatLockdown)
-	if not okFight or IsSecret(fighting) or fighting == true then
-		return
-	end
-	local kit = KITS[ns.Get(path)]
-	local sound = kit and type(ns.SOUNDS) == "table" and ns.SOUNDS[kit]
-	if sound and type(ns.PlayKit) == "function" then
-		ns.PlayKit(sound[1])
 	end
 end
 

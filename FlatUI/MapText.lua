@@ -90,7 +90,7 @@ local FIGHT_HINTS = {
 local LATER_STOPWATCH = "Flat UI: the stopwatch opens when the fight ends."
 local LATER_CALENDAR = "Flat UI: the calendar opens when the fight ends."
 local LATER_CHARACTER = "Flat UI: the character window opens when the fight ends."
-local LATER_MAP = "Flat UI: the map opens when the fight ends."
+local LATER_MAP = "Flat UI: the world map opens when the fight ends."
 
 -- frame: the frame of the lines; text[id]: the font string of a line; button[id]: the button over it; shown[id]: its text while it shows;
 -- colour[id]: its colour; size[id]: the Text size it was given; why[id]: why a wanted line is hidden, for /flatui status; over: the line under

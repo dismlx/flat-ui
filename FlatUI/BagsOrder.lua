@@ -33,8 +33,11 @@ local _, ns = ...
 -- At the live bank (B.Bank.Live), while Deposit and Take out is on (the row that shows those buttons, B.Opt("bankButtons")), a section of the
 -- player's own slots also has Put <section> in the bank in the bag window and Take <section> out in the bank window, which run the pass of Deposit
 -- and Take out of BagsBank.lua with the section (B.Categories.Of) in place of the search, and its tooltip says so; not on Keep in place, whose
--- items stay pinned. On Keep in place it also has BagsPins.lua's lines; on a section the player made, Rename and Delete this section; and in the
--- player's own bag window, New section (B.Custom.MenuLines, BagsCustom.lua). + New section, the title after the last section that makes one, never
+-- items stay pinned. A section with items placed in it by hand (B.Categories.PlacedCount, not Keep in place or Junk, which take none) has a line
+-- that puts them back in their own sections (B.Categories.PutBack, one line in chat), "Put back the 3 items placed here", or on a section the
+-- player made "Empty this section (3 items)"; the tooltip of one of Flat UI's own sections says how many are placed there. On Keep in place it also
+-- has BagsPins.lua's lines; on a section the player made, Rename, Colour and Delete this section; and in the player's own bag window, New section
+-- (B.Custom.MenuLines, BagsCustom.lua). + New section, the title after the last section that makes one, never
 -- moves, folds or opens this menu. The row Section order on the Bags page does the same reset. Moving
 -- sections works in a fight: it only lays the windows out, and their buttons are not protected (BagsLayout.lua).
 --
@@ -72,9 +75,16 @@ local TIPS = {
 	fold = "Click to fold it.",
 	unfold = "Folded: click to open it.",
 	-- After those, on a section the player made (BagsCustom.lua).
-	own = "Right-click it to rename or delete this section of yours.",
+	own = "Right-click it to rename, colour or delete this section of yours.",
 }
 local UNFOLD_ALL, FOLD_ALL = "Unfold every section", "Fold every section"
+-- What a title's menu says in chat once it put back the items placed in its section.
+local PUT_BACK = {
+	one = "Flat UI: 1 item goes back to its own section.",
+	many = "Flat UI: %d items go back to their own sections.",
+}
+-- After a title's tip, while items are placed in its section by hand.
+local PLACED_TIP = { one = "1 item is placed here by hand.", many = "%d items are placed here by hand." }
 -- After the tip of a click: what a Shift-click does, on a section among others open and on the one open alone.
 local SHIFT_TIPS = { only = "Shift-click to open only this one.", all = "Shift-click to open every section again." }
 -- The lines of a section's menu at the live bank, and what its tooltip says of them.
@@ -617,6 +627,26 @@ function Order.Fold(st, sec)
 	return Toggle(st, sec)
 end
 
+-- How many items are placed by hand in a section as the windows show it (B.Categories.PlacedCount), 0 for Keep in place and Junk, which take no
+-- placement.
+local function PlacedHere(key)
+	if key == "keep" or key == "junk" then
+		return 0
+	end
+	local ok, count = pcall(Call, B.Categories, "PlacedCount", key)
+	return ok and ns.Finite(count) and count or 0
+end
+
+-- The line of a title's menu that puts back the items placed in it: "Put back the 3 items placed here", or on a section of the player's own,
+-- which holds nothing else, "Empty this section (3 items)".
+local function PutBackText(key, count)
+	local okOwn, own = pcall(Call, B.Custom, "Is", key)
+	if okOwn and own == true then
+		return ("Empty this section (%d %s)"):format(count, count == 1 and "item" or "items")
+	end
+	return count == 1 and "Put back the item placed here" or ("Put back the %d items placed here"):format(count)
+end
+
 -- The menu of a title (a right click with no item on the cursor), under anchor.
 function Order.Menu(st, sec, anchor)
 	if not Movable(st, sec) then
@@ -646,6 +676,16 @@ function Order.Menu(st, sec, anchor)
 	if at and at < #shown then
 		Line("Move down", shown[at + 1], true)
 		Line("Move to the bottom", shown[#shown], true)
+	end
+	-- The items placed here by hand go back to their own sections (B.Categories.PutBack); on a section of the player's own that empties it.
+	local placed = PlacedHere(key)
+	if placed > 0 then
+		items[#items + 1] = { text = PutBackText(key, placed), part = "order", pick = function()
+			local count = Call(B.Categories, "PutBack", key)
+			if ns.Finite(count) and count > 0 then
+				print(count == 1 and PUT_BACK.one or PUT_BACK.many:format(count))
+			end
+		end }
 	end
 	items[#items + 1] = { text = Order.Folded(key) and "Unfold" or "Fold", part = "order", pick = function()
 		Toggle(st, sec)
@@ -710,6 +750,11 @@ function Order.Tip(st, sec)
 		local okOwn, own = pcall(Call, B.Custom, "Is", sec.key)
 		if okOwn and own == true then
 			click = click .. " " .. TIPS.own
+		end
+		-- A section of the player's own holds only what was placed in it, so only Flat UI's own say it.
+		local placed = (okOwn and own == true) and 0 or PlacedHere(sec.key)
+		if placed > 0 then
+			click = click .. " " .. (placed == 1 and PLACED_TIP.one or PLACED_TIP.many:format(placed))
 		end
 		return TIPS.drag .. " " .. click
 	end

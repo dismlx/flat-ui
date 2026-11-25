@@ -7,13 +7,14 @@ local _, ns = ...
 --
 -- It is turned on from the switch in the title bar of the options window (source "panel", Panel.lua), Samples on the toolbar of /flatui move
 -- ("movers", MoversMode.lua), /flatui test, test on and test off ("slash", Core.lua) and a key ("key": Bindings.xml binds a click of
--- FlatUITestButton, a plain button of Flat UI's own made here, named in the game's Key Bindings as BagsBank.lua names its own). On refuses in
--- combat and while Setup has the options window. It ends with its toggle or the bar's End; when the options window hides while it was turned on
--- there, unless /flatui move holds that window hidden (ns.MoversMode.Holding); when /flatui move closes for good after turning it on, unless the
--- options window is shown then, which takes it over; when Setup takes the window (Panel.lua's SetMode, whatever turned it on, since Setup paints a
--- draft and the samples paint the live profile); and at a reload. A fight pauses it inside PLAYER_REGEN_DISABLED, heard by a frame registered as
--- this file loads; a frame after the fight ends it comes back while what turned it on is still open (the options window shown or held hidden by
--- /flatui move, /flatui move open again), or for "slash" and "key" always, and ends otherwise.
+-- FlatUITestButton, a plain button of Flat UI's own made here, named in the game's Key Bindings as BagsBank.lua names its own). On refuses while
+-- Setup has the options window; in combat it keeps the wish, and a frame after the fight ends test mode comes on while what asked is still open
+-- (Wished); asked again in the same fight, the wish goes. It ends with its toggle or the bar's End; when the options window hides while it was
+-- turned on there, unless /flatui move holds that window hidden (ns.MoversMode.Holding); when /flatui move closes for good after turning it on,
+-- unless the options window is shown then, which takes it over; when Setup takes the window (Panel.lua's SetMode, whatever turned it on, since
+-- Setup paints a draft and the samples paint the live profile); and at a reload. A fight pauses it inside PLAYER_REGEN_DISABLED, heard by a frame
+-- registered as this file loads; a frame after the fight ends it comes back while what turned it on is still open (the options window shown or held
+-- hidden by /flatui move, /flatui move open again), or for "slash" and "key" always, and ends otherwise.
 --
 -- The bar (BuildBar) picks the group and Moving (a switch that clicks and slides as the options window's do, ns.PanelKit.SwitchClick and Slider),
 -- opens Bags, Bank, Gear, Finder, Queue (the Trinket queue window) and Move (/flatui move, with the samples kept on) and has End. It stands above
@@ -35,10 +36,13 @@ local _, ns = ...
 -- The contract the other files code against (spec section 5.1):
 --   TM.IsOn()            true while on and not paused: the one read every part uses in Refresh, Update or a show rule.
 --   TM.On(source)        source "panel", "movers", "slash" or "key"; false (with a line that says why) in combat or while Setup has the window.
---   TM.Off(why)          why "toggle", "panel", "movers" or "setup"; nothing when off.
+--                        In combat it keeps the wish for the fight's end ("comes on when the fight ends"), or takes back the one it kept ("stays off").
+--   TM.Off(why)          why "toggle", "panel", "movers" or "setup"; when off, "toggle" only takes back a wish of a fight.
 --   TM.Toggle(source)    Off when on (paused included), else On(source).
 --   TM.Pass(source)      gives a mode that is on to another source (/flatui move closing for good hands it to the options window that is shown).
 --   TM.Source()          the source while on, paused included, else nil.
+--   TM.Wanted()          while off: the source that asked for it in a fight, which the fight's end turns on; else nil.
+--   TM.Drop(source)      takes back a wish of that source (any, when nil) with no line: the options window drops its own as it hides.
 --   TM.Epoch()           a number that goes up at every On, Off, pause and resume: the token of every sample timer.
 --   TM.Group()           "solo", "party", "raid10", "raid20" or "raid40" (default "party"), chosen on the bar for the session.
 --   TM.SetGroup(group)   what the bar's Group runs: entries get Changed("test.group") and their refresh, and the stand-ins are polled and painted.
@@ -74,7 +78,8 @@ events:RegisterEvent("PLAYER_REGEN_DISABLED")
 events:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 -- The state of the session: on, the source that turned it on, paused for a fight, the token of timers, the group on the bar and Moving.
-local S = { on = false, source = nil, paused = false, epoch = 0, group = "party", moving = true }
+-- wanted: the source that asked for it in a fight, for the fight's end (TM.On, Wished).
+local S = { on = false, source = nil, paused = false, epoch = 0, group = "party", moving = true, wanted = nil }
 -- The entries and the stand-ins, in the order they were given, and by id. heard: the sounds asked for since the last On.
 local entries, entryById, standins, standinById, heard = {}, {}, {}, {}, {}
 -- What TM.Watch was given, told after every On, Off, pause and resume.
@@ -100,7 +105,8 @@ local CORNERS = { TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 }, LEF
 local STRATA = { BACKGROUND = true, LOW = true, MEDIUM = true, HIGH = true, DIALOG = true, FULLSCREEN = true, FULLSCREEN_DIALOG = true,
 	TOOLTIP = true }
 local SAY = {
-	combat = "Flat UI: test mode after combat.",
+	combat = "Flat UI: test mode comes on when the fight ends.",
+	stays = "Flat UI: test mode stays off.",
 	setup = "Flat UI: finish or close Setup first.",
 	pause = "Flat UI: test mode pauses for combat.",
 	line = "Samples fill in for hidden frames; your real frames take over when they show. Esc > Edit Mode shows the game's own previews.",
@@ -874,13 +880,14 @@ local function Pause()
 	print(SAY.pause)
 end
 
--- True while what turned test mode on is still open.
-local function StillOpen()
-	if S.source == "panel" then
+-- True while what turned test mode on (or what asked for it in a fight: source) is still open.
+local function StillOpen(source)
+	source = source or S.source
+	if source == "panel" then
 		local mode = ns.MoversMode
 		return (type(ns.PanelShown) == "function" and ns.PanelShown() == true)
 			or (type(mode) == "table" and type(mode.Holding) == "function" and mode.Holding() == true)
-	elseif S.source == "movers" then
+	elseif source == "movers" then
 		local kit = ns.MoverKit
 		return type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
 	end
@@ -904,12 +911,19 @@ function TM.IsOn()
 	return S.on and not S.paused
 end
 
+-- In a fight it keeps the wish (S.wanted) and says so, and the fight's end turns it on (Wished); asked again in the same fight, it takes the wish back.
 function TM.On(source)
 	if S.on then
 		return true
 	end
 	if Fighting() then
-		print(SAY.combat)
+		if S.wanted then
+			S.wanted = nil
+			print(SAY.stays)
+		else
+			S.wanted = SOURCES[source] and source or "slash"
+			print(SAY.combat)
+		end
 		return false
 	end
 	if type(ns.PanelInMode) == "function" and ns.PanelInMode() then
@@ -926,6 +940,11 @@ end
 -- why ("toggle", "panel", "movers" or "setup") names the rule that ended it, for the reader: every way ends the same.
 function TM.Off(why)
 	if not S.on then
+		-- /flatui test off in a fight takes a wish back.
+		if S.wanted and why == "toggle" then
+			S.wanted = nil
+			print(SAY.stays)
+		end
 		return
 	end
 	S.on, S.source, S.paused = false, nil, false
@@ -949,6 +968,18 @@ end
 
 function TM.Source()
 	return S.on and S.source or nil
+end
+
+function TM.Wanted()
+	return not S.on and S.wanted or nil
+end
+
+function TM.Drop(source)
+	if S.wanted and (source == nil or S.wanted == source) then
+		S.wanted = nil
+		return true
+	end
+	return false
 end
 
 function TM.Epoch()
@@ -1098,9 +1129,31 @@ function TM.StandIn(spec)
 	return true
 end
 
+-- A wish of a fight (TM.On in combat), a frame after the fight ends: it turns test mode on while what asked for it is still open (the options window
+-- shown and not in Setup, /flatui move open), or for "slash" and "key" always, and is dropped otherwise. A new fight in that frame keeps it.
+local function Wished()
+	local source = S.wanted
+	if not source or S.on or Fighting() then
+		return
+	end
+	S.wanted = nil
+	if not StillOpen(source) or (source == "panel" and type(ns.PanelInMode) == "function" and ns.PanelInMode()) then
+		return
+	end
+	TM.On(source)
+end
+
 events:SetScript("OnEvent", function(_, event)
 	if event == "PLAYER_REGEN_DISABLED" then
 		Safe(Pause)
+	elseif event == "PLAYER_REGEN_ENABLED" and S.wanted and not S.on then
+		if C_Timer and C_Timer.After then
+			C_Timer.After(0, function()
+				Safe(Wished)
+			end)
+		else
+			Safe(Wished)
+		end
 	elseif event == "PLAYER_REGEN_ENABLED" and S.on and S.paused then
 		-- A frame later, so the movers have opened again (Movers.lua's PLAYER_REGEN_ENABLED) before what turned it on is looked at.
 		local epoch = S.epoch
@@ -1117,7 +1170,7 @@ events:SetScript("OnEvent", function(_, event)
 end)
 
 -- The key: Bindings.xml binds a click of this plain button of Flat UI's own, a child of UIParent with no size and no point, as the bank key's
--- (BagsBank.lua). It hears the release only, so a press toggles once; in a fight it says so and does nothing else.
+-- (BagsBank.lua). It hears the release only, so a press toggles once; in a fight it keeps the wish for the fight's end, as TM.On does.
 local BUTTON = "FlatUITestButton"
 local BINDING = "CLICK " .. BUTTON .. ":LeftButton"
 _G["BINDING_NAME_" .. BINDING] = "Flat UI test mode"
@@ -1128,10 +1181,6 @@ do
 		ns.Own[button] = true
 		pcall(button.RegisterForClicks, button, "LeftButtonUp")
 		button:SetScript("OnClick", function()
-			if Fighting() then
-				print(SAY.combat)
-				return
-			end
 			Safe(TM.Toggle, "key")
 		end)
 	end

@@ -97,7 +97,7 @@ ns.SETUP_PROFILES = {
 		["unitframes.playerHealthText"] = "curpct",
 		["unitframes.targetHealthText"] = "curpct",
 	} },
-	{ id = "healer", label = "Healer", line = "Missing health on party frames.", values = {
+	{ id = "healer", label = "Healer", line = "Missing health, heal over time squares and a low health border on party frames.", values = {
 		["combattext.friend"] = "frames",
 		["combattext.friendDamage"] = false,
 		["combattext.friendHeal"] = "done",
@@ -113,6 +113,8 @@ ns.SETUP_PROFILES = {
 		["unitframes.focusHealthText"] = "pct",
 		["unitframes.healthByLeft"] = true,
 		["unitframes.healthTextSize"] = 110,
+		["unitframes.hotSquares"] = true,
+		["unitframes.lowHealth"] = true,
 		["unitframes.nameSize"] = 110,
 		["unitframes.partyHealthText"] = "miss",
 		["unitframes.partyPicture"] = "none",

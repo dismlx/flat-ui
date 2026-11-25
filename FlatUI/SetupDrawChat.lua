@@ -568,11 +568,12 @@ do
 	}
 	-- For the player, as the module's own samples: the report, the text with its sign, whether it is a critical hit, whether it shows
 	-- from Damage and healing you take, the colour, and whether it starts a few units to one side. The last is a Frost spell's hit: the game's
-	-- purple, or light blue with Colour by school of magic on (school, ns.CombatColour).
+	-- purple, or light blue with Colour by school of magic on (school, ns.CombatColour). A physical hit (damage) takes Damage on you colour and
+	-- the heal Healing on you colour, which shows only while Healing on you is on (CombatText.lua, DescribeOwn).
 	local OWN = {
-		{ text = "-412", level = "take", colour = { 1, 0.1, 0.1 }, side = true },
-		{ text = "-824", level = "take", colour = { 1, 0.1, 0.1 }, crit = true },
-		{ text = "+300", level = "take", colour = { 0.1, 1, 0.1 } },
+		{ text = "-412", level = "take", colour = { 1, 0.1, 0.1 }, side = true, damage = true },
+		{ text = "-824", level = "take", colour = { 1, 0.1, 0.1 }, crit = true, damage = true },
+		{ text = "+300", level = "take", colour = { 0.1, 1, 0.1 }, heal = true },
 		{ text = "Dodge", level = "more", colour = { 1, 1, 1 }, side = true, word = true },
 		{ text = "+20", level = "more", colour = { 0.41, 0.8, 0.94 } },
 		{ text = "-510", level = "take", colour = { 0.79, 0.3, 0.85 }, school = 16 },
@@ -922,9 +923,10 @@ do
 		local snapshot = 0.25 * (#OWN - 1) + 0.1
 		local newest = {}
 		local ownSchool = ns.Get("combattext.school") == true
+		local ownHeal = ns.Get("combattext.ownHeal") == true
 		for i, sample in ipairs(OWN) do
 			local fs = S.own[i]
-			local shown = level == "more" or (level == "take" and sample.level == "take")
+			local shown = (level == "more" or (level == "take" and sample.level == "take")) and not (sample.heal and not ownHeal)
 			fs:SetShown(shown)
 			local height = base * (sample.crit and scroll.crit or 1)
 			local start, rx, ry = 0.25 * (i - 1), 0, dir * (i - 1) * height * scroll.line
@@ -942,6 +944,10 @@ do
 				local colour = sample.colour
 				if sample.school and ownSchool then
 					colour = { ns.CombatColour(sample.school, true) }
+				elseif sample.damage then
+					colour = { ns.Colour("combattext.ownDamageColour") }
+				elseif sample.heal then
+					colour = { ns.Colour("combattext.ownHealColour") }
 				end
 				U.font(fs, file, Height(base, sample.crit, math.max(0, age), pops), flags, shadow, colour)
 				fs:SetAlpha(age < 0 and 0 or ns.ScrollAlpha(u, hold))
@@ -973,6 +979,7 @@ do
 		p["combattext.height"], p["combattext.crit"], p["combattext.classicCrit"] = S.enemy[6], S.enemy[6], S.enemy[6]
 		p["combattext.inStyle"], p["combattext.ownSize"], p["combattext.arcWidth"] = S.own[1], S.own[1], S.own[1]
 		p["combattext.inDir"] = S.own[1]
+		p["combattext.ownDamageColour"], p["combattext.ownHeal"], p["combattext.ownHealColour"] = S.own[1], S.own[3], S.own[3]
 		for _, key in ipairs({ "where", "outStyle", "outSize", "outDir", "icons", "speed" }) do
 			p["combattext." .. key] = S.out[1]
 		end
@@ -992,10 +999,19 @@ end
 -- same line shows the two in turn. Each shows while its row is on, in the colour and size of its rows (a size of 100% is 25 units,
 -- CombatCues.lua), on the game's combat font (CombatTextFont, else its large number font) with a thin outline. No target names the key bound to
 -- Target Nearest Enemy while Name the key to target an enemy is on, read as the module reads it. The whole is kept inside the picture at any size:
--- it shrinks as one, so the sizes keep their proportions.
+-- it shrinks as one, so the sizes keep their proportions. Low mana is drawn only for a class that has mana (not a warrior or a rogue), as test
+-- mode shows it only for a mana user. At the left, an "On you" column (0.5.39) shows the numbers on you of the Incoming area, still: -412 in
+-- Damage on you colour and +300 in Healing on you colour (while Healing on you is on) with Combat text for you on, and (Dodge) and +20 with Also
+-- misses, dodges and gains, at Size of your text in the combat text's font, outline and shadow (CombatText.lua), so the rows of Your character on
+-- the You and warnings tab have a number to point at; it goes while Combat text for you is Off, and shrinks as one to fit its room.
 do
 	local instances = setmetatable({}, { __mode = "k" })
-	local WIDE, HIGH, EDGE, GAP, SIDE, HEIGHT = 460, 190, 8, 2, 30, 25
+	local WIDE, HIGH, EDGE, GAP, SIDE, HEIGHT = 620, 190, 8, 2, 30, 25
+	-- The On you column: its room at the left, the height of its caption, and its numbers (kind: damage, heal, word or gain), as the samples of
+	-- mock-combat-text; the gain in the colour of a portrait's gain (CombatText.lua, DescribeOwn).
+	local COL_W, CAPTION = 140, 14
+	local ON_YOU = { { text = "-412", kind = "damage" }, { text = "+300", kind = "heal" }, { text = "Dodge", kind = "word" }, { text = "+20", kind = "gain" } }
+	local GAIN, CAPTION_GREY = { 0.41, 0.8, 0.94 }, { 0.72, 0.72, 0.72 }
 	local KINDS = { "enter", "leave", "warn", "health", "mana" }
 	local FALLBACK = { enter = "+Combat", leave = "-Combat", health = "Low health", mana = "Low mana" }
 	-- The colour row of each line.
@@ -1047,7 +1063,88 @@ do
 			fs:SetJustifyH("CENTER")
 			S.lines[kind] = fs
 		end
+		S.you = {}
+		for i = 1, #ON_YOU do
+			local fs = U.text(S.root)
+			fs:SetJustifyH("CENTER")
+			S.you[i] = fs
+		end
+		S.caption = U.text(S.root)
+		S.caption:SetJustifyH("CENTER")
+		S.caption:SetText("On you")
 		return S
+	end
+
+	-- Whether the player's class has mana: not a warrior or a rogue. A class the client does not plainly give counts as one with mana.
+	local function HasMana()
+		local ok, _, class = pcall(UnitClass, "player")
+		if not ok or ns.IsSecret(class) or type(class) ~= "string" then
+			return true
+		end
+		return class ~= "WARRIOR" and class ~= "ROGUE"
+	end
+
+	-- The On you column, still, in its room at the left; false when Combat text for you is Off or the page is, so the alerts take the whole width.
+	local function DrawYou(S, on)
+		local level = on and ns.Get("combattext.own") or "off"
+		local heal = ns.Get("combattext.ownHeal") == true
+		local shape = ns.CombatShape
+		local base = (shape and shape.text or 18) * (ns.Get("combattext.ownSize") or 100) / 100
+		local file, flags = U.FRIZ, "OUTLINE"
+		if type(ns.CombatFont) == "function" then
+			file, flags = ns.CombatFont(ns.Get("combattext.font"), ns.Get("combattext.outline"))
+		end
+		local shadow = ns.Get("combattext.shadow") == true
+		local shown, widest, count = {}, 0, 0
+		for i, sample in ipairs(ON_YOU) do
+			local kind = sample.kind
+			local show = level == "more" or (level == "take" and (kind == "damage" or kind == "heal"))
+			if kind == "heal" and not heal then
+				show = false
+			end
+			shown[i] = show
+			if show then
+				count = count + 1
+			end
+		end
+		local any = count > 0
+		S.caption:SetShown(any)
+		if not any then
+			for _, fs in ipairs(S.you) do
+				fs:Hide()
+			end
+			return false
+		end
+		U.font(S.caption, U.FRIZ, 10, "", true, CAPTION_GREY)
+		U.at(S.caption, "TOP", S.root, "BOTTOMLEFT", EDGE + COL_W / 2, HIGH - EDGE)
+		-- Set whole first and measured, then shrunk as one to fit the room, both high and wide.
+		local colours = { damage = { ns.Colour("combattext.ownDamageColour") }, heal = { ns.Colour("combattext.ownHealColour") }, word = U.WHITE, gain = GAIN }
+		local function Set(fs, sample, size)
+			fs:SetText(sample.kind == "word" and type(ns.CombatParen) == "function" and ns.CombatParen(sample.text) or sample.text)
+			U.font(fs, file, size, flags, shadow, colours[sample.kind])
+			local ok, w = pcall(fs.GetStringWidth, fs)
+			return (ok and not ns.IsSecret(w) and type(w) == "number" and w == w and w > 0) and w or size * #sample.text * 0.5
+		end
+		for i, sample in ipairs(ON_YOU) do
+			if shown[i] then
+				widest = math.max(widest, Set(S.you[i], sample, base))
+			end
+		end
+		local line = base + 2 * GAP
+		local k = math.min(1, (HIGH - 2 * EDGE - CAPTION) / math.max(1, count * line), (COL_W - 2 * EDGE) / math.max(1, widest))
+		local y = HIGH - EDGE - CAPTION
+		for i, sample in ipairs(ON_YOU) do
+			local fs = S.you[i]
+			fs:SetShown(shown[i])
+			if shown[i] then
+				if k < 1 then
+					Set(fs, sample, base * k)
+				end
+				U.at(fs, "TOP", S.root, "BOTTOMLEFT", EDGE + COL_W / 2, y)
+				y = y - line * k
+			end
+		end
+		return true
 	end
 
 	-- Sets the words, face and size of a line and gives its width.
@@ -1069,7 +1166,9 @@ do
 		local hFlash = HEIGHT * (ns.Get("combattext.combatStateSize") or 100) / 100
 		local hWarn = HEIGHT * (ns.Get("combattext.noTargetSize") or 100) / 100
 		local step = hWarn + GAP
-		local shown = { enter = flash, leave = flash, warn = warn, health = low, mana = low }
+		local mana = low and HasMana()
+		local shown = { enter = flash, leave = flash, warn = warn, health = low, mana = mana }
+		local left = DrawYou(S, on) and COL_W or 0
 		local texts = {
 			enter = Words("enter"), warn = Words("warn"), health = Words("health"), mana = Words("mana"),
 			leave = ns.Get("combattext.combatLength") == true and Words("leave") .. "  1:24" or Words("leave"),
@@ -1080,7 +1179,7 @@ do
 			widths[kind] = Set(S.lines[kind], texts[kind], file, (kind == "enter" or kind == "leave") and hFlash or hWarn, kind)
 		end
 		local above = flash and (GAP + hFlash) or 0
-		local below = (low and (GAP + 2 * step + hWarn)) or (warn and (GAP + hWarn)) or 0
+		local below = (low and (GAP + (mana and 2 or 1) * step + hWarn)) or (warn and (GAP + hWarn)) or 0
 		local half = 0
 		for _, kind in ipairs({ "enter", "warn", "health", "mana" }) do
 			if shown[kind] then
@@ -1088,10 +1187,10 @@ do
 			end
 		end
 		local right = flash and (widths.enter / 2 + SIDE + widths.leave) or half
-		local room, tall = WIDE - 2 * EDGE, HIGH - 2 * EDGE
+		local room, tall = WIDE - 2 * EDGE - left, HIGH - 2 * EDGE
 		local span = half + math.max(half, right)
 		local k = math.min(1, tall / math.max(1, above + below), room / math.max(1, span))
-		local cx = EDGE + half * k + (room - span * k) / 2
+		local cx = EDGE + left + half * k + (room - span * k) / 2
 		local cy = EDGE + below * k + (tall - (above + below) * k) / 2
 		for _, kind in ipairs(KINDS) do
 			local fs = S.lines[kind]
@@ -1123,6 +1222,10 @@ do
 		p["combattext.lowHealth"], p["combattext.lowColour"], p["combattext.lowManaColour"] = lines.health, lines.health, lines.mana
 		p["combattext.combatState"], p["combattext.combatEnterColour"], p["combattext.combatStateSize"] = lines.enter, lines.enter, lines.enter
 		p["combattext.combatLeaveColour"], p["combattext.combatLength"] = lines.leave, lines.leave
+		-- The rows of Your character, on the same tab: the On you column.
+		local you = S.you
+		p["combattext.own"], p["combattext.ownSize"], p["combattext.ownDamageColour"] = you[1], you[1], you[1]
+		p["combattext.ownHeal"], p["combattext.ownHealColour"], p["combattext.gainSize"] = you[2], you[2], you[4]
 		return S
 	end
 	ns.SetupDrawings["mock-combat-alerts"] = drawing

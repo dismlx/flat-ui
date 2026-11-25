@@ -27,14 +27,18 @@ local _, ns = ...
 -- list shrank, a sample, a list that just showed or a client with no interpolation takes the value at once.
 -- While the game gives every share of the healers shown plainly (out of a fight, as a rule), the title reads their average, "Healer mana 64%",
 -- the members offline or dead left out, in the red of the wash while it is under Low mana at; as soon as one share is withheld it reads Healer
--- mana alone, as nothing withheld is added. The samples read 48%.
+-- mana alone, as nothing withheld is added. The samples read 48%. Ready to pull: out of a fight, with no healer shown offline or dead, once the
+-- lowest of those plain shares is at Ready at (90%) or above, the title turns green and reads "Healer mana 97% · ready", and Sound when ready
+-- (None by default) plays once; it rings again only after a healer was seen under Ready at out of a fight, so a login, a zone-in, a refresh or
+-- the list showing again with full healers stays quiet (H.Ready). The samples are never ready.
 -- The window is a child of UIParent in the LOW strata in the look of the Threat list (Threat.lua): a flat background and a thin border in the
 -- colours of the Flat UI page, its bars in Bar texture (the bar texture of that page by default); it takes no mouse and hides with the
 -- interface. It fades in over 0.15 seconds as it shows and out over 0.35 as it hides, as the Threat list does (H.Showing); showing again while it
 -- fades out stops the fade at once, and turning the module off hides it at once. /flatui move places it (FlatUIHealerMana in Movers.lua: the
 -- window's top left corner is the top left corner of the box, or with Bars stack Up its bottom left corner the bottom left corner of the box, so
--- a list above the action bars grows upward). /flatui healers shows sample bars for a few seconds, the Shaman out of range;
--- while test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh.
+-- a list above the action bars grows upward). /flatui healers shows sample bars for a few seconds, the Shaman out of range, out of a fight only;
+-- while test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh and each second, so the sample Druid's drink counts down
+-- from 18s to 1s and starts again.
 -- Nothing of the game is changed.
 -- This follows the Healer Mana indicator of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Submodules/
 -- GroupTools.lua:485-713): the healers of the group by their role, their mana share through UnitPowerPercent and the curve to 100, and the
@@ -66,8 +70,11 @@ local HEALERS = { PRIEST = true, PALADIN = true, SHAMAN = true, DRUID = true }
 local DIM = { 0.66, 0.68, 0.62 }
 local TRACK = { 0.2, 0.2, 0.2, 0.5 }
 local GREY = { 0.6, 0.6, 0.6 }
--- The red wash of a bar below Low mana at.
+-- The red wash of a bar below Low mana at, and the green of the title once the healers are ready to pull (the green of Group tools' ready check).
 local LOW = { 0.85, 0.15, 0.1, 0.45 }
+local READY = { 0.4, 0.9, 0.4 }
+-- The places of the Sound when ready choices in ns.SOUNDS (IconRow.lua), as the Threat list has them.
+local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 -- The spell whose name is the buff of drinking (Drink), and the cup, cropped as Flat UI's icons are.
 local DRINK_SPELL, DRINK_ICON, CROP = 430, "Interface\\Icons\\INV_Drink_07", 0.08
 local LINE_MISSING = "Healer mana: this client has no UnitPowerPercent, so the list stays hidden."
@@ -79,7 +86,7 @@ local FADE_IN, FADE_OUT = 0.15, 0.35
 local HELP = { "/flatui healers - sample bars of the healer mana list for a few seconds" }
 -- The bars of /flatui healers: a name, a class, the share of mana, whether the member drinks and whether he is out of range.
 local SAMPLE = { { "Priest", "PRIEST", 82 }, { "Druid", "DRUID", 47, true }, { "Shaman", "SHAMAN", 15, false, true } }
--- The seconds left on the sample Druid's drink.
+-- The seconds left on the sample Druid's drink: in test mode they count down from it to 1 and start again.
 local SAMPLE_DRINK = 18
 
 local IsSecret = ns.IsSecret
@@ -351,6 +358,8 @@ function H.Showing(on, now)
 		for _, row in ipairs(H.rows) do
 			row.who = nil
 		end
+		-- A list that shows again with full healers does not ring Sound when ready (H.Ready).
+		H.armed = nil
 	end
 	local fading = fadeOut ~= nil and fadeOut:IsPlaying()
 	if on then
@@ -544,10 +553,20 @@ function H.Layout(n)
 	H.frame:SetSize(width + 2 * PAD, top + n * height + (n - 1) * GAP + PAD)
 end
 
+-- The seconds left on the sample Druid's drink: in test mode (H.sampleStart, set as it starts) SAMPLE_DRINK down to 1 and again, one a second;
+-- for /flatui healers alone SAMPLE_DRINK.
+function H.SampleDrink()
+	local now = H.sampleStart and Ask(GetTime)
+	if not ns.Finite(now) or now < H.sampleStart then
+		return SAMPLE_DRINK
+	end
+	return SAMPLE_DRINK - math.floor(now - H.sampleStart) % SAMPLE_DRINK
+end
+
 -- Writes one bar: the class colour, the name and the share of mana, the red wash below Low mana at, the cup while the member drinks and its
 -- fade out of range; the share goes to the bar, its text and the wash untouched. A sample is a table of SAMPLE. The bar glides to a share of the
 -- same healer it showed (row.who) in a window that shows, else takes it at once. A plain share is added to the average of the title (H.sum,
--- H.count); a withheld one marks it as unknown (H.hidden).
+-- H.count) and kept when it is the lowest (H.least, for Ready at); a withheld one marks it as unknown (H.hidden).
 function H.Fill(row, unit, sample)
 	local r, g, b
 	if sample then
@@ -567,8 +586,9 @@ function H.Fill(row, unit, sample)
 		row.bar:SetValue(sample[3])
 		row.who = nil
 		H.sum, H.count = (H.sum or 0) + sample[3], (H.count or 0) + 1
+		H.least = math.min(H.least or sample[3], sample[3])
 		if cup then
-			row.share:SetText(("%ds %d%%"):format(SAMPLE_DRINK, sample[3]))
+			row.share:SetText(("%ds %d%%"):format(H.SampleDrink(), sample[3]))
 		else
 			row.share:SetText(("%d%%"):format(sample[3]))
 		end
@@ -591,6 +611,8 @@ function H.Fill(row, unit, sample)
 		row.who = nil
 		row.share:SetText(word)
 		H.Cup(row, false)
+		-- A healer who is offline or dead is not ready to pull (H.Ready).
+		H.away = true
 		return
 	end
 	local cup, ends = false, nil
@@ -607,6 +629,7 @@ function H.Fill(row, unit, sample)
 	end
 	if ok and not IsSecret(share) and ns.Finite(share) then
 		H.sum, H.count = (H.sum or 0) + share, (H.count or 0) + 1
+		H.least = math.min(H.least or share, share)
 	else
 		H.hidden = true
 	end
@@ -621,8 +644,32 @@ function H.Fill(row, unit, sample)
 	end
 end
 
+-- Ready to pull: true out of a fight, with the real healers shown (no sample), none of them offline or dead (H.away), every share plain and the
+-- lowest (H.least) at Ready at or above; never with Ready at 0. A plain lowest share under Ready at, out of a fight, arms Sound when ready (H.armed), which plays once as the healers
+-- turn ready and again only after one of them dropped under it: so a login, a zone-in or a refresh with full healers is quiet (H.Refresh and
+-- the window hiding disarm it).
+function H.Ready(average)
+	local at = Number("readyAt", 90)
+	if average == nil or at <= 0 or H.away or H.Sampling() or Ask(InCombatLockdown) ~= false or not ns.Finite(H.least) then
+		return false
+	end
+	if H.least < at then
+		H.armed = true
+		return false
+	end
+	if H.armed then
+		H.armed = nil
+		local sound = ns.SOUNDS[KITS[Opt("readySound")] or 0]
+		if sound then
+			ns.PlayKit(sound[1], KEY)
+		end
+	end
+	return true
+end
+
 -- The title: with the average of the plain shares H.Fill added (H.sum, H.count) and none withheld (H.hidden), "Healer mana 64%", in the red of the
--- wash while under Low mana at; else Healer mana alone in the text-dim. Written only when it changes.
+-- wash while under Low mana at; once the healers are ready to pull (H.Ready) "Healer mana 97% · ready" in green, which wins over the red; else
+-- Healer mana alone in the text-dim. Written only when it changes.
 function H.Title()
 	local count, average = H.count or 0, nil
 	if count > 0 and not H.hidden then
@@ -630,14 +677,17 @@ function H.Title()
 	end
 	local at = Number("lowAt", 30)
 	local low = average ~= nil and at > 0 and average < at
-	local key = average and ("%d:%s"):format(average, tostring(low)) or "plain"
+	local ready = H.Ready(average)
+	local key = average and ("%d:%s:%s"):format(average, tostring(low), tostring(ready)) or "plain"
 	if H.titled == key then
 		return
 	end
 	H.titled = key
-	local colour = low and LOW or DIM
+	local colour = ready and READY or low and LOW or DIM
 	H.title:SetTextColor(colour[1], colour[2], colour[3], 1)
-	if average then
+	if ready then
+		H.title:SetFormattedText("%s %d%% · ready", TITLE, average)
+	elseif average then
 		H.title:SetFormattedText("%s %d%%", TITLE, average)
 	else
 		H.title:SetText(TITLE)
@@ -646,7 +696,7 @@ end
 
 -- Starts a new average for the title (H.Title).
 local function Average()
-	H.sum, H.count, H.hidden = 0, 0, false
+	H.sum, H.count, H.hidden, H.least, H.away = 0, 0, false, nil, false
 end
 
 -- True while the sample bars show: /flatui healers holds them for a few seconds (H.sample), and test mode (TestMode.lua) while it is on.
@@ -790,7 +840,7 @@ function H.Tick(on)
 end
 
 function H.Refresh()
-	H.pending, H.placed, H.laid = nil, nil, nil
+	H.pending, H.placed, H.laid, H.armed = nil, nil, nil, nil
 	if not ns.Enabled(KEY) then
 		H.sample, H.healers = nil, {}
 		H.Tick(false)
@@ -800,10 +850,15 @@ function H.Refresh()
 	H.Update()
 end
 
--- /flatui healers: the sample bars for a few seconds.
+-- /flatui healers: the sample bars for a few seconds, out of a fight only (a withheld answer counts as a fight), so they never take the place of
+-- the real bars while they matter.
 function H.Slash()
 	if not ns.Enabled(KEY) then
 		print("Healer mana: turn on Show healer mana first.")
+		return
+	end
+	if Ask(InCombatLockdown) ~= false then
+		print("Healer mana: the sample shows out of combat.")
 		return
 	end
 	local token = {}
@@ -866,7 +921,24 @@ ns.Register(KEY, {
 })
 
 -- Test mode: the sample bars while it is on (H.Sampling), drawn with the rows at each refresh of the page; Off refreshes the page, which draws the
--- healers of the group again or hides the window.
+-- healers of the group again or hides the window. Its ticker draws them each second, out of a fight, so the sample Druid's drink counts down
+-- (H.SampleDrink) from the moment test mode started.
 if ns.TestMode then
-	ns.TestMode.Register("healermana", { module = KEY, label = "Healer mana", refresh = true })
+	ns.TestMode.Register("healermana", {
+		module = KEY,
+		label = "Healer mana",
+		refresh = true,
+		every = 1,
+		Start = function()
+			H.sampleStart = Ask(GetTime)
+		end,
+		Stop = function()
+			H.sampleStart = nil
+		end,
+		Tick = function()
+			if Ask(InCombatLockdown) == false then
+				H.Update()
+			end
+		end,
+	})
 end

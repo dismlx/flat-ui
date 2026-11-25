@@ -5,7 +5,7 @@ local _, ns = ...
 -- is followed on a global function of the game through ns.FollowGlobal (Core.lua's one hooksecurefunc for each global), with HookScript on
 -- GameTooltip, and with EventRegistry for the input box; no
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
--- from the lines the kind of a unit, an item level, the hint that Shift compares, an ID and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
+-- from the lines the kind of a unit, an item level, the hint that Shift compares, an ID (and a creature's NPC ID, 0.5.39) and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
 -- and the hit table lines of HitTableTip.lua (called from the post call after them, on an enemy's GameTooltip), and nothing is created on one in
 -- combat. The size of a tooltip, the height of its health bar and the place of the input box are changed out of combat only. With Arrow keys
 -- without Alt (on by default) each input box gets the widget method SetAltArrowKeyMode(false), so the arrow keys edit the text (Arrows below).
@@ -17,7 +17,10 @@ local _, ns = ...
 -- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, Mainline/UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1017);
 -- Hide and SetAlpha are called from that frame, never inside a call of the game, and no method of GameTooltip is hooked.
 -- ChatLinks.lua (called at the end of each refresh) also fills GameTooltip from a chat link under the mouse: SetOwner on a frame of its own,
--- SetHyperlink and Hide, never in a fight. ItemCompare.lua (called at the start of each refresh) writes the game's alwaysCompareItems.
+-- SetHyperlink and Hide, never in a fight. With Light the tab that names you (0.5.39) it hands this file each chat window a line that names you
+-- goes to (ns.ChatTabNamed): the tab of a window that does not show then takes Your name colour on its box (SetOutlineColour), its label
+-- (SetTextColor, the game's colour back once it is chosen) and a slow pulse of a texture and an animation of Flat UI's own, until it is chosen.
+-- ItemCompare.lua (called at the start of each refresh) writes the game's alwaysCompareItems.
 -- ChatHistory.lua (called at the end of each refresh) keeps recent chat lines for this character and prints them after a reload.
 -- SpellLines.lua and GearLines.lua (called from the post call after ChatTips.lua) add the spell and gear lines to GameTooltip and ItemRefTooltip
 -- (AddLine, AddDoubleLine), from SpellModel.lua and GearModel.lua and the data of SpellData.lua, and GearWindow.lua is the Gear comparison window;
@@ -222,10 +225,14 @@ local function Alerting(tab)
 	return ok and not ns.IsSecret(alerting) and alerting == true
 end
 
--- The label and the flat box (its edges and fill are textures of the tab) take their own alpha, so the game's 0.4 and 0.2 do not dim them.
+-- The label and the flat box (its edges and fill are textures of the tab) take their own alpha, so the game's 0.4 and 0.2 do not dim them. A
+-- tab that names you (record.named) is at full alpha whatever Chat tab opacity is, as the game keeps a flashing tab.
 local function BrightTab(tab, record, on)
 	local other = on and TAB_OTHER[Opt("tabOpacity")]
 	local alpha = other and ((record.selected or Alerting(tab)) and 1 or other) or nil
+	if on and record.named then
+		alpha = 1
+	end
 	if alpha == nil and not record.bright then
 		return
 	end
@@ -241,8 +248,89 @@ local function BrightTab(tab, record, on)
 	end
 end
 
+-- Light the tab that names you (chat.mentionTab, 0.5.39): the alpha of the pulse over the plate at its top and its bottom, and the seconds of
+-- one way. While a tab is lit, its box, its label and a pulse of its own over the plate take Your name colour (chat.mentionColour).
+local NAMED = { HIGH = 0.45, LOW = 0.12, PULSE = 1.2 }
+
+-- True while a mention may light a tab: Chat tabs, Your name in chat and Light the tab that names you on.
+local function NamedWanted()
+	return On("tabs") and Opt("mentions") == true and Opt("mentionTab") == true
+end
+
+-- Your name colour, as ChatLinks.lua colours the name with it; orange when the saved value is not a colour.
+local function NamedColour()
+	local hex = Opt("mentionColour")
+	if type(hex) == "string" and hex:find("^%x%x%x%x%x%x%x%x$") then
+		return tonumber(hex:sub(3, 4), 16) / 255, tonumber(hex:sub(5, 6), 16) / 255, tonumber(hex:sub(7, 8), 16) / 255
+	end
+	return 1, 0.6, 0.2
+end
+
+-- The colour the game gives a tab's label (FCFTab_UpdateColors, Mainline/FloatingChatFrame.lua:1465-1471): its own colour for a whisper tab,
+-- else the normal font colour. Read only.
+local function LabelColour(tab)
+	local colours = tab.selectedColorTable
+	if Usable(colours) and IsNumber(colours.r) and IsNumber(colours.g) and IsNumber(colours.b) then
+		return colours.r, colours.g, colours.b
+	end
+	local normal = NORMAL_FONT_COLOR
+	if Usable(normal) and IsNumber(normal.r) and IsNumber(normal.g) and IsNumber(normal.b) then
+		return normal.r, normal.g, normal.b
+	end
+	return 1, 0.82, 0
+end
+
+-- The pulse of a lit tab: a texture of Flat UI's own on the tab, just above the box's fill, at full alpha whatever the game fades the tab to, and
+-- an Alpha animation of its own that goes slowly between HIGH and LOW. The label takes the colour while lit and the game's colour after.
+local function PaintNamed(tab, record, r, g, b)
+	local glow = record.glow
+	if record.named and not glow and record.plate then
+		local texture = tab:CreateTexture(nil, "BACKGROUND", nil, -7)
+		ns.Own[texture] = true
+		texture:SetAllPoints(record.plate)
+		pcall(texture.SetIgnoreParentAlpha, texture, true)
+		local group = texture:CreateAnimationGroup()
+		local fade = group:CreateAnimation("Alpha")
+		fade:SetFromAlpha(1)
+		fade:SetToAlpha(NAMED.LOW / NAMED.HIGH)
+		fade:SetDuration(NAMED.PULSE)
+		pcall(fade.SetSmoothing, fade, "IN_OUT")
+		group:SetLooping("BOUNCE")
+		glow = { texture = texture, group = group }
+		record.glow = glow
+	end
+	local ok, label = pcall(tab.GetFontString, tab)
+	label = ok and Usable(label) and label or nil
+	if record.named and glow then
+		glow.texture:SetColorTexture(r, g, b, NAMED.HIGH)
+		glow.texture:Show()
+		if not glow.group:IsPlaying() then
+			glow.group:Play()
+		end
+		if label then
+			pcall(label.SetTextColor, label, r, g, b)
+			record.labelSet = true
+		end
+		return
+	end
+	if glow then
+		glow.group:Stop()
+		glow.texture:Hide()
+	end
+	if record.labelSet then
+		record.labelSet = nil
+		if label then
+			pcall(label.SetTextColor, label, LabelColour(tab))
+		end
+	end
+end
+
 local function PaintTab(tab, record)
 	local on = On("tabs")
+	-- A lit tab goes out once it is chosen, and with any of its rows off.
+	if record.named and (record.selected or not NamedWanted()) then
+		record.named = nil
+	end
 	BrightTab(tab, record, on)
 	for _, key in ipairs(TAB_FADED) do
 		ns.SetFaded(tab[key], on)
@@ -254,11 +342,14 @@ local function PaintTab(tab, record)
 	local r, g, b
 	if on and record.selected then
 		r, g, b = SelectedColour(tab)
+	elseif on and record.named then
+		r, g, b = NamedColour()
 	end
 	ns.SetOutlineColour(record.outline, r, g, b)
 	local hr, hg, hb = ns.Colour("windows.accent")
 	record.hover:SetColorTexture(hr, hg, hb, 0.25)
 	record.hover:SetShown(on)
+	PaintNamed(tab, record, r, g, b)
 end
 
 -- A tab is styled when the window is, and when the game colours it, which it does for a tab made later too.
@@ -279,7 +370,7 @@ local function StyleTab(tab, selected)
 		local hover = tab:CreateTexture(nil, "HIGHLIGHT", nil, 0)
 		ns.Own[hover] = true
 		hover:SetAllPoints(plate)
-		record = { outline = ns.Outline(tab, plate, true), hover = hover }
+		record = { outline = ns.Outline(tab, plate, true), hover = hover, plate = plate }
 		tabs[tab] = record
 		ns.Count(KEY)
 	end
@@ -813,18 +904,20 @@ local function Extras(tooltip, data)
 	end
 	local item, spell = IsData(data, "Item"), IsData(data, "Spell") or IsData(data, "UnitAura")
 	local id = (item or spell) and data.id
-	if not IsNumber(id) then
-		return
-	end
 	local lines = {}
-	-- The ID lines, with Show IDs and the temporary enchant, come from ChatTips.lua.
-	ns.ChatTipIds(lines, data, item, id)
-	if item and Opt("count") and type(C_Item) == "table" and type(C_Item.GetItemCount) == "function" then
-		local okBags, bags = pcall(C_Item.GetItemCount, id)
-		local okAll, all = pcall(C_Item.GetItemCount, id, true)
-		if okBags and okAll and IsNumber(bags) and IsNumber(all) then
-			lines[#lines + 1] = all > bags and ("Count: %d in bags, %d with bank"):format(bags, all) or ("Count: %d in bags"):format(bags)
+	if IsNumber(id) then
+		-- The ID lines, with Show IDs and the temporary enchant, come from ChatTips.lua.
+		ns.ChatTipIds(lines, data, item, id)
+		if item and Opt("count") and type(C_Item) == "table" and type(C_Item.GetItemCount) == "function" then
+			local okBags, bags = pcall(C_Item.GetItemCount, id)
+			local okAll, all = pcall(C_Item.GetItemCount, id, true)
+			if okBags and okAll and IsNumber(bags) and IsNumber(all) then
+				lines[#lines + 1] = all > bags and ("Count: %d in bags, %d with bank"):format(bags, all) or ("Count: %d in bags"):format(bags)
+			end
 		end
+	elseif not (item or spell) and IsData(data, "Unit") and type(ns.ChatTipNpcId) == "function" then
+		-- The NPC ID of a creature or a vehicle (ChatTips.lua, 0.5.39), once for each build as the other lines here.
+		ns.ChatTipNpcId(lines, data)
 	end
 	local ok, shown = pcall(tooltip.NumLines, tooltip)
 	local record = X.extras[tooltip]
@@ -1812,6 +1905,44 @@ local function TabAlert(frame)
 	local tab = ok and not ns.IsSecret(name) and type(name) == "string" and Global(name .. "Tab") or nil
 	if tab and tabs[tab] then
 		StyleTab(tab)
+	end
+end
+
+-- Light the tab that names you (0.5.39): ChatLinks.lua calls this with the window a line that names you (or one of the other words) goes to.
+-- Only a window that does not show now (a docked window whose tab is not chosen) lights its tab, and only a tab Chat tabs styles; the tab is
+-- painted on the frame after, outside the game's chat call. It goes out when the tab is chosen (FCFTab_UpdateColors, TabColours).
+local namedQueue = {}
+function ns.ChatTabNamed(frame)
+	if not NamedWanted() or not Usable(frame) or ns.Forbidden(frame) then
+		return
+	end
+	local okShown, shown = pcall(frame.IsVisible, frame)
+	if not okShown or ns.IsSecret(shown) or shown ~= false then
+		return
+	end
+	local ok, name = pcall(frame.GetName, frame)
+	local tab = ok and not ns.IsSecret(name) and type(name) == "string" and Global(name .. "Tab") or nil
+	local record = tab and tabs[tab]
+	if not record or record.selected or record.named then
+		return
+	end
+	record.named = true
+	if next(namedQueue) ~= nil then
+		namedQueue[tab] = true
+		return
+	end
+	namedQueue[tab] = true
+	local function run()
+		local list = namedQueue
+		namedQueue = {}
+		for queued in pairs(list) do
+			if not ns.IsStopped(KEY) then
+				ns.Each(KEY, StyleTab, queued)
+			end
+		end
+	end
+	if not (type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, 0, run)) then
+		run()
 	end
 end
 
