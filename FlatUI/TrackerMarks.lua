@@ -1,14 +1,16 @@
 local _, ns = ...
 
--- Marks on action buttons: a tracker that is low or missing puts a red border on the button that casts its spell or uses its item.
+-- Marks on action buttons: a tracker that is low or missing puts a border on the button that casts its spell or uses its item, amber
+-- when low and red when missing, the colours of the tracker itself.
 -- Trackers.lua calls ns.TrackerMarkStep after it draws a tracker and ns.TrackerMarkSweep once per pass. The borders are drawn by
 -- ns.SetButtonMark in ActionBars.lua, which is only texture calls. This file makes no frame and is not a module.
 
 local KEY = "trackers"
 local RED = { 0.851, 0.251, 0.251 }
+local AMBER = { 1, 0.7, 0.2 }
 local MAX_IDS = 40
 
--- marked[entry.id] = { entry = entry, set = { [button] = true } }
+-- marked[entry.id] = { entry = entry, set = { [button] = true }, colour = AMBER or RED }
 local marked = {}
 
 local function Plain(value, kind)
@@ -73,17 +75,18 @@ local function Count(set)
 	return n
 end
 
--- Marks the buttons of the set and takes the mark from the ones that held it before.
-local function Apply(record, set)
+-- Marks the buttons of the set in the colour, the record's own when none is given, and takes the mark from the ones that held it before.
+local function Apply(record, set, colour)
+	colour = colour or record.colour or RED
 	for button in pairs(record.set) do
 		if not set[button] then
 			ns.SetButtonMark(button, "missing", nil)
 		end
 	end
 	for button in pairs(set) do
-		ns.SetButtonMark(button, "missing", RED[1], RED[2], RED[3])
+		ns.SetButtonMark(button, "missing", colour[1], colour[2], colour[3])
 	end
-	record.set = set
+	record.set, record.colour = set, colour
 end
 
 local function Clear(id)
@@ -117,7 +120,7 @@ function ns.TrackerMarkStep(entry, reading, how)
 		marked[entry.id] = record
 	end
 	record.entry = entry
-	Apply(record, Holders(entry))
+	Apply(record, Holders(entry), reading.state == "low" and AMBER or RED)
 end
 
 -- Takes the marks of every tracker that is not in the list, which is the trackers that are on, or of all when there is none.

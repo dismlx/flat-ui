@@ -1,7 +1,7 @@
 local _, ns = ...
 
 -- A row of flat square icons for the buffs on the player that the player picks: one icon for each, with
--- its charges, a sweep and countdown, a red rim when it is low, a red icon when it is missing, and a
+-- its charges, a sweep and countdown, an amber rim and count when it is low, a red icon when it is missing, and a
 -- sound when it drops. In fights the game withholds aura values from addons, so a buff is checked only
 -- while C_Secrets says its values are open. While they are not, the icon shows the game's own drawing
 -- of the buff where ns.TrackerSlots has one, else what was known last. Nothing runs every frame: an
@@ -14,9 +14,10 @@ local _, ns = ...
 -- What was known last is all there is to show while the values are withheld: a buff that was missing then
 -- is drawn as missing only when the player can cast it, since only the player's own cast can end that.
 -- A tracker that Show brings or takes away fades in over 0.2 seconds and out over 0.25 (K.Fade). Row direction lays the trackers out in a row,
--- or with Column, downward or upward, in a left-aligned column. Tracker tooltips (Out of combat only by default) shows, with the mouse over a
+-- or with Column, downward or upward, in a left-aligned column. Close up the gaps (off by default) puts the trackers that show together out of
+-- combat, and in a fight nothing moves (K.Arrange). Hide while mounted or flying also hides them on a flight path (UnitOnTaxi). Tracker tooltips (Out of combat only by default) shows, with the mouse over a
 -- tracker on screen, its name, its state with the time left and charges, and a kind's own lines (a group buff: who lacks it); the frame takes no
--- click, so a click goes through to the world. Sound when it turns low plays the kit of Sound once as a tracker goes from fine to low.
+-- click, so a click goes through to the world, and a tracker that cannot be seen (a proc that is down, one the game's own icon hides) takes no mouse. Sound when it turns low plays the kit of Sound once as a tracker goes from fine to low.
 
 local KEY = "trackers"
 -- The name of the row among the saved spots of the movers.
@@ -27,7 +28,7 @@ local GAP = 4
 -- Seconds between two passes.
 local PASS = 0.2
 local UNKNOWN_ICON = 134400
--- ffd94040, the colour of a low or missing buff.
+-- ffd94040, the colour of a missing buff. A low one is K.AMBER.
 local RED = { 0.851, 0.251, 0.251 }
 -- The bars of the personal resource display, highest first.
 local RESOURCE_BARS = { "HealthBarsContainer", "PowerBar", "AlternatePowerBar" }
@@ -50,6 +51,8 @@ local K = {
 	-- LOW_MAX: the largest Low at of a tracker's own, by kind; 20 for the kinds that are not here. A durability tracker's is a percent.
 	LOW_MAX = { item = 1000, ammo = 2000, durability = 100 },
 	PULSE_LOW = 0.35, PULSE_TIME = 0.6, GREY = 0.6, ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789",
+	-- ffffb333, the colour of a low buff: its rim, count, bar and the Low of its tooltip. Missing stays RED.
+	AMBER = { 1, 0.7, 0.2 },
 	SHOWS = { always = true, low = true, combat = true },
 	MISSING_LOOKS = { red = true, pulse = true, word = true },
 	SHOWN_AS = {
@@ -2003,7 +2006,9 @@ local function Looks(entry, reading, how)
 	look.icon = reading.icon or EntryIcon(entry)
 	look.rim = state == "low"
 	look.countRed = state == "low"
-	-- A kind may tint the rim of a tracker that is up: its colour, in place of the red of a low one.
+	-- Low is amber, so that it reads apart from the red of missing.
+	look.amber = state == "low"
+	-- A kind may tint the rim of a tracker that is up: its colour, in place of the amber of a low one.
 	if kind and type(kind.Rim) == "function" then
 		local ok, r, g, b = pcall(kind.Rim, entry, reading, how)
 		if ok and Plain(r, "number") and Plain(g, "number") and Plain(b, "number") then
@@ -2075,7 +2080,8 @@ local function Apply(record, entry, look)
 	-- A bar or text has its own count and time left, and no countdown of the sweep.
 	record.count:SetText(shape == "icon" and look.count or "")
 	if look.countRed then
-		record.count:SetTextColor(RED[1], RED[2], RED[3])
+		local colour = look.amber and K.AMBER or RED
+		record.count:SetTextColor(colour[1], colour[2], colour[3])
 	else
 		record.count:SetTextColor(1, 1, 1)
 	end
@@ -2084,10 +2090,10 @@ local function Apply(record, entry, look)
 	end
 	ns.IconCountdownFont(record, Opt("numbersFont"))
 	Sweep(record, look)
-	-- The rim is red, or the colour a kind asked for; the colour is set again only when it changes.
-	local tint = look.rimColour and (look.rimColour[1] .. "," .. look.rimColour[2] .. "," .. look.rimColour[3]) or "red"
+	-- The rim is amber when low, red when missing, or the colour a kind asked for; the colour is set again only when it changes.
+	local tint = look.rimColour and (look.rimColour[1] .. "," .. look.rimColour[2] .. "," .. look.rimColour[3]) or (look.amber and "amber" or "red")
 	if record.tint ~= tint then
-		local colour = look.rimColour or RED
+		local colour = look.rimColour or (look.amber and K.AMBER or RED)
 		for _, edge in ipairs(record.rim) do
 			edge:SetColorTexture(colour[1], colour[2], colour[3], 1)
 		end
@@ -2123,11 +2129,13 @@ local function Wanted(entry, state, how)
 	end
 	local show = Value(entry, "show")
 	if show == "low" then
-		-- Trackers that show only when low or missing are hidden on a mount, in a city or an inn and in a fight, as the three rows say; in a fight
-		-- by the trackers' own word for it, set at PLAYER_REGEN_DISABLED. Hide in combat follows the Only out of combat filter of EnhanceQoL's
+		-- Trackers that show only when low or missing are hidden on a mount or a flight path, in a city or an inn and in a fight, as the three rows
+		-- say; on a flight path by UnitOnTaxi, which IsMounted does not cover (heard by PLAYER_CONTROL_LOST and PLAYER_CONTROL_GAINED, which come as a
+		-- flight starts and ends), and in a fight by the trackers' own word for it, set at PLAYER_REGEN_DISABLED. Hide in combat follows the Only out of combat filter of EnhanceQoL's
 		-- Class Buff Reminder (ClassBuffReminder.lua:2667-2673), whose rested filter (2505-2510) Hide in cities and inns is. Its role filter
 		-- (2683-2764) is left out: groups on Forever often have no roles (HealerMana.lua), and its class rule alone would silence a mage in a raid.
-		if (Opt("mounted") and Ask(IsMounted) == true) or (Opt("resting") and Ask(IsResting) == true) or (Opt("combatHide") and fighting) then
+		if (Opt("mounted") and (Ask(IsMounted) == true or Ask(UnitOnTaxi, "player") == true)) or (Opt("resting") and Ask(IsResting) == true)
+			or (Opt("combatHide") and fighting) then
 			return 0
 		end
 		if how ~= "live" or state == "low" or state == "missing" then
@@ -2188,11 +2196,13 @@ local function Draw(entry, reading)
 		end
 		-- A tracker that comes or goes by Show fades in or out (K.Fade). Its first alpha, a curved one and one under the game's own icon it
 		-- takes at once: the game's icon may hide the frame by an alpha it withholds (TrackerSlots.lua's Hide), which a fade would cover.
+		local faded = false
 		if record.alpha ~= alpha then
 			if record.alpha == nil or record.curved or how == "game" then
 				K.SetAlpha(record, alpha)
 			else
 				K.Fade(record, alpha)
+				faded = true
 			end
 			record.alpha = alpha
 		elseif how == "game" then
@@ -2212,9 +2222,14 @@ local function Draw(entry, reading)
 			record.curved = nil
 			K.SetAlpha(record, record.alpha)
 		end
-		K.Mouse(record)
+		-- Close up the gaps: the row is placed again as a tracker comes or goes (K.Packed).
+		K.Packed(record, faded)
 	end
 	Slot("Show", entry, how == "game", record and record.alpha)
+	-- After Show, which may hide the frame by the game's own icon (K.Visible).
+	if record then
+		K.Mouse(record, entry)
+	end
 	-- A border on the action button that fixes a low or missing tracker (TrackerMarks.lua).
 	if ns.TrackerMarkStep then
 		ns.TrackerMarkStep(entry, reading, how)
@@ -3169,6 +3184,7 @@ local function Release(wanted)
 			record.how = nil
 			-- The next tracker on the record takes its first alpha at once (Draw), and a fade of this one ends with it.
 			record.alpha = nil
+			record.seen, record.leaving = nil, nil
 			K.StopFade(record)
 			if record.motion then
 				record.motion = not pcall(record.frame.SetMouseMotionEnabled, record.frame, false)
@@ -3205,8 +3221,114 @@ function K.EndKinds()
 	end
 end
 
+-- Close up the gaps ---------------------------------------------------------------------------------
+
+-- True when a tracker's frame is seen, or may be: a record not drawn yet, an alpha a kind's Over withholds (curved) and one under the game's
+-- own icon, which may hide it by an alpha it withholds, all count. A tracker a kind draws nothing for (a proc that is down) is not seen.
+function K.Seen(record)
+	if record.curved or record.how == "game" then
+		return true
+	end
+	return record.alpha ~= 0 and record.faded ~= true and record.how ~= "hidden"
+end
+
+-- The frames of a place's row, from what Layout kept in K.rows, each at its own X and Y offset. In list order; with Close up the gaps the
+-- trackers that are seen come first, so they sit together, centred on their own width or from the start of the row as Row direction says, a
+-- column from its top (downward) or bottom (upward), and the hidden ones follow in list order, so that a tracker that shows in a fight, where
+-- nothing moves, takes a place after them and no two overlap. One that fades out keeps its place until its fade is over (record.leaving).
+-- A proc of your class that shows without being added comes last and is not in the width. Out of combat only.
+function K.Arrange(place)
+	local row = K.rows and K.rows[place]
+	if not row or InCombatLockdown() then
+		return
+	end
+	local spacing, grow = Opt("spacing"), Opt("grow")
+	local list, total = row.sized, row.total
+	if Opt("pack") == true then
+		local now, first, after, last = Now(), {}, {}, {}
+		total = 0
+		for _, item in ipairs(row.sized) do
+			local record = item[2]
+			local seen = K.Seen(record)
+			record.seen = seen
+			if record.auto then
+				last[#last + 1] = item
+			elseif seen or (record.leaving and record.leaving > now) then
+				first[#first + 1] = item
+				total = total + item[3]
+			else
+				after[#after + 1] = item
+			end
+		end
+		total = total + spacing * math.max(0, #first - 1)
+		for _, group in ipairs({ after, last }) do
+			for _, item in ipairs(group) do
+				first[#first + 1] = item
+			end
+		end
+		list = first
+	end
+	local holder, widest, depth = row.holder, row.widest, row.depth
+	local x = grow == "right" and 0 or grow == "left" and 0 or -total / 2
+	local y = grow == "down" and depth / 2 or -depth / 2
+	for _, item in ipairs(list) do
+		local entry, record, width, height = item[1], item[2], item[3], item[4]
+		local frame = record.frame
+		frame:ClearAllPoints()
+		if grow == "left" then
+			x = x - width
+		end
+		-- An own X or Y offset replaces the page's: the holder is placed at the page's.
+		local ownX, ownY = Value(entry, "x") - Opt("x"), Value(entry, "y") - Opt("y")
+		if grow == "down" then
+			frame:SetPoint("TOPLEFT", holder, "CENTER", -widest / 2 + ownX, y + ownY)
+			y = y - height - spacing
+		elseif grow == "up" then
+			frame:SetPoint("BOTTOMLEFT", holder, "CENTER", -widest / 2 + ownX, y + ownY)
+			y = y + height + spacing
+		else
+			frame:SetPoint("LEFT", holder, "CENTER", x + ownX, ownY)
+		end
+		x = grow == "left" and x - spacing or x + width + spacing
+	end
+end
+
+-- One K.Arrange of a place after `delay` seconds, and out of combat: a fight's ask waits for its end, and two asks of the same delay are one.
+K.arranging = {}
+function K.QueueArrange(place, delay)
+	local key = place .. (delay > 0 and "+" or "")
+	if K.arranging[key] or not (C_Timer and C_Timer.After) then
+		return
+	end
+	K.arranging[key] = true
+	C_Timer.After(delay, function()
+		ns.OutOfCombat(function()
+			K.arranging[key] = nil
+			if ns.Enabled(KEY) and Opt("pack") == true then
+				K.Arrange(place)
+			end
+		end)
+	end)
+end
+
+-- Close up the gaps: a tracker of the row that comes or goes asks for its row to be placed again, at once when it comes and when it goes at
+-- once, and once its fade is over when it fades out, so it keeps its place while it fades. faded: the alpha went by K.Fade.
+function K.Packed(record, faded)
+	if Opt("pack") ~= true or record.auto or not record.place then
+		return
+	end
+	local seen = K.Seen(record)
+	if record.seen == seen then
+		return
+	end
+	record.seen = seen
+	record.leaving = (not seen and faded) and (Now() + K.FADE_OUT) or nil
+	K.QueueArrange(record.place, record.leaving and K.FADE_OUT + 0.05 or 0)
+end
+
 -- Runs out of combat. The trackers are grouped by their place, and each group is one row hung from the holder of its place.
 local function Layout()
+	K.rows = {}
 	if not ns.Enabled(KEY) then
 		tracked = 0
 		ns.ClearNote(KEY, NO_POSITION)
@@ -3252,6 +3374,7 @@ local function Layout()
 	local refused = false
 	shown = {}
 	K.where = {}
+	K.rows = {}
 	for _, place in ipairs(K.ORDER) do
 		local group, holder = groups[place], HolderFor(place, #groups[place] > 0)
 		if #group == 0 then
@@ -3290,8 +3413,9 @@ local function Layout()
 			if Place(place, holder, column and widest or total, column and depth or tallest, column and "center" or grow) then
 				refused = true
 			end
-			local x = grow == "right" and 0 or grow == "left" and 0 or -total / 2
-			local y = grow == "down" and depth / 2 or -depth / 2
+			-- The holder is placed by the whole row, also with Close up the gaps, so it never moves as trackers come and go; K.Arrange places the
+			-- frames in it, now and again when a tracker comes or goes.
+			K.rows[place] = { sized = sized, holder = holder, total = total, widest = widest, depth = depth }
 			for _, item in ipairs(sized) do
 				local entry, record, width, height = item[1], item[2], item[3], item[4]
 				local frame = record.frame
@@ -3301,26 +3425,11 @@ local function Layout()
 				end
 				record.place = place
 				frame:SetSize(width, height)
-				frame:ClearAllPoints()
-				if grow == "left" then
-					x = x - width
-				end
-				-- An own X or Y offset replaces the page's: the holder is placed at the page's.
-				local ownX, ownY = Value(entry, "x") - Opt("x"), Value(entry, "y") - Opt("y")
-				if grow == "down" then
-					frame:SetPoint("TOPLEFT", holder, "CENTER", -widest / 2 + ownX, y + ownY)
-					y = y - height - spacing
-				elseif grow == "up" then
-					frame:SetPoint("BOTTOMLEFT", holder, "CENTER", -widest / 2 + ownX, y + ownY)
-					y = y + height + spacing
-				else
-					frame:SetPoint("LEFT", holder, "CENTER", x + ownX, ownY)
-				end
 				frame:Show()
 				Fit(record, entry)
-				x = grow == "left" and x - spacing or x + width + spacing
 				shown[#shown + 1] = record
 			end
+			K.Arrange(place)
 		end
 	end
 	if refused then
@@ -3425,10 +3534,29 @@ end
 
 -- TIP: the colours of the state line (Up green, Low amber, Missing red) and of the dim lines. TIP_FINE, TIP_MISSING: the word of the state line
 -- for a kind whose fine or missing reads wrong as Up or Missing.
-K.TIP = { fine = { 0.3, 0.85, 0.4 }, low = { 1, 0.7, 0.2 }, missing = RED, dim = { 0.7, 0.7, 0.7 } }
+K.TIP = { fine = { 0.3, 0.85, 0.4 }, low = K.AMBER, missing = RED, dim = { 0.7, 0.7, 0.7 } }
 K.TIP_FINE = { form = "In one of them", tracking = "On", durability = "Fine", pet = "Out" }
 K.TIP_MISSING = { item = "None in your bags", ammo = "None left", durability = "An item is broken", pet = "Gone or dead",
-	tracking = "No tracking on", form = "In none of them", totem = "Not down", debuff = "Not on your target" }
+	tracking = "No tracking on", form = "In none of them", totem = "Not down", debuff = "Not on your target", weapon = "No enchant on it" }
+
+-- The dim line of a timed tracker's tooltip that says what counts as low: "Low at 2 charges or fewer or under 5:00 left (earlier in a raid)", by
+-- the Low at rows that apply here (K.LowTime, with the larger Low in dungeons and raids), or nil when neither does. The other kinds say theirs in
+-- their own Tip (TrackerKinds.lua).
+function K.TipRule(entry)
+	if not K.TIMED[entry.kind] then
+		return nil
+	end
+	local parts = {}
+	local charges = entry.charged and Value(entry, "low") or 0
+	if Plain(charges, "number") and charges > 0 then
+		parts[#parts + 1] = ("at %s or fewer"):format(Plural(math.floor(charges), entry.kind == "debuff" and "stack" or "charge"))
+	end
+	local seconds, where = K.LowTime(entry)
+	if Plain(seconds, "number") and seconds > 0 then
+		parts[#parts + 1] = ("under %d:%02d left%s"):format(math.floor(seconds / 60), math.floor(seconds % 60), where and (" (earlier in a %s)"):format(where) or "")
+	end
+	return #parts > 0 and ("Low " .. table.concat(parts, " or ")) or nil
+end
 
 -- The tracker of an id: one of the list, or a proc of your class that shows without being added.
 function K.EntryById(id)
@@ -3448,11 +3576,25 @@ end
 
 -- The frame hears the mouse while it is seen and Tracker tooltips lets its tooltip show now: never a click (Acquire), and nothing while it is
 -- clear, hidden, or in a fight with Out of combat only, so the world under it keeps its own mouse (a unit's tooltip). A curved alpha (the pet's
--- health, TrackerKinds.lua) is withheld, so a tracker shown by it alone has no tooltip. Allowed in a fight: the frame is Flat UI's own, and the
--- secure button of a click is off it there (TrackerClicks.lua).
-function K.Mouse(record)
+-- health, TrackerKinds.lua) is withheld, so a tracker shown by it alone has no tooltip. Nor has one a kind draws nothing for (record.faded: a proc
+-- that is down, also under the game's own icon), nor one the game's own icon hides by an alpha it withholds (TrackerSlots.lua's Hide, Only when
+-- low or missing in a fight), since it may not be seen. Allowed in a fight: the frame is Flat UI's own, and the secure button of a click is off it
+-- there (TrackerClicks.lua).
+-- entry: the record's tracker, when the caller has it.
+function K.Visible(record, entry)
+	if record.how == "hidden" or record.alpha ~= 1 or record.faded == true then
+		return false
+	end
+	if record.how == "game" then
+		entry = entry or K.EntryById(record.entryId)
+		return not (entry and Slot("Hid", entry) == true)
+	end
+	return true
+end
+
+function K.Mouse(record, entry)
 	local tips = Opt("tooltips")
-	local want = tips ~= "off" and not (tips ~= "on" and fighting) and record.how ~= "hidden" and record.alpha == 1
+	local want = tips ~= "off" and not (tips ~= "on" and fighting) and K.Visible(record, entry)
 	if record.motion ~= want and pcall(record.frame.SetMouseMotionEnabled, record.frame, want) then
 		record.motion = want
 	end
@@ -3531,6 +3673,10 @@ function K.TipLines(entry, tip, noClick)
 	end
 	local text, colour, state = K.TipState(entry, records[entry.id])
 	tip:AddLine(text, colour[1], colour[2], colour[3], true)
+	local rule = K.TipRule(entry)
+	if rule then
+		tip:AddLine(rule, dim[1], dim[2], dim[3], true)
+	end
 	if kind and type(kind.Tip) == "function" then
 		local ok, extra = pcall(kind.Tip, entry)
 		for _, line in ipairs(ok and type(extra) == "table" and extra or {}) do
@@ -3557,8 +3703,8 @@ function K.TipShow(record)
 		return false
 	end
 	local entry = K.EntryById(record.entryId)
-	local wanted = entry ~= nil and tips ~= "off" and not (tips ~= "on" and (fighting or InCombatLockdown())) and record.alpha == 1
-		and record.how ~= "hidden" and ns.Enabled(KEY)
+	local wanted = entry ~= nil and tips ~= "off" and not (tips ~= "on" and (fighting or InCombatLockdown())) and K.Visible(record, entry)
+		and ns.Enabled(KEY)
 	if not wanted then
 		K.TipHide(record)
 		return false
@@ -3900,6 +4046,7 @@ local function Bare(entry)
 		Apply(record, entry, { icon = nil, sweep = "clear" })
 		K.SetAlpha(record, 1)
 		record.alpha = 1
+		K.Packed(record, false)
 	end
 end
 
@@ -3911,6 +4058,7 @@ local function Paint(entry, state, length)
 		Apply(record, entry, Looks(entry, reading, "live"))
 		K.SetAlpha(record, 1)
 		record.alpha = 1
+		K.Packed(record, false)
 	end
 end
 
@@ -3945,6 +4093,7 @@ function K.HeldDraw(entry)
 		K.SetAlpha(record, 1)
 		record.alpha = 1
 	end
+	K.Packed(record, false)
 	K.Mouse(record)
 	Slot("Show", entry, false, 1)
 	return true
@@ -4289,6 +4438,15 @@ local function Refresh()
 	GameSound()
 end
 
+-- Sound picked on the page: the page is refreshed, as without a changed function of the row (Core.lua's Changed), which also registers the
+-- game's own sounds by the kit (GameSound), and out of combat the kit plays once, so the pick is heard. Only a pick in the options calls this.
+function ns.TrackerKitChanged()
+	ns.Try(KEY, Refresh)
+	if not InCombatLockdown() then
+		Ding(K.KITS[Opt("kit")] or K.KITS.raid)
+	end
+end
+
 ns.Register(KEY, {
 	label = "Trackers",
 	Start = Refresh,
@@ -4303,6 +4461,9 @@ ns.Register(KEY, {
 		PLAYER_ALIVE = Dirty,
 		PLAYER_UNGHOST = Dirty,
 		PLAYER_MOUNT_DISPLAY_CHANGED = Dirty,
+		-- A flight path starts and ends (Hide while mounted or flying).
+		PLAYER_CONTROL_LOST = Dirty,
+		PLAYER_CONTROL_GAINED = Dirty,
 		PLAYER_UPDATE_RESTING = Dirty,
 		SPELLS_CHANGED = SpellsChanged,
 	},

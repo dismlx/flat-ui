@@ -561,7 +561,28 @@ local function UnitLabel(unit)
 	return Plain(name, "string") and name ~= "" and name or unit
 end
 
--- " (Mara, Eli)": the names of the members who lack the buff at the last look, at most K.MAX_NAMES and how many more, or "" for none.
+-- A member's name in the colour of their class (RAID_CLASS_COLORS, read and never written: its plain r, g and b, no call of its own), else the plain
+-- name.
+local function ClassLabel(unit)
+	local label = UnitLabel(unit)
+	local class = Ask(UnitClassBase, unit)
+	local colours = type(RAID_CLASS_COLORS) == "table" and RAID_CLASS_COLORS or nil
+	local colour = Plain(class, "string") and colours and colours[class] or nil
+	if type(colour) ~= "table" then
+		return label
+	end
+	local r, g, b = colour.r, colour.g, colour.b
+	if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		return label
+	end
+	local function Byte(value)
+		return math.max(0, math.min(255, math.floor(value * 255 + 0.5)))
+	end
+	return ("|cff%02x%02x%02x%s|r"):format(Byte(r), Byte(g), Byte(b), label)
+end
+
+-- " (Mara, Eli)": the names of the members who lack the buff at the last look, in their class colours, at most K.MAX_NAMES and how many more, or
+-- "" for none.
 local function Who(read)
 	local names = {}
 	for index, unit in ipairs(read.lacking) do
@@ -569,7 +590,7 @@ local function Who(read)
 			names[#names + 1] = ("%d more"):format(#read.lacking - K.MAX_NAMES)
 			break
 		end
-		names[#names + 1] = UnitLabel(unit)
+		names[#names + 1] = ClassLabel(unit)
 	end
 	return #names > 0 and (" (" .. table.concat(names, ", ") .. ")") or ""
 end
