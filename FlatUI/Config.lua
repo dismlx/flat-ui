@@ -920,7 +920,7 @@ ns.PAGES = {
 		{ key = "interruptAnim", kind = "bool", default = true, label = "Interrupt flash", changed = "ButtonEffectsChanged",
 			tip = "The button of a cast that is interrupted flashes in the cast bar's Interrupted colour, a macro or an item that cast it too." },
 		{ key = "aimAnim", kind = "bool", default = true, label = "Aim highlight", changed = "ButtonEffectsChanged",
-			tip = "While a spell you place on the ground, such as Blizzard or Volley, waits for its spot, its button on Flat UI's bars pulses, also while Auto Shot or a wand keeps shooting." },
+			tip = "While a spell you place on the ground, such as Blizzard or Volley, waits for its spot or for a click on its target, its button on Flat UI's bars pulses, also while Auto Shot or a wand keeps shooting." },
 		{ section = "Extra action button" },
 		{ key = "abilityArt", kind = "bool", default = true, label = "Extra button artwork", changed = "ButtonEffectsChanged" },
 	},

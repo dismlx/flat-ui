@@ -18,8 +18,11 @@ local _, ns = ...
 -- colour, 15% to 50% and back every half second, until it is placed or cancelled: RETICLE_CLEAR, the start of any cast or channel, and SENT,
 -- SUCCEEDED, FAILED, STOP, INTERRUPTED and CHANNEL_STOP of that spell only (CAST.aimSpell), since the game sends a button only the events of its own
 -- spell (ActionButton.lua:320-339, the spell ID the fourth argument of SENT and the third of the others), so an Auto Shot or a wand shot meanwhile
--- leaves the pulse on. Only buttons that show light up: one the layout hid keeps its place over empty space. Only heights, alpha, colours, Show,
--- Hide and animations of these frames are set in a fight.
+-- leaves the pulse on. Without the reticle event (it is not known that this client sends it) the aim is found another way: at each
+-- CURRENT_SPELL_CAST_CHANGED, and a frame later, SpellIsTargeting says whether a spell waits for its spot or for a click on its target, and the
+-- buttons whose slot became current with it (IsCurrentAction, not Attack nor a repeating shot, and not the slots current before it, such as a stance
+-- or an aura) pulse (aimSpell -1) until it says no; the events that end an aim of a known spell ask it again instead. Only buttons that show light
+-- up: one the layout hid keeps its place over empty space. Only heights, alpha, colours, Show, Hide and animations of these frames are set in a fight.
 -- Samples (ns.ButtonEffectsSample, out of combat): test mode (ActionBars.lua) plays the cast fill as a 2 s cast that lands, the interrupt flash and a
 -- 2 s aim on the first shown buttons of Flat UI's main bar, and a change of Cast fill animation, Interrupt flash or Aim highlight with the options
 -- window open plays that one on the first. A sample's spell is 0, which no event of the game's names, so a real cast or aim replaces it at once and
@@ -171,7 +174,10 @@ end
 -- it landed (the fill fades for FADE seconds). sample: the token of the sample aim (aim) and the button of the interrupt sample (flashed);
 -- SAMPLE_TIME: how long the sample cast and the sample aim last.
 local CAST = { frames = setmetatable({}, WEAK), lit = {}, aimed = {}, pending = false, FADE = 0.2, ALPHA = 0.4, FLASH = 0.7, AIM_LOW = 0.15, AIM_HIGH = 0.5,
-	AIM_TIME = 0.5, sample = { aim = 0 }, SAMPLE_TIME = 2 }
+	AIM_TIME = 0.5, sample = { aim = 0 }, SAMPLE_TIME = 2,
+	-- AIM_FALLBACK: the aimSpell of an aim found by SpellIsTargeting (AimCheck), whose spell is not known. steady: the slots current while no spell
+	-- waits, by slot.
+	AIM_FALLBACK = -1, steady = {} }
 
 local function CastMake(button)
 	local icon = button.icon
@@ -370,6 +376,97 @@ local function AimStart(spellID)
 	AimLight(CastButtons(spellID), spellID)
 end
 
+local function Yes(value)
+	return Plain(value, "boolean") and value == true
+end
+
+-- The shown Flat UI buttons whose slot is current (IsCurrentAction), as { button, slot }: the game's checked rule (OwnPaint.lua STEP.checked) without
+-- Attack and a repeating Auto Shot or wand, which are current while they swing or shoot.
+local function CurrentButtons()
+	local found = {}
+	for _, button in ipairs(OwnButtons()) do
+		local slot = type(ns.OwnSlot) == "function" and ns.OwnSlot(button)
+		if Plain(slot, "number") and Visible(button) and Yes(ActionCall("IsCurrentAction", slot)) and not Yes(ActionCall("IsAutoRepeatAction", slot))
+			and not Yes(ActionCall("IsAttackAction", slot)) then
+			found[#found + 1] = { button, slot }
+		end
+	end
+	return found
+end
+
+-- True when the buttons of list that have an aim frame are the ones that pulse now.
+local function SameAim(list)
+	local aimed, count = {}, 0
+	for _, button in ipairs(CAST.aimed) do
+		aimed[button] = true
+	end
+	for _, button in ipairs(list) do
+		local made = CAST.frames[button]
+		if made and made.pulse then
+			if not aimed[button] then
+				return false
+			end
+			count = count + 1
+		end
+	end
+	return count == #CAST.aimed
+end
+
+-- The aim highlight without the reticle event, for a client that may not send it: while SpellIsTargeting says a spell waits for its spot or for a
+-- click on its target, the buttons that became current with it pulse (the current slots of the steady state, a stance, form, aura or queued swing,
+-- are left out; all current ones when that leaves none), until it is placed, cast or cancelled. A reticle aim of the game's (a plain spell ID)
+-- is left alone, and replaces this one as it comes (AimStart).
+local function AimCheck()
+	if not (On() and Opt("aimAnim")) or type(SpellIsTargeting) ~= "function" then
+		return
+	end
+	local ok, targeting = pcall(SpellIsTargeting)
+	if not ok or not Plain(targeting, "boolean") then
+		return
+	end
+	local current = CurrentButtons()
+	if not targeting then
+		CAST.steady = {}
+		for _, pair in ipairs(current) do
+			CAST.steady[pair[2]] = true
+		end
+		if CAST.aimSpell == CAST.AIM_FALLBACK then
+			AimClear()
+		end
+		return
+	end
+	if CAST.aimSpell ~= nil and CAST.aimSpell ~= 0 and CAST.aimSpell ~= CAST.AIM_FALLBACK then
+		return
+	end
+	local fresh, all = {}, {}
+	for _, pair in ipairs(current) do
+		all[#all + 1] = pair[1]
+		if not CAST.steady[pair[2]] then
+			fresh[#fresh + 1] = pair[1]
+		end
+	end
+	local list = #fresh > 0 and fresh or all
+	if #list == 0 then
+		if CAST.aimSpell == CAST.AIM_FALLBACK then
+			AimClear()
+		end
+	elseif not (CAST.aimSpell == CAST.AIM_FALLBACK and SameAim(list)) then
+		AimLight(list, CAST.AIM_FALLBACK)
+	end
+end
+
+-- Now, and once more a frame later, when the checked state of the buttons has followed.
+local function AimSoon()
+	AimCheck()
+	if C_Timer and C_Timer.After then
+		C_Timer.After(0, function()
+			if type(ns.OwnOn) == "function" and ns.OwnOn() and not pcall(AimCheck) then
+				pcall(AimClear)
+			end
+		end)
+	end
+end
+
 -- Each frame while a cast shows: the fill's height from the cast's times, or its fade once the cast landed.
 local function CastStep()
 	local now = GetTime()
@@ -465,6 +562,11 @@ local AIM_OWN = { UNIT_SPELLCAST_SENT = true, UNIT_SPELLCAST_SUCCEEDED = true, U
 local AIM_ANY = { UNIT_SPELLCAST_RETICLE_CLEAR = true, UNIT_SPELLCAST_START = true, UNIT_SPELLCAST_CHANNEL_START = true }
 
 local function CastEvent(event, ...)
+	-- Not a unit event: its argument is cancelledCast.
+	if event == "CURRENT_SPELL_CAST_CHANGED" then
+		AimSoon()
+		return
+	end
 	local unit = ...
 	if unit ~= "player" then
 		return
@@ -487,6 +589,9 @@ local function CastEvent(event, ...)
 		return
 	elseif #CAST.aimed > 0 and (AIM_ANY[event] or (AIM_OWN[event] and CAST.aimSpell ~= nil and Plain(spellID, "number") and spellID == CAST.aimSpell)) then
 		AimClear()
+	elseif CAST.aimSpell == CAST.AIM_FALLBACK and AIM_OWN[event] then
+		-- The spell of an aim found by SpellIsTargeting is not known: any spell's event asks again, so a placed spell ends it and an Auto Shot leaves it.
+		AimSoon()
 	end
 	if event == "UNIT_SPELLCAST_RETICLE_CLEAR" or event == "UNIT_SPELLCAST_SENT" or not Plain(spellID, "number") then
 		return
@@ -777,6 +882,7 @@ for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SP
 	"UNIT_SPELLCAST_RETICLE_TARGET", "UNIT_SPELLCAST_RETICLE_CLEAR", "UNIT_SPELLCAST_SENT" }) do
 	pcall(casts.RegisterUnitEvent, casts, event, "player")
 end
+pcall(casts.RegisterEvent, casts, "CURRENT_SPELL_CAST_CHANGED")
 casts:SetScript("OnEvent", function(_, event, ...)
 	if type(ns.OwnOn) == "function" and ns.OwnOn() then
 		if not pcall(CastEvent, event, ...) then

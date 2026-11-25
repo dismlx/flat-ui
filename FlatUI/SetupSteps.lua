@@ -307,7 +307,7 @@ ns.SETUP_STEPS = {
 		{ "actionbars.assist", "o", "mock-action-row" },
 		{ "actionbars.castAnim", "o", "mock-action-row" },
 		{ "actionbars.interruptAnim", "o", "mock-action-row" },
-		{ "actionbars.aimAnim", "o", "behaviour", "Makes the button of a spell you place on the ground, such as Blizzard or Volley, pulse on Flat UI's bars while the spell waits for its spot." },
+		{ "actionbars.aimAnim", "o", "behaviour", "Makes the button of a spell you place on the ground, such as Blizzard or Volley, pulse on Flat UI's bars while the spell waits for its spot or for a click on its target." },
 		{ "actionbars.abilityArt", "o", "mock-action-row" },
 	} },
 	{ id = "uf-frames", area = "Unit frames", title = "Which frames and how big", draw = "mock-unit-frames", built = true, rows = {
