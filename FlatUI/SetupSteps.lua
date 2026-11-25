@@ -1571,6 +1571,7 @@ ns.SETUP_STEPS = {
 		{ "grouptools.size", "o", "behaviour", "Sets the size of the buttons." },
 		{ "grouptools.spacing", "r", "behaviour", "Sets the room between the buttons." },
 		{ "grouptools.layout", "o", "behaviour", "Lays the buttons out in a row, in two rows or in a column." },
+		{ "grouptools.markColours", "r", "behaviour", "Gives the border of each raid marker the colour of its marker." },
 	} },
 	{ id = "pingbar", area = "Ping bar", title = "Ping bar", draw = "mock-screen", built = false, rows = {
 		{ "pingbar.enabled", "c", "behaviour", "Shows a bar with a button for each ping of the game: click one, then click where to ping, or another to switch. Each also has a key in the game's Key Bindings that pings what is under the mouse, and the movers place the bar." },

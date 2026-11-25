@@ -1453,6 +1453,8 @@ ns.PAGES = {
 		{ key = "spacing", kind = "number", default = 3, min = 0, max = 12, step = 1, label = "Spacing" },
 		{ key = "layout", kind = "choice", default = "row", label = "Layout",
 			choices = { { "row", "In a row" }, { "rows", "Markers above the rest" }, { "column", "In a column" } } },
+		{ key = "markColours", kind = "bool", default = true, label = "Borders in the marker's colour",
+			tip = "Star yellow, circle orange, diamond purple, triangle green, moon silver-blue, square blue, cross red and skull white, as in the game's menu." },
 	},
 	-- PingBar.lua: a bar of Flat UI's own with a button for each ping of the game, with its key. On by default; it shows in a group. /flatui move
 	-- places it.
