@@ -8,9 +8,11 @@ local ADDON_NAME, ns = ...
 -- hidden it has no script, so nothing runs. It hides with UIParent. In combat only, a frame of the addon's own listens to PLAYER_REGEN_DISABLED and
 -- PLAYER_REGEN_ENABLED, and only while that choice is made; the ring then fades in over FADE_IN seconds as a fight starts and out over FADE_OUT as
 -- it ends, by the alpha of its own frame (SetAlpha) in the same OnUpdate, and is hidden with no script once it has faded out. A ring of Always, or
--- one whose row goes off, shows and hides at once. While the player turns the camera with the mouse (IsMouselooking, the apis.yaml of wowless for
--- wowf lists it; only a plain true counts), the game hides its cursor, so the ring and its swipes go to alpha 0 and stay where they are, and come
--- back on the cursor as it is let go. Nothing of the game is changed. Not a module: Core.lua applies the rows at login and when the profile
+-- one whose row goes off, shows and hides at once. A change of Cursor ring, Cursor ring size or Cursor ring colour out of a fight while the
+-- options window shows makes a ring of In combat only or When you shake the mouse show whole for PREVIEW seconds from the last change, and then
+-- fade out, so the new look is seen (ns.CursorRingChanged). While the player turns the camera with the mouse (IsMouselooking, the apis.yaml
+-- of wowless for wowf lists it; only a plain true counts), the game hides its cursor, so the ring and its swipes go to alpha 0 and stay where
+-- they are, and come back on the cursor as it is let go. Nothing of the game is changed. Not a module: Core.lua applies the rows at login and when the profile
 -- changes, and the rows call ns.CursorRingChanged themselves.
 -- Grow when you shake the mouse (general.cursorRingShake, on): the same OnUpdate watches the cursor's x. Each time it goes back the other way by at
 -- least SHAKE_STEP of the interface's units (in the cursor's pixels, times UIParent's effective scale) from the farthest it went, that is a turn;
@@ -64,6 +66,9 @@ local FADE_IN, FADE_OUT = 0.15, 0.3
 -- SHAKE_HOLD: the seconds a ring of When you shake the mouse stays at its own size before it fades out.
 local SHAKE_STEP, SHAKE_TURNS, SHAKE_WINDOW, SHAKE_HOLD = 8, 4, 0.5, 0.6
 local GROW, GROW_UP, GROW_END = 1.5, 0.15, 0.6
+-- The seconds a change of the ring's look shows it whole for In combat only and When you shake the mouse, from the last change, and the rows that do.
+local PREVIEW = 1.2
+local PREVIEW_ROWS = { ["general.cursorRing"] = true, ["general.cursorRingSize"] = true, ["general.cursorRingColour"] = true }
 
 local ring
 -- The texture of the ring.
@@ -93,6 +98,8 @@ local stopped
 local shake = { turns = {} }
 local grow
 local grownScale = 1
+-- Until when a change of a row shows the ring whole (GetTime), or nil.
+local previewUntil
 
 local function Mode()
 	local mode = ns.Get("general.cursorRing")
@@ -116,17 +123,27 @@ local function Testing()
 	return test ~= nil and test.IsOn() == true
 end
 
+-- True while a change of the ring's look shows it whole (ns.CursorRingChanged).
+local function Previewing()
+	if previewUntil == nil then
+		return false
+	end
+	local now = GetTime()
+	return ns.Finite(now) and now < previewUntil
+end
+
 local function Wanted()
 	local mode = Mode()
 	if broken or mode == nil then
 		return false
 	end
-	return mode == "always" or mode == "shake" or fighting or Testing()
+	return mode == "always" or mode == "shake" or fighting or Testing() or Previewing()
 end
 
--- True for When you shake the mouse out of test mode: the ring is shown but unseen (alpha 0) until a shake, so its OnUpdate can watch for one.
+-- True for When you shake the mouse out of test mode and out of a preview: the ring is shown but unseen (alpha 0) until a shake, so its OnUpdate
+-- can watch for one.
 local function Unseen()
-	return Mode() == "shake" and not Testing()
+	return Mode() == "shake" and not Testing() and not Previewing()
 end
 
 -- Puts the centre of the ring on the cursor.
@@ -262,6 +279,8 @@ local function Shake(frame, now)
 	Scale(frame, 1 + GROW * curve)
 end
 
+local Show
+
 -- The ring hides and runs nothing more.
 local function Hidden(frame)
 	fade = nil
@@ -271,6 +290,15 @@ local function Hidden(frame)
 end
 
 local function Tick(frame)
+	-- A preview over: the ring goes back to what its choice shows, In combat only fading out and When you shake the mouse unseen again, fading
+	-- out in Shake as no swell or hold keeps it.
+	if previewUntil ~= nil and not Previewing() then
+		previewUntil = nil
+		Show(Wanted())
+		if not frame:IsShown() then
+			return
+		end
+	end
 	local now = Looking()
 	if now ~= looking then
 		looking = now
@@ -601,9 +629,9 @@ end
 -- The ring -----------------------------------------------------------------------------------------------------------------------------------------
 
 -- In combat only the ring fades in and out; Always and a row turned off show and hide it at once. When you shake the mouse shows it unseen,
--- at alpha 0, and its shakes fade it in and out (Shake); in test mode it shows whole.
-local function Show(on)
-	local fades, unseen = Mode() == "combat", Unseen()
+-- at alpha 0, and its shakes fade it in and out (Shake); in test mode it shows whole, and so does either choice during a preview, at once.
+function Show(on)
+	local fades, unseen = Mode() == "combat" and not Previewing(), Unseen()
 	if on then
 		local frame = Make()
 		Look()
@@ -697,8 +725,15 @@ local function Apply()
 	Show(Wanted())
 end
 
--- A row of the ring changed, the player logged in, or the profile changed.
-function ns.CursorRingChanged()
+-- A row of the ring changed (path, as Core.lua's Changed passes it), the player logged in, or the profile changed (no path). A change of Cursor
+-- ring, its size or its colour to In combat only or When you shake the mouse, while the options window shows and out of a fight, shows the ring
+-- whole round the pointer until PREVIEW seconds after the change (a slider drag to its last step), and it then fades out (Tick).
+function ns.CursorRingChanged(path)
+	local mode = Mode()
+	if type(path) == "string" and PREVIEW_ROWS[path] and (mode == "combat" or mode == "shake") and not broken and not InCombatLockdown()
+		and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+		previewUntil = GetTime() + PREVIEW
+	end
 	local ok, err = pcall(Apply)
 	if not ok then
 		Stop(err)

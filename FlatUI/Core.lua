@@ -506,6 +506,8 @@ local READERS = {
 	["errands.sellTwelve"] = "bags",
 	-- A bar the bar block holds with its own Background panel has no panel from the Action bars page.
 	["barblock.background"] = "actionbars",
+	-- The Ammunition slot of the data panels turns gold at the Trackers page's minimums (DataStreams.lua), drawn again by its refresh.
+	["trackers.ammoMin"] = "datapanels", ["trackers.thrownMin"] = "datapanels",
 	-- A tracker row below the display hangs under the Cooldown icons row, which these settings size and place.
 	["cooldowns.place"] = "trackers", ["cooldowns.size"] = "trackers", ["cooldowns.spacing"] = "trackers", ["cooldowns.perRow"] = "trackers",
 	["cooldowns.rows"] = "trackers",
