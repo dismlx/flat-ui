@@ -3,8 +3,9 @@ local _, ns = ...
 -- Bags: the sections of the category view and the rules that file each item in one, the record of new items, the junk test, and the
 -- placement of items by hand with drops on Junk. Bags.lua makes ns.Bags with B.Categories and B.Categories.New; this file only adds their
 -- fields. It makes no frame and owns no event: BagsData.lua hears BAG_UPDATE_DELAYED and BAG_NEW_ITEMS_UPDATED and hands New.Seen the slots that
--- changed, or whose new flag is set, before it asks for a redraw, and the window's layout (BagsLayout.lua) asks Of, Compare and Label when it lays
--- a window out.
+-- changed, or whose new flag is set, before it asks for a redraw, and the window's layout (BagsLayout.lua) asks Of, Compare, Label, Hidden,
+-- HiddenKeys and HiddenSign when it lays a window out; BagsOrder.lua asks Hideable, Exists, GroupRow, SetHidden and ShowAll for a title's menu, the
+-- Hidden button after the last section and the row Hidden sections.
 --
 -- An item lands in the first section whose rule it meets: New items, then Junk, then Keep in place, then the section the player placed it in by
 -- hand, then Equipment sets, Quest items, Equipment, Consumables, Trade goods, Reagents, Recipes, Ammunition, Bags and quivers, Keys and Other.
@@ -12,14 +13,42 @@ local _, ns = ...
 -- ItemDocumentation.lua:659-679, which never waits for the server), as BagsData keeps them on each record or through B.Data.Info, and compare
 -- them with the numbers of Forever's Enum.ItemClass and Enum.ItemMiscellaneousSubclass (wowless, data/products/wowf/enums.yaml:4630-4651 and
 -- 5009-5016). An item in an equipment set (the record's set, from C_Container.GetContainerItemEquipmentSetInfo) and a quest item (class 12, or the
--- record's quest and questStart, from C_Container.GetContainerItemQuestInfo, ContainerDocumentation.lua:281-295) are read by BagsData. With
--- Equipment set to Weapons, armour and jewellery, Equipment is three sections, and with Consumables set to By kind, Consumables is Food and drink
--- (subclass 5), Potions and elixirs (potions, elixirs and flasks, subclasses 1 to 3) and Consumables for the rest (bandages, scrolls and others).
+-- record's quest and questStart, from C_Container.GetContainerItemQuestInfo, ContainerDocumentation.lua:281-295) are read by BagsData.
+--
+-- Groups (GROUPS): three rows of the Bags page show a family of sections as one section or apart, and their default, One section, keeps it one.
+-- Equipment (bags.gear): Weapons, armour and jewellery splits it in three, by equip slot as before (shields, off-hands and relics with the weapons,
+-- shirts and tabards with the armour); Each kind in Weapons (every weapon slot, ranged, thrown and wands), Shields and off-hands (INVTYPE_SHIELD,
+-- INVTYPE_HOLDABLE), Armour (head, shoulders, chest and robe, waist, legs, feet, wrists, hands and back), Rings, Necklaces, Trinkets, Relics,
+-- Shirts and tabards, and Equipment for what is left. Consumables (bags.consumables): Food, potions and the rest splits it in Food and drink
+-- (Enum.ItemConsumableSubclass Fooddrink 5, wowless, data/products/wowf/enums.yaml:4694-4711), Potions and elixirs (Potion 1, Elixir 2,
+-- Flasksphials 3) and Consumables; Each kind in Food and drink, Potions (named so then), Elixirs and flasks, Scrolls (4), Bandages (7),
+-- Enhancements (Itemenhancement 6 and ItemenhancementTemporary 15: oils, stones, kits and the like), Explosives and devices (Device 14, and the
+-- Explosives and Devices of Trade goods, which this game files as trade goods: at Each kind Consumables takes them ahead of Trade goods' rule) and
+-- Consumables for the rest. Trade goods (bags.tradeGoods): Each kind splits it in Cloth, Leather, Metal and stone, Herbs, Elemental, Enchanting,
+-- Meat, Parts (with the explosives and devices while Consumables is not at Each kind) and Trade goods for the rest (gems, item enhancements,
+-- profession items and the trade goods of no kind above). Forever's enums list no subclasses of Trade goods (enums.yaml has none, and the game's
+-- auction house asks the server for them, C_AuctionHouse.GetAuctionItemSubClasses, Camelot/Blizzard_AuctionData.lua:183-186), so those are the
+-- client's own numbers for class 7: Parts 1, Explosives 2, Devices 3, Cloth 5, Leather 6, Metal & Stone 7, Meat 8, Herb 9, Elemental 10, Other 11,
+-- Enchanting 12. Fit gives the section a key of a group stands for under its row's choice, so a placement by hand in a section the choice does not
+-- show goes to the one that holds its kind there (Rings to Jewellery, Jewellery at Each kind to the ring's own section, and every one to the group's
+-- base at One section), and Of files an item in the sections the rows show.
+--
+-- Hidden sections: the player may hide any section of Flat UI's own but New items, Free slots and Other (a title's right-click menu, BagsOrder.lua),
+-- in both windows and for every character, a set of keys for the whole account in FlatUIDB.bags.hidden, { [key] = true }, beside the order and the
+-- folds, read with a type test at each use; an empty set is not kept. A hidden section is passed by as if it were not there: its items go to the
+-- next rule that takes them, a hidden kind of a split group to the section that holds the group's rest under its row's choice while that shows
+-- (Potions to Consumables, Rings to Equipment, Weapons to Armour at Weapons, armour and jewellery), and Other at worst; the explosives and devices
+-- of Trade goods, which Consumables only claims, go on to Trade goods' rule then. Junk hidden changes only where junk shows (IsJunk, the sell list,
+-- Sell junk and the junk coin stay, and a drop takes no item off the sell list), and Keep in place hidden leaves the pins as they are, their items
+-- filed by kind, and a drop on another section unpins no slot (B.Pins.Left). A placement by hand in a hidden section is kept but skipped, and
+-- counts again once it shows. Keys of the set that are no such section are skipped, so a section that is gone, or one of a choice not in use, errs
+-- nowhere.
+--
 -- The sections are shown in an order of their own (LIST), which is
--- not the order their rules are tried in: New items first, Keep in place next, Junk and Free slots last; the player may move every section but
--- New items and Free slots (BagsOrder.lua), which changes the order they are shown in and never where an item is filed. Sections the player makes
--- and names (B.Custom, BagsCustom.lua) hold only the items placed in them by hand, and come right after Keep in place in the built-in order
--- (BagsOrder.lua).
+-- not the order their rules are tried in: New items first, Keep in place next, Junk and Free slots last, and each section of a group where its group
+-- stands, after the group's base; the player may move every section but New items and Free slots (BagsOrder.lua), which changes the order they are
+-- shown in and never where an item is filed. Sections the player makes and names (B.Custom, BagsCustom.lua) hold only the items placed in them by
+-- hand, and come right after Keep in place in the built-in order (BagsOrder.lua).
 --
 -- Keep in place holds the items of this character's bags (a live record of bags 0 to 5) that sit in the slot the player pinned for them
 -- (B.Pins.Of, BagsPins.lua). It comes after Junk, so the Junk section and Sell junk always agree; pinning takes an item off the sell list and puts a
@@ -50,15 +79,16 @@ local _, ns = ...
 -- CursorDocumentation.lua:11-19, read from the fields of its ItemLocation, Blizzard_ObjectAPI/Mainline/ItemLocation.lua:35-44) and gives the
 -- item back to its slot with ClearCursor. Dropped on Junk, the item goes on Errands' sell list; an item of Junk dropped on another section comes
 -- off the sell list, and a grey one goes on the keep list (ns.ErrandsJunkMark), as /flatui sell and /flatui keep put them there and take them off
--- (ErrandsMerchant.lua:824-848): a placement of Flat UI's own in or out of Junk would make the section and the selling disagree. Whether a dropped
--- item is of Junk is the test of its slot for a slot of the bags (Categories.IsJunk), so a grey item of a bag left out of junk selling, which is
--- not in Junk, goes on no list; for the bank, and an item whose slot the game does not say, it is the two lists (ns.ErrandsJunkRule). An item the
--- game gives no value, or no sell price (C_Item.GetItemInfo, ItemDocumentation.lua:626-657), and a quest item cannot go in Junk, since Errands
--- never sells them. Dropped on the section it reaches by itself, an item loses its placement. An item whose slot the game does not say is judged by
--- its ID alone, with its quality from C_Item.GetItemQualityByID. New items and Free slots take no drop, and no drop is taken in a fight
--- (InCombatLockdown and UnitAffectingCombat, through Errands.Fighting): the item only goes back. The lines said in chat name an item as Errands
--- does, by C_Item.GetItemNameByID and its ID. The row Items placed by hand lists the placements and takes one off, or, from its first line while
--- two or more are placed, every one; with none it says how to place an item.
+-- (ErrandsMerchant.lua:824-848): a placement of Flat UI's own in or out of Junk would make the section and the selling disagree. While Junk is
+-- hidden no drop changes the lists, since its items show in other sections then (DropOn). Whether a dropped item is of Junk is the test of its
+-- slot for a slot of the bags (Categories.IsJunk), so a grey item of a bag left out of junk selling, which is not in Junk, goes on no list; for
+-- the bank, and an item whose slot the game does not say, it is the two lists (ns.ErrandsJunkRule). An item the game gives no value, or no sell
+-- price (C_Item.GetItemInfo, ItemDocumentation.lua:626-657), and a quest item cannot go in Junk, since Errands never sells them. Dropped on the
+-- section it reaches by itself, an item loses its placement. An item whose slot the game does not say is judged by its ID alone, with its quality
+-- from C_Item.GetItemQualityByID. New items and Free slots take no drop, and no drop is taken in a fight (InCombatLockdown and
+-- UnitAffectingCombat, through Errands.Fighting): the item only goes back. The lines said in chat name an item as Errands does, by
+-- C_Item.GetItemNameByID and its ID. The row Items placed by hand lists the placements and takes one off, or, from its first line while two or
+-- more are placed, every one; with none it says how to place an item.
 -- Sections the player makes and names (keys custom1, custom2 and on, in FlatUIDB.bags.custom; B.Custom.Is, BagsCustom.lua) take placements too,
 -- within the same MOST_PLACED; a placement in a section that is not there is skipped, and deleting a section of the player's own takes its
 -- placements away. Categories.File is the same drop without the cursor, which BagsCustom calls for an item it put in a free slot of the bags and
@@ -92,20 +122,39 @@ local MOST_PLACED = 500
 -- Where a class, subclass or slot nobody gave sorts, and where the keyring and an unknown bag sort among the containers.
 local LAST, KEYRING_PLACE, NO_BAG = 1000, 100, 200
 
--- The sections in the order they are shown.
+-- The sections in the order they are shown; each: the label a section has while its group's row is at Each kind, where it holds less.
 local SECTIONS = {
 	{ key = "new", label = "New items" },
 	{ key = "keep", label = "Keep in place" },
 	{ key = "set", label = "Equipment sets" },
 	{ key = "gear", label = "Equipment" },
 	{ key = "weapon", label = "Weapons" },
+	{ key = "shield", label = "Shields and off-hands" },
 	{ key = "armour", label = "Armour" },
 	{ key = "jewel", label = "Jewellery" },
+	{ key = "ring", label = "Rings" },
+	{ key = "neck", label = "Necklaces" },
+	{ key = "trinket", label = "Trinkets" },
+	{ key = "relic", label = "Relics" },
+	{ key = "shirt", label = "Shirts and tabards" },
 	{ key = "consumable", label = "Consumables" },
 	{ key = "food", label = "Food and drink" },
-	{ key = "potion", label = "Potions and elixirs" },
+	{ key = "potion", label = "Potions and elixirs", each = "Potions" },
+	{ key = "elixir", label = "Elixirs and flasks" },
+	{ key = "scroll", label = "Scrolls" },
+	{ key = "bandage", label = "Bandages" },
+	{ key = "enhance", label = "Enhancements" },
+	{ key = "explosive", label = "Explosives and devices" },
 	{ key = "quest", label = "Quest items" },
 	{ key = "trade", label = "Trade goods" },
+	{ key = "cloth", label = "Cloth" },
+	{ key = "leather", label = "Leather" },
+	{ key = "metal", label = "Metal and stone" },
+	{ key = "herb", label = "Herbs" },
+	{ key = "elemental", label = "Elemental" },
+	{ key = "enchanting", label = "Enchanting" },
+	{ key = "meat", label = "Meat" },
+	{ key = "parts", label = "Parts" },
 	{ key = "reagent", label = "Reagents" },
 	{ key = "recipe", label = "Recipes" },
 	{ key = "ammo", label = "Ammunition" },
@@ -117,17 +166,55 @@ local SECTIONS = {
 }
 -- The rules after New items, Junk and placement, in the order they are tried; Other takes the rest.
 local PRIORITY = { "set", "quest", "gear", "consumable", "trade", "reagent", "recipe", "ammo", "bag", "key" }
--- The sections of the Equipment family, which the Equipment row shows as one or as three, and of the Consumables family, which the Consumables row
--- shows as one or as three.
-local GEAR = { gear = true, weapon = true, armour = true, jewel = true }
-local CONSUME = { consumable = true, food = true, potion = true }
--- With Consumables split, by Enum.ItemConsumableSubclass (enums.yaml:4694-4711, as BagsSearch.lua reads them): food and drink, and potions,
--- elixirs and flasks; the rest (bandages, scrolls, others) stays in Consumables.
-local FOOD_SUB, POTION_SUBS = 5, { [1] = true, [2] = true, [3] = true }
--- With Equipment split: the slots that go with the weapons besides class 2, and the jewellery.
-local WEAPON_SLOTS = { INVTYPE_SHIELD = true, INVTYPE_HOLDABLE = true, INVTYPE_RANGED = true, INVTYPE_RANGEDRIGHT = true, INVTYPE_THROWN = true,
-	INVTYPE_RELIC = true }
-local JEWEL_SLOTS = { INVTYPE_NECK = true, INVTYPE_FINGER = true, INVTYPE_TRINKET = true }
+-- The sections the player cannot hide: the two shelves, and Other, which takes what no other section does.
+local UNHIDEABLE = { new = true, free = true, other = true }
+-- The three groups a row of the Sections part shows as one section or apart (see the top of the file). row: the row of the Bags page. base: the
+-- section that is the group as One section, and its rest while it is split. each: the sections Each kind adds to the rest. kind: for the older
+-- split of Equipment and Consumables, the section each kind goes to. slots, subs: a record's kind, by its equip slot first, else by its class and
+-- subclass (any: every subclass), else the rest. claims: the kind of another class the group takes at Each kind, ahead of that class's own rule.
+-- The slots are the equip slots of C_Item.GetItemInfoInstant (Camelot/PaperDollFrame.xml:779-873 names their places); the subclasses those of
+-- Enum.ItemConsumableSubclass (enums.yaml:4694-4711), and for Trade goods, which Forever's enums do not list, the client's own (see the top).
+local GROUPS = {
+	{ row = "gear", base = "gear", each = { "weapon", "shield", "armour", "ring", "neck", "trinket", "relic", "shirt" },
+		kind = { gear = "armour", weapon = "weapon", shield = "weapon", relic = "weapon", armour = "armour", shirt = "armour", jewel = "jewel",
+			ring = "jewel", neck = "jewel", trinket = "jewel" },
+		slots = { INVTYPE_WEAPON = "weapon", INVTYPE_2HWEAPON = "weapon", INVTYPE_WEAPONMAINHAND = "weapon", INVTYPE_WEAPONOFFHAND = "weapon",
+			INVTYPE_RANGED = "weapon", INVTYPE_RANGEDRIGHT = "weapon", INVTYPE_THROWN = "weapon", INVTYPE_SHIELD = "shield",
+			INVTYPE_HOLDABLE = "shield", INVTYPE_HEAD = "armour", INVTYPE_SHOULDER = "armour", INVTYPE_CHEST = "armour", INVTYPE_ROBE = "armour",
+			INVTYPE_WAIST = "armour", INVTYPE_LEGS = "armour", INVTYPE_FEET = "armour", INVTYPE_WRIST = "armour", INVTYPE_HAND = "armour",
+			INVTYPE_CLOAK = "armour", INVTYPE_FINGER = "ring", INVTYPE_NECK = "neck", INVTYPE_TRINKET = "trinket", INVTYPE_RELIC = "relic",
+			INVTYPE_BODY = "shirt", INVTYPE_TABARD = "shirt" },
+		subs = { [WEAPON] = { any = "weapon" } } },
+	{ row = "consumables", base = "consumable", each = { "food", "potion", "elixir", "scroll", "bandage", "enhance", "explosive" },
+		kind = { consumable = "consumable", food = "food", potion = "potion", elixir = "potion", scroll = "consumable", bandage = "consumable",
+			enhance = "consumable", explosive = "consumable" },
+		-- Potion 1, Elixir 2, Flasksphials 3, Scroll 4, Fooddrink 5, Itemenhancement 6, Bandage 7, Device 14, ItemenhancementTemporary 15; the
+		-- Explosives 2 and Devices 3 of Trade goods.
+		subs = { [CONSUMABLE] = { [1] = "potion", [2] = "elixir", [3] = "elixir", [4] = "scroll", [5] = "food", [6] = "enhance", [7] = "bandage",
+			[14] = "explosive", [15] = "enhance" }, [TRADEGOODS] = { [2] = "explosive", [3] = "explosive" } },
+		claims = "explosive" },
+	-- Parts 1, Explosives 2, Devices 3, Cloth 5, Leather 6, Metal & Stone 7, Meat 8, Herb 9, Elemental 10, Enchanting 12; the rest (Trade Goods 0,
+	-- Other 11, gems, item enhancements and profession items) stays in Trade goods.
+	{ row = "tradeGoods", base = "trade", each = { "cloth", "leather", "metal", "herb", "elemental", "enchanting", "meat", "parts" },
+		subs = { [TRADEGOODS] = { [1] = "parts", [2] = "parts", [3] = "parts", [5] = "cloth", [6] = "leather", [7] = "metal", [8] = "meat",
+			[9] = "herb", [10] = "elemental", [12] = "enchanting" } } },
+}
+-- Per group, the section each of its keys goes to under each choice that splits it (to.kind, to.each; One section sends all to base), and per key
+-- its group.
+local GROUP_OF = {}
+for _, group in ipairs(GROUPS) do
+	local each = { [group.base] = group.base }
+	for _, key in ipairs(group.each) do
+		each[key] = key
+	end
+	group.to = { each = each, kind = group.kind }
+	for key in pairs(each) do
+		GROUP_OF[key] = group
+	end
+	for key in pairs(group.kind or {}) do
+		GROUP_OF[key] = group
+	end
+end
 -- The place of each equip slot in the Character window, head to ranged (Camelot/PaperDollFrame.xml:779-873); a weapon for either hand goes with
 -- the main hand, and anything else after the ranged slot.
 local SLOT_ORDER = {
@@ -138,9 +225,11 @@ local SLOT_ORDER = {
 }
 local SLOT_LAST = 18
 
-local LABELS, PLACEABLE = {}, {}
+local LABELS, EACH_LABELS, PLACEABLE, HIDEABLE = {}, {}, {}, {}
 for _, section in ipairs(SECTIONS) do
 	LABELS[section.key] = section.label
+	EACH_LABELS[section.key] = section.each
+	HIDEABLE[section.key] = not UNHIDEABLE[section.key] or nil
 	-- New items follows the game's flag and Free slots is empty space, so neither can hold an item by its ID; Junk is Errands' lists, and Keep in
 	-- place this character's pinned slots.
 	if section.key ~= "new" and section.key ~= "junk" and section.key ~= "free" and section.key ~= "keep" then
@@ -282,32 +371,8 @@ function TESTS.gear(record)
 	return class == WEAPON or class == ARMOR
 end
 
-function TESTS.weapon(record)
-	local class, _, slot = Kind(record)
-	return class == WEAPON or (slot ~= nil and WEAPON_SLOTS[slot] == true)
-end
-
-function TESTS.jewel(record)
-	local _, _, slot = Kind(record)
-	return slot ~= nil and JEWEL_SLOTS[slot] == true
-end
-
-function TESTS.armour(record)
-	return Class(record) == ARMOR and not TESTS.weapon(record) and not TESTS.jewel(record)
-end
-
 function TESTS.consumable(record)
 	return Class(record) == CONSUMABLE
-end
-
-function TESTS.food(record)
-	local class, subclass = Kind(record)
-	return class == CONSUMABLE and subclass == FOOD_SUB
-end
-
-function TESTS.potion(record)
-	local class, subclass = Kind(record)
-	return class == CONSUMABLE and subclass ~= nil and POTION_SUBS[subclass] == true
 end
 
 function TESTS.trade(record)
@@ -341,65 +406,212 @@ function TESTS.other()
 	return true
 end
 
--- The section of the Equipment family a record goes to with Equipment split: Weapons, Jewellery, else Armour.
-local function Split(record)
-	if TESTS.weapon(record) then
-		return "weapon"
-	elseif TESTS.jewel(record) then
-		return "jewel"
+-- Groups ---------------------------------------------------------------------------------------------------------------------------------
+
+-- The choice of a group's row that splits it ("kind", "each"), or "one".
+local function Mode(group)
+	local value = Opt(group.row)
+	if type(value) == "string" and group.to[value] then
+		return value
 	end
-	return "armour"
+	return "one"
 end
 
--- A section of the Consumables family as the Consumables row shows it: one section, or the record's own of the three (By kind). placed: the
--- section an item was placed in by hand, which it keeps while the row shows that section (a potion dropped on Consumables stays there).
-local function FitConsumable(key, record, placed)
-	if Opt("consumables") ~= "kind" then
-		return "consumable"
-	end
-	if key == "consumable" and not placed then
-		if TESTS.food(record) then
-			return "food"
-		elseif TESTS.potion(record) then
-			return "potion"
+-- The kind of a record within its group: the section of its equip slot (slots), else of its class and subclass (subs), else the group's rest.
+local function KindOf(group, record)
+	local class, subclass, slot = Kind(record)
+	local key = slot and group.slots and group.slots[slot] or nil
+	if not key and class then
+		local subs = group.subs and group.subs[class]
+		if subs then
+			key = (subclass and subs[subclass]) or subs.any
 		end
 	end
-	return key
+	return key or group.base
 end
 
--- A section of the Equipment family as the Equipment row shows it: one section, or the record's own of the three; of the Consumables family as the
--- Consumables row shows it (FitConsumable; placed: a placement by hand). Other sections stay.
-local function Fit(key, record, placed)
-	if CONSUME[key] then
-		return FitConsumable(key, record, placed)
+-- True for a record of another class the group takes at Each kind (claims: the explosives and devices of Trade goods with Consumables at Each kind).
+local function Claims(group, record)
+	return group.claims ~= nil and Mode(group) == "each" and KindOf(group, record) == group.claims
+end
+
+-- True when the group's row shows the section key now (its base alone at One section), hidden or not.
+local function Shows(group, key)
+	local to = group.to[Mode(group)]
+	if not to then
+		return key == group.base
 	end
-	if not GEAR[key] then
+	return to[key] == key
+end
+
+-- The section a key of a group stands for under its row's choice: the base at One section; else the key itself where the choice shows it, a kind
+-- the choice folds into another that one (Rings into Jewellery), and the base, reached by the rules or placed by hand where the choice does not show
+-- it, the section of the record's own kind (KindOf). A kind the choice has not (Jewellery at Each kind) goes by the record's kind too. placed: an
+-- item placed by hand in key, which keeps a base the choice shows (a potion dropped on Consumables stays there). A key of no group stays.
+local function Fit(key, record, placed)
+	local group = GROUP_OF[key]
+	if not group then
 		return key
 	end
-	if Opt("gear") ~= "kind" then
-		return "gear"
+	local to = group.to[Mode(group)]
+	if not to then
+		return group.base
 	end
-	if key == "gear" then
-		return Split(record)
+	if key ~= group.base or placed then
+		local fitted = to[key]
+		if fitted == key or (fitted and key ~= group.base) then
+			return fitted
+		end
 	end
-	return key
+	return to[KindOf(group, record)] or group.base
 end
 
--- The section a record reaches by its own rules, after New items, Junk and placement.
+-- Hidden sections -----------------------------------------------------------------------------------------------------------------------
+
+-- FlatUIDB.bags.hidden, { [key] = true }, or nil while none is hidden or the saved variables have not loaded.
+local function HiddenSet()
+	local db = ns.Account()
+	local bags = type(db) == "table" and db.bags or nil
+	local hidden = type(bags) == "table" and bags.hidden or nil
+	if type(hidden) == "table" and next(hidden) ~= nil then
+		return hidden
+	end
+	return nil
+end
+
+-- True for a section of Flat UI's own the player hid. A key of the set that is no such section (an old key, a section of the player's own, New
+-- items, Free slots, Other) counts for nothing.
+local function Hidden(key)
+	if type(key) ~= "string" or not HIDEABLE[key] then
+		return false
+	end
+	local hidden = HiddenSet()
+	return hidden ~= nil and hidden[key] == true
+end
+Categories.Hidden = Hidden
+
+-- True for a section the player may hide: every one of Flat UI's own but New items, Free slots and Other.
+function Categories.Hideable(key)
+	return type(key) == "string" and HIDEABLE[key] == true
+end
+
+-- True when the rows of the Sections part show the section key now: a section of a group under its row's choice, any other of Flat UI's own always.
+function Categories.Exists(key)
+	local group = type(key) == "string" and GROUP_OF[key] or nil
+	if group then
+		return Shows(group, key)
+	end
+	return type(key) == "string" and LABELS[key] ~= nil
+end
+
+-- The hidden sections in the order of SECTIONS; with now, only those the rows show now (Exists), which a hide changes the windows for.
+function Categories.HiddenKeys(now)
+	local keys = {}
+	local hidden = HiddenSet()
+	if not hidden then
+		return keys
+	end
+	for _, section in ipairs(SECTIONS) do
+		local key = section.key
+		if HIDEABLE[key] and hidden[key] == true and (not now or Categories.Exists(key)) then
+			keys[#keys + 1] = key
+		end
+	end
+	return keys
+end
+
+-- The hidden sections as one text, for the layout's signature (BagsLayout.lua), so a change of them lays a window out afresh.
+function Categories.HiddenSign()
+	return table.concat(Categories.HiddenKeys(false), ",")
+end
+
+-- Hides the section key, or shows it again with on false; an empty set is not kept. Both windows are laid out again. True when it changed; false for
+-- a section that cannot be hidden, or before the saved variables load.
+function Categories.SetHidden(key, on)
+	local db = ns.Account()
+	if type(db) ~= "table" or not Categories.Hideable(key) then
+		return false
+	end
+	if on then
+		if Hidden(key) then
+			return false
+		end
+		if type(db.bags) ~= "table" then
+			db.bags = {}
+		end
+		if type(db.bags.hidden) ~= "table" then
+			db.bags.hidden = {}
+		end
+		db.bags.hidden[key] = true
+	else
+		local hidden = HiddenSet()
+		if not hidden or hidden[key] == nil then
+			return false
+		end
+		hidden[key] = nil
+		if next(hidden) == nil then
+			db.bags.hidden = nil
+		end
+	end
+	Request("layout")
+	return true
+end
+
+-- Shows every hidden section again. True when one was hidden.
+function Categories.ShowAll()
+	local db = ns.Account()
+	if not HiddenSet() or type(db) ~= "table" or type(db.bags) ~= "table" then
+		return false
+	end
+	db.bags.hidden = nil
+	Request("layout")
+	return true
+end
+
+-- The row of the Bags page that shows the group of section key as one section or apart ("gear", "consumables", "tradeGoods"), or nil.
+function Categories.GroupRow(key)
+	local group = type(key) == "string" and GROUP_OF[key] or nil
+	return group and group.row or nil
+end
+
+-- Filing ---------------------------------------------------------------------------------------------------------------------------------
+
+-- The section a record reaches by its own rules, after New items, Junk and placement: the first rule it meets (or its group claims it, Claims),
+-- as its group's row shows it (Fit). A hidden section is passed by as if it were not there: a hidden kind of a split group falls to the section
+-- that holds the group's rest under its row's choice (to[base]: Equipment at Each kind, Armour at Weapons, armour and jewellery, Consumables at
+-- Food, potions and the rest) while that is not hidden too, else the next rule takes the record. Only a record of the group's own class falls
+-- back: one the group only claims (the explosives and devices of Trade goods) goes on to its own class's rule, as it would with no such section.
+-- Other, which cannot be hidden, takes the rest.
 local function Rules(record)
 	for _, key in ipairs(PRIORITY) do
-		if TESTS[key](record) then
-			return Fit(key, record)
+		local group = GROUP_OF[key]
+		local own = TESTS[key](record) == true
+		if own or (group ~= nil and Claims(group, record)) then
+			local fitted = Fit(key, record)
+			if not Hidden(fitted) then
+				return fitted
+			end
+			local to = own and group and group.to[Mode(group)] or nil
+			local rest = to and to[group.base] or nil
+			if rest and rest ~= fitted and not Hidden(rest) then
+				return rest
+			end
 		end
 	end
 	return "other"
 end
 
--- The sections, in the order they are shown: { key, label, order, test(record) }. A section with no item is not drawn, so all four of the
--- Equipment family are listed and Of files an item in the ones the Equipment row shows. A test with no record is true for Free slots alone.
+-- The sections, in the order they are shown: { key, label, order, test(record) }. A section with no item is not drawn, so every section of a group
+-- is listed and Of files an item in the ones its row shows. A test with no record is true for Free slots alone. The base of a group tests the
+-- group's whole rule (BagsSearch.lua's #trade reads it); another section of a group whether the group's rule files the record there under the row's
+-- choice now, hidden or not.
 Categories.LIST = {}
 for index, section in ipairs(SECTIONS) do
 	local key = section.key
+	local group = GROUP_OF[key]
+	if group and group.base == key then
+		group = nil
+	end
 	Categories.LIST[index] = {
 		key = key,
 		label = section.label,
@@ -408,15 +620,23 @@ for index, section in ipairs(SECTIONS) do
 			if type(record) ~= "table" then
 				return key == "free"
 			end
+			if group then
+				return (TESTS[group.base](record) == true or Claims(group, record)) and Fit(group.base, record) == key
+			end
 			local test = TESTS[key]
 			return test ~= nil and test(record) == true
 		end,
 	}
 end
 
--- The label of a section: Flat UI's own, else the name the player gave a section of theirs (B.Custom.Name), else the key.
+-- The label of a section: Flat UI's own (its Each kind label while its group's row is at Each kind), else the name the player gave a section of
+-- theirs (B.Custom.Name), else the key.
 function Categories.Label(key)
 	if LABELS[key] then
+		local each = EACH_LABELS[key]
+		if each and GROUP_OF[key] and Mode(GROUP_OF[key]) == "each" then
+			return each
+		end
 		return LABELS[key]
 	end
 	local name = type(Custom.Name) == "function" and Custom.Name(key) or nil
@@ -592,7 +812,8 @@ local function Store(make)
 	return placed
 end
 
--- The section a record was placed in, as the Equipment row shows it, or nil. A placement that is not a section that holds items is skipped.
+-- The section a record was placed in, as its group's row shows it, or nil. A placement that is not a section that holds items is skipped, and so
+-- is one in a section the player hid, until it is shown again.
 local function PlacedIn(record)
 	local placed, id = Store(false), Whole(record.id)
 	if not placed or not id then
@@ -602,7 +823,11 @@ local function PlacedIn(record)
 	if type(key) ~= "string" or not Placeable(key) then
 		return nil
 	end
-	return Fit(key, record, true)
+	key = Fit(key, record, true)
+	if Hidden(key) then
+		return nil
+	end
+	return key
 end
 
 -- The placements of the account: a new table { [itemID] = section key } of every valid one.
@@ -812,11 +1037,12 @@ local function DroppedJunk(id, record)
 end
 
 -- A drop on another section: an item of Junk leaves the lists first, then the item is kept there, or loses its placement when that is the
--- section it reaches by itself. True when either changed what the window shows.
+-- section it reaches by itself. True when either changed what the window shows. While Junk is hidden its items show in other sections, so a drop
+-- between them leaves the lists as they are: hiding Junk changes no selling.
 local function DropOn(key, id, record)
 	local mark = ns.ErrandsJunkMark
 	local unlisted = false
-	if type(mark) == "function" and DroppedJunk(id, record) then
+	if type(mark) == "function" and not Hidden("junk") and DroppedJunk(id, record) then
 		mark(id, false)
 		unlisted = true
 	end
@@ -925,7 +1151,8 @@ end
 -- Filing and order -----------------------------------------------------------------------------------------------------------------------
 
 -- The section a record is shown in: New items, then Junk, then Keep in place (a record in the slot pinned for it, B.Pins.Of), then its placement,
--- then the built-in rules. No record is a free slot.
+-- then the built-in rules. No record is a free slot. Junk and Keep in place hidden only change where their items show: the junk test, the sell
+-- list and the pins stay as they are.
 function Categories.Of(record)
 	if type(record) ~= "table" then
 		return "free"
@@ -933,10 +1160,10 @@ function Categories.Of(record)
 	if New.Is(record) then
 		return "new"
 	end
-	if Categories.IsJunk(record) then
+	if not Hidden("junk") and Categories.IsJunk(record) then
 		return "junk"
 	end
-	if record.live == true then
+	if record.live == true and not Hidden("keep") then
 		local of = B.Pins and B.Pins.Of
 		if type(of) == "function" then
 			local ok, pinned = pcall(of, record)
@@ -1083,12 +1310,13 @@ end
 local PLACED_ALL = "Put every item back in its own section"
 local PLACED_NONE = "No item is placed by hand. Drop an item from your bags on a section's title to keep it there."
 
--- Every placement, by the name of its item: { { itemID, "Name (ID): Section" }, ... }, after a line that takes them all off while two or more
--- are placed, as Folded sections and Pinned slots have; with none, one line that says how to place one.
+-- Every placement, by the name of its item: { { itemID, "Name (ID): Section" }, ... }, "(hidden)" after a section the player hid, after a line that
+-- takes them all off while two or more are placed, as Folded sections and Pinned slots have; with none, one line that says how to place one.
 function ns.BagsPlacedLines()
 	local lines = {}
 	for id, key in pairs(Categories.Placed()) do
-		lines[#lines + 1] = { id, ("%s: %s"):format(Named(id), Categories.Label(Fit(key, { id = id }, true))) }
+		local fitted = Fit(key, { id = id }, true)
+		lines[#lines + 1] = { id, ("%s: %s%s"):format(Named(id), Categories.Label(fitted), Hidden(fitted) and " (hidden)" or "") }
 	end
 	if #lines == 0 then
 		return { { "none", PLACED_NONE } }

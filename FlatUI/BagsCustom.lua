@@ -12,13 +12,15 @@ local _, ns = ...
 -- The sections: FlatUIDB.bags.custom, { { key = "custom1", name = "Raid" }, ... } in the order they were made, for the whole account beside the
 -- placements, the order and the folds (ns.Account, Core.lua:3010-3012; a new layout of BagsData's record resets only its v and chars), and
 -- FlatUIDB.bags.customNext, the number of the next key. A key is "custom" and digits, so it never meets a key of Flat UI's own (B.Categories.LIST,
--- "bag" of Bag by bag, "+add" of the title that makes one), and none is used twice: the next number is above every number saved in the list, the
--- placements, the folds and the order. At most MOST sections, a name of 1 to LONGEST letters, trimmed, with no bar, unique and none of Flat UI's
--- own section names, whatever the case. A section of the player's own holds only the items placed in it by hand (FlatUIDB.bags.placed, whose shape
--- stays { [itemID] = key }): Make, Rename and Delete change the list alone, and Delete also takes the section's placements (its items go back to
--- their own sections; their sell and keep lists stay), its fold and its place in the order away. Delete asks nothing, so the last section deleted
--- is kept in this file (lastGone, never saved: its key, name, colour, place in the list, placed item IDs, fold and place in the order) until the
--- next delete or a reload, and Restore brings it back with the same key: the first line of + New section's menu and of the row Custom sections.
+-- "bag" of Bag by bag, "+add" of the title that makes one, "+hidden" of the title of hidden sections), and none is used twice: the next number
+-- is above every number saved in the list, the placements, the folds and the order. A section of the player's own cannot be hidden (its title's
+-- menu has Delete instead of Hide this section, BagsOrder.lua). At most MOST sections, a name of 1 to LONGEST letters, trimmed, with no bar,
+-- unique and none of Flat UI's own section names, whatever the case. A section of the player's own holds only the items placed in it by hand
+-- (FlatUIDB.bags.placed, whose shape stays { [itemID] = key }): Make, Rename and Delete change the list alone, and Delete also takes the
+-- section's placements (its items go back to their own sections; their sell and keep lists stay), its fold and its place in the order away.
+-- Delete asks nothing, so the last section deleted is kept in this file (lastGone, never saved: its key, name, colour, place in the list, placed
+-- item IDs, fold and place in the order) until the next delete or a reload, and Restore brings it back with the same key: the first line of + New
+-- section's menu and of the row Custom sections.
 -- An item placed elsewhere since keeps its new place, MOST_PLACED still counts, and a section made since with the same name, or MOST sections,
 -- refuses it with a line. An entry may also have colour, the ID of one of COLOURS, set from its title's menu (Colour): its title's text takes it in
 -- both windows and for every character, and its + slot's + at rest; Plain, the first, takes it away. Sweep, after the module's Start
@@ -32,7 +34,7 @@ local _, ns = ...
 -- look, a note and Cancel and Make (or Rename) in the look of the footer's buttons. Enter (OnEnterPressed) makes or renames, Escape (OnEscapePressed)
 -- cancels, and a refusal stays in the box in red with the text selected again. It goes above the frame that asked for it, else above the middle of
 -- the screen, as ChatLinks.lua:631-643 does. For a section made for an item dropped on + New section the field starts with a name for it, selected,
--- so Enter takes it and typing replaces it: the item's subtype (the third answer of C_Item.GetItemInfoInstant, WL/apis.yaml:16569: Herb, Cloth),
+-- so Enter takes it and typing replaces it: the item's subtype (the third answer of C_Item.GetItemInfoInstant, WL/apis.yaml:16569: Mail, Plate),
 -- else its type, else its name, the first that Check takes and that is not one of Flat UI's own section names with an s after it (Reagent,
 -- Key); else it starts empty. It is not in Movers or test mode, as the bag menus and the copy box of ChatLinks are not: it is a passing question.
 -- It never opens in a fight (it would hold the keyboard), and it closes as a fight starts (PLAYER_REGEN_DISABLED, WL/events.yaml:7457,
@@ -68,18 +70,19 @@ local _, ns = ...
 -- another item, the reagent bag or the keyring. The section is asked first (B.Categories.Takes: Junk takes no quest item and none that cannot be
 -- sold, and no section a placement past the most), so a drop it refuses moves nothing, buys nothing and says why. Then
 -- C_Container.PickupContainerItem (:8767, not protected) on that empty slot puts the item there, or buys the merchant's item into it, as the
--- game's own slot click does (ContainerFrame.lua:1517-1535); the item is kept in the section by its ID (B.Categories.File), and a slot pinned
--- for it is unpinned (B.Pins.Left), as a title's drop unpins the slot an item came from, so it shows in that section and not in Keep in place. A
--- merchant's item the game asks about first (a cost in items, or 150 gold or more: MerchantFrame.extendedCost and highPrice, read only, as the
--- slot click reads them) is refused with a line, so that question is never skipped, and so is a merchant's item on Keep in place, which pins
--- slots of the bags only. A bag from the bag bar (a worn slot past 19) is refused, as is an item for which the bags have no room, with a line in
--- chat (items named by C_Item.GetItemNameByID, :16685). When the moved item has arrived (BagsLayout's Layout.Update asks Arrived), the window is
--- laid out afresh, so it shows in its section and not on the top shelf. BagsLayout's Watch reads a merchant's item as held too (st.holding, with
--- st.merchant), so every + slot, catcher and title that would buy it lights at once, and a catcher takes it: let go among a section's slots it is
--- bought into a free slot, as on the + slot, while let go on a real empty slot it is the game's buy into that slot. A swap of the item on the
--- cursor (a click on another slot) is read again (Holding). A drop on the + New section title (DropNew) gives the item back and asks for a name:
--- the item is kept in the new section by its ID where it lies; a merchant's item, an item the game gives no place for and a bag from the bag bar
--- are refused there with a line, since none of them lies in the bags. A cursor that holds no item (a spell or money) takes no drop.
+-- game's own slot click does (ContainerFrame.lua:1517-1535); the item is kept in the section by its ID (B.Categories.File), and a slot pinned for
+-- it is unpinned (B.Pins.Left, while Keep in place is not hidden), as a title's drop unpins the slot an item came from, so it shows in that
+-- section and not in Keep in place. A merchant's item the game asks about first (a cost in items, or 150 gold or more: MerchantFrame.extendedCost
+-- and highPrice, read only, as the slot click reads them) is refused with a line, so that question is never skipped, and so is a merchant's item
+-- on Keep in place, which pins slots of the bags only. A bag from the bag bar (a worn slot past 19) is refused, as is an item for which the bags
+-- have no room, with a line in chat (items named by C_Item.GetItemNameByID, :16685). When the moved item has arrived (BagsLayout's Layout.Update
+-- asks Arrived), the window is laid out afresh, so it shows in its section and not on the top shelf. BagsLayout's Watch reads a merchant's item
+-- as held too (st.holding, with st.merchant), so every + slot, catcher and title that would buy it lights at once, and a catcher takes it: let go
+-- among a section's slots it is bought into a free slot, as on the + slot, while let go on a real empty slot it is the game's buy into that slot.
+-- A swap of the item on the cursor (a click on another slot) is read again (Holding). A drop on the + New section title (DropNew) gives the item
+-- back and asks for a name: the item is kept in the new section by its ID where it lies; a merchant's item, an item the game gives no place for
+-- and a bag from the bag bar are refused there with a line, since none of them lies in the bags. A cursor that holds no item (a spell or money)
+-- takes no drop.
 --
 -- The bells: the section that took an item flashes in the Highlight colour and says what happened for a moment ("Kept: Linen Cloth", "Moved in: ...",
 -- "Bought: ...", "On your sell list", "Pinned", "Made", "Renamed", "Back"), on a frame of its own over the section. The words are on a tag of their
@@ -1025,8 +1028,8 @@ local function PlaceBox(anchor)
 	end
 end
 
--- A name the box starts with for a section made for an item: its subtype (Herb, Cloth), else its type, else its name, the first that Check takes and
--- that is not one of Flat UI's own section names with an s after it (Reagent of Reagents, Key of Keys); nil when none is.
+-- A name the box starts with for a section made for an item: its subtype (Mail, Plate), else its type, else its name, the first that Check takes and
+-- that is not one of Flat UI's own section names with an s after it (Reagent of Reagents, Herb of Herbs); nil when none is.
 local function Suggest(id)
 	local candidates = {}
 	local instant = Item("GetItemInfoInstant")
