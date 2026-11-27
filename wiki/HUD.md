@@ -85,7 +85,7 @@ The **Buffs and debuffs** page styles the game's buff and debuff icons.
 **Duration format**, **Duration colour** and **Red under** also cover the totem times under the player frame.
 
 - **Duration size** (100%) and **Stack count size** (100%) size the time and the stack count.
-- **Duration format**: **No space (8m)** by default, **As the game has it (8 m)**, or **Minutes and seconds (28:41)**. With minutes and seconds, a flask or Arcane Intellect reads 28:41 or 1:05 before a pull, then plain seconds in its last minute. An hour or more keeps the short form, as 2h.
+- **Duration format**: **No space (8m)** by default, **As the game has it (8 m)**, or **Minutes and seconds (28:41)**. With minutes and seconds, a flask or Arcane Intellect reads 28:41 or 1:05 before a pull, then plain seconds in its last minute. An hour or more reads as hours and minutes, as 1h42 or 1h05, down to 59:59.
 - **Duration colour**: **White** by default, in place of the game's gold. **White, red near the end** turns a time red once **Red under** (10 s, 3 to 60 s) is left, and white again on a fresh buff, so a buff about to drop stands out. 60 s suits a flask, 3 s a Sunder Armor. A time the game withholds in a fight stays white. **As the game has it (gold, white under 90 s)** gives the game's colours back.
 - **Tenths below** (0 s, which is off, up to 10 s) writes the last seconds of a buff or debuff with tenths, as 4.8, 4.7. A rogue can refresh Slice and Dice at the last moment this way. The time still turns red at **Red under**. Totem times stay in whole seconds, as the game gives them.
 

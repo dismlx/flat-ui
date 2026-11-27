@@ -13,6 +13,7 @@ local TIP_KINDS = { item = true, spell = true, enchant = true, achievement = tru
 local CLOSING = { T = "|t", A = "|a", K = "|k" }
 local BOX_WIDTH, BOX_HEIGHT, FIELD_HEIGHT = 380, 50, 20
 local WATCH = 0.1
+local FLASH_GAP = 10
 local MENTION_EVENTS = { "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_EMOTE", "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", "CHAT_MSG_RAID",
 	"CHAT_MSG_RAID_LEADER", "CHAT_MSG_RAID_WARNING", "CHAT_MSG_INSTANCE_CHAT", "CHAT_MSG_INSTANCE_CHAT_LEADER", "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER",
 	"CHAT_MSG_CHANNEL" }
@@ -477,6 +478,13 @@ local function Mark(frame, msg, author, lineID, event, label, zone, base)
 		if sound then
 			ns.PlayKit(sound[1], KEY)
 		end
+		if Opt("mentionFlash") == true and type(FlashClientIcon) == "function" then
+			local ok, now = pcall(GetTime)
+			if ok and Plain(now, "number") and (S.flashedAt == nil or now - S.flashedAt >= FLASH_GAP or now < S.flashedAt) then
+				S.flashedAt = now
+				pcall(FlashClientIcon)
+			end
+		end
 	end
 	S.mentionLine = id
 	S.marked = S.mentionOut
@@ -612,15 +620,89 @@ local COPIED_CLOSE = 0.6
 local KEEP_KEYS = { LEFT = true, RIGHT = true, UP = true, DOWN = true, HOME = true, END = true }
 local WordEntered
 
+local CROSS = { SIZE = 16, INSET = 4, ROOM = 24, DIM = { 0.7, 0.7, 0.7 }, FADE = 0.1 }
+
+local function Shown(frame)
+	local ok, shown = pcall(frame.IsShown, frame)
+	return ok and not ns.IsSecret(shown) and shown == true
+end
+
+function ns.ChatBoxSound(open)
+	local kit = type(SOUNDKIT) == "table" and SOUNDKIT[open and "IG_CHARACTER_INFO_OPEN" or "IG_CHARACTER_INFO_CLOSE"] or nil
+	if type(PlaySound) == "function" and kit ~= nil then
+		pcall(PlaySound, kit)
+	end
+end
+
+function ns.ChatBoxDress(frame, close)
+	local cross = CreateFrame("Button", nil, frame)
+	ns.Own[cross] = true
+	cross:SetSize(CROSS.SIZE, CROSS.SIZE)
+	cross:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -CROSS.INSET, -CROSS.INSET)
+	pcall(cross.RegisterForClicks, cross, "LeftButtonUp")
+	local label = ns.OwnText(cross, "OVERLAY", "GameFontNormalSmall")
+	if label then
+		label:SetPoint("CENTER", cross, "CENTER", 0, 1)
+		label:SetText("x")
+	end
+	local function Tint(lit)
+		if not label then
+			return
+		end
+		local r, g, b = CROSS.DIM[1], CROSS.DIM[2], CROSS.DIM[3]
+		if lit then
+			local ok, cr, cg, cb = pcall(ns.Colour, "windows.accent")
+			if ok and ns.Finite(cr) and ns.Finite(cg) and ns.Finite(cb) then
+				r, g, b = cr, cg, cb
+			end
+		end
+		pcall(label.SetTextColor, label, r, g, b)
+	end
+	Tint(false)
+	cross:SetScript("OnEnter", function()
+		Tint(true)
+	end)
+	cross:SetScript("OnLeave", function()
+		Tint(false)
+	end)
+	cross:SetScript("OnClick", function()
+		close()
+	end)
+	local ok, fade = pcall(function()
+		local group = frame:CreateAnimationGroup()
+		local rise = group:CreateAnimation("Alpha")
+		rise:SetFromAlpha(0)
+		rise:SetToAlpha(1)
+		rise:SetDuration(CROSS.FADE)
+		return group
+	end)
+	return { cross = cross, fade = ok and fade or nil, tint = Tint, room = CROSS.ROOM }
+end
+
+function ns.ChatBoxOpened(dress, was)
+	if was or type(dress) ~= "table" then
+		return
+	end
+	if dress.fade then
+		pcall(dress.fade.Play, dress.fade)
+	end
+	dress.tint(false)
+	ns.ChatBoxSound(true)
+end
+
 local function CloseBox()
 	local box = S.box
 	if not box or S.closing then
 		return
 	end
 	S.closing = true
+	local was = Shown(box.frame)
 	pcall(box.edit.ClearFocus, box.edit)
 	pcall(box.frame.Hide, box.frame)
 	S.closing = false
+	if was then
+		ns.ChatBoxSound(false)
+	end
 end
 
 local function Select(edit)
@@ -666,7 +748,7 @@ local function BuildBox()
 	local help = ns.OwnText(frame, "OVERLAY", "GameFontNormalSmall")
 	if help then
 		help:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -7)
-		help:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -7)
+		help:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -CROSS.ROOM, -7)
 		pcall(help.SetJustifyH, help, "LEFT")
 		help:SetText(Help())
 		local ok, r, g, b = pcall(help.GetTextColor, help)
@@ -685,7 +767,7 @@ local function BuildBox()
 	pcall(edit.SetMaxLetters, edit, 0)
 	pcall(edit.SetMaxBytes, edit, 0)
 	ns.SetOutlineFill(ns.SetOutlineArea(ns.Outline(edit, edit, true), KEY), 0, 0, 0, 0.5)
-	local box = { frame = frame, edit = edit, help = help }
+	local box = { frame = frame, edit = edit, help = help, dress = ns.ChatBoxDress(frame, CloseBox) }
 	edit:SetScript("OnEscapePressed", CloseBox)
 	edit:SetScript("OnEnterPressed", function()
 		if box.mode == "word" then
@@ -791,7 +873,9 @@ local function OpenBox(_, address)
 	SayInBox(box, Help())
 	box.edit:SetText(address)
 	Place(box.frame)
+	local was = Shown(box.frame)
 	box.frame:Show()
+	ns.ChatBoxOpened(box.dress, was)
 	Select(box.edit)
 	local ok, focus = pcall(box.edit.HasFocus, box.edit)
 	if ok and not ns.IsSecret(focus) and focus == false then
@@ -833,7 +917,9 @@ function OpenWordBox()
 	SayInBox(box, WORDS.TYPE)
 	box.edit:SetText("")
 	Place(box.frame)
+	local was = Shown(box.frame)
 	box.frame:Show()
+	ns.ChatBoxOpened(box.dress, was)
 	pcall(box.edit.SetFocus, box.edit)
 	local okFocus, focus = pcall(box.edit.HasFocus, box.edit)
 	if okFocus and not ns.IsSecret(focus) and focus == false then

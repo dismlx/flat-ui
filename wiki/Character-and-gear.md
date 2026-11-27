@@ -258,7 +258,7 @@ Your role is read as **Flat UI setup** reads it: your group role, else a tank st
 ### When it shows
 
 - **Show**: **With an enemy targeted** (the default), **In combat** or **Always**. Where it hides, it fades in over 0.15 seconds and out over 0.35 seconds, and an enemy targeted again during the fade brings it back at once.
-- **Tooltip when you point at it** (on): pointing at the table says what Cap and the dashes mean, and why a number is from before the fight or not given, as `/flatui status` does. While the table shows, an enemy right behind it gets this tooltip in place of its own. Clicks go through the table to the world either way.
+- **Tooltip when you point at it** (on): pointing at the table says what Cap and the dashes mean, and why a number is from before the fight or not given, as `/flatui status` does. While the table shows, an enemy right behind it gets this tooltip in place of its own, in a fight too. Once the table fades out, as the target dies, they drop it or **Show** hides it, the mouse reaches the world behind that spot again at once. Clicks go through the table to the world either way.
 
 ### Look
 
@@ -361,11 +361,11 @@ Point at it for why. Its tooltip changes as soon as you click and counts a coold
 
 - **Say each swap in chat** (on): one line with the trinket put on, the one it replaced, and why.
 - **Sound on a swap**: **None** (the default), or one of seven sounds. Picking one plays it.
-- **Queue line on trinket tooltips** (on): a trinket's tooltip, in your bags or on the Character window, ends with a dim line saying where it stands, as "Trinket queue: 2nd of 4, top slot". It adds " · Stop" or " · kept 20 s" from its entry, and " · Auto queue off" while that slot's queue is off. A trinket in both lists gets a line for each.
+- **Queue line on trinket tooltips** (on): a trinket's tooltip, in your bags or on the Character window, ends with a dim line saying where it stands, as "Trinket queue: 2nd of 4, top slot". It adds " · Stop" or " · kept 20 s" from its entry, and " · Auto queue off" while that slot's queue is off. A trinket in both lists gets a line for each. The rows of the **Trinket queue** window leave the line out, since the window shows the same already.
 
 ### Carrot on a Stick while riding
 
-**Carrot on a Stick while riding** is **Off** as Flat UI comes. Set it to **Bottom trinket slot** or **Top trinket slot**, and as you get on a mount Flat UI puts Carrot on a Stick in that slot for its mount speed. As you get off, it puts your trinket back: the best ready one of the slot's list while its **Auto queue** is on, else the one it replaced.
+**Carrot on a Stick while riding** is **Off** as Flat UI comes. Set it to **Bottom trinket slot** or **Top trinket slot**, and as you get on a mount Flat UI puts Carrot on a Stick in that slot for its mount speed. As you get off, it puts your trinket back: the best ready one of the slot's list while its **Auto queue** is on, else the one it replaced. The trinket it replaced is kept for each character, so it goes back on after a `/reload` or a disconnect during the ride too.
 
 - It needs a bound Carrot on a Stick in your bags, and waits for the end of a fight as every swap does.
 - Chat and the swap sound name each swap ("riding", "off the mount"), and the slot's square says "Riding: Carrot on a Stick until you get off".
