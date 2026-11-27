@@ -25,7 +25,8 @@ local _, ns = ...
 -- and draw the tooltip. The page number is a third secure button of the same action (FlatUIBar1PageNumber, action 1) under the number, so a left
 -- click on it goes back to page 1, in a fight too, with the same click sound unless it was on page 1 already, and its tooltip says the page and,
 -- past page 1, "Click: back to page 1". A change of profile reaches the row through ActionBars.lua's Refresh (ns.OwnPagerChanged); the mouse over a
--- shown arrow or the number counts as over the main bar for Fading and the bar block (ns.OwnPagerOver).
+-- shown arrow or the number counts as over the main bar for Fading and the bar block (ns.OwnPagerOver), and the bar block's background panel
+-- widens to take them in (ns.OwnPagerRect, told after each placing through ns.BarBlockPanels).
 -- Quick Keybind Mode (the game's Key Bindings) works on the game's own buttons: while it is open the game's eight bars are given back where they
 -- are (alpha 1, the mouse on) and Flat UI's are hidden, out of combat; as it closes, or just before a fight starts, the game's bars are parked
 -- again and Flat UI's shown. A mode opened in a fight waits for its end. A fight that starts while the mode is open says so in one chat line: Flat
@@ -677,6 +678,10 @@ function F.Pager()
 	if show then
 		F.PageText()
 	end
+	-- The bar block's background panel takes the arrows in (ns.OwnPagerRect), now that they are placed.
+	if type(ns.BarBlockPanels) == "function" then
+		ns.BarBlockPanels()
+	end
 end
 
 -- True when a game bar's rectangle is not the one of the last layout, by more than half a unit on an edge.
@@ -1203,6 +1208,34 @@ function ns.OwnPagerOver()
 		end
 	end
 	return false
+end
+
+-- The rectangle round the page arrows and the page number of the main bar while they show, in UIParent units: left, bottom, right and top, or nil.
+-- The bar block's background panel and its mouse area take it in (BarBlock.lua).
+function ns.OwnPagerRect()
+	local pager = S.pager
+	if not (S.built and pager and pager.holder) then
+		return nil
+	end
+	local okShown, shown = pcall(pager.holder.IsVisible, pager.holder)
+	if not okShown or ns.IsSecret(shown) or shown ~= true then
+		return nil
+	end
+	local left, bottom, right, top
+	for _, part in ipairs({ pager.Up, pager.Down, pager.holder }) do
+		local l, b, w, h = nil, nil, nil, nil
+		if part then
+			l, b, w, h = Rect(part)
+		end
+		if l then
+			left, bottom = math.min(left or l, l), math.min(bottom or b, b)
+			right, top = math.max(right or (l + w), l + w), math.max(top or (b + h), b + h)
+		end
+	end
+	if left then
+		return left, bottom, right, top
+	end
+	return nil
 end
 
 -- Page arrows on the main bar changed: the arrows are placed, shown or hidden on the next check out of combat.
