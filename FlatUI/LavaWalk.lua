@@ -31,7 +31,8 @@ local _, ns = ...
 -- whole at once. After ten dodges in a row with no tick in between only a tick keeps it. Death, the row going Off and the end of test mode hide it
 -- at once. Its fades are the alpha of its own frame (SetAlpha), written only when it changes. Nothing is protected: an addon cannot jump for the
 -- player (JumpOrAscendStart is protected), so the bar only cues.
--- The bar is a frame of the addon's own, a child of UIParent in the LOW strata that takes no mouse and hides with the interface, with the outline
+-- The bar is a frame of the addon's own, a child of UIParent in the LOW strata (DIALOG while it shows the preview of a row's change, below) that
+-- takes no mouse and hides with the interface, with the outline
 -- of the Flat UI page (ns.Outline), a StatusBar in the bar texture of that page over a dim track, and its words in GameFontHighlightSmall. It is
 -- made the first time it shows, and it runs OnUpdate only while it shows. /flatui move places it (FlatUILavaTimer in Movers.lua, its middle at the
 -- middle of the box, just under the character), with a box while the row is not Off. A frame of the addon's own hears UNIT_COMBAT for the player
@@ -45,7 +46,9 @@ local _, ns = ...
 -- window, the cue and its flash, a Hit and then Dodged and Dodged x2, frozen while the bar's Moving is off. Its sound plays only when
 -- TM.Sound('lava') allows it, the first time after an On. /flatui lava test shows the same sample for 8 seconds, with one sound. A change of one
 -- of the rows (its size, Jump lead, Flash, the colours, Jump sound, or In lava zones and Anywhere) while the options window shows and out of a
--- fight shows it too, silent, until PREVIEW seconds after the last change, then fades it out (ns.LavaChanged). A real tick takes over from the
+-- fight shows it too, silent, until PREVIEW seconds after the last change, then fades it out (ns.LavaChanged). That preview shows over the
+-- options window (DIALOG, as the line of ErrandsRanks.lua; the window is HIGH, Panel.lua), since with no spot saved the bar sits under it; as it
+-- ends the bar is back at LOW, under the game's windows, for the real timeline, /flatui lava test and test mode. A real tick takes over from the
 -- sample. /flatui lava says the mode, the place and its IDs, the ticks seen, dodged (with the most in a row) and not seen this
 -- session, the last hit on the player, the last gaps between ticks and the latency used; /flatui lava trace prints a line for every UNIT_COMBAT of
 -- the player with what the timer made of it, the way to check in lava that this client reports its ticks at all. /flatui status has a line only
@@ -95,7 +98,8 @@ local IsSecret, Finite = ns.IsSecret, ns.Finite
 -- sound is still to play. anchor: the tick the timeline runs from; k: the period counted down; cued: the last period cued; air: the player was in
 -- the air at the danger moment of k; pendK and pendAir: the period past its danger moment and not yet judged. lastReal: the last real tick; held: a
 -- fire hit in a fight that waits for a second to set the rhythm. lastAlive: the last tick or dodge; streak: the dodges in a row, and best the most
--- of real ones this session; flip: the period of the sample, a tick every SAMPLE_EVERY. rtt: the latency of the timeline. say, sayRGB and sayUntil:
+-- of real ones this session; flip: the period of the sample, a tick every SAMPLE_EVERY; preview: the sample is the preview of a row's change,
+-- over the options window. rtt: the latency of the timeline. say, sayRGB and sayUntil:
 -- the word after a tick. flashAt and flashPeak: the flash. seen, dodged, unseen and gaps: what /flatui lava counts. trace: /flatui lava trace is
 -- on. broken: the error that stopped the timer.
 local S = { lava = false, where = {}, listening = false, deaf = false, live = false, sample = false, k = 1, cued = 0, air = false, pendAir = false,
@@ -104,7 +108,7 @@ local S = { lava = false, where = {}, listening = false, deaf = false, live = fa
 local LAST = {}
 -- The bar: frame, outline, bar, track, band, mark, flash, word and count, once made; placed: the spot it was put at; file: the bar texture on it;
 -- width and lead: of the rows; lavaRGB and jumpRGB: the colours; shown: the word, its colour, the count and the band width written last. alpha:
--- the frame's alpha written last; fadeInAt: when it began to fade in; fadeOutAt and fadeFrom: when it began to fade out, and from what alpha.
+-- the frame's alpha written last; strata: its strata written last; fadeInAt: when it began to fade in; fadeOutAt and fadeFrom: when it began to fade out, and from what alpha.
 local U = {}
 
 local Stop
@@ -313,7 +317,7 @@ local function Build()
 	count:SetWordWrap(false)
 	count:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
 	U.frame, U.bar, U.band, U.mark, U.flash, U.word, U.count = frame, bar, band, mark, flash, word, count
-	U.shown = {}
+	U.shown, U.strata = {}, "LOW"
 	return frame
 end
 
@@ -392,7 +396,7 @@ local function Tick(at, sample)
 			S.gaps[GAPS_KEPT + 1] = nil
 		end
 		S.lastReal, S.held, S.seen = at, nil, S.seen + 1
-		S.live, S.sample, S.sampleUntil = true, false, nil
+		S.live, S.sample, S.sampleUntil, S.preview = true, false, nil, false
 		S.rtt = Latency()
 	else
 		S.rtt = 0
@@ -579,7 +583,7 @@ local function Step(_, elapsed)
 		Refresh(true)
 		return
 	elseif S.sample and not Sampling(now) then
-		S.sample = false
+		S.sample, S.preview = false, false
 		Refresh(true)
 		return
 	end
@@ -601,10 +605,16 @@ local function StartSample(now)
 end
 
 -- Shows the bar, painted and placed, with its step, fading in from hidden over FADE_IN; a bar fading out is whole again at once. Hides it with
--- no step: at once, or with fade over FADE_OUT, which its step runs and then hides it.
+-- no step: at once, or with fade over FADE_OUT, which its step runs and then hides it. A preview shows over the options window (DIALOG), all else
+-- at LOW; a fade out keeps the strata it had.
 function Run(on, fade)
 	if on then
 		local frame = Build()
+		local strata = (S.preview and not S.live) and "DIALOG" or "LOW"
+		if U.strata ~= strata then
+			U.strata = strata
+			frame:SetFrameStrata(strata)
+		end
 		Paint()
 		if not frame:IsShown() then
 			U.fadeInAt = GetTime()
@@ -634,10 +644,10 @@ end
 function Refresh(fade)
 	local now = GetTime()
 	if S.broken or Mode() == nil then
-		S.live, S.sample = false, false
+		S.live, S.sample, S.preview = false, false, false
 		Run(false)
 	elseif S.live then
-		S.sample = false
+		S.sample, S.preview = false, false
 		Run(true)
 	elseif Sampling(now) then
 		if not S.sample then
@@ -645,7 +655,7 @@ function Refresh(fade)
 		end
 		Run(true)
 	else
-		S.sample = false
+		S.sample, S.preview = false, false
 		Run(false, fade)
 	end
 end
@@ -752,14 +762,15 @@ local function Apply()
 	if mode then
 		ReadPlace()
 	else
-		S.live, S.sampleUntil, S.lastReal, S.held = false, nil, nil, nil
+		S.live, S.sampleUntil, S.lastReal, S.held, S.preview = false, nil, nil, nil, false
 	end
 	Refresh()
 end
 
 -- A row of the timer changed (path, as Core.lua's Changed passes it), the player logged in, the profile changed, or test mode turned on, paused,
 -- resumed or ended (no path). A change of a row while the options window shows, out of a fight and with no real timeline running, shows the
--- sample in the new look, silent, until PREVIEW seconds after the change, so a slider drag keeps it up to its last step; then it fades out.
+-- sample in the new look, silent, until PREVIEW seconds after the change, so a slider drag keeps it up to its last step; then it fades out. It
+-- shows over the options window (S.preview, DIALOG in Run) until it ends.
 function ns.LavaChanged(path)
 	local ok, err = pcall(Apply)
 	if not ok then
@@ -771,7 +782,7 @@ function ns.LavaChanged(path)
 		return
 	end
 	ok, err = pcall(function()
-		S.sampleUntil = math.max(S.sampleUntil or 0, GetTime() + PREVIEW)
+		S.sampleUntil, S.preview = math.max(S.sampleUntil or 0, GetTime() + PREVIEW), true
 		Refresh()
 	end)
 	if not ok then
@@ -866,7 +877,7 @@ function ns.LavaCommand(rest)
 			print("Lava tick timer: choose In lava zones or Anywhere first, on Helpers > World and cursor.")
 			return
 		end
-		S.sampleUntil, S.testSound = GetTime() + TEST_TIME, true
+		S.sampleUntil, S.testSound, S.preview = GetTime() + TEST_TIME, true, false
 		ns.LavaChanged()
 	elseif word == "trace" then
 		S.trace = not S.trace
