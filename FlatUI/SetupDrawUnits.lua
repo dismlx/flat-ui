@@ -1551,6 +1551,7 @@ end
 
 function E.icons(o, g, L)
 	local s, k, root = o.s, o.k, o.root
+	o.above = nil
 	o.top:SetAllPoints(root)
 	for _, icon in ipairs({ o.leader, o.attack, o.role, o.plateIcon, o.marker, o.happy }) do
 		icon:Hide()
@@ -1598,7 +1599,9 @@ function E.icons(o, g, L)
 		if shown and s.kind == "player" and s.state and g.combatIcon then
 			Art(o.attack, "attack")
 			if L.drawn and g.iconSpot ~= "game" then
-				Mark(o.attack, root, px + side - ICON, (L.joined and L.bodyTop or py) - ICON - L.t - 2)
+				local top = (L.joined and L.bodyTop or py) - ICON - L.t - 2
+				Mark(o.attack, root, px + side - ICON, top)
+				o.above = top < 0 and -top or nil
 			else
 				Mark(o.attack, root, px + side - ICON + 2, py + side - ICON + 2)
 			end
@@ -2392,15 +2395,23 @@ local function Place(scene, rows, scaled, g)
 	local gap, rowGap, caption = 18, 6, 12
 	local y, width = 0, 0
 	for _, row in ipairs(rows) do
-		local x, rowHeight = 0, 0
+		local x, rowHeight, lift = 0, 0, 0
+		for _, entry in ipairs(row) do
+			for _, id in ipairs(type(entry) == "table" and entry or { entry }) do
+				local item = scene.items[id]
+				local scale = scaled and ScaleOf(id, g) or 1
+				item.root:SetScale(scale)
+				item.draw(item, g)
+				lift = math.max(lift, (tonumber(item.above) or 0) * scale)
+			end
+		end
+		y = y + lift
 		for _, entry in ipairs(row) do
 			local stack = type(entry) == "table" and entry or { entry }
 			local entryWidth, entryY = 0, 0
 			for _, id in ipairs(stack) do
 				local item = scene.items[id]
 				local scale = scaled and ScaleOf(id, g) or 1
-				item.root:SetScale(scale)
-				item.draw(item, g)
 				item.root:ClearAllPoints()
 				item.root:SetPoint("TOPLEFT", scene.root, "TOPLEFT", x / scale, -(y + entryY) / scale)
 				local w, h = item.width * scale, item.height * scale

@@ -487,7 +487,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.playerHealthText", "c", "mock-unit-frame" },
 		{ "unitframes.playerPowerText", "c", "mock-unit-frame" },
 		{ "unitframes.combatIcon", "o", "mock-unit-frame" },
-		{ "unitframes.statusIconSpot", "o", "behaviour", "Puts the crossed swords of a fight and the sleeping letters of resting just above your portrait, clear of the picture, or back on the game's spot at its lower corner." },
+		{ "unitframes.statusIconSpot", "o", "behaviour", "Puts the crossed swords of a fight and the sleeping letters of resting just above your portrait, clear of the picture, or back where the game draws them, the swords on its lower corner." },
 		{ "unitframes.playerPowerBar", "c", "mock-unit-frame" },
 		{ "unitframes.druidMana", "o", "mock-unit-frame" },
 		{ "unitframes.druidManaText", "o", "mock-unit-frame" },

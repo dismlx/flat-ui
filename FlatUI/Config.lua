@@ -2222,7 +2222,7 @@ ns.PAGES = {
 		{ key = "playerPowerText", kind = "choice", default = "game", label = "Power text", choices = ns.TEXT_FORMAT_CHOICES },
 		{ key = "combatIcon", kind = "bool", default = true, label = "Combat icon", tip = "The game's crossed swords on the player frame while you are in a fight." },
 		{ key = "statusIconSpot", kind = "choice", default = "above", label = "Combat and resting icons", needs = "squarePortrait",
-			tip = "Where the crossed swords of a fight and the sleeping letters of resting sit. Above the portrait keeps them clear of the picture, in either Frame style. Game's spot puts them back on its lower corner. Changed out of combat.",
+			tip = "Where the crossed swords of a fight and the sleeping letters of resting sit. Above the portrait keeps them clear of the picture, in either Frame style. Game's spot puts them back where the game draws them, the swords on the portrait's lower corner. Changed out of combat.",
 			choices = { { "above", "Above the portrait" }, { "game", "Game's spot" } } },
 		{ key = "playerPowerBar", kind = "bool", default = true, label = "Power bar" },
 		{ key = "druidMana", kind = "bool", default = true, label = "Druid mana in forms",
