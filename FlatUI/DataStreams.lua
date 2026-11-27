@@ -120,6 +120,18 @@ end
 
 local UNSAID = { DIM .. "The game does not say now.|r" }
 
+local function Junk()
+	local count = ns.ErrandsJunkCount
+	if type(count) ~= "function" then
+		return 0, 0, 0, false
+	end
+	local ok, n, waits, value, unknown = pcall(count)
+	if not ok then
+		return 0, 0, 0, false
+	end
+	return Count(n) or 0, Count(waits) or 0, Count(value) or 0, not ns.IsSecret(unknown) and unknown == true
+end
+
 P.Stream({
 	id = "bags", label = "Bag space", sample = "Bags 888/888",
 	events = { BAG_UPDATE_DELAYED = true },
@@ -140,15 +152,26 @@ P.Stream({
 		if otherTotal > 0 then
 			lines[#lines + 1] = { "Special bags", ("%d of %d free"):format(otherFree, otherTotal) }
 		end
+		local n, waits, value, unknown = Junk()
+		if n > 0 then
+			lines[#lines + 1] = { "To sell", ("%d %s, %s%s"):format(n, n == 1 and "item" or "items", P.Money(value), unknown and " (some prices unknown)" or "") }
+		end
+		if waits > 0 then
+			lines[#lines + 1] = { ("%sand %d more of your sell list|r"):format(DIM, waits) }
+		end
 		lines[#lines + 1] = { DIM .. "Counts only bags that take any item.|r" }
 		return lines
 	end,
 	Hint = function()
-		return ns.Enabled("bags") and type(ns.BagsToggle) == "function" and "Click: open your bags." or nil
+		return "Click: open your bags."
 	end,
 	Click = function(_, button)
-		if button == "LeftButton" and ns.Enabled("bags") and type(ns.BagsToggle) == "function" then
+		if button ~= "LeftButton" then
+			return
+		elseif ns.Enabled("bags") and type(ns.BagsToggle) == "function" then
 			ns.BagsToggle()
+		elseif type(_G.ToggleAllBags) == "function" then
+			pcall(_G.ToggleAllBags)
 		end
 	end,
 })
@@ -675,11 +698,14 @@ local hearthLeft = 0
 
 P.Stream({
 	id = "hearth", label = "Hearthstone", idle = "no hearthstone bound",
-	events = { HEARTHSTONE_BOUND = true, BAG_UPDATE_COOLDOWN = true },
+	events = { HEARTHSTONE_BOUND = true, BAG_UPDATE_COOLDOWN = true, BAG_UPDATE_DELAYED = true },
 	every = function()
 		return hearthLeft > 0 and 1 or nil
 	end,
 	live = true,
+	secure = function()
+		return HearthCount() > 0 and ("item:" .. HEARTHSTONE) or nil
+	end,
 	Text = function()
 		local place = Text((Ask(GetBindLocation)))
 		hearthLeft = HearthCount() > 0 and HearthLeft() or 0
@@ -702,6 +728,12 @@ P.Stream({
 			lines[#lines + 1] = { DIM .. "Not in your bags.|r" }
 		end
 		return lines
+	end,
+	Hint = function()
+		if HearthCount() == 0 then
+			return nil
+		end
+		return P.InCombat() and "Out of a fight, click: use your Hearthstone." or "Click: use your Hearthstone."
 	end,
 })
 
@@ -756,6 +788,75 @@ P.Stream({
 			local shown = ("%.1f, %.1f"):format(x, y)
 			ns.PutInChat(zone and (zone .. " " .. shown) or shown)
 		end
+	end,
+})
+
+local ZONE_STATES = {
+	sanctuary = { "|cff68ccef", "Sanctuary" },
+	friendly = { "|cff19ff19", "Friendly territory" },
+	hostile = { "|cffff1919", "Hostile territory" },
+	contested = { "|cffffb200", "Contested territory" },
+	arena = { "|cffff1919", "Free-for-all territory" },
+	combat = { "|cffff1919", "Combat zone" },
+}
+
+local function ZoneState()
+	local pvp = type(C_PvP) == "table" and not ns.IsSecret(C_PvP) and C_PvP.GetZonePVPInfo or nil
+	local kind = Ask(type(pvp) == "function" and pvp or _G.GetZonePVPInfo)
+	return type(kind) == "string" and ZONE_STATES[kind] or nil
+end
+
+local function Place()
+	local zone, sub = Text((Ask(GetZoneText))), Text((Ask(GetSubZoneText)))
+	return zone, sub ~= zone and sub or nil
+end
+
+P.Stream({
+	id = "zone", label = "Zone", sample = "Goldshire", idle = "no zone name here",
+	events = { ZONE_CHANGED_NEW_AREA = true, ZONE_CHANGED = true, ZONE_CHANGED_INDOORS = true },
+	live = true,
+	Text = function()
+		local zone, sub = Place()
+		local name = sub or zone
+		if not name then
+			return nil
+		end
+		local state = ZoneState()
+		return state and (state[1] .. name .. "|r") or name
+	end,
+	Tip = function()
+		local zone, sub = Place()
+		local state = ZoneState()
+		local lines = { title = zone or "Zone" }
+		if sub then
+			lines[#lines + 1] = { DIM .. sub .. "|r" }
+		end
+		if state then
+			lines[#lines + 1] = { "State", state[1] .. state[2] .. "|r" }
+		end
+		local x, y = Position()
+		lines[#lines + 1] = { "Coordinates", x and ("%.1f, %.1f"):format(x, y) or "None here" }
+		return lines
+	end,
+	Hint = function()
+		return WindowHint("Click: open the world map.") .. " Shift-click: put this in chat."
+	end,
+	Click = function(_, button)
+		if button ~= "LeftButton" then
+			return
+		elseif not Shift() then
+			Toggle("ToggleWorldMap", "Flat UI: the map opens when the fight ends.")
+			return
+		elseif type(ns.PutInChat) ~= "function" then
+			return
+		end
+		local zone, sub = Place()
+		local name = sub and zone and (sub .. ", " .. zone) or zone or sub
+		if not name then
+			return
+		end
+		local x, y = Position()
+		ns.PutInChat(x and ("%s %.1f, %.1f"):format(name, x, y) or name)
 	end,
 })
 

@@ -811,6 +811,7 @@ ns.SETUP_STEPS = {
 		{ "general.cursorRing", "o", "behaviour", "Draws a ring around the mouse pointer, always, in combat only or only for a moment when you shake the mouse, so you find it at a glance." },
 		{ "general.cursorRingSize", "o", "behaviour", "Sets the size of the ring around the mouse pointer." },
 		{ "general.cursorRingColour", "o", "behaviour", "Sets the colour of the ring around the mouse pointer." },
+		{ "general.cursorRingClass", "o", "behaviour", "Paints the ring around the mouse pointer in your class colour." },
 		{ "general.cursorRingShake", "o", "behaviour", "Swells the ring for a moment when you shake the mouse, so you find the pointer at once." },
 		{ "general.cursorRingCast", "o", "behaviour", "Runs your cast or channel round the ring around the mouse pointer." },
 		{ "general.cursorRingCastColour", "o", "behaviour", "Sets the colour of the cast running round the ring." },
@@ -1676,6 +1677,7 @@ ns.SETUP_STEPS = {
 		{ "errands.repFollow", "c", "behaviour", "Shows on Flat UI's experience bar the faction you last gained reputation with." },
 		{ "errands.talentReminder", "o", "behaviour", "Says in chat when you have talent points to spend." },
 		{ "errands.wayCommand", "o", "behaviour", "Adds /way, which puts a pin on your map at the coordinates you give." },
+		{ "errands.wayArrive", "o", "behaviour", "Takes the pin /way set off the map as you reach it, with a chime and a line in chat." },
 		{ "errands.navigation", "o", "behaviour", "Turns on the game's in-game navigation, a marker with its distance over the quest or map pin you track." },
 	} },
 	{ id = "datapanels", area = "Data panels", title = "Data panels", draw = "mock-screen", built = false, rows = {
