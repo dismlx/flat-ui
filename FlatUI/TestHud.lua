@@ -8,7 +8,8 @@ local _, ns = ...
 --   Cast bars: the player's at PlayerCastingBarFrame, wherever Edit Mode or Lock to player frame put it, while the player casts nothing: a cast that
 --   fills over 2.5 seconds and holds half a second, a channel that drains (with the marks of its 5 ticks while Channel ticks on the player bar is
 --   on), then an interrupted cast that flashes, in the colours of the Flat UI page, with its seconds while Cast time on your bars is on and a sample
---   pushback over the second half of the cast and of the channel while Pushback on your bar is on.
+--   pushback over the second half of the cast and of the channel, and through the Interrupted hold, while Pushback on your bar is on; the first
+--   Interrupted of a session plays Sound when you are interrupted (ns.CastKickedSample of CastTime.lua, 0.5.42).
 --   The target's, the focus's and the pet's at TargetFrameSpellBar, FocusFrameSpellBar and PetCastingBarFrame, and the first boss's at
 --   Boss1TargetFrameSpellBar, each only while the stand-in of its unit shows (TM.Shown of "target", "focus", "pet" and "boss", TestUnits.lua): an enemy
 --   cast, the target's and the focus's in the colour of the player's interrupt while Interrupt readiness on enemy casts and Flat fill are on (the
@@ -172,6 +173,10 @@ end
 local function CastStandIn(spec)
 	local round = ROUNDS[spec.round or (spec.opt == "player" and "player" or "enemy")]
 	local function Shows(holder, state, part, left, into, total)
+		-- The player bar's sample Interrupted plays Sound when you are interrupted, once a session (CastTime.lua, 0.5.42).
+		if spec.opt == "player" and state == "interrupted" and holder.row.state ~= "interrupted" and type(ns.CastKickedSample) == "function" then
+			pcall(ns.CastKickedSample)
+		end
 		ns.DrawCasts.CastProgress(holder.row, state, part, left, holder.row.state ~= state and CastName(spec, state) or nil, total)
 		holder.row.bar:SetAlpha(state == "interrupted" and (0.45 + 0.55 * math.abs(math.cos(into * 6))) or 1)
 	end

@@ -73,6 +73,7 @@ local _, ns = ...
 -- interruptedBy (UnitDocumentation.lua:4627-4640, 4742-4755) names someone: withheld, which says it is there and is never compared, or a plain GUID
 -- that is not the player's. The game's bar takes a stop without it for a plain one (Shared/CastingBarFrame.lua:137-139), so moving, jumping,
 -- Escape and a channel run to its end play nothing. Picking a sound plays it once while the options window shows. /flatui status counts the sounds.
+-- Test mode's first sample Interrupted of a session plays it once too (ns.CastKickedSample, 0.5.42), not counted there.
 -- Sound when your focus casts (None at first, main tab of Cast bars; 0.5.42): while the row names a sound and the page and Interrupt readiness on
 -- enemy casts are on, a second frame of the block's own hears UNIT_SPELLCAST_START and UNIT_SPELLCAST_CHANNEL_START of the focus alone
 -- (RegisterUnitEvent on "focus", so the unit the event gives, which may be withheld for an enemy, is never compared), and a frame later, once the
@@ -1289,6 +1290,17 @@ do
 			elseif not (frame.RegisterUnitEvent and pcall(frame.RegisterUnitEvent, frame, event, "player")) then
 				pcall(frame.RegisterEvent, frame, event)
 			end
+		end
+	end
+
+	-- Test mode's sample Interrupted on the player bar (TestHud.lua) plays the sound once a session, so it can be judged with the bar in view
+	-- (ns.TestMode.Sound, asked only while the row names a sound); None plays nothing, and it counts in no number of /flatui status (0.5.42).
+	function ns.CastKickedSample()
+		local kit = ns.Enabled("castbars") and KITS[Get(KICK_ROW)]
+		local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
+		local mode = ns.TestMode
+		if sound and type(ns.PlayKit) == "function" and type(mode) == "table" and type(mode.Sound) == "function" and mode.Sound("castkicked") then
+			ns.PlayKit(sound[1], "castbars")
 		end
 	end
 
