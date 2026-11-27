@@ -19,11 +19,13 @@ local _, ns = ...
 -- Your list is kept per character in FlatUICharDB.consumeBar, item IDs in order, at most MOST_LIST. An item is added by a drop on the bar out of a
 -- fight (OnReceiveDrag, or a click with an item on the cursor: GetCursorInfo; ClearCursor puts the item back in its bag once it is taken): on a
 -- button of the list it goes in that place (an item of the list dropped there moves), else at the end, and while the cursor holds an item a + slot
--- of the addon's own (a plain button) ends the bar out of a fight in the modes that show the list. Add an item offers the consumables in the bags.
+-- of the addon's own (a plain button) ends the bar out of a fight in the modes that show the list. Add an item offers the consumables in the bags,
+-- then the other items there with a use that cannot be worn, such as the Hearthstone.
 -- Shift+right-click on a button takes it off the list, or puts a bag button on it; Take an item off, Move an item left and Move an item right do
--- the same from the page, also in a fight and with the page off (the bar follows when it can). A drop takes only a consumable of the kinds above
--- (C.KindOf: the Consumable class, or the Explosives and Devices of Trade goods) with a use that cannot be worn, and a drop on the + slot of an item
--- of the list moves it to the end.
+-- the same from the page, also in a fight and with the page off (the bar follows when it can). The list takes any item with a use that cannot be
+-- worn: a consumable of the kinds above (C.KindOf: the Consumable class, or the Explosives and Devices of Trade goods), or another item whose use the
+-- game names (C.HasUse true), such as the Hearthstone; the bag part stays consumables only. A drop on the + slot of an item of the list moves it to
+-- the end.
 -- An item of the list stays on the bar when the bags hold none: its icon grey (SetDesaturated) and dim, its count a red 0, or, with An item of your
 -- list with none left at Leave a gap, its icon hidden in its place. A click on such a button says "Flat UI: no <item> in your bags." in chat, at
 -- most once in NONE_GAP seconds for an item. A button of the bag part whose item runs out in a fight is drawn so until the fight ends, and goes at
@@ -343,6 +345,27 @@ function C.Scan()
 	return C.scanned
 end
 
+-- The items of the bags that are no consumable but have a use the game names and cannot be worn, such as the Hearthstone, each item ID once, by
+-- name. Read only when Add an item opens, so it keeps nothing.
+function C.Others()
+	local slots, item = Api("C_Container", "GetContainerNumSlots"), Api("C_Container", "GetContainerItemID")
+	local ids, seen = {}, {}
+	if slots and item then
+		for _, bag in ipairs(BAGS) do
+			for slot = 1, Whole(Ask(slots, bag)) or 0 do
+				local id = Whole(Ask(item, bag, slot))
+				if id and not seen[id] then
+					seen[id] = true
+					if not C.KindOf(id) and not C.Worn(id) and C.HasUse(id) == true then
+						ids[#ids + 1] = id
+					end
+				end
+			end
+		end
+	end
+	return C.Sorted(ids)
+end
+
 -- Item IDs by kind, then by name, an item whose name has not loaded after the named ones of its kind, then by ID.
 function C.Sorted(ids)
 	local keys = {}
@@ -417,15 +440,16 @@ function C.Listed(id)
 	return nil
 end
 
--- Why an item cannot go on the list, or nil when it can: it must be a consumable of a kind the bar knows (C.KindOf), with a use, that cannot be worn.
+-- Why an item cannot go on the list, or nil when it can: it must have a use and not be worn. A consumable of a kind the bar knows (C.KindOf) is
+-- refused only when its use is known to be missing; any other item, such as the Hearthstone, only once the game names its use (C.HasUse true).
 function C.Refused(id)
 	local name = C.Called(id)
 	if not C.Instant(id) then
 		return ('No item found for "%s".'):format(tostring(id))
 	elseif C.Worn(id) then
 		return ("%s is worn, not used up: it belongs on your action bars."):format(name)
-	elseif not C.KindOf(id) then
-		return ("%s is not a consumable: the consumables bar holds consumables only."):format(name)
+	elseif not C.KindOf(id) and C.HasUse(id) ~= true then
+		return ("%s has no use the game names yet."):format(name)
 	elseif C.HasUse(id) == false then
 		return ("%s has no use."):format(name)
 	end
@@ -1326,14 +1350,20 @@ end
 
 -- The rows of the page ------------------------------------------------------------------------------------------------------------------------
 
--- Add an item: the consumables in the bags that are not on the list, in the bar's order, with how many you carry. Every kind, whatever Kinds in
--- your bags says. While the module does not run, no bag event reaches it, so the bags are read again for each opening of the list.
+-- Add an item: the consumables in the bags that are not on the list, in the bar's order, with how many you carry, every kind, whatever Kinds in
+-- your bags says; then the other items of the bags with a use that cannot be worn (C.Others), such as the Hearthstone. While the module does not
+-- run, no bag event reaches it, so the bags are read again for each opening of the list.
 function ns.ConsumeBarCandidates()
 	if not ns.ModuleOn(KEY) then
 		C.scanned = nil
 	end
 	local rows = {}
 	for _, id in ipairs(C.Scan()) do
+		if not C.Listed(id) then
+			rows[#rows + 1] = { id, ("%s (%d)"):format(C.Called(id), C.Count(id) or 0) }
+		end
+	end
+	for _, id in ipairs(C.Others()) do
 		if not C.Listed(id) then
 			rows[#rows + 1] = { id, ("%s (%d)"):format(C.Called(id), C.Count(id) or 0) }
 		end
