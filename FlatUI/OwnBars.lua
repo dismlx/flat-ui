@@ -26,7 +26,12 @@ local _, ns = ...
 -- click on it goes back to page 1, in a fight too, with the same click sound unless it was on page 1 already, and its tooltip says the page and,
 -- past page 1, "Click: back to page 1". A change of profile reaches the row through ActionBars.lua's Refresh (ns.OwnPagerChanged); the mouse over a
 -- shown arrow or the number counts as over the main bar for Fading and the bar block (ns.OwnPagerOver), and the bar block's background panel
--- widens to take them in (ns.OwnPagerRect, told after each placing through ns.BarBlockPanels).
+-- widens to take them in (ns.OwnPagerRect, told after each placing through ns.BarBlockPanels). Past page 1 the number lights white under the mouse,
+-- with a faint square behind it, and sinks a pixel while the left button is held on it (F.NumberLook). With the mouse over an arrow or the number the
+-- wheel pages the bar, up to the next page and down to the previous, in a fight too: secure wraps of their OnEnter, OnLeave and OnHide bind and
+-- unbind the wheel to two more secure buttons of the paging action (FlatUIBar1PageWheelUp and FlatUIBar1PageWheelDown, no mouse, acting on the
+-- press), with the same scroll click and the pop; the tooltips say "Wheel: change page". A change of Page arrows on the main bar in a fight, with
+-- the options window open, says once a fight in chat that it waits for the fight's end (ns.OwnPagerChanged).
 -- Quick Keybind Mode (the game's Key Bindings) works on the game's own buttons: while it is open the game's eight bars are given back where they
 -- are (alpha 1, the mouse on) and Flat UI's are hidden, out of combat; as it closes, or just before a fight starts, the game's bars are parked
 -- again and Flat UI's shown. A mode opened in a fight waits for its end. A fight that starts while the mode is open says so in one chat line: Flat
@@ -185,20 +190,31 @@ self:GetFrameRef("game1"):EnableMouse(false)
 ]=]
 
 -- The page arrows of the main bar: the game's paging action on a click (SECURE_ACTIONS.actionbar), on the button's release as Flat UI's buttons. The
--- page number under the text takes the same action with a page number, 1 (SecureTemplates.lua:329-330, C_ActionBar.SetActionBarPage).
+-- page number under the text takes the same action with a page number, 1 (SecureTemplates.lua:329-330, C_ActionBar.SetActionBarPage). The two
+-- wheel buttons page up and down on the press the wheel's binding sends (useOnKeyDown, SecureTemplates.lua:792-811), so a roll pages once.
 local PAGER_WIRE = [=[
-for _, dir in ipairs(newtable("Up", "Down", "Number")) do
+for _, dir in ipairs(newtable("Up", "Down", "Number", "WheelUp", "WheelDown")) do
 	local b = self:GetFrameRef("page" .. dir)
 	if b then
-		b:SetAttribute("useOnKeyDown", false)
+		b:SetAttribute("useOnKeyDown", dir == "WheelUp" or dir == "WheelDown")
 		if dir == "Number" then
 			b:SetAttribute("action", 1)
 		else
-			b:SetAttribute("action", dir == "Up" and "increment" or "decrement")
+			b:SetAttribute("action", (dir == "Up" or dir == "WheelUp") and "increment" or "decrement")
 		end
 		b:SetAttribute("type", "actionbar")
 	end
 end
+]=]
+-- The mouse over an arrow or the page number: the wheel is bound to the two wheel buttons, up to the next page and down to the previous, by override
+-- bindings of the button the mouse is over (restricted code, so in a fight too, as PAGE binds the flyout keys); they go as the mouse leaves it or it
+-- hides, and the wheel zooms the camera again.
+local PAGER_WHEEL_ON = [=[
+self:SetBindingClick(true, "MOUSEWHEELUP", "FlatUIBar1PageWheelUp", "LeftButton")
+self:SetBindingClick(true, "MOUSEWHEELDOWN", "FlatUIBar1PageWheelDown", "LeftButton")
+]=]
+local PAGER_WHEEL_OFF = [=[
+self:ClearBindings()
 ]=]
 -- The two arrows and the number: where the game's are, else the place of its XML from the bar's bottom left (the group's bottom right 4 left of
 -- and 9 up from it, the arrows 10 over and under its middle), and the game's atlases.
@@ -299,6 +315,7 @@ function F.PagerTip(button)
 		if page ~= 1 then
 			tip:AddLine("Click: back to page 1", 0.8, 0.8, 0.8)
 		end
+		tip:AddLine("Wheel: change page", 0.8, 0.8, 0.8)
 		tip:Show()
 		return
 	end
@@ -325,7 +342,84 @@ function F.PagerTip(button)
 	if #keys > 0 then
 		tip:AddLine("Key: " .. table.concat(keys, ", "), 0.8, 0.8, 0.8)
 	end
+	tip:AddLine("Wheel: change page", 0.8, 0.8, 0.8)
 	tip:Show()
+end
+
+-- The look of the page number under the mouse (over) and while the left button is held on it (down): past page 1, where a click does something, its
+-- gold turns white with a faint square behind it, as the data panel slots light, and held it sinks a pixel, as Flat UI's other buttons do. On page 1
+-- it stays gold. Font string and texture calls on Flat UI's own holder, so in a fight too; the square is made the first time.
+function F.NumberLook(over, down)
+	local pager = S.pager
+	local text, holder = pager and pager.text, pager and pager.holder
+	if not (text and holder) then
+		return
+	end
+	pager.over, pager.down = over == true, over == true and down == true
+	local lit = pager.over and F.Page() ~= 1
+	if lit then
+		text:SetTextColor(1, 1, 1)
+	else
+		local gold = NORMAL_FONT_COLOR
+		local r, g, b = 1, 0.82, 0
+		if type(gold) == "table" and ns.Finite(gold.r) and ns.Finite(gold.g) and ns.Finite(gold.b) then
+			r, g, b = gold.r, gold.g, gold.b
+		end
+		text:SetTextColor(r, g, b)
+	end
+	if lit and not pager.square then
+		local square = holder:CreateTexture(nil, "BACKGROUND")
+		ns.Own[square] = true
+		square:SetAllPoints(holder)
+		square:SetColorTexture(1, 1, 1, 0.08)
+		pager.square = square
+	end
+	if pager.square then
+		pager.square:SetShown(lit)
+	end
+	text:ClearAllPoints()
+	if lit and pager.down then
+		text:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -1)
+		text:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", 0, -1)
+	else
+		text:SetAllPoints(holder)
+	end
+end
+
+-- The hooks of the page number's look, once (insecure hooks of Flat UI's own button, as F.HookPager's).
+function F.HookNumber(number)
+	local pager = S.pager
+	if pager.numberHooked then
+		return
+	end
+	pager.numberHooked = true
+	number:HookScript("OnEnter", function()
+		pcall(F.NumberLook, true, false)
+	end)
+	number:HookScript("OnLeave", function()
+		pcall(F.NumberLook, false, false)
+	end)
+	number:HookScript("OnMouseDown", function(_, mouse)
+		if mouse == "LeftButton" then
+			pcall(F.NumberLook, true, true)
+		end
+	end)
+	number:HookScript("OnMouseUp", function()
+		pcall(F.NumberLook, pager.over, false)
+	end)
+end
+
+-- The wheel over an arrow or the number (PAGER_WHEEL_ON, PAGER_WHEEL_OFF), wrapped once, before the insecure hooks, so a wrap never takes them off.
+function F.WrapWheel(button)
+	local pager = S.pager
+	pager.wrapped = pager.wrapped or {}
+	if pager.wrapped[button] then
+		return
+	end
+	pager.wrapped[button] = true
+	SecureHandlerWrapScript(button, "OnEnter", S.header, PAGER_WHEEL_ON)
+	SecureHandlerWrapScript(button, "OnLeave", S.header, PAGER_WHEEL_OFF)
+	SecureHandlerWrapScript(button, "OnHide", S.header, PAGER_WHEEL_OFF)
 end
 
 -- The hooks of a page arrow or the page number, once: the game's scroll click after a click that paged (the number's on a page past 1 only,
@@ -380,9 +474,21 @@ function F.MakePager()
 			Atlas(button, "Highlight", def.atlas .. "-mouseover")
 			button:Hide()
 			pager[def.dir] = button
+			F.WrapWheel(button)
 			F.HookPager(button)
 			S.header:SetFrameRef("page" .. def.dir, button)
 		end
+	end
+	-- The wheel buttons: no mouse, no art, shown with bar 1, clicked only by the wheel's bindings while the mouse is over an arrow or the number.
+	for _, dir in ipairs({ "WheelUp", "WheelDown" }) do
+		local name = "FlatUIBar1Page" .. dir
+		local button = _G[name] or CreateFrame("Button", name, bar, "SecureActionButtonTemplate")
+		button:RegisterForClicks("AnyDown")
+		button:EnableMouse(false)
+		button:SetSize(1, 1)
+		pager[dir] = button
+		F.HookPager(button)
+		S.header:SetFrameRef("page" .. dir, button)
 	end
 	if not pager.holder then
 		local holder = CreateFrame("Frame", nil, bar)
@@ -401,7 +507,9 @@ function F.MakePager()
 	number:SetFrameLevel(bar:GetFrameLevel() + 9)
 	number:Hide()
 	pager.Number = number
+	F.WrapWheel(number)
 	F.HookPager(number)
+	F.HookNumber(number)
 	S.header:SetFrameRef("pageNumber", number)
 end
 
@@ -606,6 +714,10 @@ function F.PageText()
 		local known = pager.page ~= nil
 		pager.page = page
 		pager.text:SetText(page)
+		-- Under the mouse the number lights past page 1 and goes back to gold on page 1.
+		if pager.over then
+			pcall(F.NumberLook, true, pager.down)
+		end
 		if known then
 			pcall(F.PagePop, pager)
 			local tip = GameTooltip
@@ -1061,6 +1173,7 @@ function F.Event(event, name)
 	end
 	if event == "PLAYER_REGEN_ENABLED" then
 		S.fight = false
+		S.pagerTold = nil
 		if S.built then
 			fl.upkeep, fl.lock = true, true
 		end
@@ -1238,11 +1351,20 @@ function ns.OwnPagerRect()
 	return nil
 end
 
--- Page arrows on the main bar changed: the arrows are placed, shown or hidden on the next check out of combat.
+-- Page arrows on the main bar changed: the arrows are placed, shown or hidden on the next check out of combat. ActionBars.lua's Refresh calls this on
+-- every refresh, so the row is compared with the last value seen: a change in a fight, with the options window open, says once a fight in chat that
+-- the arrows show or go when it ends (S.pagerTold, cleared as the fight ends), as the bar block and the cast bars say theirs.
 function ns.OwnPagerChanged()
+	local want = ns.Get("actionbars.pageArrows") == true
+	local was = S.pagerWant
+	S.pagerWant = want
 	if S.built then
 		S.chunk.pager = nil
 		S.flag.layout = true
+		if was ~= nil and was ~= want and InCombatLockdown() and not S.pagerTold and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+			S.pagerTold = true
+			print(want and "Flat UI: the page arrows show when the fight ends." or "Flat UI: the page arrows go when the fight ends.")
+		end
 	end
 end
 

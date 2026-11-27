@@ -307,6 +307,7 @@ ns.SETUP_STEPS = {
 		{ "actionbars.sweepGcd", "o", "behaviour", "Off, a button of Flat UI's that only waits for the global cooldown shows no sweep, so only real cooldowns sweep." },
 		{ "actionbars.sweepEdge", "o", "behaviour", "Draws a bright line along the edge of the cooldown sweep on the action buttons." },
 		{ "actionbars.sweepEdgeColour", "r", "behaviour", "Sets the colour of the line along the edge of the cooldown sweep." },
+		{ "actionbars.cdNumbers", "o", "behaviour", "Turns on the game's Show numbers on cooldowns, so every action button shows the seconds left on its cooldown." },
 		{ "actionbars.cdFont", "o", "mock-action-row" },
 		{ "actionbars.cdColour", "o", "mock-action-row" },
 		{ "actionbars.cdTenths", "r", "mock-action-row" },
@@ -1449,6 +1450,7 @@ ns.SETUP_STEPS = {
 		{ "barblock.backgroundColour", "r", "behaviour", "Sets the colour of the panel behind each block." },
 		{ "barblock.backgroundAlpha", "r", "behaviour", "Sets how opaque the panel behind each block is; it still fades with the block." },
 		{ "barblock.fade", "c", "mock-bar-block" },
+		{ "barblock.fadeWhich", "r", "behaviour", "Chooses which blocks fade: every block, block 1 only, or blocks 2 and 3, the others staying at full." },
 		{ "barblock.fadeTo", "r", "mock-bar-block" },
 		{ "barblock.fadeDelay", "r", "behaviour", "Waits this long after the block was last wanted before it starts to fade." },
 		{ "barblock.fadeTime", "r", "behaviour", "Sets how long the block takes to ease down to its faded opacity; it comes back to full at once." },
@@ -1456,6 +1458,7 @@ ns.SETUP_STEPS = {
 		{ "barblock.fadeMouse", "r", "behaviour", "Brings the faded block to full opacity under the mouse." },
 		{ "barblock.fadeTarget", "r", "behaviour", "Brings the faded block to full opacity while you have a target." },
 		{ "barblock.fadeCast", "r", "behaviour", "Brings the faded block to full opacity as you cast or use an item, and for Wait before fading after." },
+		{ "barblock.fadeProc", "r", "behaviour", "Brings the faded block to full opacity while a proc alert is up for a spell on its bars, such as Overpower or Execute." },
 	} },
 	{ id = "ab-places", area = "Bar block", title = "Class, buffs and consumables bars", draw = "mock-block-places", built = true, rows = {
 		{ "blocks.enabled", "c", "mock-block-places" },
@@ -1501,6 +1504,7 @@ ns.SETUP_STEPS = {
 		{ "fade.combat", "o", "behaviour", "Keeps faded frames fully visible in combat." },
 		{ "fade.target", "o", "behaviour", "Keeps faded frames fully visible while you have a target." },
 		{ "fade.cast", "o", "behaviour", "Keeps faded frames fully visible while you cast." },
+		{ "fade.proc", "o", "behaviour", "Brings a faded action bar to full opacity while a proc alert is up for a spell on it, such as Overpower or Execute." },
 	} },
 	{ id = "movers", area = "Positions", title = "Moving frames and windows", draw = "mock-screen", built = true, rows = {
 		{ "movers.enabled", "c", "behaviour", "Turns on frame moving; /flatui move shows the handles." },

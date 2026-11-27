@@ -14,7 +14,8 @@ local _, ns = ...
 -- and its name, one table kept for good so what the trackers know of it stays. One added by hand takes its place, with its own colour, time
 -- and sound, and Remove a proc turns one off for the character (FlatUICharDB.procsOff, by name) until Bring back a proc.
 -- The preview (ns.ProcPreview): with the options window open, out of combat and with test mode off, a change of a row of the art, the glow or
--- Colour shows the first proc of the class for 4 s in the new look, its art and glow with no sound, held while a slider is dragged.
+-- Colour shows the first proc of the class for 4 s in the new look, its art and glow with no sound, held while a slider is dragged. While it shows,
+-- faded action bars and bar blocks are at full (ns.ProcPreviewing).
 
 local KEY = "trackers"
 local PART = "procs"
@@ -1089,6 +1090,12 @@ function ns.ProcPreview()
 			end
 		end)
 	end
+end
+
+-- True while the preview shows its proc (with test mode off): Fading and the bar block hold the action bars at full meanwhile, so the glow is seen at
+-- full on its button (Fade.lua, BarBlock.lua). Only reads.
+function ns.ProcPreviewing()
+	return P.preview ~= nil and not (ns.TestMode and ns.TestMode.IsOn())
 end
 
 -- Colour of the page: the trackers are refreshed as without a changed function of the row (Core.lua's Changed), then the preview shows it.

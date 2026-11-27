@@ -33,7 +33,8 @@ local _, ns = ...
 -- Proc border colour lights the proc glow there for 3 s. A sample's spell is 0, which no event of the game's names, so a real cast or aim replaces it at once and
 -- the events of other spells leave it alone; a sample never replaces a real cast or aim that shows. Moving off on the bar of test mode holds them
 -- (ns.ButtonEffectsSampleHold): the fill at 60% of its cast with its driver hidden, the aim pulse stopped bright and its time left kept, and a
--- sample started meanwhile held the same way; Moving on moves their times on by the time held and lets them go on.
+-- sample started meanwhile held the same way; Moving on moves their times on by the time held and lets them go on. While a sample plays with test
+-- mode off, the faded action bars and bar blocks are at full (ns.ButtonEffectsPreviewing, read by Fade.lua and BarBlock.lua).
 
 local KEY = "actionbars"
 local PATH = KEY .. "."
@@ -909,6 +910,23 @@ function ns.ButtonEffectsSampleLook()
 		local ir, ig, ib = ns.Colour("castbars.interruptedColour")
 		made.flash:SetColorTexture(ir, ig, ib, 1)
 	end
+end
+
+-- True while a sample of this file plays with test mode off: the cast fill or aim sample, the interrupt flash sample while it flashes, or the sample
+-- proc glow. Fading and the bar block hold the action bars at full meanwhile, so the new look is seen at full (Fade.lua, BarBlock.lua). Only reads.
+function ns.ButtonEffectsPreviewing()
+	local mode = ns.TestMode
+	if mode and mode.IsOn() then
+		return false
+	end
+	if CAST.spell == 0 or CAST.aimSpell == 0 then
+		return true
+	end
+	local made = CAST.sample.flashed and CAST.frames[CAST.sample.flashed]
+	if made and made.group:IsPlaying() then
+		return true
+	end
+	return GLOW.button ~= nil and (GLOW.held or GetTime() < GLOW.ends)
 end
 
 -- Test mode ends or pauses: the samples that show go.

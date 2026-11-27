@@ -917,8 +917,11 @@ ns.PAGES = {
 			tip = "Off: a button that only waits for the global cooldown shows no sweep. Flat UI's buttons only." },
 		{ key = "sweepEdge", kind = "bool", default = false, label = "Edge line", tip = "A bright line along the edge of the sweep. Not on the pet and stance bars.", changed = "ButtonStatesChanged" },
 		{ key = "sweepEdgeColour", kind = "colour", default = "ffffffff", label = "Edge colour", needs = "sweepEdge", changed = "ButtonStatesChanged" },
+		-- The game holds this one (ButtonStates.lua): the game's Show numbers on cooldowns, in every profile.
+		{ key = "cdNumbers", kind = "bool", default = false, label = "Cooldown numbers", live = true, get = "ButtonNumbersGet", set = "ButtonNumbersSet",
+			tip = "The game's Show numbers on cooldowns: the seconds left on every action button, Flat UI's and the game's, the pet and stance bars too. A game setting, the same in every profile. Changed in a fight, it is written when the fight ends." },
 		{ key = "cdFont", kind = "choice", default = "game", label = "Cooldown number size", changed = "ButtonStatesChanged",
-			tip = "Numbers show while the game's Show numbers on cooldowns is on, on Flat UI's buttons too. Also on the pet and stance bars.",
+			tip = "Numbers show while Cooldown numbers is on. Also on the pet and stance bars.",
 			choices = { { "game", "As the game has it" }, { "small", "Small" }, { "normal", "Normal" }, { "large", "Large" },
 				{ "huge", "Huge" } } },
 		{ key = "cdColour", kind = "colour", default = "ffffffff", label = "Cooldown number colour", tip = "Also on the pet and stance bars.", changed = "ButtonStatesChanged" },
@@ -3335,6 +3338,9 @@ ns.PAGES = {
 			tip = "The panel still fades with the block." },
 		{ section = "Fade" },
 		{ key = "fade", kind = "bool", default = false, label = "Fade the block", tip = "Faded bars still take clicks and are at full opacity while something is held on the cursor or a spell flyout is open, in Edit Mode and while /flatui move is open." },
+		{ key = "fadeWhich", kind = "choice", default = "all", label = "Blocks that fade", needs = "fade",
+			choices = { { "all", "Every block" }, { "first", "Block 1 only" }, { "others", "Blocks 2 and 3" } },
+			tip = "A block left out stays at full opacity, and the Fading page can fade its bars. Flat UI's experience bar under block 1 goes with block 1." },
 		{ key = "fadeTo", kind = "number", default = 30, min = 0, max = 90, step = 5, unit = "%", label = "Faded opacity", needs = "fade" },
 		{ key = "fadeDelay", kind = "number", default = 500, min = 0, max = 3000, step = 100, unit = " ms", label = "Wait before fading", needs = "fade",
 			tip = "How long the block stays at full opacity after the mouse leaves it or the fight ends, before it starts to fade. It comes back to full at once." },
@@ -3346,6 +3352,8 @@ ns.PAGES = {
 			tip = "For a pull with a ranged opener, or a buff on a friend, before the fight starts." },
 		{ key = "fadeCast", kind = "bool", default = false, label = "Full opacity as you cast", needs = "fade",
 			tip = "Each spell or item you use brings the faded block back while you cast, for a moment after each instant spell or item, and for Wait before fading after." },
+		{ key = "fadeProc", kind = "bool", default = true, label = "Full opacity while a proc is up", needs = "fade",
+			tip = "A block that holds the spell of a proc alert of the Trackers page, such as Overpower, Revenge or Execute, is at full opacity while the proc is up." },
 	},
 	{
 		key = "blocks", label = "Class and item bars",
@@ -3449,6 +3457,8 @@ ns.PAGES = {
 		{ key = "target", kind = "bool", default = false, label = "With a target" },
 		{ key = "cast", kind = "bool", default = false, label = "While casting",
 			tip = "A spell or item you use brings faded frames back to full while you cast, for a moment after each instant spell or item, and for Wait before fading after." },
+		{ key = "proc", kind = "bool", default = true, label = "While a proc is up",
+			tip = "An action bar that holds the spell of a proc alert of the Trackers page, such as Overpower, Revenge or Execute, is at full opacity while the proc is up, and fades again after Wait before fading once it ends." },
 	},
 }
 

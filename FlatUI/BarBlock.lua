@@ -43,7 +43,10 @@ local _, ns = ...
 -- bars seen whole, with something on the cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a
 -- child of the totem bar that opens up over the bar, out of the area under the mouse (MultiCastActionBarFrame.xml:106-107,
 -- MultiCastActionBarFrame.lua:637-641). The arrow that opens the totem flyout sticks out over the bar too, and counts as under the mouse while
--- the game shows it. The alpha a frame had is read once and put back when the fade goes off or the block stops. With Flat UI's own buttons
+-- the game shows it; while a proc alert of the Trackers page is up for a spell on one of its bars (Full opacity while a proc is up, on by default,
+-- ns.ProcUpOn) and while a look preview of the action bar pages plays (options window open, test mode off). Blocks that fade (Every block by default,
+-- Block 1 only, Blocks 2 and 3) leaves the other blocks at full, their bars free for the Fading page (ns.BarBlockFades); Flat UI's experience bar
+-- under block 1 goes with block 1. The alpha a frame had is read once and put back when the fade goes off or the block stops. With Flat UI's own buttons
 -- (OwnBars.lua) the fade writes Flat UI's bar in place of each action bar of a block (ns.OwnBarOf), never the game's bar parked under it, and
 -- after a plan tells OwnBars to lay its bars out again (ns.OwnRelayout), as the game's bars it copies have moved.
 
@@ -610,15 +613,33 @@ local function MoversOpen()
 	return type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
 end
 
+-- A look preview of the action bar pages plays, with the options window open and test mode off (the sweep, cast fill, interrupt flash, aim, tint and
+-- proc glow samples and the proc preview), as on the Fading page (Fade.lua, Previewing): the blocks are at full while it does.
+local PREVIEWS = { "ButtonStatesPreviewing", "ButtonEffectsPreviewing", "ProcPreviewing" }
+
 local function Full(plan)
 	if ns.EditModeOpen() or MoversOpen() then
 		return true
+	end
+	for _, name in ipairs(PREVIEWS) do
+		local ask = ns[name]
+		if type(ask) == "function" and ask() == true then
+			return true
+		end
 	end
 	if (Opt("fadeCombat") and InCombatLockdown()) or (Opt("fadeMouse") and Under(plan)) or Holding() or FlyoutOpen() then
 		return true
 	end
 	if Opt("fadeCast") and Casting() then
 		return true
+	end
+	-- Full opacity while a proc is up: a proc alert of the Trackers page is up for a spell a button of one of the block's bars holds (ProcGlow.lua).
+	if Opt("fadeProc") == true and type(ns.ProcUpOn) == "function" then
+		for _, row in ipairs(plan.rows) do
+			if ns.ProcUpOn(row.bar.frame) == true then
+				return true
+			end
+		end
 	end
 	-- Full opacity with a target: a withheld answer counts as a target, as on the Fading page (Fade.lua, HasTarget).
 	if Opt("fadeTarget") and type(UnitExists) == "function" then
@@ -693,16 +714,28 @@ local function Ease(frame, target, up, down)
 	return value ~= target
 end
 
+-- Blocks that fade: every block (all, the default), block 1 only (first) or blocks 2 and 3 (others). A block left out stays at full, its frames and
+-- panel get their own alpha back, and the Fading page may fade its bars (ns.BarBlockFades).
+local function Fades(n)
+	local which = Opt("fadeWhich")
+	if which == "first" then
+		return n == 1
+	elseif which == "others" then
+		return n > 1
+	end
+	return true
+end
+
 -- Every held frame and each panel toward full or faded, block by block; a frame that is no longer held gets its own alpha back. A block goes to
 -- full at once when it is wanted (in 0.1 s), and to its faded opacity over Fade time once it has not been wanted for Wait before fading. dt is the
--- time since the last pass (0 for a pass of an option change).
+-- time since the last pass (0 for a pass of an option change). A block that Blocks that fade leaves out is passed by, so its frames are put back.
 local function Fade(dt)
 	dt = Number(dt) and dt > 0 and math.min(dt, 1) or 0
 	local keep, easing = {}, false
 	local delay = (Number(Opt("fadeDelay")) and Opt("fadeDelay") or 500) / 1000
 	local up, down = dt / 0.1, dt / math.max(0.1, (Number(Opt("fadeTime")) and Opt("fadeTime") or 300) / 1000)
-	for _, block in ipairs(blocks) do
-		local plan = block.last
+	for n, block in ipairs(blocks) do
+		local plan = Fades(n) and block.last
 		if plan then
 			local alpha = 1
 			if Full(plan) then
@@ -928,13 +961,18 @@ function ns.MainBlock()
 end
 
 -- Whether the fade of a block has the frame of this name (a bar of a block or a frame hung from the main bar), for the Fading page, which leaves it to that fade.
+-- Only the blocks that fade (Blocks that fade) count: the bars of a block left out may be faded on the Fading page.
 function ns.BarBlockFades(name)
 	if not (ns.Enabled(KEY) and Opt("fade")) then
 		return false
 	end
-	for _, held in ipairs(HeldNames()) do
-		if held == name then
-			return true
+	for n, block in ipairs(blocks) do
+		if Fades(n) then
+			for _, held in ipairs(PlanNames(block.last, {})) do
+				if held == name then
+					return true
+				end
+			end
 		end
 	end
 	return false

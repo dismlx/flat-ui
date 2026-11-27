@@ -14,6 +14,11 @@ local _, ns = ...
 -- UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the module's own frame, and UnitCastingInfo and UnitChannelInfo), while
 -- the cursor holds something, while the spell flyout is open, in Edit Mode and while /flatui move is open (ns.MoverKit.IsOpen), so a frame at
 -- 0% is not a box over nothing while it is lined up.
+-- The rows of the action bars are also at full while a proc alert of the Trackers page is up for a spell one of the bar's buttons holds (While a proc
+-- is up, on by default; ns.ProcUpOn, ProcGlow.lua), so Overpower or Execute is never pressed on a dim bar, and while a look preview of the action
+-- bar pages plays with the options window open and test mode off (the sweep, cast fill, interrupt flash, aim, tint and proc glow samples and the
+-- proc preview: ns.ButtonStatesPreviewing, ns.ButtonEffectsPreviewing, ns.ProcPreviewing), so the new look is seen at full; test mode is left out,
+-- so the fade itself can still be judged there. Either way they fade again after Wait before fading.
 -- Otherwise it stays where it is until Wait before fading has passed, then eases to Faded opacity over Fade time. Back to full it comes in a tenth
 -- of a second (RETURN_TIME), or over Fade time where that is shorter, as the bar block does. A frame is written only when its value changes.
 -- A frame whose alpha something else holds at 0 (the hidden minimap buttons) is left alone, and a frame the action bar block fades is left to that fade.
@@ -356,6 +361,18 @@ end
 local function MoversOpen()
 	local kit = ns.MoverKit
 	return type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
+end
+
+-- A look preview of the action bar pages plays (with the options window open and test mode off): the action bar rows are at full while it does.
+local PREVIEWS = { "ButtonStatesPreviewing", "ButtonEffectsPreviewing", "ProcPreviewing" }
+local function Previewing()
+	for _, name in ipairs(PREVIEWS) do
+		local ask = ns[name]
+		if type(ask) == "function" and ask() == true then
+			return true
+		end
+	end
+	return false
 end
 
 -- What keeps every row at full opacity, whatever the mouse does. With a target is asked apart (Step), as it does not hold a targeted row.
@@ -727,6 +744,8 @@ local function Step(dt)
 	local step = dt / seconds
 	local up = dt / math.min(seconds, RETURN_TIME)
 	local always, targeted = Wanted(), Opt("target") and HasTarget()
+	-- The action bar rows: held by a proc up for a spell on the bar (While a proc is up), or by a look preview that plays.
+	local procs, shown = Opt("proc") == true and type(ns.ProcUpOn) == "function", Previewing()
 	for rule in pairs(asked) do
 		asked[rule] = nil
 	end
@@ -777,6 +796,7 @@ local function Step(dt)
 			-- A bag window that opened this pass, or one in use, holds its row at full.
 			local full = always or (targeted and not entry.targeted) or (entry.rule == true and Holds(Opt(entry.row)))
 				or (entry.opens == true and fresh) or (entry.busy ~= nil and entry.busy(added) == true)
+				or (entry.bar == true and (shown or (procs and ns.ProcUpOn(entry.frames[1]) == true)))
 			if not full then
 				local hover = entry.hover and Resolve(entry.hover)
 				if hover then

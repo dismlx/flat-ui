@@ -24,7 +24,10 @@ local _, ns = ...
 -- UnitAuraDocumentation.lua:245-262, 397-412). A frame of this file hears UNIT_AURA for the player only while Buff time on icons is on and an icon has
 -- a spell with a buff. These follow the Cooldown Panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
 -- Test mode (TestMode.lua) shows every row with sample cooldowns, the last part of this file, and so does the look preview for 4 seconds after a
--- change of a row of the look, out of combat with the options window open and test mode off (ns.CooldownLookChanged).
+-- change of a row of the look, out of combat with the options window open and test mode off (ns.CooldownLookChanged). The samples show the rows
+-- that act on what an icon holds too: the second is in Out of range colour while Tint when out of range is on and the third in Not enough power
+-- colour while Tint without enough power is on (Cooldowns.lua, Paint), each carries the key of its place, 1, 2 or 3, while Keybind on icons is on
+-- (Keybind), and the third a count of 5 while Reagent counts is on, in Count colour at Count corner.
 -- Every frame here is Flat UI's own, made, sized and levelled out of combat when the rows are laid out; in a fight only their alpha, their
 -- animations, their Cooldown and Show and Hide change, which the game allows on frames that are not protected, as Cooldowns.lua's sweep and flash do.
 
@@ -1067,8 +1070,9 @@ function R.Held(record)
 		held.drawn = false
 		pcall(cooldown.Clear, cooldown)
 	end
+	-- Sample 3 carries a count of 5 while Reagent counts is on, in Charge count size, Count colour and Count corner (R.Look); the others none.
 	if record.sample then
-		record.count:SetText("")
+		record.count:SetText(record.sample == 3 and Opt("useCount") == true and "5" or "")
 	end
 	R.Look(record, cooling, false, nil)
 	Border(record, IsInterrupt(record.spell))

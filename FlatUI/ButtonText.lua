@@ -19,6 +19,8 @@ local _, ns = ...
 -- by default, as the game has it, Top or Centre). The game never anchors or colours the name after its template (ActionButtonTemplate.xml:43-47:
 -- BOTTOM, 2 up, 36 wide and centred), so its anchor is read the first time and put back at Bottom; Top keeps the same inset, and it is placed out of
 -- combat only.
+-- A position or size that has to wait for the end of a fight gives a line in /flatui status, and the first change of one of those rows in a fight,
+-- made with the options window open, says in chat that hotkeys, macro names and counts move when the fight ends.
 
 local KEY = "actionbars"
 local POINTS = {
@@ -32,6 +34,8 @@ local JUSTIFY = { topleft = "LEFT", bottomleft = "LEFT", top = "CENTER", center 
 local TEXT_HEIGHT = 10
 local LINE_RANGE = "Hotkey colour: the game withholds the range, so those hotkeys keep the game's colour."
 local LINE_WAIT = "Hotkey, macro name and count position: wait for the end of the fight."
+-- The line chat gets once a fight when a change of one of those rows waits for its end, while the options window shows (state.told).
+local CHAT_WAIT = "Flat UI: hotkeys, macro names and counts move when the fight ends."
 
 local weak = { __mode = "k" }
 -- Per button: { hotFaded, nameFaded = true while faded here, coloured = true while the own colour is set, placed = true while the position is
@@ -565,7 +569,7 @@ local function Pass()
 			if not state.waiting then
 				state.waiting = true
 				ns.OutOfCombat(function()
-					state.waiting = false
+					state.waiting, state.told = false, false
 					ns.ClearNote(KEY, LINE_WAIT)
 					Later()
 				end)
@@ -692,14 +696,20 @@ function ns.ButtonTextRefresh()
 	end
 end
 
--- Config changed callback of every row of the Button text page.
+-- Config changed callback of every row of the Button text page. A row that places the text, changed in a fight while the options window shows, says
+-- once a fight in chat that it waits for the fight's end (CHAT_WAIT), as the bar block and the cast bars say theirs.
 function ns.ButtonTextChanged(path)
-	if type(path) == "string" and (path:find("^" .. KEY .. "%.hotkey[PXY]") or path == KEY .. ".hotkeySize" or path == KEY .. ".nameSize"
-		or path == KEY .. ".hotkeyShow" or path == KEY .. ".nameShow" or path == KEY .. ".countPoint" or path == KEY .. ".namePoint") then
+	local places = type(path) == "string" and (path:find("^" .. KEY .. "%.hotkey[PXY]") or path == KEY .. ".hotkeySize" or path == KEY .. ".nameSize"
+		or path == KEY .. ".hotkeyShow" or path == KEY .. ".nameShow" or path == KEY .. ".countPoint" or path == KEY .. ".namePoint")
+	if places then
 		state.place = true
 	end
 	state.dirty = true
 	Pass()
+	if places and state.waiting and not state.told and InCombatLockdown() and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+		state.told = true
+		print(CHAT_WAIT)
+	end
 	-- The keys on the cooldown icons follow Hotkey text too.
 	if path == KEY .. ".hotkeyText" and type(ns.CooldownBindsChanged) == "function" then
 		ns.CooldownBindsChanged()

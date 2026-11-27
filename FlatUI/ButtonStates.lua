@@ -31,6 +31,10 @@ local _, ns = ...
 -- (SampleGrey), and a change of that row plays it too. With test mode off, a change of Own usability colours, Not enough power colour, Cannot use
 -- colour, Tint icon when out of range or Out of range colour (while its row is on) paints the icon of the first sample button in that colour for
 -- 2 s instead (TintSample, through the icon painter), a change meanwhile giving it the 2 s again.
+-- Cooldown numbers (actionbars.cdNumbers) is the game's Show numbers on cooldowns, which this file writes out of combat (ns.ButtonNumbersSet; a
+-- choice made in a fight waits for its end); its change plays the sweep sample with or without its numbers. In test mode too, a change of a
+-- usability or range row paints the first sample button in its colour for 2 s and leaves the sweep alone (ns.ButtonStatesTint, ActionBars.lua).
+-- While a sample of this file plays with test mode off, the faded action bars and bar blocks are at full (ns.ButtonStatesPreviewing).
 
 local KEY = "actionbars"
 local BARS = {
@@ -979,6 +983,78 @@ function ns.ButtonStatesChanged(path)
 	Ask(nil)
 	PrepareReady()
 	Preview(path)
+end
+
+-- Cooldown numbers (actionbars.cdNumbers), a row the game holds: its Show numbers on cooldowns. The row's value is true while the numbers show, nil
+-- when it cannot be read; in a fight it is the choice that waits for the fight's end (NUMBERS.pending), so the switch follows a click at once.
+local NUMBERS = { pending = nil }
+function ns.ButtonNumbersGet()
+	local hide = NumbersOff()
+	if hide == nil then
+		return nil
+	end
+	if NUMBERS.pending ~= nil then
+		return NUMBERS.pending
+	end
+	return not hide
+end
+
+-- The write, out of combat. Flat UI's buttons follow it on CVAR_UPDATE (OwnPaint.lua) and the game's through its own callback; the sweep sample
+-- plays with or without its numbers.
+local function WriteNumbers(on)
+	local write = C_CVar and C_CVar.SetCVar or SetCVar
+	if type(write) ~= "function" then
+		return
+	end
+	pcall(write, "countdownForCooldowns", on and "1" or "0")
+	Preview(KEY .. ".cdFont")
+end
+
+-- The row was changed. Nothing is written in combat: the last choice made in a fight is written when it ends.
+function ns.ButtonNumbersSet(_, value)
+	local on = value == true
+	if InCombatLockdown() then
+		local queued = NUMBERS.pending ~= nil
+		NUMBERS.pending = on
+		if not queued then
+			ns.OutOfCombat(function()
+				local wanted = NUMBERS.pending
+				NUMBERS.pending = nil
+				if wanted ~= nil then
+					WriteNumbers(wanted)
+				end
+			end)
+		end
+		return
+	end
+	NUMBERS.pending = nil
+	WriteNumbers(on)
+end
+
+-- Test mode on: a change of a usability or range row paints the first sample button in its colour for TINT.TIME seconds, as with test mode off
+-- (Preview), in place of the sweep (ActionBars.lua, SampleChanged). True for every such row, so the sweep is left alone; it paints only while the
+-- row's switch is on (Tint icon when out of range for its colour, Own usability colours for the others), out of combat.
+function ns.ButtonStatesTint(button, path)
+	local row = type(path) == "string" and path:match("^" .. KEY .. "%.(.+)$")
+	local tint = row and TINTS[row]
+	if not tint then
+		return false
+	end
+	if Plain(button, "table") and not InCombatLockdown() and Opt(tint == "rangeColour" and "rangeTint" or "usableOwn") == true then
+		TintSample(button, tint)
+	end
+	return true
+end
+
+-- True while the sweep sample (and its flash) or a colour sample of this file plays with test mode off: Fading and the bar block hold the action
+-- bars at full meanwhile, so the new look is seen at full (Fade.lua, BarBlock.lua). Only reads.
+function ns.ButtonStatesPreviewing()
+	local mode = ns.TestMode
+	if mode and mode.IsOn() then
+		return false
+	end
+	local now = GetTime()
+	return (SAMPLE.ends ~= nil and now < SAMPLE.ends) or (TINT.button ~= nil and now < TINT.ends)
 end
 
 if type(ns.OnOwnReady) == "function" then
