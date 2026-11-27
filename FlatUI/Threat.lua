@@ -722,7 +722,7 @@ function T.Draw(mob, entries)
 	local mobs = type(ns.ThreatMobs) == "table" and ns.ThreatMobs or nil
 	if n < 1 then
 		if mobs then
-			mobs.BelowOff()
+			mobs.BelowOff(T.fighting == true)
 		end
 		T.Showing(false)
 		T.Alarm(nil, nil)

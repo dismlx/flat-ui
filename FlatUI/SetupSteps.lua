@@ -1693,7 +1693,7 @@ ns.SETUP_STEPS = {
 		{ "threat.otherTanks", "o", "behaviour", "As a tank, stays quiet when another tank of the group takes an enemy from you." },
 		{ "threat.warnSound", "r", "behaviour", "Chooses the sound that plays once for either warning." },
 		{ "threat.slipAt", "r", "behaviour", "Sets the share of your threat past which another member makes an enemy you hold turn amber, under your target or in Enemies you fight." },
-		{ "threat.lostSound", "r", "behaviour", "Chooses the sound that plays once as an enemy you held, other than your target, turns to someone else." },
+		{ "threat.lostSound", "r", "behaviour", "Chooses the sound that plays once as an enemy you held turns to someone else, in Enemies you fight or under your target." },
 	} },
 	{ id = "healermana", area = "Healer mana", title = "Healer mana", draw = "mock-screen", built = false, rows = {
 		{ "healermana.enabled", "c", "behaviour", "Shows the mana of the healers in your group, in a window placed with the movers." },

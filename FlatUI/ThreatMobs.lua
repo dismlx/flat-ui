@@ -1099,10 +1099,13 @@ function M.Below(unit)
 	M.Suffix(unit, lost)
 end
 
-function M.BelowOff()
+function M.BelowOff(keep)
 	if M.mode == "both:live" or M.mode == "both:sample" then
 		M.Tick(false)
-		M.mode, M.known, M.last, M.readAt = nil, {}, nil, nil
+		if not (keep and M.mode == "both:live") then
+			M.mode, M.known = nil, {}
+		end
+		M.last, M.readAt = nil, nil
 	end
 	if not M.below then
 		return
