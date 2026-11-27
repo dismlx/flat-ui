@@ -23,7 +23,8 @@ local _, ns = ...
 -- aura is read that the game withholds (C_UnitAuras.GetPlayerAuraBySpellID and GetAuraDataBySpellName are SecretWhenUnitAuraRestricted:
 -- UnitAuraDocumentation.lua:245-262, 397-412). A frame of this file hears UNIT_AURA for the player only while Buff time on icons is on and an icon has
 -- a spell with a buff. These follow the Cooldown Panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
--- Test mode (TestMode.lua) shows every row with sample cooldowns, the last part of this file.
+-- Test mode (TestMode.lua) shows every row with sample cooldowns, the last part of this file, and so does the look preview for 4 seconds after a
+-- change of a row of the look, out of combat with the options window open and test mode off (ns.CooldownLookChanged).
 -- Every frame here is Flat UI's own, made, sized and levelled out of combat when the rows are laid out; in a fight only their alpha, their
 -- animations, their Cooldown and Show and Hide change, which the game allows on frames that are not protected, as Cooldowns.lua's sweep and flash do.
 
@@ -895,12 +896,75 @@ end
 -- and name) has the gold border Interrupt.lua gives it while an enemy casts, with Glow on your interrupt on: a ring of this file's own in the same
 -- gold and width. No ready sound plays and no cooldown of the game's is asked for (Ready and Recheck in Cooldowns.lua wait); the counts keep what
 -- they showed. Off and a fight end it: the next Update draws each icon from the game again and the layout after it takes the samples away.
--- READY: the seconds a sample stays ready before its sweep starts again. PX: the width of the interrupt's border, Interrupt.lua's.
-local H = { READY = 1.5, PX = 2, interrupts = nil }
+-- The look preview: out of combat, with the options window open and test mode off, a change of a row of the look (ns.CooldownLookChanged, the
+-- changed of those rows in Config.lua) shows the same samples for PREVIEW seconds, as test mode draws them, and a change while it is up keeps it up
+-- until PREVIEW seconds after the last one, with the same sweeps (its token). Its end, a fight and test mode coming on take it away; the icons it
+-- held forget they were dimmed, so the real icons come back with no flash and no ready sound.
+-- READY: the seconds a sample stays ready before its sweep starts again. PX: the width of the interrupt's border, Interrupt.lua's. preview: the
+-- preview that is up, { token, ends }, or nil; token: the count of previews, for the epoch of their samples.
+local H = { READY = 1.5, PX = 2, PREVIEW = 4, interrupts = nil, preview = nil, token = 0 }
+
+local function TestOn()
+	local test = ns.TestMode
+	return type(test) == "table" and test.IsOn() == true
+end
+
+-- The epoch of the samples: test mode's, else the preview's.
+local function Epoch()
+	if TestOn() then
+		return ns.TestMode.Epoch()
+	end
+	return "p" .. (H.preview and H.preview.token or 0)
+end
 
 function R.Testing()
-	local test = ns.TestMode
-	return type(test) == "table" and test.IsOn() == true and ns.Enabled(KEY) and not InCombatLockdown()
+	if not ns.Enabled(KEY) or InCombatLockdown() then
+		return false
+	end
+	return TestOn() or (H.preview ~= nil and GetTime() < H.preview.ends)
+end
+
+-- Every icon the samples held forgets that it was dimmed, so the real look comes back with no flash, and Ready plays nothing for it.
+local function Forget()
+	for _, record in ipairs(R.Shown()) do
+		if record.held then
+			record.dimmed, record.readyPlayed = nil, nil
+		end
+	end
+end
+
+local function PreviewEnd()
+	if not H.preview then
+		return
+	end
+	Forget()
+	H.preview = nil
+	ns.RefreshModule(KEY)
+end
+
+-- The changed of the look rows: the module is refreshed as for any row, with the preview up first when it can be.
+function ns.CooldownLookChanged()
+	if not InCombatLockdown() and ns.Enabled(KEY) and type(ns.PanelShown) == "function" and ns.PanelShown() and not TestOn()
+		and C_Timer ~= nil and C_Timer.After ~= nil then
+		local now = GetTime()
+		if not (H.preview and now < H.preview.ends) then
+			for _, record in ipairs(R.Shown()) do
+				record.dimmed, record.readyPlayed = nil, nil
+			end
+			H.token = H.token + 1
+			H.preview = { token = H.token }
+		end
+		H.preview.ends = now + H.PREVIEW
+		C_Timer.After(H.PREVIEW + 0.05, function()
+			if H.preview and GetTime() >= H.preview.ends then
+				local ok, err = pcall(PreviewEnd)
+				if not ok then
+					geterrorhandler()(err)
+				end
+			end
+		end)
+	end
+	ns.RefreshModule(KEY)
 end
 
 -- Each row that is on and has no icon gets the three samples, while test mode is on.
@@ -987,7 +1051,7 @@ function R.Held(record)
 			break
 		end
 	end
-	local epoch, now = ns.TestMode.Epoch(), GetTime()
+	local epoch, now = Epoch(), GetTime()
 	local held = record.held
 	if not held or held.epoch ~= epoch or held.index ~= index then
 		local seconds = 6 + ((index - 1) * 3) % 10
@@ -1041,6 +1105,16 @@ ns.TestMode.Register(KEY, {
 	every = 0.5,
 	Tick = H.Tick,
 })
+-- Test mode coming on takes the preview's place: its own refresh draws its samples.
+ns.TestMode.Watch(function(on)
+	if on and H.preview then
+		Forget()
+		H.preview = nil
+	end
+end)
+ns.AddEvent(KEY, "PLAYER_REGEN_DISABLED", PreviewEnd, function()
+	return H.preview ~= nil
+end)
 
 -- The events: the rules of a group, an instance and a travel form change with these, and a fight can make a buff secret or plain again.
 for _, event in ipairs({ "GROUP_ROSTER_UPDATE", "ZONE_CHANGED_NEW_AREA", "UPDATE_SHAPESHIFT_FORM" }) do
