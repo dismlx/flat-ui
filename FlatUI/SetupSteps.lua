@@ -1074,6 +1074,7 @@ ns.SETUP_STEPS = {
 		{ "trinkets.sound", "r", "behaviour", "Plays a sound on each trinket swap." },
 		{ "trinkets.riding", "o", "behaviour", "Puts Carrot on a Stick in a trinket slot while you ride, and your trinket back when you get off." },
 		{ "trinkets.slotButtons", "o", "behaviour", "Puts a small square beside each trinket slot on the Character window that shows the queue's state and opens its window." },
+		{ "trinkets.tipLine", "o", "behaviour", "Adds a dim line to a trinket's tooltip that says where it stands in the trinket queue's lists." },
 	} },
 	{ id = "hud-hittable", area = "Character and gear", title = "Hit table", draw = "mock-player", built = true, rows = {
 		{ "hud.hitTable", "c", "behaviour", "Shows under your player frame your chances to miss, be dodged, parried or blocked, glance, crit and hit against your target, and the share of a spell's damage resisted with your Spell Piercing, while you are a tank or a damage dealer, or always." },

@@ -51,6 +51,11 @@ local T = {
 	STATUS_OFF = "Trinket queue, %s: auto queue off.",
 	STATUS_SLOT = "Trinket queue, %s: wearing %s; %s%s.",
 	STATUS_NEXT = "; next %s in %s",
+	TIP_LINE = "Trinket queue: %s of %d, %s slot",
+	TIP_STOP = " · Stop",
+	TIP_DELAY = " · kept %d s",
+	TIP_AUTO_OFF = " · Auto queue off",
+	TIP_COLOUR = { 0.66, 0.68, 0.62 },
 }
 local WHY = {
 	off = { "off", "The trinket queue is off" },
@@ -90,7 +95,8 @@ local Q, R, D = {}, {}, {}
 local S = { pending = nil, fails = {}, nextTry = {}, refused = {}, said = {}, noted = {}, equippedAt = {}, heldAt = {}, heard = {}, uses = {},
 	tipLen = {}, kinds = {}, levels = {}, loading = {}, autoWas = {}, once = {}, why = {}, untilAt = {}, nextAt = {}, next = {}, token = 0,
 	soon = false, quietUntil = 0, version = 0, runs = 0, faults = {}, bags = nil, order = nil, fightTries = 0, normalised = false,
-	fallback = false, listening = false, ear = nil, pattern = nil, late = nil, ridingBack = {}, ridingOff = {}, rode = {} }
+	fallback = false, listening = false, ear = nil, pattern = nil, late = nil, ridingBack = {}, ridingOff = {}, rode = {},
+	tipMarks = setmetatable({}, { __mode = "k" }), tipHooked = false }
 ns.TrinketQueue = Q
 
 local function IsSecret(value)
@@ -1637,7 +1643,87 @@ function R.Tell()
 	end
 end
 
+function R.Ordinal(number)
+	local tens, ones = number % 100, number % 10
+	local suffix = "th"
+	if tens < 11 or tens > 13 then
+		suffix = ones == 1 and "st" or ones == 2 and "nd" or ones == 3 and "rd" or "th"
+	end
+	return ("%d%s"):format(number, suffix)
+end
+
+function R.QueueLines(id)
+	local lines = {}
+	for _, n in ipairs(ORDER) do
+		local list = Q.List(n)
+		local index, entry = Q.Find(list, id)
+		if index then
+			local text = T.TIP_LINE:format(R.Ordinal(index), #list, WORD[n]:lower())
+			if entry.stop then
+				text = text .. T.TIP_STOP
+			elseif Finite(entry.delay) and entry.delay > 0 then
+				text = text .. T.TIP_DELAY:format(entry.delay)
+			end
+			if not Q.Auto(n) then
+				text = text .. T.TIP_AUTO_OFF
+			end
+			lines[#lines + 1] = text
+		end
+	end
+	return lines
+end
+
+function R.TipFilled(tooltip, data)
+	if not (rawequal(tooltip, GameTooltip) or rawequal(tooltip, ItemRefTooltip)) or ns.Forbidden(tooltip)
+		or type(data) ~= "table" or IsSecret(data) or not Q.Running() or ns.Get("trinkets.tipLine") ~= true then
+		return
+	end
+	local id = data.id
+	if not Whole(id) then
+		return
+	end
+	local ok, shown = Call(tooltip.NumLines, tooltip)
+	if not ok or not Finite(shown) then
+		return
+	end
+	local mark = S.tipMarks[tooltip]
+	if mark and mark.data == data and shown >= mark.lines then
+		return
+	end
+	local lines = R.QueueLines(id)
+	if #lines == 0 then
+		return
+	end
+	local colour = T.TIP_COLOUR
+	for _, text in ipairs(lines) do
+		if not Call(tooltip.AddLine, tooltip, text, colour[1], colour[2], colour[3]) then
+			return
+		end
+		shown = shown + 1
+	end
+	S.tipMarks[tooltip] = { data = data, lines = shown }
+end
+
+function R.HookTips()
+	if S.tipHooked then
+		return
+	end
+	local processor = TooltipDataProcessor
+	local kinds = type(Enum) == "table" and not IsSecret(Enum) and Enum.TooltipDataType or nil
+	local item = type(kinds) == "table" and not IsSecret(kinds) and kinds.Item or nil
+	if not Fn(processor, "AddTooltipPostCall") or not Finite(item) then
+		return
+	end
+	S.tipHooked = true
+	Call(processor.AddTooltipPostCall, item, function(tooltip, data)
+		if not IsSecret(tooltip) then
+			Q.Run(R.TipFilled, tooltip, data)
+		end
+	end)
+end
+
 function Q.Started()
+	R.HookTips()
 	local now = Now()
 	S.quietUntil = now + TIME.QUIET
 	for _, n in ipairs(ORDER) do
