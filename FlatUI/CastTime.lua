@@ -59,6 +59,14 @@ local _, ns = ...
 -- It takes the font of the bar's spell name. Since 0.5.42 it stays as the cast ends, while the bar fades or holds Interrupted, and empties as the
 -- bar hides, the row goes off or the unit is no enemy; the next cast writes its own. /flatui status counts the casts that named their target, and
 -- how many of those names showed in a class colour.
+-- Seconds until your interrupt is ready (on by default, Text and icon tab of Cast bars, while Interrupt readiness on enemy casts is on; 0.5.42): a
+-- font string of the addon's own inside the left end of the target and focus bars (LEFT of the bar's LEFT, +4), made ahead out of a fight as the
+-- name of the cast's target is, in the font of the bar's spell name and Interrupt on cooldown colour. On each look of the poll, while the bar casts
+-- or channels, its shield does not plainly show and Interrupt.lua says every usable interrupt of the player's is on cooldown
+-- (ns.InterruptReady false), it counts down the cooldown of the first: ns.InterruptCooldown gives the game's duration object
+-- (C_Spell.GetSpellCooldownDuration, the global cooldown left out), which goes untouched to a duration text binding with a seconds formatter, as
+-- the time of a cast does, or by the poll to SetFormattedText of its GetRemainingDuration when the binding raises. It empties as the interrupt is
+-- ready, the cast ends or the row goes off. /flatui status counts the casts that showed it.
 -- Sound when you are interrupted (None at first, main tab of Cast bars; 0.5.41): while the row names a sound and the page is on, a frame of its own
 -- hears the player's UNIT_SPELLCAST_INTERRUPTED and UNIT_SPELLCAST_CHANNEL_STOP (RegisterUnitEvent, started and stopped by ns.CastTimeSync and the
 -- row's changed handler, ns.CastKickedSoundPicked) and plays the sound (ns.PlayKit, ns.SOUNDS of IconRow.lua, at most once a second) when their
@@ -564,8 +572,182 @@ local function LookAims(on)
 	end
 end
 
+-- Seconds until your interrupt is ready -----------------------------------------------------------------------------
+
+-- KT: shown (the casts that showed the seconds, for /flatui status), live (the bars that show them now, which keeps the poll running) and refused
+-- (the game would not write them). KickTimeOn, LookKicks and KickAhead are the block's own, below.
+local KT = { shown = 0, live = 0, refused = false }
+local KickTimeOn, LookKicks, KickAhead
+do
+	local KICK_TIME_ROW, KICK_COLOUR_ROW = "castbars.kickTime", "castbars.interruptCooling"
+	-- kicks: per target or focus bar, its seconds { fs, shown, font, hex, id, mode, binding, duration }, false when they could not be made;
+	-- kickQueued: a make waits for the end of the fight.
+	local kicks, kickQueued = setmetatable({}, weak), setmetatable({}, weak)
+
+	-- The row, the page and Interrupt readiness on enemy casts are on.
+	function KickTimeOn()
+		return Get(KICK_TIME_ROW) == true and Get("castbars.interrupt") == true and ns.Enabled("castbars")
+	end
+
+	-- The font string inside the left end of a bar (LEFT +4), made once out of a fight on a bar the game may protect, as MakeAim makes its own.
+	local function MakeKick(bar)
+		local kick = kicks[bar]
+		if kick ~= nil then
+			return kick or nil
+		end
+		if InCombatLockdown() and ns.MaybeProtected(bar) then
+			if not kickQueued[bar] then
+				kickQueued[bar] = true
+				ns.OutOfCombat(function()
+					kickQueued[bar] = nil
+					pcall(MakeKick, bar)
+				end)
+			end
+			return nil
+		end
+		local fs = ns.OwnText(bar, "OVERLAY", "GameFontHighlightSmall")
+		if fs == nil then
+			kicks[bar] = false
+			return nil
+		end
+		fs:SetPoint("LEFT", bar, "LEFT", 4, 0)
+		fs:SetJustifyH("LEFT")
+		fs:SetText("")
+		fs:Hide()
+		kick = { fs = fs, shown = false }
+		kicks[bar] = kick
+		return kick
+	end
+
+	local function KickHide(kick)
+		if kick and kick.shown then
+			if kick.mode == "binding" and kick.binding ~= nil then
+				pcall(kick.binding.SetEnabled, kick.binding, false)
+			end
+			pcall(kick.fs.SetText, kick.fs, "")
+			pcall(kick.fs.Hide, kick.fs)
+			kick.shown, kick.id, kick.mode, kick.duration = false, nil, nil, nil
+			KT.live = math.max(0, KT.live - 1)
+		end
+	end
+
+	-- Interrupt on cooldown colour on the seconds, set again only when the row changed.
+	local function KickColour(kick)
+		local hex = Get(KICK_COLOUR_ROW)
+		if kick.hex == hex then
+			return
+		end
+		local r, g, b = ns.Colour(KICK_COLOUR_ROW)
+		if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+			r, g, b = 0.85, 0.45, 0.18
+		end
+		pcall(kick.fs.SetTextColor, kick.fs, r, g, b)
+		kick.hex = hex
+	end
+
+	-- The first way, as the time of a cast: the game's duration text binding with a seconds formatter on the font string.
+	local function KickBind(kick, duration)
+		local binding = kick.binding
+		if binding == nil then
+			binding = C_DurationUtil.CreateDurationTextBinding()
+			binding:SetFormatter(C_StringUtil.CreateSecondsFormatter())
+			binding:SetFontString(kick.fs)
+			kick.binding = binding
+		end
+		binding:SetDuration(duration)
+		binding:SetEnabled(true)
+	end
+
+	-- The second way: the seconds left, rounded, written on each look; SetFormattedText takes them withheld.
+	local function KickWrite(kick)
+		kick.fs:SetFormattedText("%.0f", kick.duration:GetRemainingDuration())
+	end
+
+	-- True for a plain true from the bar's shield: the cast cannot be interrupted, so its seconds would say nothing.
+	local function Shielded(bar)
+		local shield = bar.BorderShield
+		if ns.IsSecret(shield) or type(shield) ~= "table" then
+			return false
+		end
+		local ok, shown = pcall(shield.IsShown, shield)
+		return ok and Flag(shown)
+	end
+
+	-- One look at a target or focus bar: while its enemy casts or channels and every usable interrupt of the player's is on cooldown
+	-- (ns.InterruptReady false), the seconds until the first is back, from its duration object, which is never read here. A new interrupt on
+	-- cooldown (another rank or a stance's) is bound again; the duration object goes to the binding untouched.
+	local function KickLook(bar, unit, on)
+		local kick = kicks[bar]
+		local duration, id = nil, nil
+		if on and (Flag(bar.casting) or Flag(bar.channeling)) and type(ns.InterruptReady) == "function"
+			and type(ns.InterruptCooldown) == "function" and ns.InterruptReady(unit) == false and not Shielded(bar) then
+			duration, id = ns.InterruptCooldown()
+		end
+		if duration == nil then
+			KickHide(kick)
+			return
+		end
+		kick = kick or MakeKick(bar)
+		if not kick then
+			return
+		end
+		if not kick.shown or kick.id ~= id then
+			if not kick.shown then
+				AimFont(bar, kick)
+			end
+			KickColour(kick)
+			kick.id, kick.duration = id, duration
+			if pcall(KickBind, kick, duration) then
+				kick.mode = "binding"
+			elseif pcall(KickWrite, kick) then
+				kick.mode = "poll"
+			else
+				KT.refused = true
+				KickHide(kick)
+				return
+			end
+		elseif kick.mode == "poll" and not pcall(KickWrite, kick) then
+			KT.refused = true
+			KickHide(kick)
+			return
+		end
+		if not kick.shown then
+			kick.fs:Show()
+			kick.shown = true
+			KT.shown, KT.live = KT.shown + 1, KT.live + 1
+		end
+	end
+
+	-- One look at the target and focus bars while the row is on, and at those that showed seconds when it went off.
+	function LookKicks(on)
+		for _, entry in ipairs(OWN) do
+			local bar = _G[entry[1]]
+			if bar ~= nil and not ns.IsSecret(bar) and not ns.Forbidden(bar) and (on or kicks[bar]) then
+				KickLook(bar, entry[2], on)
+			end
+		end
+	end
+
+	-- Made ahead out of a fight while `make`, so the first cast of one shows its seconds; a change of Interrupt on cooldown colour reaches them at once.
+	function KickAhead(make)
+		for _, entry in ipairs(OWN) do
+			local bar = _G[entry[1]]
+			if bar ~= nil and not ns.IsSecret(bar) and not ns.Forbidden(bar) then
+				local kick = kicks[bar]
+				if make and kick == nil then
+					kick = MakeKick(bar)
+				end
+				if kick then
+					pcall(KickColour, kick)
+				end
+			end
+		end
+	end
+end
+
 local function Step()
 	pcall(LookAims, AimOn())
+	pcall(LookKicks, KickTimeOn())
 	LookList(OWN, OwnOn())
 	LookList(MINE, MineOn())
 	ns.EachPlate(LookPlate, PlateRow())
@@ -591,8 +773,8 @@ local function Fades()
 end
 
 local function Wanted()
-	-- The name of a cast's target goes on while the time has stopped.
-	if AimOn() then
+	-- The name of a cast's target and the seconds of the interrupt go on while the time has stopped.
+	if AimOn() or KickTimeOn() or KT.live > 0 then
 		return true
 	end
 	for _, aim in pairs(aims) do
@@ -1099,6 +1281,7 @@ function ns.CastTimeSync()
 	if not InCombatLockdown() then
 		pcall(AimAhead)
 	end
+	pcall(KickAhead, KickTimeOn() and not InCombatLockdown())
 	pcall(PushListen, PushOn())
 	pcall(KickListen)
 	-- A change of Pushback colour reaches a total that shows at once.
@@ -1137,6 +1320,10 @@ function ns.StatusLines()
 	if AimOn() then
 		lines[#lines + 1] = ("Target of enemy casts: %d casts named their target, %d in its class colour and %d in white."):format(state.aimed,
 			state.aimClass, state.aimed - state.aimClass)
+	end
+	if KickTimeOn() then
+		lines[#lines + 1] = KT.refused and ("Seconds until your interrupt is ready: shown on %d casts; the game would not write them once."):format(KT.shown)
+			or ("Seconds until your interrupt is ready: shown on %d casts."):format(KT.shown)
 	end
 	if PushOn() then
 		lines[#lines + 1] = P.last and ("Pushback on your bar: the last shown was %+.1f."):format(P.last) or "Pushback on your bar: no pushback seen yet."

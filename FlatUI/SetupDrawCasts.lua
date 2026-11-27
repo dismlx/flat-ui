@@ -15,7 +15,8 @@ local _, ns = ...
 --   on (1.0 / 2.5 on the first row), and the interrupt colours of Interrupt.lua on the Target row (ready), the Focus row (on cooldown) and the
 --   Target, out of range row (Frostbolt, ready but out of range, 0.5.39) while Interrupt readiness is on: on the fill with Flat fill, else on the
 --   strip along the bar's bottom edge, Interrupt strip height thick; the name of the cast's target ("> Jon", in a warrior's class colour, 0.5.41)
---   past the end of the Target row while Target of enemy casts is on, the pushback in Pushback colour, and the latency zone (in Latency zone
+--   past the end of the Target row while Target of enemy casts is on, a sample "4" inside the left end of the Focus row in Interrupt on cooldown
+--   colour while Seconds until your interrupt is ready is on (0.5.42), the pushback in Pushback colour, and the latency zone (in Latency zone
 --   colour, 0.5.41) and the spell icon of the player and pet bars while their rows are on, with or without Flat fill (0.5.39; with Flat fill only before).
 --   resource display: ApplyResourceBar, JoinBar, ApplyResourceFill, ApplyResourceText (Bars.lua:78-165), the custom colours (Bars.lua:195-250).
 --   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530), and the
@@ -371,6 +372,16 @@ local function NewCastBar(inst, parent, spec)
 			row.time:SetText(spec.time)
 		end
 	end
+	-- The seconds until the player's interrupt is ready, inside the left end of an enemy cast it is on cooldown for (CastTime.lua, 0.5.42).
+	if spec.kick == "cooling" then
+		row.kickTime = NewText(bar)
+		if row.kickTime then
+			row.kickTime:SetPoint("LEFT", bar, "LEFT", 4, 0)
+			row.kickTime:SetJustifyH("LEFT")
+			row.kickTime:SetText(spec.kickTime or "4")
+			row.kickTime:Hide()
+		end
+	end
 	if spec.aim then
 		row.aim = NewText(bar)
 		if row.aim then
@@ -455,6 +466,7 @@ local function BuildCast(stage)
 	end
 	p["castbars.ownTime"] = target.time
 	p["castbars.castTarget"] = target.aim
+	p["castbars.kickTime"] = focus.kickTime or focus.bar
 	p["castbars.playerTime"] = player.time
 	p["castbars.timeTotal"] = target.time
 	p["castbars.pushback"], p["castbars.pushbackColour"] = player.push, player.push
@@ -718,6 +730,14 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 		row.icon:SetShown(enabled and G("castbars.playerIcon") == true)
 	end
 	PaintTicks(row, look, state, w, part)
+	-- The seconds until the player's interrupt is ready on an enemy cast it is on cooldown for, while Seconds until your interrupt is ready and
+	-- Interrupt readiness on enemy casts are on, in Interrupt on cooldown colour and the spell name's size and outline.
+	if row.kickTime then
+		row.kickTime:SetShown(enabled and kick == "cooling" and G("castbars.kickTime") == true and G("castbars.interrupt") == true
+			and (state == "cast" or state == "channel"))
+		local kr, kg, kb = ns.Colour("castbars.interruptCooling")
+		Look(row.kickTime, look.percent, kr, kg, kb, look.outline)
+	end
 	-- The spell name.
 	if row.text then
 		local mode = "top10"

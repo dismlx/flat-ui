@@ -1036,6 +1036,8 @@ ns.PAGES = {
 			tip = "Seconds left, at the right end of the bar, in the spell name's size and outline." },
 		{ key = "castTarget", kind = "bool", default = true, label = "Target of enemy casts",
 			tip = "Whom the cast on your target's or focus's bar is aimed at, as > Bex, just past the bar's right end, so you see who is about to be hit or sheeped. The name takes the class colour of that player, as the game's nameplates colour it. It stays while the bar fades or holds Interrupted, so you still see whom a kicked cast was aimed at." },
+		{ key = "kickTime", kind = "bool", default = true, label = "Seconds until your interrupt is ready", needs = "interrupt",
+			tip = "While an enemy you target or focus casts and your interrupt cools down, its seconds left count down inside the left end of the bar in Interrupt on cooldown colour, so you see whether Kick is back before the cast lands. Works while Interrupt readiness on enemy casts is on." },
 		{ key = "playerTime", kind = "bool", default = false, label = "Cast time on your bars",
 			tip = "Seconds left, inside the right end of your cast bar and your pet's; the game's own time from Edit Mode is hidden meanwhile." },
 		{ key = "timeTotal", kind = "bool", default = false, label = "Total cast time too",
