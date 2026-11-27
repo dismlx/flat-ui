@@ -493,9 +493,25 @@ local function Worth(sec)
 	return value, unknown
 end
 
-local function FoldedTip(tip, sec)
+local function ItemPrice(record)
+	if type(C_Item) ~= "table" or type(C_Item.GetItemInfo) ~= "function" then
+		return nil
+	end
+	local item = (type(record.link) == "string" and not IsSecret(record.link)) and record.link or record.id
+	if not item then
+		return nil
+	end
+	local ok, name, _, _, _, _, _, _, _, _, _, price = pcall(C_Item.GetItemInfo, item)
+	if ok and not IsSecret(name) and name ~= nil and Finite(price) and price >= 0 then
+		return price
+	end
+	return nil
+end
+
+function Layout.ListTip(tip, entries, opts)
+	local worth = type(opts) == "table" and opts.worth == true
 	local byId, list = {}, {}
-	for _, entry in ipairs(sec.entries) do
+	for _, entry in ipairs(type(entries) == "table" and entries or {}) do
 		local record = entry.record
 		local id = record and record.id
 		if Finite(id) then
@@ -504,7 +520,8 @@ local function FoldedTip(tip, sec)
 				local link, name = record.link, record.name
 				item = { id = id, count = 0, icon = record.icon, quality = record.quality,
 					link = type(link) == "string" and not IsSecret(link) and link:find("|H", 1, true) and link or nil,
-					name = type(name) == "string" and not IsSecret(name) and name ~= "" and name or nil }
+					name = type(name) == "string" and not IsSecret(name) and name ~= "" and name or nil,
+					price = worth and ItemPrice(record) or nil }
 				byId[id] = item
 				list[#list + 1] = item
 			end
@@ -532,11 +549,21 @@ local function FoldedTip(tip, sec)
 			end
 		end
 		local name = item.link or Plain(item.name or ("Item %d"):format(item.id))
-		tip:AddDoubleLine(icon .. name, item.count > 1 and ("x" .. item.count) or " ", r, g, b, DIM[1], DIM[2], DIM[3])
+		local times = item.count > 1 and ("x" .. item.count) or nil
+		if worth then
+			local right = item.price and item.price > 0 and Money(item.price * item.count) or " "
+			tip:AddDoubleLine(icon .. name .. (times and (" " .. times) or ""), right, r, g, b, 1, 1, 1)
+		else
+			tip:AddDoubleLine(icon .. name, times or " ", r, g, b, DIM[1], DIM[2], DIM[3])
+		end
 	end
 	if #list > FOLD_LINES then
 		tip:AddLine(("and %d more"):format(#list - FOLD_LINES), DIM[1], DIM[2], DIM[3])
 	end
+end
+
+local function FoldedTip(tip, sec)
+	Layout.ListTip(tip, sec.entries)
 end
 
 local function TitleTip(title)
@@ -581,6 +608,13 @@ local function TitleTip(title)
 		head, line = sec.label, "Nothing to sell. Drop an item here to sell it at merchants from now on."
 	elseif sec.strip and not st.holding then
 		head, line = sec.label, "Click to put these items away now."
+		folded = #sec.entries > 0
+		if folded then
+			local value, unknown = Worth(sec)
+			if value > 0 then
+				worth = (unknown and "Worth at least %s at a merchant." or "Worth %s at a merchant."):format(Money(value))
+			end
+		end
 	elseif not st.holding then
 		local tipOf = Fn(B.Order, "Tip")
 		local ok, text = false, nil
@@ -603,11 +637,14 @@ local function TitleTip(title)
 	end
 	tip:SetOwner(title.frame, "ANCHOR_TOP")
 	tip:SetText(head, 1, 1, 1)
-	if worth then
+	if worth and not sec.strip then
 		tip:AddLine(worth, 1, 1, 1, true)
 	end
 	if folded then
 		FoldedTip(tip, sec)
+	end
+	if worth and sec.strip then
+		tip:AddLine(worth, 1, 1, 1, true)
 	end
 	local colour = refused and RED or DIM
 	tip:AddLine(line, colour[1], colour[2], colour[3], true)
@@ -1141,6 +1178,18 @@ local function BuildSections(st)
 			end
 		end
 	end
+	if st.mine then
+		local okBack, count, key = pcall(Call, Categories, "LastPutBack")
+		if okBack and Finite(count) and count > 0 and type(key) == "string" and not IsSecret(key) and key ~= NEW and key ~= FREE and key ~= KEEP
+			and not byKey[key] and not Hid(key) then
+			local okExists, exists = pcall(Call, Categories, "Exists", key)
+			if okExists and exists == true then
+				local back = { key = key, label = Label(key), entries = {} }
+				byKey[key] = back
+				list[#list + 1] = back
+			end
+		end
+	end
 	table.sort(list, function(a, b)
 		local oa, ob = orders[a.key] or LATE, orders[b.key] or LATE
 		if oa ~= ob then
@@ -1442,7 +1491,13 @@ function Layout.Dim(which)
 			end
 			seen[entry] = matched == true
 		end
-		if lit ~= nil then
+		if type(st.test) == "function" then
+			local okTest, hit = false, nil
+			if entry.record ~= nil then
+				okTest, hit = pcall(st.test, entry.record)
+			end
+			dim(button, okTest and hit == true and matched ~= false, true)
+		elseif lit ~= nil then
 			dim(button, entry.bag == lit and matched, true)
 		else
 			dim(button, matched)
@@ -1479,6 +1534,37 @@ function Layout.Dim(which)
 			title.text:SetAlpha(alpha)
 			title.rule:SetAlpha(alpha)
 		end
+	end
+end
+
+function Layout.Entries(which)
+	local st = state[which]
+	local list = {}
+	if not (st and st.built) then
+		return list
+	end
+	for _, entry in pairs(st.cells) do
+		if type(entry.record) == "table" and entry.record.live == true then
+			list[#list + 1] = entry
+		end
+	end
+	return list
+end
+
+function Layout.LightWith(which, test)
+	local st = state[which]
+	if not st then
+		return
+	end
+	if type(test) ~= "function" then
+		test = nil
+	end
+	if st.test == test then
+		return
+	end
+	st.test = test
+	if st.built then
+		Layout.Dim(which)
 	end
 end
 

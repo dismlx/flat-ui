@@ -39,6 +39,7 @@ local BIND_WORD, BIND_FONT, BIND_COLOUR = "BoE", "NumberFontNormalSmall", { 0.38
 local TINT = { 1, 0.18, 0.18 }
 local FEED_PET, FOOD_SIZE, FOOD_COLOUR = 6991, 14, { 0.45, 0.85, 0.3 }
 local LEARN = { word = "+", font = "NumberFontNormal", size = 16, colour = { 0.3, 0.9, 0.3 } }
+local LOOT = { word = "open", size = 10, colour = { 1, 0.82, 0 } }
 local JUNK_ATLAS = "bags-junkcoin"
 local QUEST_BANG = { "TEXTURE_ITEM_QUEST_BANG", "Interface\\ContainerFrame\\UI-Icon-QuestBang" }
 local QUEST_BORDER = { "TEXTURE_ITEM_QUEST_BORDER", "Interface\\ContainerFrame\\UI-Icon-QuestBorder" }
@@ -70,7 +71,7 @@ local SAY_GAP = 2
 local COUNT_LINE = "%d in this slot"
 local SEEN = { today = "Last seen today", yesterday = "Last seen yesterday", days = "Last seen %d days ago" }
 local DAY = 86400
-local FADES = { "level", "bind", "tint", "food", "learn" }
+local FADES = { "level", "bind", "tint", "food", "learn", "loot" }
 local NONE = {}
 
 local states = setmetatable({}, { __mode = "k" })
@@ -624,6 +625,21 @@ local function LearnText(button)
 	return text
 end
 
+local function LootText(button)
+	local text = ns.OwnText(button, "OVERLAY", LEVEL_FONT)
+	if text == nil then
+		return nil
+	end
+	local ok, file = pcall(text.GetFont, text)
+	if ok and Text(file) then
+		pcall(text.SetFont, text, file, LOOT.size, "OUTLINE")
+	end
+	pcall(text.SetPoint, text, "BOTTOMLEFT", button, "BOTTOMLEFT", 2, 2)
+	pcall(text.SetTextColor, text, LOOT.colour[1], LOOT.colour[2], LOOT.colour[3], 1)
+	pcall(text.SetText, text, LOOT.word)
+	return text
+end
+
 local function TintTexture(button, state)
 	local texture = Made(button, "BORDER", 7)
 	if texture == nil then
@@ -820,13 +836,14 @@ local function JunkShown(record)
 end
 
 local function Marks(button, state, record, link, junk)
-	local bind, tint, food, learn = false, false, false, false
+	local bind, tint, food, learn, loot = false, false, false, false, false
 	if record ~= nil and Opt("marks") ~= false and Usable(ItemMarks) then
 		bind = not junk and Ask(ItemMarks.BoE, record.id, link, record.bound == true) == true
 		if record.key == Me() then
 			local bag, slot = nil, nil
 			if record.live == true then
 				bag, slot = record.bag, record.slot
+				loot = record.loot == true
 			end
 			tint = Ask(ItemMarks.Unusable, record.id, link, bag, slot) == true
 			learn = not tint and Ask(ItemMarks.Learnable, record.id, link, bag, slot) == true
@@ -837,6 +854,7 @@ local function Marks(button, state, record, link, junk)
 	Mark(button, state, "tint", tint, TintTexture)
 	Mark(button, state, "food", food, FoodTexture)
 	Mark(button, state, "learn", learn, LearnText)
+	Mark(button, state, "loot", loot, LootText)
 end
 
 local function Junk(button, state, show)

@@ -25,7 +25,7 @@ local HELP = {
 	"Search",
 	"Words look in each item's name, kind and slot, and in the name of its section: potion, cloth, mail, head, consumables.",
 	"A space or & is and, | is or, ! is not, brackets group, and \"quoted text\" is one word.",
-	"#junk  #new  #quest  #boe  #bound  #set  #usable  #unusable  #learnable",
+	"#junk  #new  #quest  #boe  #bound  #set  #usable  #unusable  #learnable  #openable",
 	"#gear  #weapon  #armour  #consumable  #potion  #elixir  #flask  #food  #bandage  #scroll",
 	"#trade  #reagent  #recipe  #ammo  #bag  #key",
 	"#poor  #common  #uncommon  #rare  #epic  #legendary",
@@ -45,6 +45,7 @@ local QUICK = {
 	{ "Quest items", "#quest" },
 	{ "Cannot use", "#unusable" },
 	{ "Recipes you can learn", "#learnable" },
+	{ "Can be opened", "#openable" },
 	{ "Consumables", "#consumable" },
 	{ "Trade goods", "#trade" },
 	{ "Placed by hand", "#placed" },
@@ -145,7 +146,7 @@ end
 
 local function Label()
 	if current.label == nil then
-		local label = Text(Categories.Label(Categories.Of(current.record)))
+		local label = not current.filing and Text(Categories.Label(Categories.Of(current.record))) or nil
 		current.label = label and label:lower() or false
 	end
 	return current.label or nil
@@ -293,6 +294,9 @@ local KEYWORDS = {
 	end,
 	set = function(record)
 		return record.set == true
+	end,
+	openable = function(record)
+		return record.loot == true
 	end,
 	placed = function(record)
 		local placedKey = Categories.PlacedKey
@@ -742,6 +746,32 @@ function Search.Match(record)
 	local answer = Eval(query, record)
 	Begin(nil)
 	return answer
+end
+
+local rules, ruleCount, RULES_MOST = {}, 0, 40
+
+function Search.Matches(source, record)
+	source = Text(source)
+	if not source or current.filing or type(record) ~= "table" or not Whole(record.id) then
+		return false
+	end
+	local query = rules[source]
+	if query == nil then
+		if ruleCount >= RULES_MOST then
+			rules, ruleCount = {}, 0
+		end
+		query = Compile(source) or false
+		rules[source], ruleCount = query, ruleCount + 1
+	end
+	if not query then
+		return false
+	end
+	local saved = current
+	current = { filing = true }
+	Begin(record)
+	local ok, answer = pcall(Eval, query, record)
+	current = saved
+	return ok and answer == true
 end
 
 function Search.Help()

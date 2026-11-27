@@ -599,7 +599,7 @@ local function ReadSlot(bag, slot)
 		count = 1
 	end
 	return id, Text(info.hyperlink), count, Count(info.quality), Flag(info.isLocked), Flag(info.isBound), Flag(info.hasNoValue),
-		Icon(info.iconFileID), Text(info.itemName), Flag(info.isReadable)
+		Icon(info.iconFileID), Text(info.itemName), Flag(info.isReadable), Flag(info.hasLoot)
 end
 
 local function QuestOf(bag, slot, class)
@@ -683,7 +683,7 @@ local function TakeInfo(rec)
 end
 
 local function LiveRecord(key, bag, slot)
-	local id, link, count, quality, locked, bound, noValue, icon, name, readable = ReadSlot(bag, slot)
+	local id, link, count, quality, locked, bound, noValue, icon, name, readable, loot = ReadSlot(bag, slot)
 	local byBag = live[bag]
 	if not id then
 		if byBag then
@@ -693,14 +693,14 @@ local function LiveRecord(key, bag, slot)
 	end
 	local rec = byBag and byBag[slot]
 	if rec and rec.key == key and rec.id == id and rec.link == link and rec.count == count and rec.quality == quality and rec.bound == bound then
-		rec.locked = locked
+		rec.locked, rec.loot = locked, loot
 		if rec.name == nil then
 			rec.name = LinkName(link) or name or ItemName(id)
 		end
 		return rec
 	end
 	rec = { key = key, bag = bag, slot = slot, live = true, id = id, count = count, quality = quality, link = link, icon = icon,
-		name = LinkName(link) or name or ItemName(id), bound = bound, noValue = noValue, locked = locked, readable = readable }
+		name = LinkName(link) or name or ItemName(id), bound = bound, noValue = noValue, locked = locked, readable = readable, loot = loot }
 	TakeInfo(rec)
 	local held = last[bag]
 	local state = held and held[slot]
@@ -793,7 +793,7 @@ local function Scan(bag, into, changed, guard)
 		end
 	end
 	for slot = 1, size do
-		local id, link, count, quality, locked, bound, noValue = ReadSlot(bag, slot)
+		local id, link, count, quality, locked, bound, noValue, _, _, _, loot = ReadSlot(bag, slot)
 		local state = held[slot]
 		if not id then
 			if state then
@@ -806,7 +806,7 @@ local function Scan(bag, into, changed, guard)
 			end
 		else
 			local moved = not state or state.id ~= id or state.link ~= link or state.count ~= count or state.quality ~= quality
-				or state.locked ~= locked
+				or state.locked ~= locked or state.loot ~= loot
 			local differs = not state or state.id ~= id or state.link ~= link or state.count ~= count or state.quality ~= quality
 				or state.bound ~= bound
 			if differs then
@@ -819,7 +819,7 @@ local function Scan(bag, into, changed, guard)
 				held[slot] = state
 				DropLive(bag, slot)
 			end
-			state.locked = locked
+			state.locked, state.loot = locked, loot
 			if moved then
 				Mark(changed, bag, slot)
 			end
@@ -1472,6 +1472,21 @@ function ns.SessionMoney()
 end
 Data.SessionMoney = ns.SessionMoney
 
+function ns.SessionRestart()
+	local char = ns.Character()
+	local money, now = Count(Ask(Client(nil, "GetMoney"))), Count(Ask(Client(nil, "time")))
+	if type(char) ~= "table" or not (money and now) then
+		return false
+	end
+	char.sessionMoney, char.sessionStartAt = money, now
+	print("Flat UI: the gold count of this session starts again now.")
+	local panels = ns.DataPanels
+	if type(panels) == "table" and type(panels.Mark) == "function" then
+		pcall(panels.Mark, "gold")
+	end
+	return true
+end
+
 do
 	local ok, frame = pcall(CreateFrame, "Frame")
 	if ok and type(frame) == "table" then
@@ -1531,6 +1546,44 @@ function Data.Counts(id)
 		return a.key < b.key
 	end)
 	return rows
+end
+
+function Data.Mine(id)
+	id = Count(id)
+	if not id or id == 0 or Stopped() then
+		return 0, 0, 0
+	end
+	local record = Mine(false)
+	if type(record) ~= "table" then
+		return 0, 0, 0
+	end
+	local found = { bags = 0, bank = 0 }
+	for _, where in ipairs(WINDOWS) do
+		local section = record[where]
+		if type(section) == "table" then
+			for _, slots in pairs(section) do
+				if type(slots) == "table" then
+					for slot, value in pairs(slots) do
+						if type(slot) == "number" and type(value) == "string" and tonumber(value:match("^(%d+)")) == id then
+							local got, count = Decode(value)
+							if got == id then
+								found[where] = found[where] + count
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	local worn = 0
+	if type(record.worn) == "table" then
+		for slot, value in pairs(record.worn) do
+			if type(slot) == "number" and Count(value) == id then
+				worn = worn + 1
+			end
+		end
+	end
+	return found.bags, found.bank, worn
 end
 
 function Data.BankScan()

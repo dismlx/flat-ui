@@ -18,7 +18,7 @@ local TIPS = {
 		.. "right-click this title to put them back. Ctrl+right-click an item to pin or unpin its slot. Drag the title to move this section.",
 	fold = "Click to fold it.",
 	unfold = "Folded: click to open it.",
-	own = "Right-click it to rename, colour or delete this section of yours.",
+	own = "Right-click it to rename, colour or delete this section of yours, or, with a search typed, to keep what the search finds here.",
 }
 local UNFOLD_ALL, FOLD_ALL = "Unfold every section", "Fold every section"
 local PUT_BACK = {
@@ -886,6 +886,10 @@ function Order.Tip(st, sec)
 		local okOwn, own = pcall(Call, B.Custom, "Is", sec.key)
 		if okOwn and own == true then
 			click = click .. " " .. TIPS.own
+			local okRule, rule = pcall(Call, B.Custom, "Rule", sec.key)
+			if okRule and type(rule) == "string" and not ns.IsSecret(rule) then
+				click = click .. " " .. ("Keeps what %s finds."):format(rule)
+			end
 		end
 		local placed = (okOwn and own == true) and 0 or PlacedHere(sec.key)
 		if placed > 0 then
