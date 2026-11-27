@@ -34,10 +34,10 @@ function Trust.Count(entry)
 	return count
 end
 
--- The line the strip shows while no tip or message does.
+-- The line the strip shows while no tip or message does; a click on it goes to each changed row in turn (Panel.lua, ui.NextChanged).
 function Trust.Status(entry)
 	local count = entry and not entry.home and not entry.profiles and Trust.Count(entry) or 0
-	return count > 0 and ("%d changed on this tab"):format(count) or ""
+	return count > 0 and ("%d changed on this tab. Click to go to each."):format(count) or ""
 end
 
 -- The question of Reset page, which asks only while something on the tab is changed.

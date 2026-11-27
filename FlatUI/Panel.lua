@@ -5,15 +5,20 @@ local ADDON_NAME, ns = ...
 -- works in combat. It is only built out of combat, since UIParent is protected.
 --
 -- It fades in with the game's window sounds (Build). Its keys (BuildKeys, out of combat): Ctrl+F for Search, Ctrl+Z to put back the newest change of
--- Home's Recent changes (a whole Reset page in one press), Ctrl+Y or Ctrl+Shift+Z to make it again, Escape for the colour picker (Cancel), an open
+-- Home's Recent changes (a whole Reset page in one press), Ctrl+Y or Ctrl+Shift+Z to make it again, each showing the row it changed on the tab shown
+-- (its card opens, it scrolls into view and flashes) or naming the row's place in the strip (ui.ShowChange), Escape for the colour picker (Cancel), an open
 -- list or a question before the window, Enter for the picker's Apply or a question's first button, but not for a careful question (Delete, Reset,
 -- Copy from, Replace, setup's Start over); setup has the same Enter (ns.PanelKit.Enter). A long list's filter field has the cursor as it opens. The
 -- question box fades in and grows with its question, its first button in the accent, or red with "Enter does not answer this." under a careful
 -- question (Ask). A message of the strip holds for SAY_HOLD seconds whatever the mouse crosses, fading in, then the strip shows its count again (Say).
 -- A press counts as a click only when it is let go over what it pressed, as with the game's buttons, and a button's label sinks 1 px while it is
 -- held (Clickable, Button).
--- The title bar names the profile in use, which a click opens (BuildProfileName), and the strip's Reload counts the changes that wait for a reload
--- (BuildFoot). Every switch plays the game's checkbox sound on a click and its knob slides (SwitchClick, Slider).
+-- The title bar names the profile in use, which a click opens, with a second line in the accent for a profile that waits for the fight's end
+-- (BuildProfileName), and the strip's Reload counts the changes that wait for a reload (BuildFoot). The strip's "3 changed on this tab" takes a
+-- click, which goes to each changed row in turn (ui.NextChanged), and a tab holding changes has a dot (PanelTabs.lua). The Search box has a cross
+-- that clears it while words are typed (BuildLeft). Reset profile and Delete profile have Bring back while what they took can come back, until a
+-- reload (BuildProfiles; Core.lua, ns.BringBackProfile and ns.BringBackDeleted). Every switch plays the game's checkbox sound on a click and its
+-- knob slides (SwitchClick, Slider).
 -- The wheel scrolls a page over a slider too, and Shift and the wheel step the slider (AddNumber). A sound row plays a line once as it is picked and
 -- has a Play button (AddChoice). Search lights the typed words in its results and counts them, and a Profiles
 -- result opens its row (view.byLabel of BuildProfiles). Reset page says what it did, and is dimmed while nothing on the tab is changed.
@@ -302,7 +307,8 @@ end
 -- A flat button. A primary button is in the accent. The third result, SetTone(tone), gives it another tone after it is made: "accent", "danger"
 -- (red, for the first button of a careful question) or nil for the plain one; the label of a coloured one is in the colour that reads on the accent.
 -- While the left button holds it down its label sinks 1 px and its fill goes back to the resting tone; the press counts only when it is let go over
--- the button (Clickable). The pressed look is hooked, so a caller's own scripts stay as they are.
+-- the button (Clickable). The pressed look is hooked, so a caller's own scripts stay as they are, and a frame over the button that takes its mouse
+-- (the secure /reload button of Reload.lua) gives it the look with ns.PanelKit.Press(button, down) (ui.presses).
 local function Button(parent, text, width, onClick, primary)
 	local button = Frame(parent)
 	button:SetSize(width, BUTTON)
@@ -337,6 +343,8 @@ local function Button(parent, text, width, onClick, primary)
 			Paint()
 		end
 	end
+	ui.presses = ui.presses or setmetatable({}, { __mode = "k" })
+	ui.presses[button] = Press
 	button:HookScript("OnMouseDown", function(_, mouse)
 		if mouse == "LeftButton" then
 			Press(true)
@@ -1848,23 +1856,26 @@ local function Call(name, ...)
 	return first, second
 end
 
--- Profile in use picked in a fight (the Profiles page, Home's Profile card): the pick waits for the fight's end in ui.wantProfile, which the title
--- bar shows ("Profile: Default, Raid after the fight"), and a frame of the window's own switches to it then (BuildProfileWait). The pick wins over a
--- rule of Switch automatically that waits too (ProfileSwitch.lua, Switch.Drop); a pick of the profile in use takes the wish back.
+-- Profile in use picked in a fight (the Profiles page, Home's Profile card): the pick waits for the fight's end in ProfileSwitch.lua (Switch.Keep),
+-- which /flatui profile Name uses too, and wins over a rule of Switch automatically that waits; the title bar shows either under the profile in use
+-- ("Raid after the fight", BuildProfileName), and ProfileSwitch.lua switches a frame after the fight. A pick of the profile in use takes back
+-- whatever waits, the rule's switch too.
 local function KeepProfile(pick)
 	local current = Call("Profile")
 	current = IsText(current) and current or ""
+	local switch = ns.ProfileSwitch
+	local keeps = type(switch) == "table" and type(switch.Keep) == "function" and type(switch.Wanted) == "function"
 	if not IsText(pick) or pick == current then
-		local had = ui.wantProfile ~= nil
-		ui.wantProfile = nil
-		Say(had and ("Stays on %s."):format(current) or ("Using %s."):format(current))
-	else
-		ui.wantProfile = pick
-		local switch = ns.ProfileSwitch
-		if type(switch) == "table" and type(switch.Drop) == "function" then
-			switch.Drop()
+		local had = keeps and switch.Wanted() ~= nil
+		if keeps then
+			switch.Keep(nil)
 		end
+		Say(had and ("Stays on %s."):format(current) or ("Using %s."):format(current))
+	elseif keeps then
+		switch.Keep(pick)
 		Say(("Switches to %s when the fight ends."):format(pick))
+	else
+		Say("Profiles change after combat.")
 	end
 	RefreshAll()
 	return false
@@ -2097,6 +2108,23 @@ local function BuildProfiles()
 			end
 			menu.SetText(doomed or "Choose a profile")
 		end
+		-- The profile deleted this session comes back with its characters and rules, until a reload (Core.lua, ns.BringBackDeleted).
+		if type(ns.BringBackDeleted) == "function" and type(ns.DeletedProfile) == "function" then
+			local back = Button(row.frame, "Bring back", SMALL + 10, function()
+				Act("BringBackDeleted")
+			end)
+			back:SetPoint("LEFT", row.frame, "LEFT", CONTROL + FIELD + 10 + SMALL + 8, 0)
+			row.Hover(back, function()
+				local gone = Call("DeletedProfile")
+				if IsText(gone) and ns.PanelTrust then
+					ns.PanelTrust.Show(back, ("Brings back %s as it was when you deleted it, with the characters that used it and its Switch "
+						.. "automatically rules. Until you reload."):format(gone))
+				end
+			end)
+			updates[#updates + 1] = function()
+				back:SetShown(IsText(Call("DeletedProfile")))
+			end
+		end
 	end
 
 	if type(ns.RenameProfile) == "function" then
@@ -2129,6 +2157,29 @@ local function BuildProfiles()
 		end)
 		reset:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		row.Hover(reset)
+		-- What Reset profile, Copy from, an import that replaces or setup's Finish took from the profile in use comes back, until a reload (Core.lua,
+		-- ns.BringBackProfile). A second press puts back what the first took.
+		if type(ns.BringBackProfile) == "function" and type(ns.LostProfile) == "function" then
+			local back = Button(row.frame, "Bring back", SMALL + 10, function()
+				Act("BringBackProfile")
+			end)
+			back:SetPoint("LEFT", row.frame, "LEFT", CONTROL + SMALL + 8, 0)
+			row.Hover(back, function()
+				local lost = Call("LostProfile")
+				if type(lost) == "table" and ns.PanelTrust then
+					local counts = ("%d setting%s"):format(lost.settings, lost.settings == 1 and "" or "s")
+					if lost.spots then
+						counts = counts .. (", %d frame position%s"):format(lost.spots, lost.spots == 1 and "" or "s")
+					end
+					local at = IsText(lost.at) and lost.at ~= "" and (" at " .. lost.at) or ""
+					ns.PanelTrust.Show(back, ("Puts %s back as it was before %s%s: %s."):format(lost.name, lost.what, at, counts))
+				end
+			end)
+			updates[#updates + 1] = function()
+				local lost = Call("LostProfile")
+				back:SetShown(type(lost) == "table" and lost.inUse == true)
+			end
+		end
 	end
 
 	if ns.ProfileSwitch then
@@ -2471,6 +2522,70 @@ function Arrive(entry, item)
 	end
 end
 
+-- The row of a setting on the tab shown, which opens (its card too), comes into view and flashes: scrolled to as Arrive does with `always`, else
+-- only when it lies outside the view. Returns true when the tab has the row.
+function ui.Reach(entry, item, always)
+	local view = entry and ui.views[entry]
+	if not view or type(item) ~= "table" then
+		return false
+	end
+	if view.RevealItem then
+		view.RevealItem(item)
+	end
+	for _, row in ipairs(view.rows or {}) do
+		if row.item == item then
+			local scroller, top = view.scroller, row.top or 0
+			if always or top < scroller.offset or top + ROW > scroller.offset + scroller.height then
+				scroller.Scroll(math.max(0, top - 2 * ROW))
+			end
+			Flash(row)
+			return true
+		end
+	end
+	return false
+end
+
+-- After Ctrl+Z or Ctrl+Y (BuildKeys): the row of the change shows on the tab shown (ui.Reach); a change of another tab, or one made while a search
+-- shows, names its place after the strip's words ("Undid Border colour: back to #000000 (Unit frames > Bars and pictures)."). Returns the words.
+function ui.ShowChange(text, entry)
+	if not IsText(text) or type(entry) ~= "table" or type(entry.item) ~= "table" or ui.mode then
+		return text
+	end
+	if not ui.searching and ui.Reach(ui.current, entry.item) then
+		return text
+	end
+	local home = ns.PanelHome
+	local crumb = home and home.Crumb and ui.model and home.Crumb(ui.model, entry.item) or ""
+	if IsText(crumb) and crumb ~= "" then
+		return (text:gsub("%.$", "")) .. " (" .. crumb .. ")."
+	end
+	return text
+end
+
+-- A click on the strip's count of changes on the tab (ui.stripHit, BuildBars): the next changed row after the last one it went to, in the order
+-- of the tab, opens (its card too), comes into view and flashes; after the last it starts at the first again. A new tab starts at the first.
+function ui.NextChanged()
+	local entry = ui.current
+	local view = entry and ui.views[entry]
+	if not view or not ns.PanelTrust or ui.searching or ui.mode then
+		return
+	end
+	local first, pick
+	for index, row in ipairs(view.rows or {}) do
+		if row.item and ns.PanelTrust.Changed(row.item) then
+			first = first or index
+			if not pick and index > (ui.changedAt or 0) then
+				pick = index
+			end
+		end
+	end
+	pick = pick or first
+	if pick then
+		ui.changedAt = pick
+		ui.Reach(entry, view.rows[pick].item, true)
+	end
+end
+
 -- Fills the row of a setting in the accent at 10% while its part of the preview is pointed at.
 local function PartFill(path, on, shown)
 	for _, row in ipairs((shown or ui.view or {}).rows or {}) do
@@ -2712,6 +2827,7 @@ end
 function ShowStrip()
 	if ui.strip then
 		local text = ui.message
+		local status = false
 		if not text then
 			-- A message taken away before its fade in ends leaves the strip at full strength.
 			if ui.sayFade then
@@ -2721,9 +2837,22 @@ function ShowStrip()
 			text = ui.tip or ""
 			if text == "" and not ui.searching and not ui.mode and ns.PanelTrust then
 				text = ns.PanelTrust.Status(ui.current)
+				status = text ~= ""
 			end
 		end
 		ui.strip:SetText(text)
+		-- The count of changes on the tab takes clicks (ui.NextChanged) over the width of its words, and only while it shows.
+		local hit = ui.stripHit
+		if hit then
+			if status then
+				local ok, width = pcall(ui.strip.GetStringWidth, ui.strip)
+				hit:SetWidth(Number(width) and width > 0 and math.min(width, WIDTH - 24) or 7 * #text)
+			elseif hit.lit then
+				hit.lit = false
+				Tint(ui.strip, "text")
+			end
+			hit:SetShown(status)
+		end
 	end
 end
 
@@ -2738,6 +2867,7 @@ function ShowPage(entry)
 	ui.search:SetText("")
 	ui.quiet = false
 	ui.current = entry
+	ui.changedAt = nil
 	local view = ui.views[entry]
 	if not view then
 		view = entry.home and BuildHome() or entry.profiles and BuildProfiles() or BuildView(entry)
@@ -2799,6 +2929,10 @@ function RefreshAll()
 		end
 		if ui.barProfile then
 			ui.barProfile.Update()
+		end
+		-- The dots of the tabs that hold changes (PanelTabs.lua).
+		if ui.tabs and ui.tabs.Marks then
+			ui.tabs.Marks()
 		end
 		if ui.ShowReload then
 			ui.ShowReload()
@@ -2986,9 +3120,60 @@ local function BuildLeft(window)
 	local hint = Dim(Label(box, "GameFontHighlight", "LEFT"))
 	hint:SetPoint("LEFT", box, "LEFT", 8, 0)
 	hint:SetText("Search")
+	-- A cross at the right of the box while words are typed, two lines in the dim text, in the text colour under the mouse: a click clears the words,
+	-- shows the page again (Search) and keeps the cursor in the box for the next search. The words keep clear of it (SetTextInsets).
+	local clear = Frame(box)
+	clear:SetSize(16, 16)
+	clear:SetPoint("RIGHT", box, "RIGHT", -4, 0)
+	clear:Hide()
+	clear.lines = {}
+	for _, ends in ipairs({ { -3.5, 3.5, 3.5, -3.5 }, { -3.5, -3.5, 3.5, 3.5 } }) do
+		local ok, line = pcall(clear.CreateLine, clear, nil, "OVERLAY", nil, 2)
+		if ok and type(line) == "table" then
+			ns.Own[line] = true
+			line:SetThickness(1.5)
+			line:SetStartPoint("CENTER", clear, ends[1], ends[2])
+			line:SetEndPoint("CENTER", clear, ends[3], ends[4])
+			clear.lines[#clear.lines + 1] = line
+		end
+	end
+	function clear.Paint()
+		for _, line in ipairs(clear.lines) do
+			line:SetColorTexture(Look.Colour(clear.hover and "text" or "text-dim"))
+		end
+	end
+	Painted(clear.Paint)
+	Clickable(clear, function()
+		box:SetText("")
+		box:SetFocus()
+	end)
+	clear:SetScript("OnEnter", function()
+		clear.hover = true
+		clear.Paint()
+		ui.message, ui.tip = nil, "Clears the search."
+		ShowStrip()
+	end)
+	clear:SetScript("OnLeave", function()
+		clear.hover = false
+		clear.Paint()
+		ui.tip = ""
+		ShowStrip()
+	end)
+	clear:SetScript("OnHide", function()
+		if clear.hover then
+			clear.hover = false
+			clear.Paint()
+			ui.tip = ""
+			ShowStrip()
+		end
+	end)
+	ui.searchClear = clear
 	box:SetScript("OnTextChanged", function(self)
 		local typed = self:GetText()
-		hint:SetShown(not (IsText(typed) and typed ~= ""))
+		local words = IsText(typed) and typed ~= ""
+		hint:SetShown(not words)
+		clear:SetShown(words)
+		self:SetTextInsets(6, words and 22 or 6, 0, 0)
 		if not ui.quiet and IsText(typed) then
 			Search(typed)
 		end
@@ -3262,9 +3447,10 @@ end
 
 -- The profile the changes go into, dim, left of the Test mode switch on every options page ("Profile: Raid"); a long name is cut short. Pointing at
 -- it says how many characters use the profile, a click opens Profiles, and a change of profile while the window is open (Switch automatically, a
--- slash command) tints it in the accent for a second (PROFILE_FLASH). A profile picked in a fight shows after it until the fight ends
--- ("Profile: Default, Raid after the fight", KeepProfile). RefreshAll sets it; it is in the parts of the options pages, so it hides while a mode
--- has the window.
+-- slash command) tints it in the accent for a second (PROFILE_FLASH). A profile that waits for the fight's end, picked in a fight (KeepProfile,
+-- /flatui profile Name) or due by a rule of Switch automatically, shows on a second line under it in the accent ("Raid after the fight",
+-- ProfileSwitch.lua's Switch.Wanted), in the same 160 units, so it never reaches the Search box. RefreshAll sets it; it is in the parts of the
+-- options pages, so it hides while a mode has the window.
 local PROFILE_FLASH, PROFILE_HOLD = 1, 0.4
 local function BuildProfileName(bar)
 	local frame = Frame(bar)
@@ -3272,6 +3458,9 @@ local function BuildProfileName(bar)
 	frame:SetPoint("RIGHT", ui.testSwitch.frame, "LEFT", -12, 0)
 	local text = Dim(Label(frame, "GameFontHighlightSmall", "RIGHT", 160))
 	text:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+	local after = Tint(Label(frame, "GameFontHighlightSmall", "RIGHT", 160), "accent")
+	after:SetPoint("RIGHT", frame, "RIGHT", 0, -7)
+	after:Hide()
 	local shown, seenAt, flash
 	local function Glow(_, seconds)
 		flash = flash + (Number(seconds) and seconds or 0)
@@ -3284,7 +3473,18 @@ local function BuildProfileName(bar)
 		end
 	end
 	local name = { frame = frame, text = text }
-	local shownWant
+	local shownWant, shownRule
+	-- What waits for the fight's end, and whether a rule of Switch automatically wants it.
+	local function Waiting()
+		local switch = ns.ProfileSwitch
+		if type(switch) == "table" and type(switch.Wanted) == "function" then
+			local want, rule = switch.Wanted()
+			if IsText(want) then
+				return want, rule == true
+			end
+		end
+		return nil, false
+	end
 	function name.Update()
 		local now = CurrentProfile()
 		local at = Now()
@@ -3293,20 +3493,21 @@ local function BuildProfileName(bar)
 		if ui.window and ui.window:IsShown() then
 			seenAt = at
 		end
-		local want = ui.wantProfile
-		if now == shown and want == shownWant then
+		local want, rule = Waiting()
+		if want == now then
+			want = nil
+		end
+		if now == shown and want == shownWant and rule == shownRule then
 			return
 		end
 		local first, moved = shown == nil, now ~= shown
-		shown, shownWant = now, want
-		-- A pick of a fight names the profile it waits to switch to (KeepProfile).
-		local words = now ~= "" and ("Profile: " .. now) or ""
-		if now ~= "" and want then
-			words = ("Profile: %s, %s after the fight"):format(now, want)
-		end
-		-- The longer line takes room to its left, where the title bar has none of its own.
-		text:SetWidth(want and 260 or 160)
-		text:SetText(words)
+		shown, shownWant, shownRule = now, want, rule
+		text:SetText(now ~= "" and ("Profile: " .. now) or "")
+		-- What waits for the fight's end is a second line under the name, in the same width.
+		text:ClearAllPoints()
+		text:SetPoint("RIGHT", frame, "RIGHT", 0, want and 6 or 0)
+		after:SetText(want and ("%s after the fight"):format(want) or "")
+		after:SetShown(want ~= nil)
 		if not moved then
 			return
 		end
@@ -3329,6 +3530,10 @@ local function BuildProfileName(bar)
 		local count = ns.PanelHome and ns.PanelHome.UserCount and ns.PanelHome.UserCount(now) or 1
 		ui.message = nil
 		ui.tip = ("Changes here are saved in %s, used by %d character%s. Click for Profiles."):format(now, count, count == 1 and "" or "s")
+		local want, rule = Waiting()
+		if want and want ~= now then
+			ui.tip = ui.tip .. (" Switches to %s when the fight ends%s."):format(want, rule and " (Switch automatically)" or "")
+		end
 		ShowStrip()
 	end)
 	frame:SetScript("OnLeave", function()
@@ -3336,41 +3541,6 @@ local function BuildProfileName(bar)
 		ShowStrip()
 	end)
 	ui.barProfile = name
-end
-
--- The wish of KeepProfile, a frame after the fight ends: the profile picked in a fight goes in use, whether the window is still open or not, and
--- chat says so. It is a frame of its own, since the keys' frame stops being built when the keyboard is refused (BuildKeys). A new fight in that
--- frame keeps the wish for its end.
-local function BuildProfileWait(window)
-	local wait = Frame(window)
-	wait:RegisterEvent("PLAYER_REGEN_ENABLED")
-	local function Switch()
-		local want = ui.wantProfile
-		if not want or InCombatLockdown() then
-			return
-		end
-		ui.wantProfile = nil
-		local done, message = Call("UseProfile", want)
-		if done then
-			print(("Flat UI: using %s."):format(want))
-		elseif IsText(message) then
-			print("Flat UI: " .. message)
-		end
-		if ui.window and ui.window:IsShown() then
-			Say(IsText(message) and message or nil)
-			RefreshAll()
-		end
-	end
-	wait:SetScript("OnEvent", function()
-		if not ui.wantProfile then
-			return
-		end
-		if C_Timer and C_Timer.After then
-			C_Timer.After(0, Switch)
-		else
-			Switch()
-		end
-	end)
 end
 
 local function BuildBars(window)
@@ -3473,6 +3643,24 @@ local function BuildBars(window)
 	text:SetPoint("TOPLEFT", strip, "TOPLEFT", 12, -4)
 	text:SetHeight(STRIP - 8)
 	ui.strip = text
+	-- "3 changed on this tab. Click to go to each.": a frame over its words, shown by ShowStrip while the strip shows that count, lights them in the
+	-- accent under the mouse, and a click goes to the next changed row (ui.NextChanged).
+	local hit = Frame(strip)
+	hit:SetHeight(STRIP - 8)
+	hit:SetPoint("LEFT", strip, "LEFT", 12, 0)
+	hit:Hide()
+	Clickable(hit, function()
+		ui.NextChanged()
+	end)
+	hit:SetScript("OnEnter", function()
+		hit.lit = true
+		Tint(text, "accent")
+	end)
+	hit:SetScript("OnLeave", function()
+		hit.lit = false
+		Tint(text, "text")
+	end)
+	ui.stripHit = hit
 end
 
 -- The keys of the options pages come through a frame of Flat UI's own that has the keyboard while the pages show, out of combat only
@@ -3493,14 +3681,16 @@ local function BuildKeys(window)
 		ui.search:SetFocus()
 	end
 	-- Ctrl+Z: the newest change of Home's Recent changes goes back, and the strip says what (PanelHome.lua, Home.UndoNewest). Ctrl+Y or
-	-- Ctrl+Shift+Z makes again what it took back (Home.Redo).
+	-- Ctrl+Shift+Z makes again what it took back (Home.Redo). Either shows the row it changed, or names its place (ui.ShowChange).
 	local function Undo()
-		Say(ns.PanelHome.UndoNewest())
+		local text, entry = ns.PanelHome.UndoNewest()
 		RefreshAll()
+		Say(ui.ShowChange(text, entry))
 	end
 	local function Redo()
-		Say(ns.PanelHome.Redo())
+		local text, entry = ns.PanelHome.Redo()
 		RefreshAll()
+		Say(ui.ShowChange(text, entry))
 	end
 	keys:SetScript("OnKeyDown", function(self, key)
 		local asking = ui.confirm ~= nil and ui.confirm:IsShown() == true
@@ -3582,7 +3772,6 @@ local function Build()
 	BuildRight(window)
 	BuildFoot(window)
 	BuildKeys(window)
-	BuildProfileWait(window)
 	-- It fades in over FADE_IN (OnUpdate, below) with the game's sound of a window opening, and plays the sound of one closing as it hides; it hides at
 	-- once, since Escape hides it through UISpecialFrames. Hidden and shown again by /flatui move (MoversMode's Holding), it plays neither.
 	window:SetScript("OnShow", function()
@@ -3778,7 +3967,9 @@ ns.PanelKit = {
 	Scroller = Scroller, Dropdown = Dropdown, NewRow = NewRow, BuildRow = BuildRow, IsOpen = IsOpen, Unmet = Unmet, Header = Header, Painted = Painted,
 	Solid = Solid, Backing = Backing, Accent = Accent, Shade = Shade, Clamp = Clamp, Rect = Rect, IsText = IsText, Cursor = Cursor, Drag = Drag,
 	Say = Say, Ask = Ask, CloseList = CloseList, OpenList = OpenList, Read = Read, Write = Write,
-	Bool = AddBool, SwitchClick = SwitchClick, Slider = Slider,
+	Bool = AddBool, SwitchClick = SwitchClick, Slider = Slider, CopyField = CopyField,
+	-- The pressed look of a Button, for a frame of Flat UI's own over it that takes its mouse (Reload.lua's secure button).
+	Press = function(button, down) local press = ui.presses and ui.presses[button] if press then press(down == true) end end,
 	Window = function() return ui.window end,
 	Inset = function(parent, inset) insets[parent] = inset end,
 	Tip = function(text) ui.message, ui.tip = nil, text or "" ShowStrip() end, Refresh = function() RefreshAll() end,

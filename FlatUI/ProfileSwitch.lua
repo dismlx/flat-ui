@@ -4,13 +4,17 @@ local ADDON_NAME, ns = ...
 -- FlatUIDB.profileRules under "Name - Realm" beside FlatUIDB.profileOf, outside every profile and outside the text form of a profile.
 -- A rule with no profile is No change, which is what every character has until a rule is chosen. A rule picked for the kind of place the character
 -- is in now asks whether to switch now (Switch now or Later); otherwise the switch waits for the next change of place. A switch due in a fight
--- waits for its end, unless a profile is picked by hand meanwhile (Switch.Drop).
+-- waits for its end, unless a profile is picked by hand meanwhile (Switch.Drop). A profile picked by hand in a fight (the options window, Home's
+-- Profile card, /flatui profile Name) waits here too (Switch.Keep), and wins over the rule: a frame after the fight ends it is put in use and chat
+-- says "Flat UI: using Raid.". The window's title bar shows what waits, either kind (Switch.Wanted). Delete profile keeps the rules that pointed at
+-- the profile for the session (Switch.RulesOf), and its Bring back puts them back (Switch.Restore).
 
 local Switch = {}
 ns.ProfileSwitch = Switch
 
 local NONE = "No change"
-local last, pending
+-- last: the kind of place last seen; pending: the rule's switch waits for the fight's end; wanted: the profile picked by hand in a fight.
+local last, pending, wanted
 Switch.KINDS = {
 	{ key = "dungeon", label = "In a dungeon" },
 	{ key = "raid", label = "In a raid" },
@@ -110,6 +114,46 @@ function Switch.Deleted(old)
 	Switch.Renamed(old, nil)
 end
 
+-- The rules of every character that point at a profile, by "Name - Realm": { [key] = { kind, ... } }, or nil when none does. Delete profile keeps
+-- them for its Bring back (Core.lua, ns.DeleteProfile).
+function Switch.RulesOf(name)
+	local db, found = ns.Account(), nil
+	for key, rules in pairs(type(db) == "table" and type(db.profileRules) == "table" and db.profileRules or {}) do
+		if type(rules) == "table" then
+			for kind, used in pairs(rules) do
+				if used == name then
+					found = found or {}
+					found[key] = found[key] or {}
+					table.insert(found[key], kind)
+				end
+			end
+		end
+	end
+	return found
+end
+
+-- Puts back the rules RulesOf gave for a profile that came back, each one only while it is still No change.
+function Switch.Restore(name, kept)
+	local db = ns.Account()
+	if type(db) ~= "table" or type(kept) ~= "table" then
+		return
+	end
+	if type(db.profileRules) ~= "table" then
+		db.profileRules = {}
+	end
+	for key, kinds in pairs(kept) do
+		if type(db.profileRules[key]) ~= "table" then
+			db.profileRules[key] = {}
+		end
+		local rules = db.profileRules[key]
+		for _, kind in ipairs(kinds) do
+			if rules[kind] == nil then
+				rules[kind] = name
+			end
+		end
+	end
+end
+
 -- The switch ---------------------------------------------------------------------------------------
 
 
@@ -155,10 +199,73 @@ function Switch.Drop()
 	pending = false
 end
 
-function Switch.CombatEnded()
+-- A profile picked by hand in a fight, put in use as the fight ends; nil takes the wish back. Either way the rule's switch that waits is dropped.
+function Switch.Keep(name)
+	wanted = type(name) == "string" and name or nil
+	pending = false
+end
+
+-- What waits for the fight's end: the profile and true when it is the rule's (Switch automatically), or nil when nothing waits.
+function Switch.Wanted()
+	if wanted then
+		return wanted, false
+	end
 	if pending then
+		local name = Switch.Get(last)
+		if name and name ~= ns.Profile() then
+			return name, true
+		end
+	end
+	return nil
+end
+
+-- The options window shows the profile in use again, with the strip's line while it is open.
+local function Shown(message)
+	if type(ns.RefreshPanel) == "function" then
+		pcall(ns.RefreshPanel)
+	end
+	local kit = ns.PanelKit
+	if message and type(ns.PanelShown) == "function" and ns.PanelShown() and type(kit) == "table" and type(kit.Say) == "function" then
+		pcall(kit.Say, message)
+	end
+end
+
+-- A frame after the fight ends (InCombatLockdown may still say true as PLAYER_REGEN_ENABLED comes): the profile picked by hand, else the rule's.
+-- A new fight in that frame keeps them for its end.
+local function AfterFight()
+	if InCombatLockdown() then
+		return
+	end
+	local name = wanted
+	if name then
+		wanted, pending = nil, false
+		local done, message = ns.UseProfile(name)
+		if done then
+			print(("Flat UI: using %s."):format(name))
+		elseif type(message) == "string" then
+			print("Flat UI: " .. message)
+		end
+		Shown(message)
+	elseif pending then
 		last = Switch.Kind()
 		Run()
+		Shown(nil)
+	end
+end
+
+function Switch.CombatEnded()
+	if not (wanted or pending) then
+		return
+	end
+	if C_Timer and C_Timer.After then
+		C_Timer.After(0, function()
+			local ok, err = pcall(AfterFight)
+			if not ok then
+				geterrorhandler()(err)
+			end
+		end)
+	else
+		AfterFight()
 	end
 end
 

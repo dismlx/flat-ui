@@ -2,7 +2,9 @@ local ADDON_NAME, ns = ...
 
 -- The tabs of a module page, the breadcrumb above its title and the frame chooser of the Per frame tab. The child pages of a page are tabs: the
 -- sidebar lists modules and the pages that hold part of one (Gear comparison, with its Window and finder tab). The eight frame pages of Unit frames are one tab, Per frame, with a chooser that remembers its last frame per account in
--- FlatUIDB.panel. Panel.lua hands the drawing of these to this file; the widgets are the ones of ns.PanelKit.
+-- FlatUIDB.panel. A tab with any setting off its default has a small dot in the accent after its name (Per frame counts its eight frames), and a
+-- tab under More a dot after its line in the list (self.Marks, which Panel.lua's RefreshAll calls); each tab keeps the dot's room, so the bar
+-- never moves as one comes or goes. Panel.lua hands the drawing of these to this file; the widgets are the ones of ns.PanelKit.
 
 local Tabs = {}
 ns.PanelTabs = Tabs
@@ -13,6 +15,8 @@ local Nav = ns.PanelNav
 local PAD = kit.PAD
 
 local TAB_H, CHOOSE_H, INSET, GAP, CHIP_H, CRUMB_Y = 34, 32, 10, 4, 24, 42
+-- The dot of a tab with changes: its size, and the room it keeps after the name.
+local MARK, MARK_ROOM = 5, 9
 Tabs.TAB_H = TAB_H
 
 -- The pages of the frames of Unit frames, in the order of the chooser, and what the chooser calls them.
@@ -134,6 +138,13 @@ local function Button(parent, chip)
 	b.line:SetHeight(2)
 	b.line:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0)
 	b.line:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+	-- A tab's dot of changes, 4 units after its name; a chip has none.
+	if not chip then
+		b.dot = kit.Fill(f, "ARTWORK")
+		b.dot:SetSize(MARK, MARK)
+		b.dot:SetPoint("LEFT", b.text, "RIGHT", 4, 0)
+		b.dot:Hide()
+	end
 	local function Paint()
 		local fill = (chip and b.active and "raised") or (b.hover and "hover") or nil
 		b.fill:SetShown(fill ~= nil)
@@ -142,7 +153,15 @@ local function Button(parent, chip)
 		end
 		b.line:SetShown(b.active == true)
 		b.line:SetColorTexture(kit.Accent())
+		if b.dot then
+			b.dot:SetColorTexture(kit.Accent())
+		end
 		kit.Tint(b.text, (b.active or b.hover) and "text" or "text-dim")
+	end
+	function b.Mark(on)
+		if b.dot then
+			b.dot:SetShown(on == true)
+		end
 	end
 	kit.Painted(Paint)
 	f:SetScript("OnEnter", function()
@@ -161,7 +180,7 @@ local function Button(parent, chip)
 	function b.Set(text, active, onClick)
 		b.text:SetText(text)
 		b.active, b.onClick = active, onClick
-		b.width = Measure(b.text) + 2 * INSET
+		b.width = Measure(b.text) + 2 * INSET + (chip and 0 or MARK_ROOM)
 		f:SetSize(b.width, chip and CHIP_H or TAB_H)
 		Paint()
 	end
@@ -292,6 +311,36 @@ function Tabs.Build(right, host)
 		HideCrumbs()
 	end
 
+	-- The tabs shown now (self.Set), and which of them hold a setting off its default.
+	local shownList, marks = nil, {}
+	local function Changed(tab)
+		local trust = ns.PanelTrust
+		for _, page in ipairs(trust and tab.pages or {}) do
+			if trust.Count(page) > 0 then
+				return true
+			end
+		end
+		return false
+	end
+	function self.Marks()
+		if not shownList or not bar:IsShown() then
+			return
+		end
+		for number, tab in ipairs(shownList) do
+			marks[number] = Changed(tab)
+			if tabs[number] then
+				tabs[number].Mark(marks[number])
+			end
+		end
+	end
+	local function Marked(number, label)
+		if not marks[number] then
+			return label
+		end
+		local r, g, b = kit.Accent()
+		return ("%s |cff%02x%02x%02x\226\128\162|r"):format(label, math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
+	end
+
 	function self.Set(entry)
 		local model = host.Model()
 		local top = Nav.Top(model, entry)
@@ -299,6 +348,7 @@ function Tabs.Build(right, host)
 		local at, current = Tabs.Find(list, entry)
 		Tabs.Remember(entry)
 		Crumbs(entry, top, current and current.label or nil)
+		shownList = #list > 0 and list or nil
 		if #list == 0 then
 			bar:Hide()
 			choose:Hide()
@@ -345,7 +395,7 @@ function Tabs.Build(right, host)
 					lines = function()
 						local lines = {}
 						for number = fit + 1, #list do
-							lines[#lines + 1] = { list[number].id, list[number].label }
+							lines[#lines + 1] = { list[number].id, Marked(number, list[number].label) }
 						end
 						return lines
 					end,
@@ -364,6 +414,7 @@ function Tabs.Build(right, host)
 			more.Place(bar, x, 0)
 		end
 		bar:Show()
+		self.Marks()
 		local band, shown, left = TAB_H, 0, PAD
 		if current and current.frames then
 			for number, page in ipairs(current.pages) do

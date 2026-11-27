@@ -4,8 +4,9 @@ local ADDON_NAME, ns = ...
 -- made for another screen size, with Fit positions to this screen, on, which scales its positions to this screen as ns.FitSpots does; neither shows
 -- while Frame positions is off), what to import is chosen (the count of a part left out is fainter), and a profile is exported by module. Each row
 -- says what it does in its tip. The rows are the widgets of ns.PanelKit and sit at the end of the page. Replace asks first, and Enter does not answer
--- that question (a careful one, Panel.lua Ask). The functions of Core.lua that read and write the text are ns.ProfilePreview, ns.ImportProfile and
--- ns.ExportProfile.
+-- that question (a careful one, Panel.lua Ask). The box of Export by module and the name box of Import as show a dim hint while empty, and the export
+-- box copies as the other export boxes do (ns.PanelKit.CopyField: a click selects all of it, Ctrl+C says so). The functions of Core.lua that read and
+-- write the text are ns.ProfilePreview, ns.ImportProfile and ns.ExportProfile.
 
 local Share = {}
 ns.ProfileShare = Share
@@ -216,8 +217,12 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 	if paste then
 		paste.Place(at + kit.ROW)
 	end
-	local out = kit.Field(fixed.frame, kit.FIELD, 0)
+	-- As the other export boxes: a dim hint while empty, a click selects all of it again, and Ctrl+C says it was copied (ns.PanelKit.CopyField).
+	local out = kit.Field(fixed.frame, kit.FIELD, 0, nil, "Press Export chosen, then Ctrl+C")
 	out:SetPoint("LEFT", fixed.frame, "LEFT", kit.CONTROL, 0)
+	if kit.CopyField then
+		kit.CopyField(out)
+	end
 	fixed.Hover(out)
 	local choose = kit.Button(fixed.frame, "Modules", kit.SMALL, function()
 		state.listed = not state.listed
@@ -264,7 +269,8 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 		end,
 	})
 	menu.frame:SetPoint("LEFT", into.frame, "LEFT", kit.CONTROL, 0)
-	local named = kit.Field(into.frame, kit.FIELD, 32)
+	-- The hint follows every change of its text, the name Preview writes too.
+	local named = kit.Field(into.frame, kit.FIELD, 32, nil, "Name of the new profile")
 	named:SetPoint("LEFT", into.frame, "LEFT", kit.CONTROL + kit.FIELD + 10, 0)
 	into.Hover(named)
 	state.nameField = named

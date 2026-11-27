@@ -3465,9 +3465,20 @@ local function Enter(name)
 	Apply(was)
 end
 
--- Gives the profile in use other settings and positions.
-local function Replace(options, movers)
+-- What Reset profile, Copy from, an import that replaces, setup's Finish and Delete profile took away, for this session only: Bring back on the Profiles
+-- page puts it back (ns.BringBackProfile, ns.BringBackDeleted) until a reload. Nothing of it is saved. kept.lost = { of = the profile's table, options,
+-- movers (nil where the positions stayed), what, at }; kept.deleted = { name, data, users, mine, rules }.
+local kept = {}
+
+-- Gives the profile in use other settings and positions. With `what`, the words of the change after "as it was before" ("Reset profile"), the
+-- settings and positions it had are kept as the loss of this session (kept.lost), one at a time. Replace puts other tables in place, so the ones
+-- it takes away are in use nowhere and are kept as they are.
+local function Replace(options, movers, what)
 	local was = profile.movers
+	if what then
+		kept.lost = { of = profile, options = profile.options, movers = movers ~= was and was or nil, what = what,
+			at = type(date) == "function" and date("%H:%M") or "" }
+	end
 	profile.options, profile.movers = options, movers
 	values = options
 	Apply(was)
@@ -3649,8 +3660,8 @@ function ns.CopyProfile(from)
 		return false, "That is the profile in use."
 	end
 	local copy = CopyOf(db.profiles[source])
-	Replace(copy.options, copy.movers)
-	return true, ("Copied %s."):format(source)
+	Replace(copy.options, copy.movers, ("Copy from %s"):format(source))
+	return true, ("Copied %s. Bring back on the Profiles page puts %s back until you reload."):format(source, current)
 end
 
 -- The profile in use takes `picks`, a table of saved path to value, and is applied once. Each value is written as Normalise gives it; a value equal to
@@ -3675,7 +3686,7 @@ function ns.ChangeProfile(picks)
 			end
 		end
 	end
-	Replace(copy.options, profile.movers)
+	Replace(copy.options, profile.movers, "setup's Finish")
 	return true, ("Saved %s."):format(current)
 end
 
@@ -3754,6 +3765,15 @@ function ns.DeleteProfile(name)
 	elseif found == current then
 		return false, "The profile in use cannot be deleted."
 	end
+	-- Kept for this session, so Bring back can put it back with its characters and rules (ns.BringBackDeleted).
+	local users = {}
+	for key, used in pairs(db.profileOf) do
+		if used == found then
+			users[#users + 1] = key
+		end
+	end
+	kept.deleted = { name = found, data = db.profiles[found], users = users, mine = charDB.profile == found,
+		rules = ns.ProfileSwitch and ns.ProfileSwitch.RulesOf and ns.ProfileSwitch.RulesOf(found) or nil }
 	db.profiles[found] = nil
 	if ns.ProfileSwitch then
 		ns.ProfileSwitch.Deleted(found)
@@ -3766,7 +3786,7 @@ function ns.DeleteProfile(name)
 	if charDB.profile == found then
 		charDB.profile = nil
 	end
-	return true, ("Deleted %s."):format(found)
+	return true, ("Deleted %s. Bring back on the Profiles page puts it back until you reload."):format(found)
 end
 
 -- Every setting of the profile in use goes back to its default and every moved frame goes back.
@@ -3775,8 +3795,99 @@ function ns.ResetProfile()
 	if refusal then
 		return false, refusal
 	end
-	Replace({}, {})
-	return true, ("Reset %s."):format(current)
+	Replace({}, {}, "Reset profile")
+	return true, ("Reset %s. Bring back on the Profiles page puts it back until you reload."):format(current)
+end
+
+-- The name of the profile whose settings the loss of this session holds (kept.lost), or nil: the table is found again, so a rename follows it and a
+-- profile deleted and not brought back has none.
+local function LostName()
+	local lost = kept.lost
+	if not (lost and db) then
+		return nil
+	end
+	for name, data in pairs(db.profiles) do
+		if data == lost.of then
+			return name
+		end
+	end
+	return nil
+end
+
+-- What Bring back of Reset profile would put back, or nil: { name, what, at, settings, spots, inUse }, the counts being those of the settings
+-- and the frame positions it puts back (spots nil where the positions stayed).
+function ns.LostProfile()
+	local name = LostName()
+	if not name then
+		return nil
+	end
+	local lost = kept.lost
+	local settings, spots = 0, nil
+	for _ in pairs(lost.options) do
+		settings = settings + 1
+	end
+	if lost.movers then
+		spots = 0
+		for _ in pairs(lost.movers) do
+			spots = spots + 1
+		end
+	end
+	return { name = name, what = lost.what, at = lost.at, settings = settings, spots = spots, inUse = name == current }
+end
+
+-- Puts the profile in use back as it was before the loss of this session, out of combat. What it takes away becomes the loss in turn, so a second
+-- press puts that back.
+function ns.BringBackProfile()
+	local refusal = Refusal()
+	if refusal then
+		return false, refusal
+	end
+	local lost, name = kept.lost, LostName()
+	if not name then
+		return false, "Nothing to bring back."
+	elseif name ~= current then
+		return false, ("Switch to %s first."):format(name)
+	end
+	Replace(lost.options, lost.movers or profile.movers, "you brought it back")
+	return true, ("Brought back %s as it was before %s. Bring back again undoes this."):format(name, lost.what)
+end
+
+-- The name of the profile Delete profile took away this session, while it can come back (no profile has its name now), or nil.
+function ns.DeletedProfile()
+	local gone = kept.deleted
+	if gone and db and not Find(gone.name) then
+		return gone.name
+	end
+	return nil
+end
+
+-- Puts back the profile Delete profile took away this session, out of combat: its settings and positions, every character that used it and
+-- has no profile since, and the rules of Switch automatically that pointed at it and are No change since.
+function ns.BringBackDeleted()
+	local refusal = Refusal()
+	if refusal then
+		return false, refusal
+	end
+	local gone = kept.deleted
+	if not gone then
+		return false, "Nothing to bring back."
+	elseif Find(gone.name) then
+		return false, ("A profile named %s is there now. Rename it first."):format(gone.name)
+	end
+	kept.deleted = nil
+	db.profiles[gone.name] = gone.data
+	for _, key in ipairs(gone.users) do
+		if db.profileOf[key] == nil then
+			db.profileOf[key] = gone.name
+		end
+	end
+	if gone.mine and charDB.profile == nil then
+		charDB.profile = gone.name
+	end
+	if gone.rules and ns.ProfileSwitch and ns.ProfileSwitch.Restore then
+		ns.ProfileSwitch.Restore(gone.name, gone.rules)
+	end
+	return true, ("Brought back %s."):format(gone.name)
 end
 
 -- Text form of a profile ---------------------------------------------------------------------
@@ -4087,12 +4198,15 @@ function ns.ImportProfile(text, opts)
 			return false, message
 		end
 	else
-		local kept = CopyOf(profile)
-		Replace(options or kept.options, spots or kept.movers)
+		local copy = CopyOf(profile)
+		Replace(options or copy.options, spots or copy.movers, "Import profile")
 	end
 	if moved and options then
 		ns.scaleMoved = ns.scaleMoved or {}
 		ns.scaleMoved[current] = moved
+	end
+	if opts.newName == nil then
+		return true, ("Imported into %s. Bring back on the Profiles page puts back what it had until you reload."):format(current)
 	end
 	return true, ("Imported into %s."):format(current)
 end
@@ -4388,7 +4502,22 @@ SlashCmdList["FLATUI"] = function(msg)
 		print(("Profile: %s"):format(current))
 		print(#others > 0 and ("Other profiles: %s"):format(table.concat(others, ", ")) or "No other profiles.")
 	elseif verb and verb:lower() == "profile" then
-		print((select(2, ns.UseProfile(rest))))
+		-- In a fight the profile waits for its end, as a pick in the options window does (ProfileSwitch.lua, Switch.Keep), and chat says when it is in use.
+		local found = db and InCombatLockdown() and Find(rest)
+		if db and InCombatLockdown() and not found then
+			print("No such profile.")
+		elseif found and found ~= current and ns.ProfileSwitch and ns.ProfileSwitch.Keep then
+			ns.ProfileSwitch.Keep(found)
+			print(("Flat UI: switches to %s when the fight ends."):format(found))
+			if type(ns.RefreshPanel) == "function" then
+				pcall(ns.RefreshPanel)
+			end
+		elseif found and found == current and ns.ProfileSwitch and ns.ProfileSwitch.Keep then
+			ns.ProfileSwitch.Keep(nil)
+			print(("Flat UI: stays on %s."):format(found))
+		else
+			print((select(2, ns.UseProfile(rest))))
+		end
 	elseif text == "scale off" then
 		ns.Set("general.scaleOn", false)
 		print("Custom UI scale: off")
@@ -4406,7 +4535,7 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui options - the page in the game's options")
 		print("/flatui status - what is styled, and any error")
 		print("/flatui profile - the profile in use and the others")
-		print("/flatui profile Name - switch to a profile")
+		print("/flatui profile Name - switch to a profile; in a fight it switches as the fight ends")
 		print("/flatui setup - walk round your screen in six short stops")
 		print("/flatui profiles - the ready-made looks; a click puts one in use")
 		print("/flatui welcome - the welcome screen")
