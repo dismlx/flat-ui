@@ -97,7 +97,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | **While casting** | Off | A spell or item you use brings faded frames back to full while you cast, for a moment after each instant spell or item, and for Wait before fading after. |
 | **While a proc is up** | On | An action bar that holds the spell of a proc alert of the Trackers page, such as Overpower, Revenge or Execute, is at full opacity while the proc is up, and fades again after Wait before fading once it ends. |
 | **Until health and mana are full** | Off | Faded frames stay at full while your health, or your mana if you have mana, is under full, so they are there while you eat and drink, then fade after Wait before fading. Not while you are dead. |
-| **While a key is held** | None | Holding the key brings every faded frame back to full at once, so you can glance at a cooldown or your bags. They fade again after Wait before fading once you let go. Not while you type in a box. Choices: None, Shift, Ctrl, Alt. |
+| **While a key is held** | None | Holding the key brings every faded frame back to full at once, so you can glance at a cooldown or your bags. Bars in a block that fades on the Bar block page come back too. They fade again after Wait before fading once you let go. Not while you type in a box. Choices: None, Shift, Ctrl, Alt. |
 
 ## Hidden frames
 

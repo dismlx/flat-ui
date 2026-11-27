@@ -968,8 +968,8 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | **Spacing** | 3 |  |
 | **Icon border** | On |  |
 | **Flash when one lands** | On | A quick white flash on the icon as one of these buffs comes, not when one that shows is cast again. Drawn by the game, so also in a fight. |
-| **Sound when one ends** | None | Once as one of the short buffs of your class leaves you, such as Slice and Dice, also in a fight, since the game plays it. Also for your own defensives shown on Defensives on you, such as Ice Barrier or Shield Wall. A buff with a tracker is left out, since the tracker has its own sound, and so is one that lasts longer than Time limit. Out of combat, a pick plays it. Choices: None, Raid warning, Alarm, Whisper warning. |
-| **Bar texture** | `default` | Needs **Time left** at Thin bar under the icon. |
+| **Sound when one ends** | None | Once as one of the short buffs of your class leaves you, such as Slice and Dice, also in a fight, since the game plays it. Also for your own defensives shown on Defensives on you, such as Ice Barrier or Shield Wall. A buff whose tracker plays its own sound as it drops is left out, and so is one that lasts longer than Time limit. Out of combat, a pick plays it. Choices: None, Raid warning, Alarm, Whisper warning. |
+| **Bar texture** | `default` | The thin bar under each icon, here and on Defensives on you, so the two rows match. Dimmed while neither has Time left at Thin bar under the icon. |
 | **Buff tooltips** | On | Settings on the Tooltips page do not change this tooltip. Choices: On, Out of combat only, Off. |
 
 **Position**

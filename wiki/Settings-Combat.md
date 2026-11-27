@@ -1,4 +1,4 @@
-Every setting of the **Combat** group of the options window, 348 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Combat](Combat) and [Combat text](Combat-text).
+Every setting of the **Combat** group of the options window, 354 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Combat](Combat) and [Combat text](Combat-text).
 
 Pages: [Cooldowns](#cooldowns) · [Trackers](#trackers) · [Defensives on you](#defensives-on-you) · [Absorb shields](#absorb-shields) · [Charges](#charges) · [Enemy cooldowns](#enemy-cooldowns) · [Combat text](#combat-text)
 
@@ -196,6 +196,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | **Shortest cooldown** | 5 s | A shorter cooldown does not pulse, nor does the global cooldown. |
+| **When it pulses** | Always | In combat only keeps the pulse quiet between fights. Not while mounted or in a city keeps it quiet on a mount, on a flight path and where the game rests you, in a city or an inn. A cooldown that ends while it is quiet does not pulse later. /flatui pulse test and the samples of the look still show. Choices: Always, In combat only, Not while mounted or in a city. |
 | **Your pet's abilities** | Off | Spell Lock, Seduction, Sacrifice, Dash and the like pulse as they come back, as your own spells do. A pet casts some of its abilities on its own, which then pulse each time: Leave out takes one away. |
 | **Leave out** |  | A spell is left out with all its ranks. For one that is not listed, type /flatui pulse ignore and its name. |
 | **Put back** |  |  |
@@ -211,6 +212,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | **Sound of one spell or item** |  | Choose one, then open the list again for its own sound. One without it plays Sound. Out of combat, a pick shows it. |
 | **Name under the icon** | On | The spell or item that is ready again, fading with the icon. An item's name is in its quality's colour. |
 | **Grow as it fades** | Off | The icon swells by a quarter as it fades out. |
+| **Burst as it shows** | On | The game's star flash, the one its own cooldowns show as they end, bursts once over the icon as it comes in: white for a spell, in the item's quality colour for an item. |
 
 **Spots**
 
@@ -341,7 +343,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | **Sound when it comes** | Off | For a buff or debuff tracker, in the kit of Sound. |
 | **Sound when it stacks** | Off | For a buff or debuff tracker, in the kit of Sound. |
 | **Sound when it turns low** | Off | Once as a tracker goes from fine to low, by its Low at rows, Item minimum, Ammunition minimum or the pet rows, in the kit of Sound. The game hides buffs in a fight, so a buff turns low by sound between fights. |
-| **Sound** | Raid warning | Out of combat, a pick plays it once. Edit a tracker gives one tracker a sound of its own. Choices: Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. |
+| **Sound** | Raid warning | Out of combat, a pick plays it once. Edit a tracker gives one tracker a sound of its own. Raid warning, Alarm and Whisper warning also play for a buff in a fight, since the game plays them. The others play only while the game shows your buffs, so a buff that drops in a fight is silent with them. Choices: Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. |
 
 ### Proc alerts
 
@@ -353,7 +355,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | **Add a proc** |  | For another spell, type /flatui tracker add proc and its name. A proc you add keeps its own colour, time and sound. |
 | **Remove a proc** |  | Also lists the procs of your class. One you remove stays off for this character. |
 | **Bring back a proc** |  | A proc of your class you removed shows again without being added. Needs **Procs of your class** on. |
-| **Colour** | #FFD100 | The border of a proc alert, and the plain arc of a proc with no art of its own. /flatui tracker proc colour sets one proc's colour, which also tints its art. |
+| **Colour** | #FFD100 | The border of a proc alert, and the plain arc of a proc with no art of its own. /flatui tracker proc colour sets one proc's colour, which also tints its art, and works on the procs of your class too, by name: /flatui tracker proc colour Execute ff3030. proc sound Overpower bell, proc time Revenge 5 and proc reset Execute set a proc's sound and time or put them back. |
 | **Sound** | Spell alert | Choices: None, Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. |
 
 **Art beside the character**
@@ -389,6 +391,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | **X offset** | 0 | Moves the row left or right of where Place puts it. Out of combat with no defensive on you, the samples show the new spot as you drag. Needs **Place** at Above the player frame or At the personal resource display. |
 | **Y offset** | 0 | Moves the row up or down from where Place puts it. Needs **Place** at Above the player frame or At the personal resource display. |
 | **Icon size** | 32 | Out of combat with no defensive on you, a change of this or another row of the look shows samples in the new look for a few seconds. The time left turns amber in its last 5 seconds. The numbers on the icon grow and shrink with it. |
+| **Time left** | On the icon | A thin bar under the icon runs down with the time left, in the Bar texture of Your buffs, open there while this row is the bar, and the caster's name moves under it. The bars the game draws in a fight change once the game shows your buffs again. Choices: On the icon, Thin bar under the icon, Off. |
 | **Spacing** | 3 |  |
 | **Caster's name** | On |  |
 | **Icon border** | On |  |
@@ -439,6 +442,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | --- | --- | --- |
 | **Colour by school** | On | A shield that takes one school in its colour: Fire Ward orange, Frost Ward light blue, Shadow Ward violet, Mana Shield grey. One that takes every school is in Shield colour. |
 | **Shield colour** | #FFE08A | Shields that take every school, and the total. |
+| **Shield stripes** | On | The striped shield pattern over each bar's fill, as the game draws absorbs on its later frames, with a soft bright edge where the fill ends. Also on the bars the game draws in a fight. |
 
 **Shields**
 

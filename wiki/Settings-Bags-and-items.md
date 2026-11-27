@@ -97,7 +97,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | **Item level in bags and bank** | On | In the game's bag and bank windows. The Bags page has its own. |
-| **Item level on equipped gear** | On |  |
+| **Item level on equipped gear** | On | On each slot of the Character window, and your average item level under your level, to set beside the one the Inspect window shows. |
 | **Item level in the equipment flyout** | On | The bag items that fit a slot of the Character window, shown while you hold Alt over the slot. Needs **Item level on equipped gear** on. |
 | **Item level on the Inspect window** | On | On each slot, and the player's average item level under their level. |
 | **Item level corner on gear** | Bottom left | On the slots of the Character and Inspect windows. Bags and the flyout keep the bottom left. Choices: Bottom left, Bottom right, Top left, Top right. |
