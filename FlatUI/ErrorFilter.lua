@@ -129,6 +129,68 @@ local function GameLeavesOut(id)
 	return Field(Global("BLACK_LISTED_MESSAGE_TYPES"), id) == true
 end
 
+local FL = { time = 0.2, lift = 0.4, lines = setmetatable({}, { __mode = "k" }) }
+
+function FL.Wanted()
+	local cvar = Global("C_CVar")
+	if type(cvar) ~= "table" or type(cvar.GetCVar) ~= "function" then
+		return false
+	end
+	local ok, value = pcall(cvar.GetCVar, "flashErrorMessageRepeats")
+	return ok and not ns.IsSecret(value) and value == "1"
+end
+
+function FL.Step(self)
+	local now = GetTime()
+	for line, at in pairs(FL.lines) do
+		local okText, text = pcall(line.GetText, line)
+		if not okText or ns.IsSecret(text) or text ~= at.text then
+			FL.lines[line] = nil
+		else
+			local share = (now - at.at) / FL.time
+			local okShown, shown = pcall(line.IsShown, line)
+			if share >= 1 or share < 0 or not okShown or ns.IsSecret(shown) or shown ~= true then
+				pcall(line.SetTextColor, line, at.r, at.g, at.b)
+				FL.lines[line] = nil
+			else
+				local lift = (share > 0.5 and (1 - share) / 0.5 or share / 0.5) * FL.lift
+				pcall(line.SetTextColor, line, math.min(at.r + lift, 1), math.min(at.g + lift, 1), math.min(at.b + lift, 1))
+			end
+		end
+	end
+	if next(FL.lines) == nil then
+		self:Hide()
+	end
+end
+
+function FL.Flash(line, message)
+	if not FL.Wanted() then
+		return
+	end
+	local at = FL.lines[line]
+	if not at then
+		local ok, r, g, b = pcall(line.GetTextColor, line)
+		if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+			return
+		end
+		at = { r = r, g = g, b = b, text = message }
+		FL.lines[line] = at
+	end
+	at.at = GetTime()
+	if not FL.frame then
+		local ok, made = pcall(CreateFrame, "Frame")
+		if not ok or type(made) ~= "table" then
+			FL.lines[line] = nil
+			return
+		end
+		ns.Own[made] = true
+		made:Hide()
+		made:SetScript("OnUpdate", FL.Step)
+		FL.frame = made
+	end
+	FL.frame:Show()
+end
+
 local function Repeat(errors, id, message)
 	if not Repeats()[id] then
 		return false
@@ -141,6 +203,7 @@ local function Repeat(errors, id, message)
 	if not okText or ns.IsSecret(text) or text ~= message then
 		return false
 	end
+	pcall(FL.Flash, line, message)
 	pcall(errors.ResetMessageFadeByID, errors, id)
 	return true
 end

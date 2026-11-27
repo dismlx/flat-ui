@@ -2491,9 +2491,21 @@ local function SetMouseAll()
 	end
 end
 
+function pick.Label(on)
+	local label = pick.label
+	if not label then
+		return
+	end
+	label:SetText(on and "Stop picking" or "Pick a frame")
+	pcall(function()
+		label:SetTextColor(ns.PanelLook.Colour(on and "accent" or "text"))
+	end)
+end
+
 local function StopPick()
 	pick.on = false
 	pick.leaf, pick.cands, pick.edit, pick.chosen = nil, nil, nil, nil
+	pick.Label(false)
 	SetMouseAll()
 	if tag then
 		tag:Hide()
@@ -2612,6 +2624,7 @@ local function StartPick()
 		ns.SetOutlineThickness(boxOutline, 2)
 	end
 	pick.on, pick.leaf, pick.cands, pick.steps = true, nil, nil, 0
+	pick.Label(true)
 	SetMouseAll()
 	keys.shift, keys.alt = KeyDown(IsShiftKeyDown), KeyDown(IsAltKeyDown)
 	tag:Show()
@@ -3819,13 +3832,17 @@ local function BuildBar()
 	centre.how = MM.Text(bar, "GameFontDisableSmall", "text-dim")
 	centre.how:SetWidth(416)
 	centre.how:SetPoint("TOPLEFT", edit, "BOTTOMLEFT", 0, -6)
-	local pickButton = MM.Button(bar, "Pick a frame", 100, function()
+	local pickButton
+	pickButton, pick.label = MM.Button(bar, "Pick a frame", 100, function()
 		if pick.on then
 			StopPick()
 		else
 			StartPick()
 		end
 	end, false, function()
+		if pick.on then
+			return "Stop picking", "Stops picking without taking a frame."
+		end
 		return "Pick a frame", "Point at any frame on the screen and press Alt to give it a box of its own; Shift picks the frame around it. "
 			.. "Click again to stop."
 	end)

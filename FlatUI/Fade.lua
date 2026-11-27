@@ -229,9 +229,29 @@ local function Previewing()
 	return false
 end
 
+local HOLD_KEYS = { shift = "IsShiftKeyDown", ctrl = "IsControlKeyDown", alt = "IsAltKeyDown" }
+local function KeyHeld()
+	local name = HOLD_KEYS[Opt("holdKey")]
+	local ask = name and rawget(_G, name)
+	if type(ask) ~= "function" then
+		return false
+	end
+	local ok, down = pcall(ask)
+	if not ok or ns.IsSecret(down) or down ~= true then
+		return false
+	end
+	if type(GetCurrentKeyBoardFocus) == "function" then
+		local okFocus, focus = pcall(GetCurrentKeyBoardFocus)
+		if okFocus and (ns.IsSecret(focus) or focus ~= nil) then
+			return false
+		end
+	end
+	return true
+end
+
 local function Wanted()
 	return (Opt("combat") and Fighting()) or Holding() or FlyoutOpen() or ns.EditModeOpen() or MoversOpen()
-		or (Opt("cast") == true and Casting()) or (Opt("hurt") == true and Hurt())
+		or (Opt("cast") == true and Casting()) or (Opt("hurt") == true and Hurt()) or KeyHeld()
 end
 
 local function Grouped()
