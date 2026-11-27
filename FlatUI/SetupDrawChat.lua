@@ -616,6 +616,14 @@ do
 		return SWING_ICON
 	end
 
+	local function Width(fs, guess)
+		local ok, w = pcall(fs.GetStringWidth, fs)
+		if ok and not ns.IsSecret(w) and type(w) == "number" and w == w and w > 0 then
+			return w
+		end
+		return guess
+	end
+
 	local function DrawOut(S, look)
 		local shown = ns.Get("combattext.enabled") ~= false and ns.Get("combattext.where") ~= "over"
 		local scroll, style = SHAPE.scroll, ns.Get("combattext.outStyle")
@@ -629,22 +637,13 @@ do
 		local named = ns.Get("combattext.whose") == "one" and ns.Get("combattext.abilityName") == "every"
 		local snapshot = OUT_GAP * (#OUT - 1) + 0.1
 		local newest, spots, over = {}, {}, 0
-		local laneStep = math.min(scroll.lane * base, (WIDE - OUT_X - 8) / 2)
+		local words = ns.CombatWordSize()
 		for i, sample in ipairs(OUT) do
 			local fs = S.out[i]
 			fs:SetShown(shown)
 			if shown then
-				local height = base * (sample.crit and scroll.crit or 1)
-				local start, rx, ry = OUT_GAP * (i - 1), 0, dir * (i - 1) * height * scroll.line
-				if path then
-					local lane
-					lane, start = ns.ScrollLane(newest, height, start)
-					newest[lane] = { start = start, height = height, life = life, length = OUT_LENGTH, serial = i }
-					rx, ry = scroll.lanes[lane] * laneStep, 0
-				end
-				local age = snapshot - start
-				local u = math.max(0, age / life)
-				local dx, dy = ns.ScrollPath(style, u, OUT_LENGTH, dir, 1, scroll.arcs[ns.Get("combattext.arcWidth")])
+				local size = base * (sample.word and words or 1)
+				local height = size * (sample.crit and scroll.crit or 1)
 				local text, r, g, b = sample.text, 1, 1, 1
 				if sample.word then
 					text = ns.CombatParen(text)
@@ -659,12 +658,24 @@ do
 					end
 				end
 				fs:SetText(text)
-				local h = Height(base, sample.crit, math.max(0, age), look.pops)
+				U.font(fs, look.file, height, look.flags, look.shadow, { r, g, b })
+				local start, rx, ry = OUT_GAP * (i - 1), 0, dir * (i - 1) * height * scroll.line
+				if path then
+					local half = Width(fs, height * #sample.text * 0.5) / 2
+					local unit = math.min(ns.ScrollPitch(base, half), (WIDE - OUT_X - 8) / 2)
+					local lane
+					lane, start = ns.ScrollLane(newest, height, start, (named and sample.name) and 2 or nil, unit, half)
+					rx, ry = scroll.lanes[lane] * unit, 0
+					newest[lane] = { start = start, height = height, life = life, length = OUT_LENGTH, serial = i, on = true, rx = rx, half = half }
+				end
+				local age = snapshot - start
+				local u = math.max(0, age / life)
+				local dx, dy = ns.ScrollPath(style, u, OUT_LENGTH, dir, 1, scroll.arcs[ns.Get("combattext.arcWidth")])
+				local h = Height(size, sample.crit, math.max(0, age), look.pops)
 				U.font(fs, look.file, h, look.flags, look.shadow, { r, g, b })
 				local seen = not (age < 0 or u >= 1)
 				fs:SetAlpha(seen and ns.ScrollAlpha(u, hold) or 0)
-				local ok, w = pcall(fs.GetStringWidth, fs)
-				w = (ok and not ns.IsSecret(w) and type(w) == "number" and w == w) and w or 0
+				local w = Width(fs, 0)
 				local x = OUT_X + rx + dx
 				spots[i] = { x = x, y = start0 + ry + dy, h = h }
 				if seen then
@@ -690,6 +701,7 @@ do
 		local movement, loose, higher = ns.Get("combattext.movement"), ns.Get("combattext.spread") == "loose", ns.Get("combattext.crit") == "higher"
 		local word, bySchool = ns.Get("combattext.partial") == "word", ns.Get("combattext.school") == true
 		local kinds = ns.Get("combattext.partial") == "smaller"
+		local words = ns.CombatWordSize()
 		local game = ns.Get("combattext.source") == "game"
 		local enemyFile, enemyFlags, enemyShadow = file, flags, shadow
 		if game then
@@ -717,7 +729,7 @@ do
 			local after = (named and sample.name) and (" " .. sample.name) or ""
 			local move = ns.CombatMove(movement, sample.crit and not game and not classic and pops)
 			local age = move == "burst" and BURST_AGE or sample.age
-			local settle = Height(SHAPE.text * size, sample.crit, age, false)
+			local settle = Height(SHAPE.text * size * ((sample.word and not game) and words or 1), sample.crit, age, false)
 			local turn = (i - 1) % #lanes + 1
 			local wide = 3 * settle
 			local lane, up = lanes[turn], 0
@@ -757,7 +769,7 @@ do
 			elseif sample.school then
 				r, g, b = ns.CombatColour(sample.school, bySchool, palette)
 			end
-			local base = SHAPE.text * size * ((kinds and sample.flag == "GLANCING") and cls.kinds.glancing or 1)
+			local base = SHAPE.text * size * ((kinds and sample.flag == "GLANCING") and cls.kinds.glancing or 1) * ((sample.word and not game) and words or 1)
 			fs:SetText(text)
 			U.font(fs, enemyFile, Height(base, sample.crit, age, classic and sample.crit == true or (not classic and pops and not game), move == "burst"), enemyFlags, enemyShadow, { r, g, b })
 			if classic then
@@ -786,7 +798,7 @@ do
 			end
 		end
 		local where, units = ns.Get("combattext.friend"), ns.Get("combattext.friendUnits")
-		local healing, signs, pets, words = ns.Get("combattext.friendHeal"), ns.Get("combattext.friendSigns") == true, ns.Get("combattext.friendPet") == true, ns.Get("combattext.friendWords") == true
+		local healing, signs, pets, friendWords = ns.Get("combattext.friendHeal"), ns.Get("combattext.friendSigns") == true, ns.Get("combattext.friendPet") == true, ns.Get("combattext.friendWords") == true
 		local fsize, lift = ns.Get("combattext.friendSize") / 100, ns.Get("combattext.friendHeight")
 		for _, unit in ipairs(S.friends) do
 			local unitShown = (where == unit.where or where == "both") and (units == "all" or unit.where == "plates")
@@ -799,7 +811,7 @@ do
 				elseif sample.kind == "heal" then
 					shown = shown and healing ~= "off" and (healing == "taken" or unit.where == "plates")
 				else
-					shown = shown and words
+					shown = shown and friendWords
 				end
 				fs:SetShown(shown)
 				if shown then
@@ -821,7 +833,7 @@ do
 					if chosen then
 						dx, dy = ns.CombatOffsets({ movement = "classic", rise = risen * math.max(1, SHAPE.text * fsize / cls.ref), life = life }, sample.age)
 					end
-					U.font(fs, file, Height(SHAPE.text * fsize, false, sample.age, pops and not chosen), flags, shadow, { r, g, b })
+					U.font(fs, file, Height(SHAPE.text * fsize * (sample.kind == "word" and words or 1), false, sample.age, pops and not chosen), flags, shadow, { r, g, b })
 					fs:SetAlpha(chosen and Alpha(sample.age, fade, life) or Alpha(sample.age, SHAPE.fade, SHAPE.life))
 					U.at(fs, "CENTER", unit.frame, "CENTER", dx + (i - 2.5) * 14, dy + (unit.where == "frames" and lift or 0))
 				end
@@ -830,7 +842,7 @@ do
 		local level, style, scroll = ns.Get("combattext.own"), ns.Get("combattext.inStyle"), SHAPE.scroll
 		local dir = ns.Get("combattext.inDir") == "up" and 1 or -1
 		local top = dir == 1 and OWN_TOP - OWN_LENGTH or OWN_TOP
-		local ownSize = ns.Get("combattext.ownSize") / 100
+		local ownSize = (ns.ScrollSize and ns.ScrollSize("inc") or ns.Get("combattext.ownSize")) / 100
 		local life = style == "static" and scroll.still or scroll.life[ns.Get("combattext.speed")] or scroll.life.normal
 		local hold = style == "static" and scroll.stillHold or scroll.hold
 		local base = SHAPE.text * ownSize
@@ -843,19 +855,25 @@ do
 			local fs = S.own[i]
 			local shown = (level == "more" or (level == "take" and sample.level == "take")) and not (sample.heal and not ownHeal)
 			fs:SetShown(shown)
-			local height = base * (sample.crit and scroll.crit or 1)
+			local size = base * (sample.word and words or 1)
+			local height = size * (sample.crit and scroll.crit or 1)
 			local start, rx, ry = 0.25 * (i - 1), 0, dir * (i - 1) * height * scroll.line
+			if shown then
+				fs:SetText(sample.word and ns.CombatParen(sample.text) or sample.text)
+				U.font(fs, file, height, flags, shadow, sample.colour)
+			end
 			if shown and path then
+				local half = Width(fs, height * #sample.text * 0.5) / 2
+				local unit = -ns.ScrollPitch(base, half)
 				local lane
-				lane, start = ns.ScrollLane(newest, height, start)
-				newest[lane] = { start = start, height = height, life = life, length = OWN_LENGTH, serial = i }
-				rx, ry = -scroll.lanes[lane] * scroll.lane * base, 0
+				lane, start = ns.ScrollLane(newest, height, start, nil, unit, half)
+				rx, ry = scroll.lanes[lane] * unit, 0
+				newest[lane] = { start = start, height = height, life = life, length = OWN_LENGTH, serial = i, on = true, rx = rx, half = half }
 			end
 			if shown then
 				local age = snapshot - start
 				local u = math.max(0, age / life)
 				local dx, dy = ns.ScrollPath(style, u, OWN_LENGTH, dir, -1, scroll.arcs[ns.Get("combattext.arcWidth")])
-				fs:SetText(sample.word and ns.CombatParen(sample.text) or sample.text)
 				local colour = sample.colour
 				if sample.school and ownSchool then
 					colour = { ns.CombatColour(sample.school, true) }
@@ -864,7 +882,7 @@ do
 				elseif sample.heal then
 					colour = { ns.Colour("combattext.ownHealColour") }
 				end
-				U.font(fs, file, Height(base, sample.crit, math.max(0, age), pops), flags, shadow, colour)
+				U.font(fs, file, Height(size, sample.crit, math.max(0, age), pops), flags, shadow, colour)
 				fs:SetAlpha(age < 0 and 0 or ns.ScrollAlpha(u, hold))
 				U.at(fs, "CENTER", S.root, "BOTTOMLEFT", OWN_X + rx + dx, top + ry + dy)
 			end
@@ -890,12 +908,12 @@ do
 		end
 		p["combattext.height"], p["combattext.crit"], p["combattext.classicCrit"] = S.enemy[6], S.enemy[6], S.enemy[6]
 		p["combattext.inStyle"], p["combattext.ownSize"], p["combattext.arcWidth"] = S.own[1], S.own[1], S.own[1]
-		p["combattext.inDir"] = S.own[1]
+		p["combattext.inDir"], p["combattext.inSize"] = S.own[1], S.own[1]
 		p["combattext.ownDamageColour"], p["combattext.ownHeal"], p["combattext.ownHealColour"] = S.own[1], S.own[3], S.own[3]
 		for _, key in ipairs({ "where", "outStyle", "outSize", "outDir", "icons", "speed" }) do
 			p["combattext." .. key] = S.out[1]
 		end
-		p["combattext.missWords"] = S.enemy[5]
+		p["combattext.missWords"], p["combattext.missSize"] = S.enemy[5], S.enemy[5]
 		p["combattext.abilityName"] = S.enemy[4]
 		for _, key in ipairs({ "friend", "friendUnits", "friendDamage", "friendHeal", "friendPet", "friendWords", "friendSigns", "friendDamageColour", "friendHealColour", "friendSize", "friendHeight" }) do
 			p["combattext." .. key] = S.friends[key == "friendHeight" and 1 or 2].frame
@@ -1013,7 +1031,8 @@ do
 		local level = on and ns.Get("combattext.own") or "off"
 		local heal = ns.Get("combattext.ownHeal") == true
 		local shape = ns.CombatShape
-		local base = (shape and shape.text or 18) * (ns.Get("combattext.ownSize") or 100) / 100
+		local base = (shape and shape.text or 18) * ((ns.ScrollSize and ns.ScrollSize("inc")) or ns.Get("combattext.ownSize") or 100) / 100
+		local words = type(ns.CombatWordSize) == "function" and ns.CombatWordSize() or 1
 		local file, flags = U.FRIZ, "OUTLINE"
 		if type(ns.CombatFont) == "function" then
 			file, flags = ns.CombatFont(ns.Get("combattext.font"), ns.Get("combattext.outline"))
@@ -1044,6 +1063,7 @@ do
 		local colours = { damage = { ns.Colour("combattext.ownDamageColour") }, heal = { ns.Colour("combattext.ownHealColour") }, word = U.WHITE, gain = GAIN }
 		local function Set(fs, sample, size)
 			fs:SetText(sample.kind == "word" and type(ns.CombatParen) == "function" and ns.CombatParen(sample.text) or sample.text)
+			size = size * (sample.kind == "word" and words or 1)
 			U.font(fs, file, size, flags, shadow, colours[sample.kind])
 			local ok, w = pcall(fs.GetStringWidth, fs)
 			return (ok and not ns.IsSecret(w) and type(w) == "number" and w == w and w > 0) and w or size * #sample.text * 0.5

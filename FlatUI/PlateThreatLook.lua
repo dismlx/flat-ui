@@ -725,6 +725,11 @@ local function Subscribe()
 	end
 end
 
+function ns.PlateRingShown(frame)
+	local rec = frame ~= nil and recs[frame] or nil
+	return type(rec) == "table" and type(rec.ring) == "table" and rec.ring.shown == true
+end
+
 local extra = ns.PlateExtra
 extra.layout[#extra.layout + 1] = function(frame, own)
 	if type(own) == "table" then

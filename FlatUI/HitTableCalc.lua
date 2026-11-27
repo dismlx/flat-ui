@@ -25,6 +25,8 @@ local OVER = 0.05
 local TANKING = 2
 local RESIST_AVERAGE, RESIST_CAP, RESIST_LEVEL = 0.75, 0.75, 0.02
 local RANK = { withheld = 3, refused = 2, missing = 1 }
+local ALL = { melee = true, ranged = true, spell = true }
+local HELD = { "agility", "melee", "ranged", "spell" }
 
 local function Call(fn, ...)
 	if type(fn) ~= "function" then
@@ -242,7 +244,21 @@ function C.Front(facing, target)
 	return false, true
 end
 
-function C.Kinds(choice, class, power)
+local function Armed()
+	local item, why = Call(GetInventoryItemID, "player", SLOTS.main)
+	if why or (item ~= nil and not Finite(item)) then
+		return nil
+	elseif item == nil then
+		return false
+	end
+	local line, unknown = LineOf(item)
+	if unknown then
+		return nil
+	end
+	return line ~= nil
+end
+
+function C.Kinds(choice, class, power, armed)
 	if choice == "melee" then
 		return { melee = true }
 	elseif choice == "ranged" then
@@ -252,9 +268,19 @@ function C.Kinds(choice, class, power)
 	elseif choice == "all" then
 		return { melee = true, ranged = true, spell = true }
 	elseif class == "DRUID" then
-		return FERAL_POWER[power] and { melee = true } or { spell = true }
+		if FERAL_POWER[power] then
+			return { melee = true }
+		end
+		if armed == nil then
+			armed = Armed()
+		end
+		return armed == false and { spell = true } or { melee = true, spell = true }
 	end
 	return KITS[class] or { melee = true, spell = true }
+end
+
+function C.Specials(class, power)
+	return class ~= "DRUID" or FERAL_POWER[power] == true
 end
 
 local function Clamp(value)
@@ -441,12 +467,13 @@ function C.Inputs(spec)
 	end
 	local power = Ask(UnitPowerType, "player")
 	local form = Ask(GetShapeshiftForm)
-	inputs.class, inputs.power = class, power
+	inputs.class, inputs.power, inputs.form = class, power, Finite(form) and form or 0
 	inputs.feral = class == "DRUID" and Finite(form) and form ~= 0
+	inputs.armed = Armed()
 	local target = C.Target(spec.against, level, spec.unit)
 	inputs.target = target
 	inputs.front, inputs.facingUnsure = C.Front(spec.facing, target)
-	local kinds = type(spec.kinds) == "table" and spec.kinds or C.Kinds(spec.lines, class, power)
+	local kinds = type(spec.kinds) == "table" and spec.kinds or C.Kinds(spec.lines, class, power, inputs.armed)
 	inputs.kinds = kinds
 	inputs.agility = (kinds.melee or kinds.ranged) and AgilityCrit() or nil
 	if kinds.melee then
@@ -505,6 +532,7 @@ function C.Table(spec, inputs)
 		return read
 	end
 	read.level, read.feral = level, inputs.feral
+	read.old, read.otherForm = inputs.old == true, inputs.otherForm == true
 	read.target, read.enemy = target, target.enemy
 	read.front, read.facingUnsure = inputs.front, inputs.facingUnsure
 	local ctx = { L = level, T = target.level, D = target.level * PER_LEVEL, player = target.player == true, front = read.front,
@@ -542,6 +570,78 @@ function C.Table(spec, inputs)
 	return read
 end
 
-function C.Read(spec)
-	return C.Table(spec, C.Inputs(spec))
+local function Withheld(inputs)
+	for _, why in pairs(type(inputs.gaps) == "table" and inputs.gaps or {}) do
+		if why == "withheld" then
+			return true
+		end
+	end
+	return false
+end
+
+local function Copy(t)
+	local out = {}
+	for key, value in pairs(type(t) == "table" and t or {}) do
+		out[key] = value
+	end
+	return out
+end
+
+function C.Hold(store, inputs)
+	if type(store) ~= "table" or type(inputs) ~= "table" or not Finite(inputs.level) then
+		return inputs
+	end
+	local form = Finite(inputs.form) and inputs.form or 0
+	if not Withheld(inputs) then
+		local kept = {}
+		for _, field in ipairs(HELD) do
+			kept[field] = inputs[field]
+		end
+		kept.gaps, kept.assumed = Copy(inputs.gaps), Copy(inputs.assumed)
+		store[form], store.last = kept, kept
+		return inputs
+	end
+	local kept = store[form] or store.last
+	if type(kept) ~= "table" then
+		return inputs
+	end
+	local out = Copy(inputs)
+	for _, field in ipairs(HELD) do
+		out[field] = kept[field]
+	end
+	out.gaps, out.assumed = Copy(kept.gaps), Copy(kept.assumed)
+	out.old, out.otherForm = true, store[form] == nil
+	return out
+end
+
+function C.Keep(store)
+	return C.Hold(store, C.Inputs({ kinds = ALL, against = "level" }))
+end
+
+function C.Pick(inputs, kinds)
+	local copy = Copy(inputs)
+	kinds = type(kinds) == "table" and kinds or {}
+	copy.kinds = kinds
+	copy.melee = kinds.melee and inputs.melee or nil
+	copy.ranged = kinds.ranged and inputs.ranged or nil
+	copy.spell = kinds.spell and inputs.spell or nil
+	local assumed = {}
+	for _, hand in ipairs(type(inputs.assumed) == "table" and inputs.assumed or {}) do
+		if (hand == "ranged weapon" and copy.ranged) or (hand ~= "ranged weapon" and copy.melee) then
+			assumed[#assumed + 1] = hand
+		end
+	end
+	copy.assumed = assumed
+	return copy
+end
+
+function C.Read(spec, store)
+	spec = type(spec) == "table" and spec or {}
+	local inputs = C.Hold(store, C.Inputs({ kinds = ALL, against = spec.against, facing = spec.facing, unit = spec.unit }))
+	if type(inputs) ~= "table" or not Finite(inputs.level) then
+		return C.Table(spec, inputs)
+	end
+	local kinds = type(spec.kinds) == "table" and spec.kinds or C.Kinds(spec.lines, inputs.class, inputs.power, inputs.armed)
+	local special = spec.special == true and C.Specials(inputs.class, inputs.power)
+	return C.Table({ special = special, rules = spec.rules }, C.Pick(inputs, kinds))
 end

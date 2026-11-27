@@ -22,7 +22,7 @@ local SETS = {
 	spellmark = { spellmark = true },
 }
 local COLOUR = { icon = true, cooldown = true, usable = true, range = true }
-local HOTKEY = { hotkey = true, range = true }
+local HOTKEY = { hotkey = true, range = true, empty = true }
 local DOT = "\226\151\143"
 
 local P = {
@@ -191,8 +191,9 @@ local function DrawHotkey(button, st)
 		return
 	end
 	local dot = st.hotkey == ""
+	local bare = st.empty == true and not st.grid and type(ns.EmptyKeyHidden) == "function" and ns.EmptyKeyHidden(button) == true
 	hk:SetText(dot and (RANGE_INDICATOR or DOT) or st.hotkey)
-	hk:SetShown((not dot) or (st.has == true and st.checksRange == true))
+	hk:SetShown(not bare and ((not dot) or (st.has == true and st.checksRange == true)))
 	local r, g, b, a = Painted("hotkey", button, st)
 	if r == nil then
 		if st.checksRange == true and st.inRange == false then
@@ -1070,6 +1071,12 @@ function ns.OwnRepaint(button)
 		All()
 	else
 		Refresh(button)
+	end
+end
+
+function ns.OwnRepaintEmpty()
+	if P.started and On() then
+		All(SETS.empty)
 	end
 end
 

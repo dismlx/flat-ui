@@ -22,6 +22,7 @@ local S = {
 	editWas = false,
 	rect = {}, rectClock = 0,
 	kbWant = false, kbHeld = false, kbTold = false, fight = false, kbOwner = {},
+	emptySet = {}, emptyBusy = false, emptyOn = false,
 }
 local F = {}
 
@@ -94,7 +95,7 @@ end
 local ON_SHOW = [=[
 local bar = self:GetFrameRef("bar")
 bar:SetAttribute("flatui-game", true)
-if bar:GetAttribute("flatui-pb") or bar:GetAttribute("flatui-kb") then
+if bar:GetAttribute("flatui-pb") or bar:GetAttribute("flatui-kb") or bar:GetAttribute("flatui-empty") then
 	bar:Hide()
 else
 	bar:Show()
@@ -108,7 +109,7 @@ bar:Hide()
 local ON_PETBATTLE = [=[
 local pb = tonumber(newstate) == 1
 self:SetAttribute("flatui-pb", pb)
-if self:GetAttribute("flatui-game") and not pb and not self:GetAttribute("flatui-kb") then
+if self:GetAttribute("flatui-game") and not pb and not self:GetAttribute("flatui-kb") and not self:GetAttribute("flatui-empty") then
 	self:Show()
 else
 	self:Hide()
@@ -183,8 +184,20 @@ local KB_OFF = PARK .. [=[
 for n = 1, 8 do
 	local bar = self:GetFrameRef("bar" .. n)
 	bar:SetAttribute("flatui-kb", false)
-	if bar:GetAttribute("flatui-game") and not bar:GetAttribute("flatui-pb") then
+	if bar:GetAttribute("flatui-game") and not bar:GetAttribute("flatui-pb") and not bar:GetAttribute("flatui-empty") then
 		bar:Show()
+	end
+end
+]=]
+
+local EMPTY = [=[
+do
+	local bar = self:GetFrameRef("bar%d")
+	bar:SetAttribute("flatui-empty", %s)
+	if bar:GetAttribute("flatui-game") and not bar:GetAttribute("flatui-pb") and not bar:GetAttribute("flatui-kb") and not bar:GetAttribute("flatui-empty") then
+		bar:Show()
+	else
+		bar:Hide()
 	end
 end
 ]=]
@@ -584,6 +597,7 @@ function F.Layout()
 	end
 	if #run > 0 then
 		Run(table.concat(run, "\n"))
+		S.flag.empty = true
 	end
 	local ok, err = pcall(F.Pager)
 	S.pagerError = not ok and tostring(err) or nil
@@ -807,6 +821,58 @@ function F.Lock()
 	end
 end
 
+function F.Busy(edit)
+	if edit then
+		return true
+	end
+	if type(GetCursorInfo) == "function" then
+		local ok, kind = pcall(GetCursorInfo)
+		if ok and (ns.IsSecret(kind) or kind ~= nil) then
+			return true
+		end
+	end
+	local kit = ns.MoverKit
+	if type(kit) == "table" and type(kit.IsOpen) == "function" then
+		local ok, open = pcall(kit.IsOpen)
+		return ok and open == true
+	end
+	return false
+end
+
+function F.Bare(n)
+	local has = C_ActionBar and C_ActionBar.HasAction or _G.HasAction
+	local count = Count(n)
+	if type(has) ~= "function" or count < 1 then
+		return false
+	end
+	for i = 1, count do
+		local slot = S.grid[n][i]:GetAttribute("action")
+		if type(slot) ~= "number" then
+			return false
+		end
+		local ok, there = pcall(has, slot)
+		if not ok or ns.IsSecret(there) or there then
+			return false
+		end
+	end
+	return true
+end
+
+function F.Empty()
+	local on = ns.Get("actionbars.emptyBars") == true and not F.Busy(S.editWas)
+	local t = {}
+	for n = 2, 8 do
+		local hide = on and F.Bare(n) or false
+		if (S.emptySet[n] == true) ~= hide then
+			S.emptySet[n] = hide
+			t[#t + 1] = EMPTY:format(n, tostring(hide))
+		end
+	end
+	if #t > 0 then
+		Run(table.concat(t, "\n"))
+	end
+end
+
 function F.Missing()
 	local last = S.grid[8] and S.grid[8][12]
 	if not last or last:GetAttribute("type") ~= "action" or last:GetAttribute("action") ~= BAR[8].base + 12 then
@@ -888,6 +954,7 @@ function F.Build()
 	end
 	S.built = true
 	S.flag.revert = false
+	S.flag.empty = true
 	for n = 1, 12 do
 		S.slots[n] = S.grid[1][n]:GetAttribute("action")
 	end
@@ -960,6 +1027,10 @@ function F.Process()
 		fl.layout = false
 		F.Layout()
 	end
+	if fl.empty then
+		fl.empty = false
+		F.Empty()
+	end
 	if fl.keys then
 		fl.keys, fl.resync = false, false
 		F.Keys()
@@ -985,6 +1056,11 @@ function F.Watch()
 	S.editWas = active
 	if not S.built then
 		return
+	end
+	local busy, on = F.Busy(active), ns.Get("actionbars.emptyBars") == true
+	if busy ~= S.emptyBusy or on ~= S.emptyOn then
+		S.emptyBusy, S.emptyOn = busy, on
+		S.flag.empty = true
 	end
 	if type(KeybindFrames_InQuickKeybindMode) == "function" then
 		local ok, open = pcall(KeybindFrames_InQuickKeybindMode)
@@ -1051,7 +1127,7 @@ function F.Event(event, name)
 	end
 	if event == "PLAYER_REGEN_ENABLED" then
 		S.fight = false
-		S.pagerTold = nil
+		S.pagerTold, S.emptyTold = nil, nil
 		if S.built then
 			fl.upkeep, fl.lock = true, true
 		end
@@ -1082,9 +1158,14 @@ function F.Event(event, name)
 		F.PageText()
 	end
 	if event == "PLAYER_ENTERING_WORLD" then
-		fl.layout, fl.lock, fl.keys = true, true, true
-	elseif event == "ACTIONBAR_SLOT_CHANGED" or event == "UPDATE_BINDINGS" then
+		fl.layout, fl.lock, fl.keys, fl.empty = true, true, true, true
+	elseif event == "ACTIONBAR_SLOT_CHANGED" then
+		fl.keys, fl.empty = true, true
+	elseif event == "UPDATE_BINDINGS" then
 		fl.keys = true
+	elseif event == "ACTIONBAR_SHOWGRID" or event == "ACTIONBAR_HIDEGRID" or event == "CURSOR_CHANGED" then
+		S.emptyBusy = F.Busy(S.editWas)
+		fl.empty = true
 	elseif event == "EDIT_MODE_LAYOUTS_UPDATED" or event == "UI_SCALE_CHANGED" or event == "DISPLAY_SIZE_CHANGED" then
 		fl.layout = true
 	elseif event == "CVAR_UPDATE" and type(name) == "string" and name:lower() == "lockactionbars" then
@@ -1095,7 +1176,7 @@ end
 local frame = CreateFrame("Frame")
 local LATER = { "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR",
 	"UPDATE_VEHICLE_ACTIONBAR", "UPDATE_OVERRIDE_ACTIONBAR", "UPDATE_SHAPESHIFT_FORM", "ACTIONBAR_SLOT_CHANGED", "UPDATE_BINDINGS",
-	"EDIT_MODE_LAYOUTS_UPDATED", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED", "CVAR_UPDATE" }
+	"EDIT_MODE_LAYOUTS_UPDATED", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED", "CVAR_UPDATE", "ACTIONBAR_SHOWGRID", "ACTIONBAR_HIDEGRID", "CURSOR_CHANGED" }
 function F.Listen()
 	if S.listening then
 		return
@@ -1221,6 +1302,17 @@ function ns.OwnPagerChanged()
 			S.pagerTold = true
 			print(want and "Flat UI: the page arrows show when the fight ends." or "Flat UI: the page arrows go when the fight ends.")
 		end
+	end
+end
+
+function ns.OwnEmptyChanged()
+	if not S.built then
+		return
+	end
+	S.flag.empty = true
+	if InCombatLockdown() and not S.emptyTold and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+		S.emptyTold = true
+		print(ns.Get("actionbars.emptyBars") == true and "Flat UI: empty bars hide when the fight ends." or "Flat UI: empty bars show again when the fight ends.")
 	end
 end
 

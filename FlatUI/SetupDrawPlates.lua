@@ -2215,7 +2215,7 @@ function P.Parts(S)
 	Set({ "targetBar", "targetBarColour", "target", "targetColour", "targetThickness", "targetFlash" }, (Live("target") or plate).bar)
 	Set({ "focusColour" }, (Live("focus") or Live("target") or plate).bar)
 	local marked = Live("target") or plate
-	Set({ "targetMark", "targetMarkColour", "targetArrows" }, type(ns.PlateMarkShown) == "function" and ns.PlateMarkShown(marked) or marked.bar)
+	Set({ "targetMark", "targetMarkColour", "targetMarkGlow", "targetArrows", "targetArrowSize" }, type(ns.PlateMarkShown) == "function" and ns.PlateMarkShown(marked) or marked.bar)
 	Set({ "threat", "threatRole", "threatGood", "threatTransition", "threatBad", "threatSameColours", "threatDamageGood", "threatDamageTransition",
 		"threatDamageBad" }, plates.threat and plates.threat.chips.f or plate.bar)
 	Set({ "hover", "hoverColour" }, (Live("hover") or plate).bar)

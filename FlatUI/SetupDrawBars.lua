@@ -467,6 +467,7 @@ function ACTION.build(stage)
 	for _, key in ipairs({ "hotkeyShow", "hotkeySize", "hotkeyOwn", "hotkeyColour", "hotkeyPoint", "hotkeyX", "hotkeyY", "nameShow", "nameSize", "countSize", "textOutline" }) do
 		parts["actionbars." .. key] = main.buttons[5].frame
 	end
+	parts["actionbars.hotkeyEmpty"] = main.buttons[#main.buttons].frame
 	parts["actionbars.hotkeyText"] = inst.rows[2].buttons[9].frame
 	for _, key in ipairs({ "usableOwn", "manaColour", "unusableColour", "rangeTint", "rangeColour", "sweep", "sweepOwn", "sweepAlpha", "cdFont", "cdColour", "cdTenths", "cdGrey" }) do
 		parts["actionbars." .. key] = main.buttons[1].frame
@@ -488,6 +489,9 @@ local function PaintText(entry, b, on)
 	end
 	local flags = on and type(ns.OutlineFlags) == "function" and ns.OutlineFlags(Opt("textOutline")) or nil
 	local hot, name = Shows(Opt("hotkeyShow")), Shows(Opt("nameShow"))
+	if on and b.empty and b.emptyOn and Opt("hotkeyEmpty") ~= true then
+		hot = false
+	end
 	b.key:SetText(on and Opt("hotkeyText") == "short" and type(ns.HotkeyText) == "function" and ns.HotkeyText(b.keyLong) or b.keyLong)
 	b.key:SetAlpha(hot and 1 or 0)
 	b.name:SetAlpha(name and 1 or 0)
