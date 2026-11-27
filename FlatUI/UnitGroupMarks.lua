@@ -1026,9 +1026,13 @@ end)
 -- except under chat lockdown, UnitDocumentation.lua:1778-1791); a withheld answer keeps what shows. It hides while the member is plainly dead or
 -- offline, where the Dead or Offline word and the resurrection icon speak. Each frame hears PLAYER_FLAGS_CHANGED, UNIT_CONNECTION and UNIT_HEALTH for
 -- its own member on a frame of the addon's own (RegisterUnitEvent, as the game's raid frames hear them, Shared/CompactUnitFrame.lua:339-352), whose
--- payload is never read, so the word comes and goes in a fight too, and on a revive. It is made and placed out of combat.
+-- payload is never read, so the word comes and goes in a fight too, and on a revive. It is made and placed out of combat. It fades in over AFK_IN
+-- seconds as the member goes and out over AFK_OUT as they come back (Alpha animations of the font string; a new member, or the row going off, hides it
+-- at once), and counts the time away from when Flat UI first saw the flag, plain numbers of GetTime: AFK for the first minute, then AFK 3m, and from
+-- an hour AFK 1h, written again every AFK_EVERY seconds by one ticker of the addon's own that runs only while a word counts.
 local AFK_EVENTS = { "PLAYER_FLAGS_CHANGED", "UNIT_CONNECTION", "UNIT_HEALTH" }
 local AFK_GREY = 0.8
+local AFK_IN, AFK_OUT, AFK_EVERY = 0.2, 0.3, 15
 
 -- True when the member is plainly away, and neither plainly dead nor plainly offline; false when not; nil when the game withheld whether.
 local function Away(unit)
@@ -1039,25 +1043,142 @@ local function Away(unit)
 	return Plain(_G.UnitIsDeadOrGhost, unit) ~= true and Plain(_G.UnitIsConnected, unit) ~= false
 end
 
+local function Now()
+	local ok, now = pcall(GetTime)
+	if ok and ns.Finite(now) then
+		return now
+	end
+	return nil
+end
+
+-- The word: AFK, then with the minutes or hours away since the flag was first seen.
+local function AfkWord(a)
+	local word, now = a.word, Now()
+	if a.since ~= nil and now ~= nil then
+		local gone = now - a.since
+		if gone >= 3600 then
+			word = ("%s %dh"):format(a.word, math.floor(gone / 3600))
+		elseif gone >= 60 then
+			word = ("%s %dm"):format(a.word, math.floor(gone / 60))
+		end
+	end
+	if a.said ~= word then
+		a.said = word
+		a.text:SetText(word)
+	end
+end
+
+-- The words that count, and the ticker that writes them again; it stops with the last.
+local counting = setmetatable({}, { __mode = "k" })
+local afkTicker = nil
+
+local function CountAfk()
+	for a in pairs(counting) do
+		if a.since ~= nil then
+			AfkWord(a)
+		else
+			counting[a] = nil
+		end
+	end
+	if next(counting) == nil and afkTicker ~= nil then
+		pcall(afkTicker.Cancel, afkTicker)
+		afkTicker = nil
+	end
+end
+
+local function Counting(a)
+	counting[a] = a.since ~= nil or nil
+	if a.since ~= nil and afkTicker == nil and type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
+		local ok, ticker = pcall(C_Timer.NewTicker, AFK_EVERY, function()
+			X.run(AFK, CountAfk)
+		end)
+		afkTicker = ok and ticker or nil
+	end
+end
+
+-- The fades of the word: an Alpha animation from 0 to 1, and one from 1 to 0 that hides the word as it ends and puts its opacity back. Nil for each
+-- where the client makes none.
+local function AfkFades(text)
+	local ok, fadeIn, fadeOut = pcall(function()
+		local come = text:CreateAnimationGroup()
+		local rise = come:CreateAnimation("Alpha")
+		rise:SetFromAlpha(0)
+		rise:SetToAlpha(1)
+		rise:SetDuration(AFK_IN)
+		local go = text:CreateAnimationGroup()
+		local fall = go:CreateAnimation("Alpha")
+		fall:SetFromAlpha(1)
+		fall:SetToAlpha(0)
+		fall:SetDuration(AFK_OUT)
+		pcall(go.SetToFinalAlpha, go, true)
+		go:SetScript("OnFinished", function()
+			text:Hide()
+			text:SetAlpha(1)
+		end)
+		return come, go
+	end)
+	if ok then
+		return fadeIn, fadeOut
+	end
+	return nil, nil
+end
+
+-- The member went away (the count starts and the word fades in) or is back (it fades out, or with fade false goes at once).
+local function SetAway(a, away, fade)
+	if a.away == away then
+		return
+	end
+	a.away = away
+	local text, fadeIn, fadeOut = a.text, a.fadeIn, a.fadeOut
+	if fadeIn and fadeIn:IsPlaying() then
+		pcall(fadeIn.Stop, fadeIn)
+	end
+	if away then
+		if fadeOut and fadeOut:IsPlaying() then
+			pcall(fadeOut.Stop, fadeOut)
+		end
+		a.since = Now()
+		AfkWord(a)
+		text:SetAlpha(1)
+		text:Show()
+		if fadeIn then
+			pcall(fadeIn.Play, fadeIn)
+		end
+	else
+		a.since = nil
+		if not (fade and fadeOut and text:IsShown()) then
+			if fadeOut and fadeOut:IsPlaying() then
+				pcall(fadeOut.Stop, fadeOut)
+			end
+			text:Hide()
+			text:SetAlpha(1)
+		elseif not fadeOut:IsPlaying() and not pcall(fadeOut.Play, fadeOut) then
+			text:Hide()
+		end
+	end
+	Counting(a)
+end
+
 local function ShowAfk(a)
 	if a.unit == nil then
-		a.text:Hide()
+		SetAway(a, false, false)
 		return
 	end
 	local away = Away(a.unit)
 	if away ~= nil then
-		a.text:SetShown(away)
+		SetAway(a, away, true)
 	end
 end
 
--- The frame of the addon's own that hears the member of one party frame, and nothing once it has no member. A new member starts with the word hidden.
+-- The frame of the addon's own that hears the member of one party frame, and nothing once it has no member. A new member starts with the word hidden
+-- and no count.
 local function ListenAfk(a, unit)
 	if a.unit == unit then
 		return
 	end
 	pcall(a.ear.UnregisterAllEvents, a.ear)
 	a.unit = unit
-	a.text:Hide()
+	SetAway(a, false, false)
 	if unit == nil then
 		return
 	end
@@ -1107,11 +1228,13 @@ local function MakeAfk(rec)
 	if text == nil then
 		return nil
 	end
-	text:SetText(type(_G.AFK) == "string" and not IsSecret(_G.AFK) and _G.AFK ~= "" and _G.AFK or "AFK")
+	local word = type(_G.AFK) == "string" and not IsSecret(_G.AFK) and _G.AFK ~= "" and _G.AFK or "AFK"
+	text:SetText(word)
 	text:SetTextColor(AFK_GREY, AFK_GREY, AFK_GREY)
 	text:Hide()
 	local ear = Own(CreateFrame("Frame"))
-	local a = { text = text, ear = ear }
+	local a = { text = text, ear = ear, word = word, said = word }
+	a.fadeIn, a.fadeOut = AfkFades(text)
 	ear:SetScript("OnEvent", function()
 		X.run(AFK, ShowAfk, a)
 	end)

@@ -2234,7 +2234,7 @@ ns.PAGES = {
 		{ key = "partyRezIcon", kind = "bool", default = true, label = "Resurrection icon on party frames",
 			tip = "On the portrait of a dead member while someone resurrects them, also in a fight, breathing softly so two healers do not resurrect the same one. With Picture None it sits in the empty picture square, or in One frame at the left end of the health bar, clear of the Dead word. The game's party frames show a summon already, and its raid frames both." },
 		{ key = "partyAfk", kind = "bool", default = true, label = "AFK on party frames",
-			tip = "A grey AFK at the bottom of the picture of a party member who is away, also of the empty picture square with Picture None, or in One frame at the left end of the health bar, also in a fight. Hidden while they are dead or offline. The game's frames show none." },
+			tip = "A grey AFK at the bottom of the picture of a party member who is away, also of the empty picture square with Picture None, or in One frame at the left end of the health bar, also in a fight. It fades in, counts the time away from when Flat UI first saw the flag (AFK 3m, AFK 1h) and fades out as they come back. Hidden while they are dead or offline. The game's frames show none." },
 		{ key = "raidLeaderIcon", kind = "bool", default = true, label = "Leader and assistant icons on raid frames", tip = "The game's raid frames show none." },
 		{ key = "targetBorder", kind = "choice", default = "game", label = "Border for your target",
 			tip = "On raid frames, the border of your target. With Own colour the game's party frames get one too.",
