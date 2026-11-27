@@ -289,6 +289,9 @@ local SWING_TIMERS = {
 	{ "SwingTimerRangedFrame", "ranged" },
 }
 
+local SWING_GRACE, SWING_FADE = 0.4, 0.25
+local idleSince, swingFaded = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
+
 local function SwingIdle(timer)
 	local mode = ns.Enabled("swing") and ns.Get("swing.idle")
 	if mode ~= "hide" and mode ~= "combat" then
@@ -302,7 +305,18 @@ local function SwingIdle(timer)
 		local ok, fighting = pcall(UnitAffectingCombat, "player")
 		return ok and fighting == false
 	end
-	return not ns.IsSecret(ending) and ending == nil
+	if ns.IsSecret(ending) then
+		return false
+	elseif ending ~= nil then
+		idleSince[timer] = nil
+		return false
+	end
+	local now, since = GetTime(), idleSince[timer]
+	if since == nil or since > now then
+		idleSince[timer] = now
+		return false
+	end
+	return now - since >= SWING_GRACE + SWING_FADE
 end
 
 local swingOption = setmetatable({}, { __mode = "k" })
@@ -474,6 +488,36 @@ local function ApplySwingReverse(timer)
 	end
 end
 
+local function SwingFadeStep(timer)
+	local bar = timer.StatusBar
+	if bar == nil or ns.Forbidden(bar) then
+		return
+	end
+	local ending, editing, since = timer.swingEndTime, timer.isInEditMode, idleSince[timer]
+	local swinging = ns.IsSecret(ending) or ending ~= nil
+	local left
+	if not swinging and since ~= nil and not (ns.IsSecret(editing) or editing == true) and ns.Enabled("swing") and ns.Get("swing.idle") == "hide" then
+		local t = GetTime() - since - SWING_GRACE
+		if t >= 0 and t < SWING_FADE then
+			left = 1 - t / SWING_FADE
+		end
+	end
+	local base = swingFaded[timer]
+	if left then
+		if base == nil then
+			local ok, alpha = pcall(bar.GetAlpha, bar)
+			base = ok and ns.Finite(alpha) and alpha or 1
+			swingFaded[timer] = base
+		end
+		pcall(bar.SetAlpha, bar, base * left)
+	elseif base ~= nil then
+		swingFaded[timer] = nil
+		if not swinging then
+			pcall(bar.SetAlpha, bar, base)
+		end
+	end
+end
+
 local function ApplySwingIdle(timer)
 	local bar = timer.StatusBar
 	if bar == nil or ns.Forbidden(bar) then
@@ -489,6 +533,7 @@ local function ApplySwingIdle(timer)
 		ns.SetHidden(bar, hide)
 		set.idle = hide or nil
 	end
+	SwingFadeStep(timer)
 end
 
 local AUTO_SHOT_AIM = 0.5
@@ -835,10 +880,10 @@ local function SwingInFlight()
 	if ns.Get("swing.idle") ~= "hide" and not ns.Get("swing.textOwn") and math.abs(ns.Get("swing.rangeAlpha") / 100 - GAME_RANGE_ALPHA) <= 0.0001 then
 		return false
 	end
-	local found = false
+	local found, hide, now = false, ns.Get("swing.idle") == "hide", GetTime()
 	EachTimer(function(timer)
-		local ending = timer.swingEndTime
-		if not ns.IsSecret(ending) and ending ~= nil then
+		local ending, since = timer.swingEndTime, idleSince[timer]
+		if (not ns.IsSecret(ending) and ending ~= nil) or (hide and since ~= nil and now >= since and now - since < SWING_GRACE + SWING_FADE) then
 			found = true
 		end
 	end)
@@ -868,6 +913,7 @@ local function SwingLight(timer)
 		SwingLooks(timer)
 	end
 	ns.Each("swing", ApplySwingRange, timer)
+	ns.Each("swing", SwingFadeStep, timer)
 end
 
 local function SwingFull(timer)
@@ -1257,6 +1303,18 @@ local CAST_STATES = {
 	["ui-castingbar-filling-applyingcrafting"] = "craft",
 	["ui-castingbar-full-applyingcrafting"] = "craft",
 }
+function ns.CastBarInterrupted(bar)
+	if ns.IsSecret(bar) or ns.Forbidden(bar) then
+		return false
+	end
+	local fill = ns.FillRegion(bar)
+	if not fill then
+		return false
+	end
+	local ok, atlas = pcall(fill.GetAtlas, fill)
+	return ok and not ns.IsSecret(atlas) and type(atlas) == "string" and CAST_STATES[atlas:lower()] == "interrupted"
+end
+
 local CAST_COLOURS = {
 	cast = "castbars.castColour",
 	channel = "castbars.channelColour",
@@ -1398,7 +1456,7 @@ end
 
 local function HideMarks(record)
 	if record.marks then
-		for _, name in ipairs({ "icon", "latency" }) do
+		for _, name in ipairs({ "icon", "latency", "queue" }) do
 			if record[name] then
 				record[name]:Hide()
 			end
@@ -1425,11 +1483,48 @@ local function LatencyTint(holder, ...)
 	holder.latencyHex = hex
 end
 
+local QUEUE = { at = nil, ms = nil, every = 1, least = 5 }
+
+local function QueueWindow()
+	local now = GetTime()
+	if QUEUE.at and now >= QUEUE.at and now - QUEUE.at < QUEUE.every then
+		return QUEUE.ms
+	end
+	local ms
+	local api = C_Spell
+	if type(api) == "table" and type(api.GetSpellQueueWindow) == "function" then
+		local ok, value = pcall(api.GetSpellQueueWindow)
+		if ok and ns.Finite(value) and value >= 0 then
+			ms = value > 0 and value < QUEUE.least and value * 1000 or value
+		end
+	end
+	if ms == nil and type(GetCVar) == "function" then
+		local ok, value = pcall(GetCVar, "SpellQueueWindow")
+		local number = ok and not ns.IsSecret(value) and tonumber(value) or nil
+		ms = ns.Finite(number) and number >= 0 and number or nil
+	end
+	QUEUE.at, QUEUE.ms = now, ms or 400
+	return QUEUE.ms
+end
+
+local function QueueTint(holder, mark)
+	local hex = ns.Get("castbars.queueColour")
+	if holder.queueHex == hex then
+		return
+	end
+	local ok, r, g, b = pcall(ns.Colour, "castbars.queueColour")
+	if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		r, g, b = 1, 1, 1
+	end
+	mark:SetColorTexture(r, g, b, 1)
+	holder.queueHex = hex
+end
+
 local function MakeMark(bar, record, name, anchor)
 	if record.markFailed or (InCombatLockdown() and Protected(bar)) then
 		return nil
 	end
-	local mark = bar:CreateTexture(nil, "OVERLAY", nil, name == "icon" and 1 or 0)
+	local mark = bar:CreateTexture(nil, "OVERLAY", nil, name == "icon" and 1 or name == "queue" and 2 or 0)
 	ns.Own[mark] = true
 	anchor(mark)
 	mark:Hide()
@@ -1442,7 +1537,47 @@ local function MakeMark(bar, record, name, anchor)
 	return mark
 end
 
-local function Marks(bar, record, wantIcon, wantLatency)
+local function PlaceQueue(bar, record, wantQueue, startMs, endMs, width)
+	local queue = record.queue
+	local window = wantQueue and startMs and endMs and endMs > startMs and width and width > 0 and QueueWindow() or nil
+	if not (window and window > 0) then
+		if queue then
+			queue:Hide()
+		end
+		return false
+	end
+	if not queue then
+		local spacer = record.queueSpacer or MakeMark(bar, record, "queueSpacer", function(mark)
+			mark:SetColorTexture(0, 0, 0, 0)
+			mark:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+			mark:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
+			mark:SetWidth(0.01)
+		end)
+		queue = spacer and MakeMark(bar, record, "queue", function(mark)
+			mark:SetColorTexture(1, 1, 1, 1)
+			mark:SetPoint("TOP", spacer, "TOPRIGHT", 0, 0)
+			mark:SetPoint("BOTTOM", spacer, "BOTTOMRIGHT", 0, 0)
+		end)
+		if not queue then
+			return false
+		end
+	end
+	QueueTint(record, queue)
+	local x = (1 - math.min(1, window / (endMs - startMs))) * width
+	if record.queueX ~= x then
+		record.queueSpacer:SetWidth(math.max(x, 0.01))
+		record.queueX = x
+	end
+	local px = ns.Pixels(bar, 1)
+	if record.queuePx ~= px then
+		queue:SetWidth(px)
+		record.queuePx = px
+	end
+	queue:Show()
+	return true
+end
+
+local function Marks(bar, record, wantIcon, wantLatency, wantQueue)
 	local unit = record.option == "pet" and "pet" or "player"
 	local name, _, texture, startMs, endMs = UnitCastingInfo(unit)
 	local channel = false
@@ -1456,6 +1591,9 @@ local function Marks(bar, record, wantIcon, wantLatency)
 	elseif name == nil then
 		if record.latency then
 			record.latency:Hide()
+		end
+		if record.queue then
+			record.queue:Hide()
 		end
 		local icon = record.icon
 		if icon and not wantIcon then
@@ -1517,6 +1655,9 @@ local function Marks(bar, record, wantIcon, wantLatency)
 	elseif latency then
 		latency:Hide()
 	end
+	if PlaceQueue(bar, record, wantQueue and not channel, startMs, endMs, width) then
+		shown = true
+	end
 	record.marks = shown or nil
 end
 
@@ -1524,9 +1665,10 @@ local function PaintMarks(bar, record, state)
 	local option = record.key == "castbars" and record.option
 	local wantIcon = (option == "player" or option == "pet") and ns.Get("castbars.playerIcon")
 	local wantLatency = option == "player" and state ~= "interrupted" and ns.Get("castbars.latency")
-	if not wantIcon and not wantLatency then
+	local wantQueue = option == "player" and state ~= "interrupted" and ns.Get("castbars.queue") == true
+	if not wantIcon and not wantLatency and not wantQueue then
 		HideMarks(record)
-	elseif ns.PartStopped("castbars", "cast marks") or not ns.EachPart("castbars", "cast marks", Marks, bar, record, wantIcon, wantLatency) then
+	elseif ns.PartStopped("castbars", "cast marks") or not ns.EachPart("castbars", "cast marks", Marks, bar, record, wantIcon, wantLatency, wantQueue) then
 		HideMarks(record)
 	end
 end
@@ -1901,13 +2043,13 @@ end
 
 do
 	local MARK_BARS = { { "PlayerCastingBarFrame", "player" }, { "OverlayPlayerCastingBarFrame", "player" }, { "PetCastingBarFrame", "pet" } }
-	local MARK_EVERY, MARK_PART, MARK_NAMES = 0.05, "cast marks", { "icon", "cast", "channel" }
+	local MARK_EVERY, MARK_PART, MARK_NAMES = 0.05, "cast marks", { "icon", "cast", "channel", "queue" }
 	local sets, queued = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
 	local markFrame, markClock, marking = nil, 0, false
 
 	local function MarksWanted()
 		return ns.Enabled("castbars") and ns.Get("castbars.flat") ~= true and not ns.PartStopped("castbars", MARK_PART)
-			and (ns.Get("castbars.latency") == true or ns.Get("castbars.playerIcon") == true)
+			and (ns.Get("castbars.latency") == true or ns.Get("castbars.playerIcon") == true or ns.Get("castbars.queue") == true)
 	end
 
 	local function ShowMark(set, name, show)
@@ -1979,11 +2121,41 @@ do
 			return nil
 		end
 		set = { unit = unit, icon = icon, cast = cast, channel = channel, shown = {}, widths = {} }
+		if unit == "player" then
+			local spacer = NewMark(bar, 0, function(mark)
+				mark:SetColorTexture(0, 0, 0, 0)
+				mark:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+				mark:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
+				mark:SetWidth(0.01)
+			end)
+			set.queueSpacer = spacer
+			set.queue = spacer and NewMark(bar, 2, function(mark)
+				mark:SetColorTexture(1, 1, 1, 1)
+				mark:SetPoint("TOP", spacer, "TOPRIGHT", 0, 0)
+				mark:SetPoint("BOTTOM", spacer, "BOTTOMRIGHT", 0, 0)
+				mark:SetWidth(ns.Pixels(bar, 1))
+			end) or nil
+		end
 		sets[bar] = set
 		return set
 	end
 
-	local function PaintSet(bar, set, wantIcon, wantLatency)
+	local function PaintQueue(set, wantQueue, channel, startMs, endMs, width)
+		local window = wantQueue and not channel and startMs and endMs and endMs > startMs and width and width > 0 and QueueWindow() or nil
+		if not (set.queue and window and window > 0) then
+			ShowMark(set, "queue", false)
+			return
+		end
+		QueueTint(set, set.queue)
+		local x = (1 - math.min(1, window / (endMs - startMs))) * width
+		if set.widths.queue ~= x then
+			set.queueSpacer:SetWidth(math.max(x, 0.01))
+			set.widths.queue = x
+		end
+		ShowMark(set, "queue", true)
+	end
+
+	local function PaintSet(bar, set, wantIcon, wantLatency, wantQueue)
 		local name, _, texture, startMs, endMs = UnitCastingInfo(set.unit)
 		local channel = false
 		if not ns.IsSecret(name) and name == nil then
@@ -1998,6 +2170,7 @@ do
 			if ok and not ns.IsSecret(shown) and shown == true then
 				ShowMark(set, "cast", false)
 				ShowMark(set, "channel", false)
+				ShowMark(set, "queue", false)
 				if not wantIcon then
 					ShowMark(set, "icon", false)
 				end
@@ -2040,6 +2213,7 @@ do
 		else
 			ShowMark(set, side, false)
 		end
+		PaintQueue(set, wantQueue, channel, startMs, endMs, width)
 	end
 
 	local function MarkTick(_, elapsed)
@@ -2053,11 +2227,12 @@ do
 			return
 		end
 		local wantIcon, wantLatency = ns.Get("castbars.playerIcon") == true, ns.Get("castbars.latency") == true
+		local wantQueue = ns.Get("castbars.queue") == true
 		for _, entry in ipairs(MARK_BARS) do
 			local bar = _G[entry[1]]
 			local set = bar ~= nil and sets[bar]
 			if set then
-				local ok, err = ns.EachPart("castbars", MARK_PART, PaintSet, bar, set, wantIcon, wantLatency)
+				local ok, err = ns.EachPart("castbars", MARK_PART, PaintSet, bar, set, wantIcon, wantLatency, wantQueue)
 				if not ok then
 					HideSet(set)
 					if err then
