@@ -50,13 +50,13 @@ local LINE_WAITS = "Hit table: a change of place waits for the end of the fight.
 local LINE_PET = "Hit table: lowered under the pet frame, or test mode's sample of it, which it would run into."
 local LINE_SANS = "Hit table: the game did not load Flat UI Sans, so the table uses the game font."
 local LINE_GAP = {
-	withheld = "Hit table: the game withholds your %s in a fight and has not given them out of one since you logged in, so parts of %s show a dash.",
+	withheld = "Hit table: the game withholds your %s in a fight and has not given them out of one since you logged in or reloaded, so parts of %s show a dash.",
 	refused = "Hit table: the game refused your %s, so parts of %s show a dash.",
 	missing = "Hit table: this client gives no %s, so parts of %s show a dash.",
 }
 local LINE_OLD = "Hit table: the game withholds your stats in a fight, so the numbers are the last it gave out of one%s."
 local LINE_OLD_FORM = ", in another stance or form"
-local TIP = { title = "Hit table", percent = "Your chances in percent against it, all from one roll for each attack.",
+local TIP = { title = "Hit table", percent = "Your chances in percent against the enemy the title names. A swing's parts come from one roll and add up to 100; on the other lines Crit is the chance on an attack that lands.",
 	cap = "Cap: the most your swings can crit, what misses, dodges, parries, glances and blocks leave; yellow once your crit is past it.",
 	none = "A dark dash: the attack cannot have it, as a parry from behind.", unknown = "A light dash: a number the game does not give, as said below." }
 local LINE_ASSUMED = "Hit table: the game gave no weapon skill for your %s, so it counts %d, the most for your level."
@@ -859,7 +859,7 @@ local function Owned()
 		return false
 	end
 	local ok, owned = pcall(tip.IsOwned, tip, S.frame)
-	return ok and owned == true
+	return ok and not IsSecret(owned) and owned == true
 end
 
 local function Untip()
@@ -907,13 +907,31 @@ local function Tip()
 	S.tipped = true
 end
 
+local function Guarded(frame)
+	if Ask(InCombatLockdown) ~= true then
+		return false
+	end
+	local ok, protected = pcall(frame.IsProtected, frame)
+	return not ok or IsSecret(protected) or protected == true
+end
+
 local function Hover()
 	local frame = S.frame
 	local want = S.visible == true and Opt("hitTableHover") ~= false
 	if frame and S.motion ~= want then
-		pcall(frame.SetMouseClickEnabled, frame, false)
-		if pcall(frame.SetMouseMotionEnabled, frame, want) then
-			S.motion = want
+		if Guarded(frame) then
+			if not S.hoverWaits then
+				S.hoverWaits = true
+				ns.OutOfCombat(function()
+					S.hoverWaits = false
+					Safe(Hover)
+				end)
+			end
+		else
+			pcall(frame.SetMouseClickEnabled, frame, false)
+			if pcall(frame.SetMouseMotionEnabled, frame, want) then
+				S.motion = want
+			end
 		end
 	end
 	if not want then
