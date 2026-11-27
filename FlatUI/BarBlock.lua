@@ -479,6 +479,25 @@ local function Casting()
 	return false
 end
 
+local function Below(value, most)
+	return ns.Finite(value) and ns.Finite(most) and most > 0 and value < most
+end
+
+local function Hurt()
+	local okDead, dead = pcall(UnitIsDeadOrGhost, "player")
+	if not okDead or ns.IsSecret(dead) or dead == true then
+		return false
+	end
+	local okHealth, health = pcall(UnitHealth, "player")
+	local okMost, most = pcall(UnitHealthMax, "player")
+	if okHealth and okMost and Below(health, most) then
+		return true
+	end
+	local okMana, mana = pcall(UnitPower, "player", 0)
+	local okPool, pool = pcall(UnitPowerMax, "player", 0)
+	return okMana and okPool and Below(mana, pool)
+end
+
 local function MoversOpen()
 	local kit = ns.MoverKit
 	return type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
@@ -508,6 +527,9 @@ local function Full(plan)
 				return true
 			end
 		end
+	end
+	if Opt("fadeHurt") == true and Hurt() then
+		return true
 	end
 	if Opt("fadeTarget") and type(UnitExists) == "function" then
 		local ok, exists = pcall(UnitExists, "target")

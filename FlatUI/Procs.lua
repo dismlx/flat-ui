@@ -1053,16 +1053,28 @@ function ns.ProcEnds(entry)
 		return nil
 	end
 	local now = Now()
+	local since = P.up[entry.id] == entry and P.since[entry.id]
+	if Plain(since, "number") and not P.ended[entry.id] and since + time > now then
+		return since + time
+	end
 	local preview = P.preview
 	local start = (preview ~= nil and preview.entry == entry and preview.since) or (P.held == entry and P.heldSince) or nil
 	if Plain(start, "number") then
 		return now + time - (now - start) % time
 	end
-	local since = P.up[entry.id] == entry and P.since[entry.id]
-	if Plain(since, "number") and not P.ended[entry.id] and since + time > now then
-		return since + time
-	end
 	return nil
+end
+
+function ns.ProcReal(entry)
+	if type(entry) ~= "table" or entry.id == nil or P.up[entry.id] ~= entry or P.ended[entry.id] then
+		return false
+	end
+	local since = P.since[entry.id]
+	if not Plain(since, "number") then
+		return false
+	end
+	local time = Number(entry.time)
+	return time <= 0 or since + time > Now()
 end
 
 local function HeldStart()

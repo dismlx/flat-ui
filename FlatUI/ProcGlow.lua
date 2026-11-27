@@ -169,6 +169,69 @@ local function Stopped(made)
 	end
 end
 
+local TIME_SPOTS = { TOPLEFT = { 2, -2, "LEFT" }, TOPRIGHT = { -2, -2, "RIGHT" }, BOTTOMLEFT = { 2, 2, "LEFT" }, BOTTOMRIGHT = { -2, 2, "RIGHT" } }
+local TIME_CORNERS = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }
+local TIME_TAKES = {
+	topright = { TOPRIGHT = true }, topleft = { TOPLEFT = true }, top = { TOPLEFT = true, TOPRIGHT = true },
+	bottomright = { BOTTOMRIGHT = true }, bottomleft = { BOTTOMLEFT = true }, bottom = { BOTTOMLEFT = true, BOTTOMRIGHT = true },
+}
+local TIME_LAST, TIME_GROW = 2, 1.15
+
+local function TextOn(made)
+	if not ns.Enabled("actionbars") then
+		return false
+	end
+	if type(ns.ButtonIsOn) ~= "function" then
+		return true
+	end
+	local ok, on = pcall(ns.ButtonIsOn, made.button)
+	return ok and on == true
+end
+
+local function Corner(hot, name, count)
+	local takes = { TIME_TAKES[hot] or {}, TIME_TAKES[count] or {}, TIME_TAKES[name] or {} }
+	for tier = #takes, 1, -1 do
+		for _, corner in ipairs(TIME_CORNERS) do
+			local taken = false
+			for index = 1, tier do
+				taken = taken or takes[index][corner] == true
+			end
+			if not taken then
+				return corner
+			end
+		end
+	end
+	return TIME_CORNERS[1]
+end
+
+local function Place(made)
+	local text = made.time
+	local hot, name, count = "topright", "bottom", "bottomright"
+	if TextOn(made) then
+		hot, name, count = ns.Get("actionbars.hotkeyPoint"), ns.Get("actionbars.namePoint"), ns.Get("actionbars.countPoint")
+	end
+	local key = ("%s:%s:%s"):format(tostring(hot), tostring(name), tostring(count))
+	if made.timeAt == key then
+		return
+	end
+	local corner = Corner(hot, name, count)
+	local spot = TIME_SPOTS[corner]
+	if pcall(function()
+		text:ClearAllPoints()
+		text:SetPoint(corner, made.button, corner, spot[1], spot[2])
+		text:SetJustifyH(spot[3])
+	end) then
+		made.timeAt = key
+	end
+end
+
+local function Look(made, last)
+	local on = TextOn(made)
+	local size = on and tonumber(ns.Get("actionbars.hotkeySize")) or 100
+	local flags = on and type(ns.OutlineFlags) == "function" and ns.OutlineFlags(ns.Get("actionbars.textOutline")) or nil
+	ns.TextStyle(made.time, { percent = size * (last and TIME_GROW or 1), flags = flags })
+end
+
 local function Count(made, seconds)
 	local text = made.time
 	if not text then
@@ -179,6 +242,9 @@ local function Count(made, seconds)
 		return
 	end
 	made.timeClock = 0.1
+	if made.fadeLeft and made.shown then
+		return
+	end
 	local mark, left = made.mark, nil
 	if type(mark) == "table" and type(mark[5]) == "table" and type(ns.ProcEnds) == "function" and ns.Get(KEY .. ".glowTime") == true then
 		local ok, ends = pcall(ns.ProcEnds, mark[5])
@@ -195,8 +261,17 @@ local function Count(made, seconds)
 		return
 	end
 	local n = math.ceil(left)
-	text:SetTextColor(mark[1], mark[2], mark[3])
+	local last = n <= TIME_LAST
+	if last then
+		text:SetTextColor(1, 1, 1)
+	else
+		text:SetTextColor(mark[1], mark[2], mark[3])
+	end
 	if made.shown ~= n then
+		if made.shown == nil then
+			Place(made)
+		end
+		Look(made, last)
 		made.shown = n
 		text:SetText(n)
 		text:Show()
@@ -332,12 +407,20 @@ function ns.ProcGlowSoft(parent, anchor)
 	return look
 end
 
+local function Fit(made)
+	local ok, w, h = pcall(made.button.GetSize, made.button)
+	if not (ok and Plain(w, "number") and Plain(h, "number") and w > 0 and h > 0) or (made.width == w and made.height == h) then
+		return
+	end
+	made.width, made.height = w, h
+	made.frame:SetSize(w * SCALE, h * SCALE)
+	if made.start then
+		made.start:SetSize(w * START_SIZE, h * START_SIZE)
+	end
+end
+
 local function MakeGlow(button)
 	local width, height = 36, 36
-	local ok, w, h = pcall(button.GetSize, button)
-	if ok and Plain(w, "number") and Plain(h, "number") and w > 0 and h > 0 then
-		width, height = w, h
-	end
 	local frame = CreateFrame("Frame", nil, ParentOf(button))
 	frame:SetSize(width * SCALE, height * SCALE)
 	frame:SetPoint("CENTER", button, "CENTER", 0, 0)
@@ -386,9 +469,10 @@ local function MakeGlow(button)
 	end
 	local time = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
 	ns.Own[time] = true
-	time:SetPoint("TOP", button, "TOP", 0, -2)
 	time:Hide()
 	made.time = time
+	Fit(made)
+	Place(made)
 	made.step = function(_, seconds)
 		Tick(made, seconds)
 	end
@@ -440,6 +524,7 @@ local function Play(made, carry)
 	made.alpha = 1
 	made.clock = carry and math.max(made.clock, START_SECONDS) or 0
 	if not pcall(function()
+		Fit(made)
 		SetLook(made, look, carry)
 		made.frame:SetAlpha(1)
 		made.frame:SetScript("OnUpdate", made.step)
@@ -754,7 +839,7 @@ function ns.ProcUpOn(name)
 	local testing = type(mode) == "table" and type(mode.IsOn) == "function" and mode.IsOn() == true
 	local held = testing and type(ns.ProcHeld) == "function" and ns.ProcHeld or nil
 	for _, rec in pairs(active) do
-		if not (held and held(rec.entry)) then
+		if not (held and held(rec.entry) and not (type(ns.ProcReal) == "function" and ns.ProcReal(rec.entry))) then
 			if rec.bars == nil or rec.barsOf ~= rec.up then
 				rec.barsOf, rec.bars = rec.up, {}
 			end

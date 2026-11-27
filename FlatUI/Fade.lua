@@ -546,6 +546,7 @@ end
 
 local function Step(dt)
 	if ns.PartStopped(KEY, PART) then
+		state.barsOver = false
 		ReleaseAll()
 		return
 	end
@@ -554,6 +555,7 @@ local function Step(dt)
 	local up = dt / math.min(seconds, RETURN_TIME)
 	local always, targeted = Wanted(), Opt("target") and HasTarget()
 	local procs, shown = Opt("proc") == true and type(ns.ProcUpOn) == "function", Previewing()
+	local together, wasOver, anyBar = Opt("barsTogether") == true, state.barsOver == true, false
 	for rule in pairs(asked) do
 		asked[rule] = nil
 	end
@@ -602,28 +604,34 @@ local function Step(dt)
 			end
 			local full = always or (targeted and not entry.targeted) or (entry.rule == true and Holds(Opt(entry.row)))
 				or (entry.opens == true and fresh) or (entry.busy ~= nil and entry.busy(added) == true)
-				or (entry.bar == true and (shown or (procs and ns.ProcUpOn(entry.frames[1]) == true)))
-			if not full then
+				or (entry.bar == true and (shown or (together and wasOver) or (procs and ns.ProcUpOn(entry.frames[1]) == true)))
+			local joined = together and entry.bar == true
+			if not full or joined then
+				local over = false
 				local hover = entry.hover and Resolve(entry.hover)
 				if hover then
-					full = Over(hover)
+					over = Over(hover)
 				else
 					for _, held in ipairs(frames) do
 						if Over(held[1]) then
-							full = true
+							over = true
 							break
 						end
 					end
 				end
-				for _, held in ipairs(not full and added or {}) do
+				for _, held in ipairs(not over and added or {}) do
 					if Over(held[1]) then
-						full = true
+						over = true
 						break
 					end
 				end
-				if not full and entry.beside then
-					full = Beside(entry.beside)
+				if not over and entry.beside then
+					over = Beside(entry.beside)
 				end
+				if over and joined and not (ns.BarBlockFades and ns.BarBlockFades(entry.frames[1])) then
+					anyBar = true
+				end
+				full = full or over
 			end
 			local idle = full and 0 or (state.idle[entry.row] or 0) + dt
 			state.idle[entry.row] = idle
@@ -637,6 +645,7 @@ local function Step(dt)
 			end
 		end
 	end
+	state.barsOver = anyBar
 end
 
 local function FightStarts()

@@ -1494,6 +1494,7 @@ ns.SETUP_STEPS = {
 		{ "barblock.fadeTarget", "r", "behaviour", "Brings the faded block to full opacity while you have a target." },
 		{ "barblock.fadeCast", "r", "behaviour", "Brings the faded block to full opacity as you cast or use an item, and for Wait before fading after." },
 		{ "barblock.fadeProc", "r", "behaviour", "Brings the faded block to full opacity while a proc alert is up for a spell on its bars, such as Overpower or Execute." },
+		{ "barblock.fadeHurt", "r", "behaviour", "Keeps the faded block at full opacity until your health and mana are full again." },
 	} },
 	{ id = "ab-places", area = "Bar block", title = "Class, buffs and consumables bars", draw = "mock-block-places", built = true, rows = {
 		{ "blocks.enabled", "c", "mock-block-places" },
@@ -1535,6 +1536,7 @@ ns.SETUP_STEPS = {
 		{ "fade.microAlpha", "o", "mock-fade" },
 		{ "fade.bagsAlpha", "o", "mock-fade" },
 		{ "fade.barsAlpha", "o", "behaviour", "Sets how far the action bars, stance bar and pet bar fade, apart from Faded opacity." },
+		{ "fade.barsTogether", "o", "behaviour", "Brings every faded action bar back to full when the mouse is over any one of them." },
 		{ "fade.delay", "o", "behaviour", "Sets how many milliseconds a frame waits before it fades." },
 		{ "fade.time", "r", "behaviour", "Sets how many milliseconds the fade takes." },
 		{ "fade.combat", "o", "behaviour", "Keeps faded frames fully visible in combat." },
