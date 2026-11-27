@@ -195,7 +195,7 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 		kit.CopyField(out)
 	end
 	fixed.Hover(out)
-	local choose = kit.Button(fixed.frame, "Modules", kit.SMALL, function()
+	local choose, chooseText = kit.Button(fixed.frame, "Modules", kit.SMALL, function()
 		state.listed = not state.listed
 		kit.Refresh()
 	end)
@@ -253,6 +253,17 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 	local exportSpots = true
 	Switch(Add("Frame positions", Listed, "Puts the frame positions in the export."), function() return exportSpots end,
 		function(on) exportSpots = on end)
+	local every = Add("Modules", Listed, "Ticks or clears every module below.")
+	for index, on in ipairs({ true, false }) do
+		local mark = kit.Button(every.frame, on and "All" or "None", kit.SMALL, function()
+			for key in pairs(state.chosen) do
+				state.chosen[key] = on
+			end
+			kit.Refresh()
+		end)
+		mark:SetPoint("LEFT", every.frame, "LEFT", kit.CONTROL + (index - 1) * (kit.SMALL + 8), 0)
+		every.Hover(mark)
+	end
 	for _, module in ipairs(Share.Modules()) do
 		state.chosen[module.key] = true
 		Switch(Add(module.label, Listed, "Puts the settings of this module in the export."), function() return state.chosen[module.key] == true end,
@@ -265,6 +276,10 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 			if on then
 				picked[key] = true
 			end
+		end
+		if next(picked) == nil and not exportSpots then
+			kit.Say("Tick a module first.")
+			return
 		end
 		local ok, text = pcall(ns.ExportProfile, { modules = Share.Cover(picked), spots = exportSpots })
 		if ok and Text(text) ~= "" then
@@ -293,6 +308,9 @@ function Share.Build(kit, child, y, updates, scroller, paste)
 			positionsCount:SetAlpha(state.positions == false and 0.4 or 1)
 			menu.SetText(state.as == "new" and "New profile" or "Replace " .. Text(ns.Profile and ns.Profile()))
 			named:SetShown(state.as == "new")
+		end
+		if chooseText then
+			chooseText:SetText(state.listed and "Hide list" or "Modules")
 		end
 		local top = base
 		for _, entry in ipairs(rows) do

@@ -846,7 +846,62 @@ local function AddColour(row, item)
 			ns.PanelColour.Open(Read(item), item.alpha == true, Set)
 		end
 	end)
-	row.Hover(swatch)
+	local menu = { frame = swatch }
+	local function Pasted()
+		local copied, now = ui.copiedColour, Read(item)
+		if not (copied and IsText(now) and #now == 8) then
+			return nil
+		end
+		local value = (item.alpha == true and copied.alpha) and copied.value or now:sub(1, 2) .. copied.value:sub(3)
+		return value ~= now and value or nil
+	end
+	swatch:HookScript("OnMouseUp", function(self, button)
+		if button ~= "RightButton" or not row.active then
+			return
+		end
+		local ok, over = pcall(self.IsMouseOver, self)
+		if ok and not ns.IsSecret(over) and over == false then
+			return
+		end
+		OpenList(menu, {
+			lines = function()
+				local now, lines = Read(item), {}
+				if IsText(now) and #now == 8 then
+					lines[#lines + 1] = { "copy", "Copy #" .. now:sub(3):upper() }
+				end
+				local paste = Pasted()
+				if paste then
+					lines[#lines + 1] = { "paste", "Paste #" .. paste:sub(3):upper() }
+				end
+				return lines
+			end,
+			pick = function(id)
+				local now = Read(item)
+				if id == "copy" and IsText(now) and #now == 8 then
+					ui.copiedColour = { value = now, alpha = item.alpha == true }
+					if ns.PanelColour and ns.PanelColour.Remember then
+						ns.PanelColour.Remember(now)
+					end
+					Say(("Copied #%s. Right-click another colour to paste it."):format(now:sub(3):upper()))
+				elseif id == "paste" then
+					local paste = Pasted()
+					if paste then
+						Set(paste)
+						Say(("Pasted #%s into %s. Ctrl+Z puts it back."):format(paste:sub(3):upper(), IsText(item.label) and item.label or "this colour"))
+					end
+				end
+			end,
+		})
+	end)
+	row.Hover(swatch, function()
+		local tip = (IsText(row.tip) and row.tip ~= "" and row.tip .. " " or "") .. "Right-click: copy or paste."
+		if ui.mode then
+			ui.tip = tip
+			ShowStrip()
+		elseif ns.PanelTrust then
+			ns.PanelTrust.Show(swatch, tip, row.need)
+		end
+	end)
 	return function()
 		local value = Read(item)
 		if item.path then
@@ -2180,7 +2235,17 @@ end
 
 local FLASH, FLASH_ALPHA = 0.8, 0.24
 local CHIP_H = 28
-local STEPS_GROUP, PROFILES_GROUP, ACTIONS_GROUP = "Flat UI setup", "Profiles", "Actions"
+local STEPS_GROUP, PROFILES_GROUP, ACTIONS_GROUP, CHANGED_WORD = "Flat UI setup", "Profiles", "Actions", "#changed"
+
+local function PlaceOf(entry)
+	local home = ns.PanelHome
+	return home and home.Place and ui.model and home.Place(ui.model, entry) or entry.label or ""
+end
+
+local function Module(entry)
+	local module = entry and entry.page and entry.page.moduleLabel
+	return type(module) == "string" and module or ""
+end
 
 local function BuildChips(parent)
 	local block = { frame = Frame(parent), chips = {} }
@@ -2204,17 +2269,18 @@ local function BuildChips(parent)
 			local chip = block.chips[index]
 			if not chip then
 				local label
-				chip, label = Button(block.frame, entry.label, 100, function()
+				chip, label = Button(block.frame, PlaceOf(entry), 100, function()
 					Go(block.chips[index].go)
 				end)
 				chip.text = label
 				block.chips[index] = chip
 			end
-			chip.text:SetText(entry.label)
+			local place = PlaceOf(entry)
+			chip.text:SetText(place)
 			chip.go = entry
 			local ok, measured = pcall(chip.text.GetStringWidth, chip.text)
 			if not (ok and Number(measured) and measured > 0) then
-				measured = 7.2 * #entry.label
+				measured = 7.2 * #place
 			end
 			local width = math.ceil(measured) + 24
 			if x > 0 and x + width > ROW_W then
@@ -2422,16 +2488,27 @@ end
 
 local function Collect(words)
 	local groups = {}
+	local only = #words == 1 and words[1] == CHANGED_WORD
 	for _, entry in ipairs(ui.model.pages) do
-		local section, group = "", nil
+		local section, group, place, named = "", nil, nil, nil
 		for _, item in ipairs(entry.page) do
 			if item.section then
 				section = item.section
 			elseif item.key and ns.RowShown(item.path) then
-				local tier = ns.PanelSearch.Tier(words, item.label, item.tip, section, entry.label)
+				if not place then
+					place = PlaceOf(entry)
+					local top = ns.PanelNav.Top(ui.model, entry)
+					named = table.concat({ place, entry.label or "", Module(entry), Module(top) }, " ")
+				end
+				local tier
+				if only then
+					tier = ns.PanelTrust.Changed(item) and 1 or nil
+				else
+					tier = ns.PanelSearch.Tier(words, item.label, item.tip, section, named)
+				end
 				if tier then
 					if not group then
-						group = { label = entry.label, entry = entry, hits = {} }
+						group = { label = place, entry = entry, hits = {} }
 						groups[#groups + 1] = group
 					end
 					group.hits[#group.hits + 1] = { tier = tier, label = item.label or "", item = item, key = item, Open = function()
@@ -2479,6 +2556,9 @@ local function Collect(words)
 					does.Run()
 				end }
 		end
+	end
+	if only then
+		return groups
 	end
 	for _, group in ipairs({ profiles, steps, actions }) do
 		if #group.hits > 0 then
@@ -2550,10 +2630,14 @@ local function Search(typed)
 	end
 	view.shown, view.picks = {}, {}
 	local groups = Collect(words)
+	local only = #words == 1 and words[1] == CHANGED_WORD
 	local y = 8
-	local chips = ns.PanelSearch.Pages(words, ui.model)
-	if #groups == 0 then
-		chips = ns.PanelSearch.Closest(words, ui.model)
+	local chips = {}
+	if not only then
+		chips = ns.PanelSearch.Pages(words, ui.model)
+		if #groups == 0 then
+			chips = ns.PanelSearch.Closest(words, ui.model)
+		end
 	end
 	y = y + view.chips.Set(chips, y)
 	for number, group in ipairs(groups) do
@@ -2589,6 +2673,7 @@ local function Search(typed)
 			end
 		end
 	end
+	view.empty:SetText(only and "Every setting is at its default." or "No settings match.")
 	view.empty:SetShown(#view.shown == 0)
 	if #view.shown == 0 then
 		view.empty:ClearAllPoints()
@@ -2601,7 +2686,11 @@ local function Search(typed)
 	Show(view)
 	ui.title:SetText("Search")
 	local found = #view.shown
-	ui.head.Set(nil, found == 0 and "No results" or found == 1 and "1 result" or ("%d results"):format(found))
+	if only then
+		ui.head.Set(nil, found == 0 and "No changed settings" or found == 1 and "1 changed setting" or ("%d changed settings"):format(found))
+	else
+		ui.head.Set(nil, found == 0 and "No results" or found == 1 and "1 result" or ("%d results"):format(found))
+	end
 	ui.tabs.Hide()
 	ui.preview.Set(nil, 0)
 	ui.reset:Hide()
@@ -2969,6 +3058,18 @@ local function BuildLeft(window)
 		end
 		self:ClearFocus()
 	end)
+	box:SetScript("OnEnter", function()
+		if not ui.mode then
+			ui.message, ui.tip = nil, "Words of a setting, its tip or its page. " .. CHANGED_WORD .. " lists every setting you changed. Ctrl+F from any page."
+			ShowStrip()
+		end
+	end)
+	box:SetScript("OnLeave", function()
+		if not ui.mode then
+			ui.tip = ""
+			ShowStrip()
+		end
+	end)
 	ui.search = box
 
 	ui.optionParts = { left, box, ui.testSwitch.frame, ui.barProfile.frame }
@@ -3309,6 +3410,22 @@ local function BuildBars(window)
 		window:StopMovingOrSizing()
 		SavePosition()
 	end)
+	local clicked
+	bar:SetScript("OnMouseDown", function(_, button)
+		if button ~= "LeftButton" or type(GetTime) ~= "function" then
+			return
+		end
+		local now = GetTime()
+		if clicked and Number(now) and now - clicked <= 0.3 then
+			clicked = nil
+			window:ClearAllPoints()
+			window:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+			Look.ClearPosition()
+			Say("The window is back in the middle.")
+		else
+			clicked = Number(now) and now or nil
+		end
+	end)
 	bar:EnableMouseWheel(true)
 	bar:SetScript("OnMouseWheel", function(_, delta)
 		local ok, held = pcall(IsControlKeyDown)
@@ -3327,7 +3444,7 @@ local function BuildBars(window)
 		end
 		local scale = ns.Get("panel.scale")
 		ui.message = nil
-		ui.tip = ("Drag to move. Ctrl and the mouse wheel: Window scale, now %d%%."):format(Number(scale) and scale or 100)
+		ui.tip = ("Drag to move, double-click to put it in the middle. Ctrl and the mouse wheel: Window scale, now %d%%."):format(Number(scale) and scale or 100)
 		ShowStrip()
 	end)
 	bar:SetScript("OnLeave", function()

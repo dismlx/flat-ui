@@ -69,17 +69,31 @@ function Search.Sort(groups)
 	return groups
 end
 
-local function Name(entry)
+local function Named(model, entry, child)
 	local module = entry.page and entry.page.moduleLabel
-	return (type(module) == "string" and (entry.label .. " " .. module) or entry.label):lower()
+	local tab = child and ns.PanelTabs and ns.PanelTabs.Label(model, entry)
+	return table.concat({ entry.label or "", type(module) == "string" and module or "", type(tab) == "string" and tab or "" }, " ")
+end
+
+local function Name(model, entry)
+	local top = ns.PanelNav.Top(model, entry)
+	if top and top ~= entry then
+		return (Named(model, entry, true) .. " " .. Named(model, top, false)):lower()
+	end
+	return Named(model, entry, false):lower()
 end
 
 function Search.Pages(words, model)
 	local list = {}
 	local function Add(entry)
-		if entry and HasAll(Name(entry), words) then
-			list[#list + 1] = entry
+		if not (entry and HasAll(Name(model, entry), words)) then
+			return
 		end
+		local top = ns.PanelNav.Top(model, entry)
+		if top and top ~= entry and HasAll(Name(model, top), words) then
+			return
+		end
+		list[#list + 1] = entry
 	end
 	Add(model.home)
 	for _, entry in ipairs(model.pages) do
@@ -90,9 +104,9 @@ function Search.Pages(words, model)
 end
 
 function Search.Closest(words, model)
-	local scored = {}
+	local scored, scoreOf = {}, {}
 	local function Add(entry, at)
-		local name, score = Name(entry), 0
+		local name, score = Name(model, entry), 0
 		for _, word in ipairs(words) do
 			if #word >= 3 and name:find(word:sub(1, 3), 1, true) then
 				score = score + 1
@@ -100,6 +114,7 @@ function Search.Closest(words, model)
 		end
 		if score > 0 then
 			scored[#scored + 1] = { entry = entry, score = score, at = at }
+			scoreOf[entry] = score
 		end
 	end
 	Add(model.home, 0)
@@ -114,8 +129,11 @@ function Search.Closest(words, model)
 		return a.at < b.at
 	end)
 	local list = {}
-	for index = 1, math.min(3, #scored) do
-		list[index] = scored[index].entry
+	for _, hit in ipairs(scored) do
+		local top = ns.PanelNav.Top(model, hit.entry)
+		if #list < 3 and not (top and top ~= hit.entry and (scoreOf[top] or 0) >= hit.score) then
+			list[#list + 1] = hit.entry
+		end
 	end
 	return list
 end
