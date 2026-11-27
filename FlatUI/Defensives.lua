@@ -104,7 +104,8 @@ function D.Place()
 	if place == "resource" then
 		local display = PersonalResourceDisplayFrame
 		if display ~= nil and not ns.Forbidden(display) then
-			local over = type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder("above") or nil
+			local over = type(ns.ChargesHolder) == "function" and ns.ChargesHolder("above") or nil
+			over = over or (type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder("above") or nil)
 			if over then
 				holder:SetPoint("BOTTOMLEFT", over, "TOPLEFT", x, ROOM + 4 + y)
 			else

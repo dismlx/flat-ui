@@ -2878,7 +2878,10 @@ local function Place(place, holder, total, tallest, grow)
 		local anchored = false
 		local display = PersonalResourceDisplayFrame
 		if display ~= nil and not ns.Forbidden(display) then
-			local over = type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder(Opt("side") == "below" and "below" or "above") or nil
+			local side = Opt("side") == "below" and "below" or "above"
+			local charges = type(ns.ChargesHolder) == "function" and ns.ChargesHolder(side) or nil
+			local over = charges or (type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder(side) or nil)
+			local named = charges and "the Charges row" or "the Your buffs row"
 			if Opt("side") == "below" then
 				local row, depth = CooldownsBelow()
 				if row then
@@ -2886,14 +2889,14 @@ local function Place(place, holder, total, tallest, grow)
 					K.where[place] = "below the Cooldown icons row"
 				elseif over then
 					holder:SetPoint("CENTER", over, "BOTTOM", x, y - GAP - tallest / 2)
-					K.where[place] = "below the Your buffs row"
+					K.where[place] = "below " .. named
 				else
 					holder:SetPoint("CENTER", LowestBar(display), "BOTTOM", x, y - GAP - tallest / 2)
 					K.where[place] = "below the personal resource display"
 				end
 			elseif over then
 				holder:SetPoint("CENTER", over, "TOP", x, y + GAP + tallest / 2)
-				K.where[place] = "above the Your buffs row"
+				K.where[place] = "above " .. named
 			else
 				holder:SetPoint("CENTER", HighestBar(display), "TOP", x, y + GAP + tallest / 2)
 				K.where[place] = "above the personal resource display"

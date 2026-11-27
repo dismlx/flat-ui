@@ -3,18 +3,24 @@ local _, ns = ...
 local KEY = "charges"
 local MOVER = "FlatUICharges"
 local SPOT_Y = -200
+local GAP = 4
 local REREAD, EARLY, FRESH, CAST = 0.05, 0.3, 0.5, 1
 local TEST_TIME, PREVIEW = 8, 7
 local DEFAULT_TOP, MOST_TOP = 3, 99
 local MOST_ADDED, MAX_ID = 40, 2147483647
-local SAMPLE_ID, SAMPLE_ICON = 324, "Interface\\Icons\\Spell_Nature_LightningShield"
-local SAMPLE_STEPS = { { 2, 3 }, { 4, 2 }, { 6, 1 }, { 6.6, 0 } }
-local SAMPLE_LENGTH = 600
+local SAMPLES = {
+	lightning = { id = 324, icon = "Interface\\Icons\\Spell_Nature_LightningShield", top = 3, length = 600, steps = { { 2, 3 }, { 4, 2 }, { 6, 1 }, { 6.6, 0 } } },
+	maelstrom = { id = 408505, icon = "Interface\\Icons\\Spell_Shaman_MaelstromWeapon", top = 5, length = 30, steps = { { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 }, { 6, 5 }, { 6.6, 0 } } },
+}
+local BARS = { "HealthBarsContainer", "PowerBar", "AlternatePowerBar" }
+local TOLD = { "TrackerPlaceAgain", "CooldownsMoved", "DefensivesMoved" }
+local NOTE_OWN = "Charges: the personal resource display is off or hidden, so the row is at its own spot (/flatui move, Charges)."
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 local FAMILIES = {
 	{ key = "lightning", class = "SHAMAN", rgb = { 0.35, 0.72, 1 }, ids = { 324, 325, 905, 945, 8134, 10431, 10432 }, name = "Lightning Shield" },
 	{ key = "water", class = "SHAMAN", rgb = { 0.2, 0.84, 0.7 }, ids = { 408510 }, name = "Water Shield" },
 	{ key = "earth", rgb = { 0.56, 0.72, 0.3 }, ids = { 974, 408514 }, name = "Earth Shield" },
+	{ key = "maelstrom", class = "SHAMAN", rgb = { 0.72, 0.9, 1 }, ids = { 408505 }, name = "Maelstrom Weapon", stacks = true, start = 5, most = 10 },
 	{ key = "innerfire", class = "PRIEST", rgb = { 1, 0.8, 0.28 }, ids = { 588, 7128, 602, 1006, 10951, 10952 }, name = "Inner Fire" },
 	{ key = "shadowguard", class = "PRIEST", rgb = { 0.68, 0.42, 1 }, ids = { 18137, 19308, 19309, 19310, 19311, 19312 }, name = "Shadowguard" },
 	{ key = "holyshield", class = "PALADIN", rgb = { 1, 0.93, 0.72 }, ids = { 20925, 20927, 20928, 1239570 }, name = "Holy Shield" },
@@ -322,19 +328,146 @@ function C.Holder()
 		local holder = L.Own(CreateFrame("Frame", nil, UIParent))
 		holder:SetFrameStrata("LOW")
 		holder:SetSize(1, 1)
+		holder:SetScript("OnSizeChanged", function()
+			ns.Try(KEY, C.Resized)
+		end)
 		C.holder = holder
 	end
 	return C.holder
 end
 
-function C.Place()
-	local holder = C.Holder()
-	local x, y = ns.MoverSpot(MOVER, "CENTER")
-	holder:ClearAllPoints()
-	if x then
-		holder:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
+local function Field(frame, key)
+	local ok, value = pcall(function()
+		return frame[key]
+	end)
+	if ok and not IsSecret(value) then
+		return value
+	end
+	return nil
+end
+
+local function Shown(frame)
+	return frame ~= nil and not ns.Forbidden(frame) and Ask(frame.IsShown, frame) == true
+end
+
+function C.Bar(display, last)
+	local from, to, step = 1, #BARS, 1
+	if last then
+		from, to, step = #BARS, 1, -1
+	end
+	for index = from, to, step do
+		local bar = Field(display, BARS[index])
+		if Shown(bar) then
+			return bar
+		end
+	end
+	return display
+end
+
+function C.Target()
+	local place = Opt("place")
+	if place ~= "under" and place ~= "above" then
+		return nil
+	end
+	local display = rawget(_G, "PersonalResourceDisplayFrame")
+	if not Shown(display) then
+		return nil
+	end
+	local side = place == "under" and "below" or "above"
+	local over = type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder(side) or nil
+	return over or C.Bar(display, side == "below"), side
+end
+
+local function Anchored(frame)
+	local ok, left = pcall(frame.GetLeft, frame)
+	return not ok or IsSecret(left) or left ~= nil
+end
+
+function C.Hang(holder, target, side)
+	if side == "below" then
+		holder:SetPoint("TOPLEFT", target, "BOTTOMLEFT", 0, -GAP)
+		holder:SetPoint("TOPRIGHT", target, "BOTTOMRIGHT", 0, -GAP)
 	else
-		holder:SetPoint("CENTER", UIParent, "CENTER", 0, SPOT_Y)
+		holder:SetPoint("BOTTOMLEFT", target, "TOPLEFT", 0, GAP)
+		holder:SetPoint("BOTTOMRIGHT", target, "TOPRIGHT", 0, GAP)
+	end
+end
+
+function C.Place(again)
+	local holder = C.Holder()
+	local target, side = C.Target()
+	if not again and C.target == target and C.side == side and C.spot ~= nil and (target == nil or C.spot ~= "own") then
+		return
+	end
+	C.target, C.side = target, side
+	holder:ClearAllPoints()
+	if target and pcall(C.Hang, holder, target, side) and Anchored(holder) then
+		C.spot = side
+		ns.ClearNote(KEY, NOTE_OWN)
+	else
+		holder:ClearAllPoints()
+		C.spot = "own"
+		local x, y = ns.MoverSpot(MOVER, "CENTER")
+		if x then
+			holder:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
+		else
+			holder:SetPoint("CENTER", UIParent, "CENTER", 0, SPOT_Y)
+		end
+		holder:SetSize(L.Ringed() and 1 or ns.ChargesBar.WIDTH, 1)
+		if Opt("place") ~= "own" then
+			ns.Note(KEY, NOTE_OWN)
+		else
+			ns.ClearNote(KEY, NOTE_OWN)
+		end
+	end
+	if not again then
+		C.Resized()
+	end
+	C.Tell()
+end
+
+function C.Tell()
+	local key = ns.Enabled(KEY) and C.wantShown == true and tostring(C.spot) or "off"
+	if key == C.told then
+		return
+	end
+	C.told = key
+	for _, name in ipairs(TOLD) do
+		if type(ns[name]) == "function" then
+			pcall(ns[name])
+		end
+	end
+end
+
+function ns.ChargesHolder(side)
+	if C.holder and C.spot == side and C.wantShown == true and ns.Enabled(KEY) then
+		return C.holder
+	end
+	return nil
+end
+
+function C.Width()
+	if C.spot == "own" or not C.holder then
+		return nil
+	end
+	local ok, width = pcall(C.holder.GetWidth, C.holder)
+	if ok and ns.Finite(width) and width > 1 then
+		return width
+	end
+	return nil
+end
+
+function C.Resized()
+	local width = C.Width()
+	local was = C.width
+	if width == was or (width and was and math.abs(width - was) < 0.5) then
+		return
+	end
+	if Opt("fill") ~= false and not L.Ringed() then
+		C.Repaint()
+		C.Layout()
+	else
+		C.width = width
 	end
 end
 
@@ -343,13 +476,31 @@ function C.Display(family)
 	if not d then
 		d = L.New(C.Holder())
 		d.family, d.rgb = family, family.rgb
+		d.title = Name(family.ids[1])
 		local saved = C.Saved()
 		local top = saved and saved.top[family.key]
 		d.memory = ns.Finite(top) and top >= 1 and math.min(top, MOST_TOP) or nil
 		C.displays[family.key] = d
-		L.Paint(d, d.memory or DEFAULT_TOP)
+		L.Paint(d, C.Start(d))
 	end
 	return d
+end
+
+function C.Least(family)
+	local most = family.start or 1
+	local call = type(C_Spell) == "table" and C_Spell.GetSpellMaxCumulativeAuraApplications or nil
+	local value = Ask(call, family.ids[1])
+	if ns.Finite(value) and value > most then
+		most = value
+	end
+	return math.min(most, family.most or MOST_TOP)
+end
+
+function C.Start(d)
+	if d.family.stacks then
+		return math.max(d.memory or 0, C.Least(d.family))
+	end
+	return d.memory or DEFAULT_TOP
 end
 
 function C.Remember(d, top)
@@ -370,14 +521,20 @@ local function NewCast(d, st, now)
 end
 
 function C.Up(d, st, now)
-	local fresh = NewCast(d, st, now)
-	local top = d.top or d.memory or DEFAULT_TOP
+	local family = d.family
+	local fresh = NewCast(d, st, now) and not family.stacks
+	local top = d.top or C.Start(d)
 	if not d.up then
 		top = d.memory or st.count or top
 	end
-	if st.count then
+	if st.top then
+		top = st.top
+	elseif st.count then
 		top = fresh and st.count or math.max(top, st.count)
-		top = math.min(top, MOST_TOP)
+		if family.stacks then
+			top = math.max(top, C.Least(family))
+		end
+		top = math.min(top, family.most or MOST_TOP)
 		if top ~= d.memory and not C.sample then
 			C.Remember(d, top)
 		end
@@ -409,7 +566,7 @@ end
 function C.Down(d, now, silent)
 	if d.up and d.mode == "read" then
 		local left = d.expires and d.expires - now or nil
-		if not (silent or C.quiet) and d.lastCount == 1 and (left == nil or left > EARLY) then
+		if not (silent or C.quiet or d.family.stacks) and d.lastCount == 1 and (left == nil or left > EARLY) then
 			C.Sound()
 		end
 		L.Gone(d, now, not (silent or C.quiet))
@@ -454,6 +611,10 @@ function C.Known(family)
 	return false
 end
 
+function C.Holds(family)
+	return C.Known(family) or (family.stacks == true and family.class ~= nil and C.Mine(family))
+end
+
 function C.Hide(d, now)
 	if d.up then
 		C.Down(d, now, true)
@@ -466,9 +627,9 @@ end
 function C.Apply(family, st, now)
 	local d = C.displays[family.key]
 	if st == "hidden" then
-		d = d or ((C.Known(family) or false) and C.Display(family))
+		d = d or ((C.Holds(family) or false) and C.Display(family))
 		if d then
-			d.held = d.up or d.held or C.Known(family)
+			d.held = d.up or d.held or C.Holds(family)
 			if d.held then
 				C.SetMode(d, "hidden")
 			end
@@ -504,6 +665,7 @@ function C.Pass()
 		return
 	end
 	local now = Now()
+	C.Place()
 	C.Holder():SetAlpha((C.Gate() or C.sample ~= nil) and 1 or 0)
 	local real = false
 	for _, family in ipairs(C.Families()) do
@@ -514,7 +676,7 @@ function C.Pass()
 		end
 	end
 	for key, d in pairs(C.displays) do
-		if C.sample and key ~= "lightning" or not (C.sample or C.byId[d.family.ids[1]]) then
+		if C.sample and key ~= C.sample.key or not (C.sample or C.byId[d.family.ids[1]]) then
 			C.Hide(d, now)
 		end
 	end
@@ -562,31 +724,80 @@ function C.Layout()
 	table.sort(list, function(a, b)
 		return a.family.order < b.family.order
 	end)
+	if not C.holder then
+		return
+	end
+	if L.Ringed() then
+		C.Across(list)
+	else
+		C.Stack(list)
+	end
+end
+
+function C.Across(list)
 	local gap = L.Number("orbSize", 12) * 0.6 + 6
-	local total, kept = -gap, 0
+	local total, kept, tall = -gap, 0, 1
 	for _, d in ipairs(list) do
 		if not Spare(d) then
 			total = total + d.w + gap
 			kept = kept + 1
+			tall = math.max(tall, d.h)
 		end
 	end
 	local x = -total / 2
 	for _, d in ipairs(list) do
 		if not Spare(d) then
-			C.Put(d, x + d.w / 2)
+			C.Put(d, x + d.w / 2, 0)
 			x = x + d.w + gap
 		end
 	end
 	for _, d in ipairs(list) do
 		if Spare(d) then
-			C.Put(d, kept > 0 and x + d.w / 2 or 0)
+			C.Put(d, kept > 0 and x + d.w / 2 or 0, 0)
 		end
+	end
+	C.Height(tall)
+end
+
+function C.Stack(list)
+	local gap = ns.ChargesBar.STACK
+	local y, last = 0, 0
+	for _, d in ipairs(list) do
+		if not Spare(d) then
+			C.Put(d, 0, y)
+			last = y
+			y = y + d.h + gap
+		end
+	end
+	for _, d in ipairs(list) do
+		if Spare(d) then
+			C.Put(d, 0, y > 0 and y or 0)
+		end
+	end
+	C.Height(math.max(1, y - gap, last))
+end
+
+function C.Height(height)
+	local holder = C.holder
+	if C.spot == "own" then
+		holder:SetSize(L.Ringed() and 1 or ns.ChargesBar.WIDTH, L.Ringed() and 1 or height)
+	else
+		holder:SetHeight(height)
 	end
 end
 
-function C.Put(d, x)
-	pcall(d.frame.ClearAllPoints, d.frame)
-	pcall(d.frame.SetPoint, d.frame, "CENTER", C.holder, "CENTER", x, -d.cy)
+function C.Put(d, x, y)
+	local frame = d.frame
+	pcall(frame.ClearAllPoints, frame)
+	if C.spot == "below" then
+		pcall(frame.SetPoint, frame, "TOP", C.holder, "TOP", x, -y)
+	elseif C.spot == "above" then
+		pcall(frame.SetPoint, frame, "BOTTOM", C.holder, "BOTTOM", x, y)
+	elseif L.Ringed() then
+		pcall(frame.SetPoint, frame, "CENTER", C.holder, "CENTER", x, -d.cy)
+	else
+		pcall(frame.SetPoint, frame, "TOP", C.holder, "TOP", x, -y)
+	end
 end
 
 function C.Step(_, elapsed)
@@ -669,9 +880,10 @@ function C.Listen(on)
 end
 
 function C.Repaint()
+	C.width = C.Width()
 	for _, d in pairs(C.displays) do
 		d.rgb = d.family.rgb
-		L.Paint(d, d.top or d.memory or DEFAULT_TOP)
+		L.Paint(d, d.top or C.Start(d))
 		if d.mode == "read" and d.lastCount then
 			L.Count(d, d.lastCount, false, Now())
 		end
@@ -691,6 +903,7 @@ function C.Off()
 		C.holder:SetAlpha(0)
 		C.Shown(false)
 	end
+	C.Tell()
 	local game = ns.ChargesGame
 	if game then
 		game.Off()
@@ -722,7 +935,7 @@ function C.Refresh()
 	end
 	C.Holder()
 	C.Shown(true)
-	C.Place()
+	C.Place(true)
 	C.Repaint()
 	C.Listen(true)
 	local game = ns.ChargesGame
@@ -734,12 +947,13 @@ function C.Refresh()
 end
 
 function ns.ChargesShown()
-	return ns.Enabled(KEY)
+	return ns.Enabled(KEY) and (Opt("place") == "own" or C.spot == "own")
 end
 
 function ns.ChargesMoved()
 	if C.holder and ns.Enabled(KEY) then
-		ns.Try(KEY, C.Place)
+		ns.Try(KEY, C.Place, true)
+		ns.Try(KEY, C.Layout)
 	end
 end
 
@@ -764,8 +978,8 @@ function C.AnyUp()
 	return false
 end
 
-local function SampleCount(t)
-	for _, step in ipairs(SAMPLE_STEPS) do
+local function SampleCount(steps, t)
+	for _, step in ipairs(steps) do
 		if t < step[1] then
 			return step[2]
 		end
@@ -773,18 +987,24 @@ local function SampleCount(t)
 	return 0
 end
 
+function C.SampleKey()
+	return Opt("style") == "art" and ns.ChargesBar.ArtFor(BUILT.maelstrom) and "maelstrom" or "lightning"
+end
+
 function C.SampleApply(now)
-	local sample, d = C.sample, C.displays.lightning
-	local cycle = SAMPLE_STEPS[#SAMPLE_STEPS][1]
+	local sample = C.sample
+	local d, spec = C.displays[sample.key], SAMPLES[sample.key]
+	local steps = spec.steps
+	local cycle = steps[#steps][1]
 	local passed = now - sample.start
 	local round = math.floor(passed / cycle)
-	local count = SampleCount(passed - round * cycle)
+	local count = SampleCount(steps, passed - round * cycle)
 	if round == sample.round and count == sample.count then
 		return
 	end
 	sample.round, sample.count = round, count
-	local st = { id = SAMPLE_ID, count = count, expires = sample.start + round * cycle + SAMPLE_LENGTH, length = SAMPLE_LENGTH,
-		file = SpellIcon(SAMPLE_ID) or SAMPLE_ICON, instance = round + 1 }
+	local st = { id = spec.id, count = count, top = spec.top, expires = sample.start + round * cycle + spec.length, length = spec.length,
+		file = SpellIcon(spec.id) or spec.icon, instance = round + 1 }
 	C.Up(d, st, now)
 end
 
@@ -794,7 +1014,7 @@ function C.SampleStep(now, elapsed)
 	sample.frozen = sample.held and mode ~= nil and not mode.Moving()
 	if sample.frozen then
 		sample.start = sample.start + elapsed
-		local d = C.displays.lightning
+		local d = C.displays[sample.key]
 		if d and d.expires then
 			d.expires = d.expires + elapsed
 		end
@@ -812,14 +1032,19 @@ function C.StartSample(why, seconds, held)
 		return false
 	end
 	local now = Now()
+	local key = C.SampleKey()
 	local old = C.sample
-	C.sample = { start = old and old.start or now, ends = seconds and now + seconds or nil, held = held == true, why = why }
-	local family = BUILT.lightning
+	if old and old.key ~= key then
+		C.EndSample(true)
+		old = nil
+	end
+	C.sample = { start = old and old.start or now, ends = seconds and now + seconds or nil, held = held == true, why = why, key = key }
+	local family = BUILT[key]
 	local d = C.Display(family)
 	d.rgb = family.rgb
-	for key, other in pairs(C.displays) do
-		if key ~= "lightning" then
-			C.Hide(other, now)
+	for other, shown in pairs(C.displays) do
+		if other ~= key then
+			C.Hide(shown, now)
 		end
 	end
 	if not old then
@@ -840,8 +1065,9 @@ function C.EndSample(quiet)
 	if not C.sample then
 		return
 	end
+	local key = C.sample.key
 	C.sample = nil
-	local d = C.displays.lightning
+	local d = C.displays[key]
 	if d then
 		C.Hide(d, Now())
 		d.top = nil
@@ -858,7 +1084,7 @@ function C.Hold()
 	local mode = ns.TestMode
 	local on = mode ~= nil and mode.IsOn() == true and ns.Enabled(KEY) and not InCombatLockdown()
 	if on and not C.AnyUp() then
-		if not (C.sample and C.sample.held) then
+		if not (C.sample and C.sample.held) or C.sample.key ~= C.SampleKey() then
 			C.StartSample("test", nil, true)
 		end
 	elseif C.sample and C.sample.held then
@@ -897,7 +1123,11 @@ function C.Test()
 		return
 	end
 	if C.StartSample("slash", TEST_TIME) then
-		print(("Charges: a sample of Lightning Shield for %d seconds, a charge used every 2 seconds."):format(TEST_TIME))
+		if C.sample.key == "maelstrom" then
+			print(("Charges: a sample of Maelstrom Weapon for %d seconds, a stack gained every second."):format(TEST_TIME))
+		else
+			print(("Charges: a sample of Lightning Shield for %d seconds, a charge used every 2 seconds."):format(TEST_TIME))
+		end
 	end
 end
 
@@ -951,6 +1181,8 @@ function C.Status()
 	local game = ns.ChargesGame
 	if game and game.refused then
 		lines[#lines + 1] = "Charges: the game refused its own icons, so in a fight, while it hides your buffs, the charges do not show."
+	elseif game and game.barRefused then
+		lines[#lines + 1] = "Charges: the game refused some of its own gems, so in a fight, while it hides your buffs, some gems may not light or keep their old look."
 	end
 	if type(C_UnitAuras) ~= "table" or type(C_UnitAuras.GetPlayerAuraBySpellID) ~= "function" then
 		lines[#lines + 1] = "Charges: the game gives no buff information."
@@ -985,6 +1217,9 @@ ns.Register(KEY, {
 		end,
 		ADDON_RESTRICTION_STATE_CHANGED = function()
 			C.Queue()
+		end,
+		EDIT_MODE_LAYOUTS_UPDATED = function()
+			ns.ChargesMoved()
 		end,
 	},
 	slash = { charges = C.Slash },

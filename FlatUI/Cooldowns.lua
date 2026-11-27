@@ -1648,7 +1648,8 @@ local function Place(row)
 		note = NO_POSITION
 		local display = PersonalResourceDisplayFrame
 		if display ~= nil and not ns.Forbidden(display) then
-			local over = type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder("below") or nil
+			local over = type(ns.ChargesHolder) == "function" and ns.ChargesHolder("below") or nil
+			over = over or (type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder("below") or nil)
 			if over then
 				frame:SetPoint("CENTER", over, "BOTTOM", x, y - GAP)
 			else
