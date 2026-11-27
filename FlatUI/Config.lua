@@ -2378,6 +2378,8 @@ ns.PAGES = {
 		{ key = "xpLevelLine", kind = "bool", default = true, label = "Level up line in chat",
 			tip = "At each new level one line in chat says how long the level you finished took, and your play this session. The time of a level shows once you levelled in this session or typed /played.",
 			needs = "xpOwn", needsIn = { "flat" } },
+		{ key = "xpQuestEnough", kind = "bool", default = true, label = "Line when your quests are enough to level", needs = "xpQuest",
+			tip = "Once a level, a line in chat says when the quests ready to hand in hold enough experience for the next level, as the last of them is done or as you log in. A /reload does not say it again." },
 		{ section = "Bag bar and micro menu" },
 		{ key = "bags", kind = "bool", default = true, label = "Bag bar buttons", tip = "Square icons with a thin border, without the bar frame." },
 		{ key = "micro", kind = "bool", default = true, label = "Micro menu buttons", tip = "Thin border in place of the default button frames." },
@@ -3306,6 +3308,8 @@ ns.PAGES = {
 			tip = "A spell or item you use brings faded frames back to full while you cast, for a moment after each instant spell or item, and for Wait before fading after." },
 		{ key = "proc", kind = "bool", default = true, label = "While a proc is up",
 			tip = "An action bar that holds the spell of a proc alert of the Trackers page, such as Overpower, Revenge or Execute, is at full opacity while the proc is up, and fades again after Wait before fading once it ends." },
+		{ key = "hurt", kind = "bool", default = false, label = "Until health and mana are full",
+			tip = "Faded frames stay at full while your health, or your mana if you have mana, is under full, so they are there while you eat and drink, then fade after Wait before fading. Not while you are dead." },
 	},
 }
 

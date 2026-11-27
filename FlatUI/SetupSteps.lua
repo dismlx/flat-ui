@@ -769,6 +769,7 @@ ns.SETUP_STEPS = {
 		{ "hud.xpRepStats", "o", "behaviour", "Adds the time to the next standing or the reputation per hour after the text of the reputation bar." },
 		{ "hud.xpStatsTip", "o", "behaviour", "Adds this session's experience, the experience per hour and the time, kills and quests to level to the experience bar tooltip, and the reputation per hour and the time to the next standing to the reputation bar tooltip." },
 		{ "hud.xpLevelLine", "o", "behaviour", "Says in chat how long the level you just finished took." },
+		{ "hud.xpQuestEnough", "o", "behaviour", "Says in chat once a level when your finished quests are enough to reach the next one." },
 		{ "hud.micro", "c", "mock-xp-micro" },
 		{ "general.menuButton", "o", "behaviour", "Puts a Flat UI button in the game menu, under Options. It does not work in combat, and it does not show while the game's taintLog is on." },
 		{ "general.menuOpens", "o", "behaviour", "Chooses whether the game menu button opens Flat UI setup or the options window." },
@@ -1499,6 +1500,7 @@ ns.SETUP_STEPS = {
 		{ "fade.target", "o", "behaviour", "Keeps faded frames fully visible while you have a target." },
 		{ "fade.cast", "o", "behaviour", "Keeps faded frames fully visible while you cast." },
 		{ "fade.proc", "o", "behaviour", "Brings a faded action bar to full opacity while a proc alert is up for a spell on it, such as Overpower or Execute." },
+		{ "fade.hurt", "o", "behaviour", "Keeps faded frames fully visible until your health and mana are full again." },
 	} },
 	{ id = "movers", area = "Positions", title = "Moving frames and windows", draw = "mock-screen", built = true, rows = {
 		{ "movers.enabled", "c", "behaviour", "Turns on frame moving; /flatui move shows the handles." },

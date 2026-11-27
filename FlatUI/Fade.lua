@@ -194,6 +194,25 @@ local function Casting()
 	return false
 end
 
+local function Below(value, most)
+	return ns.Finite(value) and ns.Finite(most) and most > 0 and value < most
+end
+
+local function Hurt()
+	local okDead, dead = pcall(UnitIsDeadOrGhost, "player")
+	if not okDead or ns.IsSecret(dead) or dead == true then
+		return false
+	end
+	local okHealth, health = pcall(UnitHealth, "player")
+	local okMost, most = pcall(UnitHealthMax, "player")
+	if okHealth and okMost and Below(health, most) then
+		return true
+	end
+	local okMana, mana = pcall(UnitPower, "player", 0)
+	local okPool, pool = pcall(UnitPowerMax, "player", 0)
+	return okMana and okPool and Below(mana, pool)
+end
+
 local function MoversOpen()
 	local kit = ns.MoverKit
 	return type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
@@ -212,7 +231,7 @@ end
 
 local function Wanted()
 	return (Opt("combat") and Fighting()) or Holding() or FlyoutOpen() or ns.EditModeOpen() or MoversOpen()
-		or (Opt("cast") == true and Casting())
+		or (Opt("cast") == true and Casting()) or (Opt("hurt") == true and Hurt())
 end
 
 local function Grouped()

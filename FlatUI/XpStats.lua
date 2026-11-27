@@ -135,6 +135,9 @@ local function Kept(saved, now)
 	if not Finite(saved.saidLevel) then
 		saved.saidLevel = nil
 	end
+	if not Finite(saved.saidEnough) then
+		saved.saidEnough = nil
+	end
 	local played = saved.played
 	if not (type(played) == "table" and Finite(played.level) and Finite(played.at) and Finite(played.seconds)) then
 		saved.played = nil
@@ -403,6 +406,15 @@ local function Scan()
 		end
 	end
 	quest = found
+	local last = s and s.last
+	if Opt("xpQuestEnough") == true and Opt("xpQuest") == true and last and found.ready > 0 and found.readyXP > 0 and s.saidEnough ~= last[1] then
+		local left = math.max(last[3] - last[2], 0)
+		if left > 0 and left <= found.readyXP then
+			s.saidEnough = last[1]
+			local whose = found.ready == 1 and "your finished quest is" or ("your %d finished quests are"):format(found.ready)
+			print(("Flat UI: %s enough to reach level %d."):format(whose, last[1] + 1))
+		end
+	end
 end
 
 local function Redraw()
@@ -885,7 +897,7 @@ local function Reset()
 		return false
 	end
 	local kept = { last = s.last, levelSince = s.levelSince, played = s.played, kills = s.kills, quests = s.quests, pool = s.pool,
-		saidLevel = s.saidLevel }
+		saidLevel = s.saidLevel, saidEnough = s.saidEnough }
 	s = Fresh(now)
 	for key, value in pairs(kept) do
 		s[key] = value
