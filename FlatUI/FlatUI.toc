@@ -42,6 +42,7 @@ CombatTextSpells.lua
 CombatText.lua
 ScrollText.lua
 CombatCues.lua
+AvoidAnnounce.lua
 Bars.lua
 ActionBars.lua
 OwnBars.lua
