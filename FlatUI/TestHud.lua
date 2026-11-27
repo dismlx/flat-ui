@@ -113,6 +113,9 @@ local function CastStandIn(spec)
 				pcall(ns.CastWatchSample, "target")
 			elseif state == "interrupted" and type(ns.CastLandSample) == "function" then
 				pcall(ns.CastLandSample)
+				if type(ns.CastLandWordSample) == "function" then
+					pcall(ns.CastLandWordSample)
+				end
 			end
 		end
 		if spec.cool then

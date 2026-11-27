@@ -21,9 +21,10 @@ local SAMPLE_BLOCK = 120
 local STALE_EVENTS = { "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "UPDATE_SHAPESHIFT_FORM",
 	"PLAYER_ENTERING_WORLD" }
 local HELP = {
-	"/flatui announce - where Announce blocks, dodges and parries sends its lines now, or why it sends nothing",
+	"/flatui announce - where Announce blocks, dodges and parries and Announce your interrupts send their lines now, or why they send nothing",
 	"/flatui announce test - sample lines in your own chat window only, never sent to the group",
 }
+local KICK_SAMPLE, DEF_SAMPLE, DEF_LEAST = "Shadow Bolt", { "Shield Wall", 12 }, 60
 
 local IsSecret, Finite = ns.IsSecret, ns.Finite
 
@@ -31,7 +32,7 @@ local function Empty()
 	return { n = 0, count = {}, amount = {}, known = {}, partial = {} }
 end
 
-local S = { tank = false, roleStale = true, sent = 0, own = 0, held = 0, refused = 0, total = {}, batch = Empty() }
+local S = { tank = false, roleStale = true, sent = 0, own = 0, held = 0, refused = 0, total = {}, batch = Empty(), kicks = 0, defs = 0 }
 
 local Run, Flush
 
@@ -92,17 +93,31 @@ local function Grouped(category)
 	return Ask(IsInGroup, category) == true, Ask(IsInRaid, category) == true
 end
 
-local function Battle()
+local function Place()
 	if type(IsInInstance) ~= "function" then
-		return false
+		return nil
 	end
 	local ok, _, kind = pcall(IsInInstance)
-	return ok and not IsSecret(kind) and (kind == "pvp" or kind == "arena")
+	if ok and not IsSecret(kind) and type(kind) == "string" then
+		return kind
+	end
+	return nil
+end
+
+local function Battle()
+	local kind = Place()
+	return kind == "pvp" or kind == "arena"
 end
 
 local function Channel(to)
 	if Battle() then
 		return nil, "you are in a battleground or arena"
+	end
+	if Opt("announceInstance") == true then
+		local kind = Place()
+		if kind ~= "party" and kind ~= "raid" then
+			return nil, "you are not in a dungeon or raid"
+		end
 	end
 	local home, instance = _G.LE_PARTY_CATEGORY_HOME, _G.LE_PARTY_CATEGORY_INSTANCE
 	local inHome, homeRaid = Grouped(Finite(home) and home or nil)
@@ -255,13 +270,14 @@ local function Send(text, to)
 	return true
 end
 
-local function Out(text, now, wait)
-	local to = Channel(Target())
+local function Out(text, now, wait, choice, stamp)
+	local to = Channel(choice or Target())
+	stamp = stamp or "sentAt"
 	if to == nil then
 		return true
 	elseif to == "self" then
 		print(OWN .. text)
-		S.own, S.sentAt, S.last, S.lastTo = S.own + 1, now, text, to
+		S.own, S[stamp], S.last, S.lastTo = S.own + 1, now, text, to
 		return true
 	elseif type(ns.MessagesOpen) == "function" and ns.MessagesOpen() == false then
 		if wait then
@@ -272,7 +288,7 @@ local function Out(text, now, wait)
 	end
 	local ok, why = Send(text, to)
 	if ok then
-		S.sent, S.sentAt, S.last, S.lastTo = S.sent + 1, now, text, to
+		S.sent, S[stamp], S.last, S.lastTo = S.sent + 1, now, text, to
 	else
 		S.refused, S.why = S.refused + 1, S.why or why
 	end
@@ -397,6 +413,106 @@ local function Apply()
 	Wake(false)
 end
 
+local function Defensives()
+	if S.defSet ~= nil then
+		return S.defSet
+	end
+	local data, byClass, kind = ns.ABILITIES, ns.ABILITIES_BY_CLASS, nil
+	for index, name in ipairs(type(ns.COOLDOWN_KINDS) == "table" and ns.COOLDOWN_KINDS or {}) do
+		if name == "defensive" then
+			kind = index
+		end
+	end
+	local ok, _, class = pcall(UnitClass, "player")
+	if not ok or IsSecret(class) or type(class) ~= "string" or type(data) ~= "table" or type(byClass) ~= "table" or kind == nil then
+		return {}
+	end
+	local set = {}
+	for _, group in ipairs({ class, "ALL" }) do
+		for _, index in ipairs(type(byClass[group]) == "table" and byClass[group] or {}) do
+			local a = data[index]
+			if type(a) == "table" and a.kind == kind and Finite(a.cd) and a.cd >= DEF_LEAST and Finite(a.secs) and a.secs > 0 and type(a.casts) == "table" then
+				for _, id in ipairs(a.casts) do
+					set[id] = a
+				end
+			end
+		end
+	end
+	S.defSet = set
+	return set
+end
+
+local function DefLine(name, secs)
+	return ("%s up (%d s)"):format(name, math.floor(secs + 0.5))
+end
+
+local function Used(_, _, _, spell)
+	if not On() or Opt("announceDefensives") ~= true or IsSecret(spell) or type(spell) ~= "number" then
+		return
+	end
+	local a = Defensives()[spell]
+	if a == nil then
+		return
+	end
+	if S.roleStale then
+		ReadRole()
+	end
+	local now = Now()
+	if not S.tank or now == nil or Channel(Target()) == nil or (S.defAt and now >= S.defAt and now - S.defAt < GAP) then
+		return
+	end
+	S.defAt, S.defs = now, S.defs + 1
+	Out(DefLine(a.name, a.secs), now, nil, nil, "defAt")
+end
+
+local function KickChoice()
+	local choice = Opt("announceKicks")
+	return TO[choice] and choice or nil
+end
+
+function ns.AnnounceKicksOn()
+	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and KickChoice() ~= nil
+end
+
+local function KickLine(name)
+	return type(name) == "string" and name ~= "" and ("Interrupted " .. name) or "Interrupted"
+end
+
+local function Kicked(_, spell)
+	local choice = ns.AnnounceKicksOn() and KickChoice()
+	local now = Now()
+	if not choice or now == nil or (S.kickAt and now >= S.kickAt and now - S.kickAt < GAP) or Channel(choice) == nil then
+		return
+	end
+	local name = nil
+	if Finite(spell) and type(C_Spell) == "table" then
+		name = Ask(C_Spell.GetSpellName, spell)
+	end
+	S.kickAt, S.kicks = now, S.kicks + 1
+	Out(KickLine(name), now, nil, choice, "kickAt")
+end
+
+function ns.AnnounceKick(spell)
+	Run(Kicked, spell)
+end
+
+local function KickSummary()
+	local choice = KickChoice()
+	if not choice then
+		return "Announce your interrupts: off."
+	end
+	local to, why = nil, nil
+	if not ns.Enabled(KEY) then
+		why = "Place combat numbers is off"
+	elseif ns.PartStopped(KEY, PART) then
+		why = "it stopped after an error, until /reload"
+	else
+		to, why = Channel(choice)
+	end
+	return ("Announce your interrupts: %s; %s. %d %s."):format(TO[choice], to and ("now to " .. PLACES[to]) or ("nothing sent now, as " .. why), S.kicks,
+		S.kicks == 1 and "line" or "lines")
+end
+
 local function Reason()
 	if not ns.Enabled(KEY) then
 		return nil, "Place combat numbers is off"
@@ -428,6 +544,9 @@ local function Summary()
 	end
 	if S.refused > 0 then
 		line = ("%s, %d refused by the game (%s)"):format(line, S.refused, tostring(S.why))
+	end
+	if Opt("announceDefensives") == true then
+		line = ("%s; %d %s"):format(line, S.defs, S.defs == 1 and "defensive" or "defensives")
 	end
 	return line .. "."
 end
@@ -467,6 +586,7 @@ local function Report()
 	if S.unmade then
 		print("The game would not make a timer frame, so a line held back waits for your next block, dodge, parry or miss.")
 	end
+	print(KickSummary())
 	print(HELP[2])
 end
 
@@ -515,8 +635,35 @@ local function Test()
 	for _, line in ipairs(lines) do
 		print("  " .. line)
 	end
+	if Opt("announce") == true and Opt("announceDefensives") == true then
+		local most = nil
+		for _, a in pairs(Defensives()) do
+			if most == nil or a.cd > most.cd then
+				most = a
+			end
+		end
+		print("  " .. DefLine(most and most.name or DEF_SAMPLE[1], most and most.secs or DEF_SAMPLE[2]))
+	end
 	local to, why = Reason()
 	print(to and ("Now they would go to %s."):format(PLACES[to]) or ("Now nothing would be sent, as %s."):format(why))
+	local choice = KickChoice()
+	if choice then
+		print(("Announce your interrupts (%s), a sample line shown only to you, never sent:"):format(TO[choice]))
+		print("  " .. KickLine(KICK_SAMPLE))
+		local kickTo, kickWhy = Channel(choice)
+		print(kickTo and ("Now it would go to %s."):format(PLACES[kickTo]) or ("Now nothing would be sent, as %s."):format(kickWhy))
+	end
+end
+
+function ns.AnnounceKicksChanged()
+	Run(Apply)
+	if type(ns.CastLandSync) == "function" then
+		ns.CastLandSync()
+	end
+end
+
+function ns.AnnounceInstanceUnused()
+	return Opt("announce") ~= true and KickChoice() == nil
 end
 
 function ns.AnnounceChanged(path)
@@ -545,6 +692,18 @@ end, function(unit)
 	return not IsSecret(unit) and unit == "player" and Opt("announce") == true
 end)
 
+ns.AddEvent(KEY, "UNIT_SPELLCAST_SUCCEEDED", function(unit, cast, spell)
+	Run(Used, unit, cast, spell)
+end, function(unit)
+	return not IsSecret(unit) and unit == "player" and Opt("announceDefensives") == true and Opt("announce") == true
+end)
+
+ns.AddEvent(KEY, "PLAYER_ENTERING_WORLD", function()
+	if ns.AnnounceKicksOn() and type(ns.CastLandSync) == "function" then
+		ns.CastLandSync()
+	end
+end)
+
 for _, event in ipairs(STALE_EVENTS) do
 	ns.AddEvent(KEY, event, function()
 		S.roleStale = true
@@ -571,10 +730,14 @@ ns.AddEvent(KEY, "PLAYER_EQUIPMENT_CHANGED", function()
 end)
 
 ns.AddStatus(KEY, function()
-	if not On() then
-		return {}
+	local lines = {}
+	if On() then
+		lines[1] = Summary()
 	end
-	return { Summary() }
+	if ns.AnnounceKicksOn() then
+		lines[#lines + 1] = KickSummary()
+	end
+	return lines
 end)
 
 ns.AddSlash(KEY, "announce", Slash, HELP)
