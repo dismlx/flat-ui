@@ -2,6 +2,10 @@ local _, ns = ...
 
 ns.WhatsNewData = {
 	{
+		version = "0.5.46",
+		lines = {},
+	},
+	{
 		version = "0.5.45",
 		lines = {
 			"\001What's new\002 now lists every change of the newest three versions with notes, newest first; only the older versions are still cut after 40 lines with their 'And N more' line. After this update the window shows all 121 changes of 0.5.44 instead of 40.",
@@ -353,18 +357,6 @@ ns.WhatsNewData = {
 			"\001Fade the block\002 on the \001Bar block\002 page now brings the block's bars, its background panel and Flat UI's experience bar under it back to full in Edit Mode and while /flatui move is open, as the \001Fading\002 page's frames already did, so the tabs and the \001Action bar block\002 box no longer sit over bars you can barely see. After \001Done\002 they wait \001Wait before fading\002 and fade again.",
 			"With Flat UI's buttons, pointing at a spell in the spellbook or at a talent now pulses each of Flat UI's buttons that holds it, or its flyout, with the game's gold highlight (flat gold over the icon with \001Flat highlights\002), in a fight too, as the game does on its own buttons. You can find where a spell sits, or see that it is on no bar.",
 			"And 69 more changes in the full changelog on CurseForge.",
-		},
-	},
-	{
-		version = "0.5.40",
-		lines = {
-			"Bags: you can now hide any section of Flat UI's own except New items, Free slots and Other. Right-click its title and choose \001Hide this section\002. It goes from both windows for all your characters, and its items move to the next section that takes them: a hidden Potions sends potions to Consumables, a hidden Rings sends rings to Equipment, and with \001Equipment\002 at Weapons, armour and jewellery a hidden Weapons sends weapons to Armour. Hiding Junk only moves your junk into other sections; \001Sell junk\002, the junk coin and your sell list stay as they are, even when you drag junk from one section to another. Hiding Keep in place leaves your pins alone, even when you drop a pinned item on another section, and shows those items by kind. Items you placed by hand in a hidden section return to it when it shows again.",
-			"New: while a section is hidden, a dim \001Hidden (3)\002 shows after the last section of the bag and bank windows. Click it and pick a section to show it again, or pick \001Show every hidden section\002. A section title's right-click menu also has \001Show hidden sections\002, and the new \001Hidden sections\002 row on the Bags page lists them all. \001Folded sections\002 and \001Items placed by hand\002 now mark a hidden section with (hidden).",
-			"\001Equipment\002 has a new choice, \001Each kind\002: Weapons (bows, guns, wands and thrown weapons too), Shields and off-hands, Armour, Rings, Necklaces, Trinkets, Relics, and Shirts and tabards, with Equipment for anything else you can equip.",
-			"\001Consumables\002 has a new choice, \001Each kind\002: Food and drink, Potions, Elixirs and flasks, Scrolls, Bandages, Enhancements (weapon oils, sharpening stones and the like), and Explosives and devices, with Consumables for the rest. Explosives and devices count as trade goods in the game, but they show here with this choice.",
-			"New \001Trade goods\002 row on the Bags page. \001Each kind\002 shows Cloth, Leather, Metal and stone, Herbs, Elemental, Enchanting, Meat and Parts, with Trade goods for the rest, such as gems. Parts also holds explosives and devices unless \001Consumables\002 is set to Each kind. All three rows stay at One section until you change them.",
-			"The new sections work like the others in both windows: they fold, move, hide, take drops and items placed by hand, end in a + slot, show a count and are found by the search. A section order you saved before puts each new section next to its group. A section title's right-click menu now splits its group by kind or joins it into one: \001Split by kind\002 or \001Join into one section\002 for Trade goods, and the three choices for Equipment and Consumables. The Bags page follows the change.",
-			"Bags: Rings, Herbs, Cloth and the other new section names are now Flat UI's own, so a new section of yours cannot take them. Dropping a herb or cloth on \001+ New section\002 now suggests the item's own name. Sections you already made keep their names and items.",
 		},
 	},
 }
