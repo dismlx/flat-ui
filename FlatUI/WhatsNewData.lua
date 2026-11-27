@@ -3,7 +3,11 @@ local _, ns = ...
 ns.WhatsNewData = {
 	{
 		version = "0.5.43",
-		lines = {},
+		lines = {
+			"New \001What's new\002 window: from now on, the first login after Flat UI updates shows what changed in each version since the one you last played on this account, newest first, with setting names in the accent colour. This first time it shows 0.5.43, as older versions kept no note of the one you played. It has \001Open Flat UI's options\002 and \001Close\002, Escape closes it, and it can be dragged anywhere on screen. It waits for the end of a fight, and if a fight starts it steps aside (\"Flat UI: What's new comes back after the fight.\") and comes back after it. A new install shows nothing, as the welcome screen and setup walk you through Flat UI.",
+			"New \001What's new after an update\002, under \001Updates\002 on the \001Options and setup\002 tab of the \001Flat UI\002 page: \001Show the window\002 (the default), \001One line in chat\002 (\"Flat UI updated to 0.5.43. /flatui new shows what changed.\") or \001Nothing\002. A character the welcome screen greets gets the chat line instead of the window.",
+			"New /flatui new (or /flatui changes) opens \001What's new\002 at any time with this version's changes, and /flatui new 0.5.41 shows that version, one of the newest six. \001What's new in 0.5.43\002, at the bottom of \001Home\002 in the options window, opens it too.",
+		},
 	},
 	{
 		version = "0.5.42",

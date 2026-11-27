@@ -1,6 +1,9 @@
 ## 0.5.43
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- New **What's new** window: from now on, the first login after Flat UI updates shows what changed in each version since the one you last played on this account, newest first, with setting names in the accent colour. This first time it shows 0.5.43, as older versions kept no note of the one you played. It has **Open Flat UI's options** and **Close**, Escape closes it, and it can be dragged anywhere on screen. It waits for the end of a fight, and if a fight starts it steps aside ("Flat UI: What's new comes back after the fight.") and comes back after it. A new install shows nothing, as the welcome screen and setup walk you through Flat UI.
+- New **What's new after an update**, under **Updates** on the **Options and setup** tab of the **Flat UI** page: **Show the window** (the default), **One line in chat** ("Flat UI updated to 0.5.43. /flatui new shows what changed.") or **Nothing**. A character the welcome screen greets gets the chat line instead of the window.
+- New `/flatui new` (or `/flatui changes`) opens **What's new** at any time with this version's changes, and `/flatui new 0.5.41` shows that version, one of the newest six. **What's new in 0.5.43**, at the bottom of **Home** in the options window, opens it too.
 
 ## 0.5.42
 
