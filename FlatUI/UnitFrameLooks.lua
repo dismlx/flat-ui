@@ -274,6 +274,9 @@ function Shadow(rec, on)
 	local want = on and Opt("lookShadow") == true and not Off()
 	if want and rec.shadowBox == nil and not rec.shadowFailed then
 		if InCombatLockdown() then
+			if rec.shadowSeen then
+				X.tell("Flat UI: frame shadows show when the fight ends.")
+			end
 			if not rec.shadowQueued then
 				rec.shadowQueued = true
 				ns.OutOfCombat(function()
@@ -288,6 +291,7 @@ function Shadow(rec, on)
 			Say(rec, "shadow", NOTE.shadow)
 		end
 	end
+	rec.shadowSeen = true
 	local box = rec.shadowBox
 	if box == nil then
 		return
@@ -303,7 +307,7 @@ local function Follow(rec)
 end
 
 local HOVER_PART = "Mouse highlight"
-local HOVER = { alpha = 0.12, every = 0.05, steps = 6, file = "Interface\\Buttons\\WHITE8X8" }
+local HOVER = { alpha = 0.12, every = 0.05, steps = 6, file = "Interface\\Buttons\\WHITE8X8", fadeIn = 0.08, fadeOut = 0.15 }
 X.hoverAlpha = HOVER.alpha
 local hover = { made = setmetatable({}, { __mode = "k" }), waited = 0 }
 
@@ -328,16 +332,34 @@ local function Under()
 	return nil
 end
 
-local function Light(rec)
+local function Halt(group)
+	if group ~= nil and group:IsPlaying() then
+		pcall(group.Stop, group)
+	end
+end
+
+local function Light(rec, now)
 	if rec == hover.lit then
 		return
 	end
-	if hover.lit ~= nil and hover.lit.hoverFrame ~= nil then
-		hover.lit.hoverFrame:Hide()
+	local old = hover.lit
+	if old ~= nil and old.hoverFrame ~= nil then
+		local frame = old.hoverFrame
+		Halt(old.hoverIn)
+		if now or old.hoverOut == nil or not frame:IsShown() or not pcall(old.hoverOut.Play, old.hoverOut) then
+			Halt(old.hoverOut)
+			frame:Hide()
+			frame:SetAlpha(1)
+		end
 	end
 	hover.lit = rec
 	if rec ~= nil then
+		Halt(rec.hoverOut)
+		rec.hoverFrame:SetAlpha(1)
 		rec.hoverFrame:Show()
+		if rec.hoverIn ~= nil and not now then
+			pcall(rec.hoverIn.Play, rec.hoverIn)
+		end
 	end
 end
 
@@ -377,7 +399,7 @@ function Drive()
 		hover.driver:SetScript("OnUpdate", want and OnUpdate or nil)
 	end
 	if not want then
-		Light(nil)
+		Light(nil, true)
 	end
 end
 
@@ -396,6 +418,27 @@ local function MakeHover(rec)
 	layer:SetVertexColor(1, 1, 1, HOVER.alpha)
 	layer:Show()
 	rec.hoverFrame, rec.hoverLayer = frame, layer
+	local ok, come, go = pcall(function()
+		local rise = frame:CreateAnimationGroup()
+		local up = rise:CreateAnimation("Alpha")
+		up:SetFromAlpha(0)
+		up:SetToAlpha(1)
+		up:SetDuration(HOVER.fadeIn)
+		local fall = frame:CreateAnimationGroup()
+		local down = fall:CreateAnimation("Alpha")
+		down:SetFromAlpha(1)
+		down:SetToAlpha(0)
+		down:SetDuration(HOVER.fadeOut)
+		pcall(fall.SetToFinalAlpha, fall, true)
+		fall:SetScript("OnFinished", function()
+			frame:Hide()
+			frame:SetAlpha(1)
+		end)
+		return rise, fall
+	end)
+	if ok then
+		rec.hoverIn, rec.hoverOut = come, go
+	end
 	hover.made[rec] = true
 end
 
@@ -433,7 +476,7 @@ function Hover(rec, on)
 		HoverShape(rec)
 	end
 	if not want and hover.lit == rec then
-		Light(nil)
+		Light(nil, true)
 	end
 	Drive()
 end

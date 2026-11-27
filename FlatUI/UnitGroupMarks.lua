@@ -8,6 +8,7 @@ local FILTER = "HARMFUL|RAID"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local MARKER_FILE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local RIM_PX, ICON, MARK, SOON = 2, 12, 14, 0.1
+local MARK_POP, MARK_POP_TIME = 1.6, 0.2
 local PARTY_MARK, LEAD, LEAD_IN, LEAD_DOWN = 16, 10, 3, 16
 local LEADER_ATLAS, LEADER_FILE, ASSISTANT_FILE = "UI-HUD-UnitFrame-Player-Group-LeaderIcon", "Interface\\GroupFrame\\UI-Group-LeaderIcon", "Interface\\GroupFrame\\UI-Group-AssistantIcon"
 local SELF = { player = "player", target = "target", focus = "focus" }
@@ -613,6 +614,14 @@ local function Plain(call, unit)
 	return nil
 end
 
+local function MemberGuid(unit)
+	local ok, guid = pcall(UnitGUID, unit)
+	if ok and not IsSecret(guid) and type(guid) == "string" and guid ~= "" then
+		return guid
+	end
+	return nil
+end
+
 local function HealthBar(rec)
 	local entry = rec.byRole.health
 	return entry and entry.target or rec.parts.health
@@ -658,7 +667,7 @@ local function MakeMarker(rec)
 	local size = rec.kind == "party" and PARTY_MARK or MARK
 	icon:SetSize(size, size)
 	icon:Hide()
-	rec.marker = { holder = holder, icon = icon }
+	rec.marker = { holder = holder, icon = icon, pop = X.pop(icon, MARK_POP, MARK_POP_TIME) }
 	PlaceMarker(rec)
 	return rec.marker
 end
@@ -679,13 +688,22 @@ local function DrawMarker(rec)
 		return
 	end
 	local unit = UnitOfFrame(rec)
-	local shown = false
+	local shown, plain = false, nil
 	if unit ~= nil and type(GetRaidTargetIndex) == "function" then
 		local ok, index = pcall(GetRaidTargetIndex, unit)
 		if ok and (IsSecret(index) or (ns.Finite(index) and index >= 1 and index <= 8 and index == math.floor(index))) then
 			shown = Cell(m.icon, index)
+			plain = ns.Finite(index) and index or nil
 		end
 	end
+	local guid = unit ~= nil and MemberGuid(unit) or nil
+	if guid ~= m.guid then
+		m.guid, m.seen = guid, nil
+	end
+	if shown and m.seen and (not m.icon:IsShown() or (plain ~= nil and m.index ~= nil and plain ~= m.index)) then
+		X.popNow(m.pop)
+	end
+	m.index, m.seen = shown and plain or nil, true
 	m.icon:SetShown(shown)
 end
 
@@ -699,6 +717,7 @@ local function Marker(rec, on)
 	if not live then
 		if m then
 			m.icon:Hide()
+			m.seen = nil
 		end
 		return
 	end
@@ -849,7 +868,8 @@ ns.AddEvent(KEY, "INCOMING_RESURRECT_CHANGED", function()
 	end
 end)
 
-local AFK_EVENTS = { "PLAYER_FLAGS_CHANGED", "UNIT_CONNECTION", "UNIT_HEALTH" }
+local AFK_EVENTS = { "PLAYER_FLAGS_CHANGED", "UNIT_CONNECTION" }
+local awaySince = {}
 local AFK_GREY = 0.8
 local AFK_IN, AFK_OUT, AFK_EVERY = 0.2, 0.3, 15
 
@@ -969,20 +989,51 @@ local function SetAway(a, away, fade)
 	end
 end
 
+local function HearHealth(a, wanted)
+	if a.hearing == wanted then
+		return
+	end
+	a.hearing = wanted
+	if not wanted then
+		pcall(a.ear.UnregisterEvent, a.ear, "UNIT_HEALTH")
+		return
+	end
+	local ok = type(a.ear.RegisterUnitEvent) == "function" and pcall(a.ear.RegisterUnitEvent, a.ear, "UNIT_HEALTH", a.unit)
+	if not ok then
+		pcall(a.ear.RegisterEvent, a.ear, "UNIT_HEALTH")
+	end
+end
+
 local function ShowAfk(a)
 	if a.unit == nil then
-		a.since = nil
+		a.since, a.guid = nil, nil
 		SetAway(a, false, false)
 		Counting(a)
+		HearHealth(a, false)
 		return
 	end
 	local flag, shows = Away(a.unit)
 	if flag == nil then
 		return
 	end
-	a.since = flag and (a.since or Now()) or nil
+	local guid = MemberGuid(a.unit)
+	if guid ~= a.guid then
+		a.guid, a.since = guid, nil
+	end
+	if not flag then
+		if guid ~= nil then
+			awaySince[guid] = nil
+		end
+		a.since = nil
+	elseif guid ~= nil then
+		awaySince[guid] = awaySince[guid] or a.since or Now()
+		a.since = awaySince[guid]
+	else
+		a.since = a.since or Now()
+	end
 	SetAway(a, shows, true)
 	Counting(a)
+	HearHealth(a, a.since ~= nil)
 end
 
 local function ListenAfk(a, unit)
@@ -990,7 +1041,7 @@ local function ListenAfk(a, unit)
 		return
 	end
 	pcall(a.ear.UnregisterAllEvents, a.ear)
-	a.unit = unit
+	a.unit, a.hearing = unit, nil
 	a.since = nil
 	SetAway(a, false, false)
 	Counting(a)
@@ -1007,23 +1058,38 @@ end
 
 local AFK_RAID_UP = 3
 
+local function HealthWords(rec)
+	local mode = Field(X.path(rec.frame, "optionTable"), "healthText")
+	if type(mode) ~= "string" then
+		local get = type(C_CVar) == "table" and C_CVar.GetCVar or GetCVar
+		if type(get) == "function" then
+			local ok, value = pcall(get, "raidFramesHealthText")
+			mode = ok and not IsSecret(value) and value or nil
+		end
+	end
+	return type(mode) == "string" and mode ~= "" and mode ~= "none"
+end
+
 local function PlaceAfk(rec)
 	local a = rec.afk
 	if rec.kind == "raid" then
 		local status = X.path(rec.frame, "statusText")
 		local to = status or rec.frame
-		if a.to == to then
+		local above = status ~= nil and HealthWords(rec)
+		if a.to == to and a.above == above then
 			return true
 		elseif InCombatLockdown() then
 			return false
 		end
 		a.text:ClearAllPoints()
-		if status ~= nil then
+		if above then
+			a.text:SetPoint("BOTTOM", status, "TOP", 0, 1)
+		elseif status ~= nil then
 			a.text:SetPoint("CENTER", status, "CENTER", 0, 0)
 		else
 			a.text:SetPoint("BOTTOM", rec.frame, "BOTTOM", 0, AFK_RAID_UP)
 		end
-		a.to, a.onBar = to, false
+		a.to, a.onBar, a.above = to, false, above
 		return true
 	end
 	local to = MarkerSpot(rec)
@@ -1269,13 +1335,46 @@ local function Aim(rec, on)
 	Say(NOTE_AIM, rec, set == false)
 end
 
+local function KeepAway()
+	if next(awaySince) == nil then
+		return
+	end
+	local okCount, count = pcall(GetNumGroupMembers)
+	if not okCount or not ns.Finite(count) or count < 1 then
+		wipe(awaySince)
+		return
+	end
+	local okRaid, raid = pcall(IsInRaid)
+	local inRaid = okRaid and not IsSecret(raid) and raid == true
+	local here = {}
+	local player = MemberGuid("player")
+	if player ~= nil then
+		here[player] = true
+	end
+	for index = 1, inRaid and count or count - 1 do
+		local guid = MemberGuid((inRaid and "raid" or "party") .. index)
+		if guid ~= nil then
+			here[guid] = true
+		end
+	end
+	for guid in pairs(awaySince) do
+		if not here[guid] then
+			awaySince[guid] = nil
+		end
+	end
+end
+
 local function GroupChanged()
+	KeepAway()
 	for _, rec in pairs(X.records) do
 		if rec.leader then
 			X.run(LEADER, Leader, rec, X.active(rec))
 		end
 		if rec.aim then
 			X.run(AIM, Aim, rec, X.active(rec))
+		end
+		if rec.afk and rec.afk.unit ~= nil then
+			X.run(AFK, ShowAfk, rec.afk)
 		end
 	end
 end

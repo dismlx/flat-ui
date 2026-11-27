@@ -59,7 +59,9 @@ local STATUS = { names = { player = "Player", target = "Target", pet = "Pet", to
 	notDrawn = "Unit frames: a portrait could not be drawn on one frame, which keeps the game's portrait.",
 	undrawn = 0 }
 local FRAME = { POWER = { player = "playerPowerBar", target = "targetPowerBar", focus = "focusPowerBar", pet = "petPowerBar", tot = "totPowerBar",
-	party = "partyPowerBar", boss = "bossPowerBar" }, INSET = 0.1464, CAP = { flat = 0.45, gradient = 0.75 } }
+	party = "partyPowerBar", boss = "bossPowerBar" }, INSET = 0.1464, CAP = { flat = 0.45, gradient = 0.75 },
+	TELL = "Flat UI: unit frames take their new layout when the fight ends.",
+	OPTS = { "portraitSize", "frameStyle", "powerSpace", "nameRoom", "powerWidth", "smallTextSize", "levelPosition", "pvpFlag", "pvpTimer", "strip", "smallRow" } }
 
 local records = setmetatable({}, { __mode = "k" })
 local byFlash = setmetatable({}, { __mode = "k" })
@@ -649,12 +651,21 @@ local function ApplyPicture(rec, on, redraw)
 	Mask.sync(rec, shown or none or false)
 	local round = shown and pic.style ~= "head" and Opt("classShape") == "round" or false
 	ns.SetOutlineRound(pic.outline, pic.texture, round, pic.fadeTex)
-	if round and not pic.outline.round and not ns.roundMissing and InCombatLockdown() and not pic.roundQueued then
-		pic.roundQueued = true
-		ns.OutOfCombat(function()
-			pic.roundQueued = nil
-			pcall(Refresh)
-		end)
+	local shape = Opt("classShape")
+	if round and not pic.outline.round and not ns.roundMissing and InCombatLockdown() then
+		if pic.shapeOpt ~= nil and pic.shapeOpt ~= shape then
+			ns.UnitFrameExtra.tell(FRAME.TELL)
+		end
+		if not pic.roundQueued then
+			pic.roundQueued = true
+			ns.OutOfCombat(function()
+				pic.roundQueued = nil
+				pcall(Refresh)
+			end)
+		end
+	end
+	if not InCombatLockdown() then
+		pic.shapeOpt = shape
 	end
 	pic.round = pic.outline.roundOn == true
 	if rec.joined == true then
@@ -945,6 +956,14 @@ local function Rooms(rec, rowOn)
 	return shows and ROW.at(rec) == "end" and ROW.levelRoom or 0, (pvp and ROW.flagRoom or 0) + (pvp and rec.kind == "player" and Opt("pvpTimer") == true and ROW.timerRoom or 0)
 end
 
+function FRAME.opts()
+	local list = { tostring(ns.Get("general.thickness")) }
+	for _, key in ipairs(FRAME.OPTS) do
+		list[#list + 1] = tostring(Opt(key))
+	end
+	return table.concat(list, ":")
+end
+
 local function LayoutKey(rec)
 	local rowOn = RowOn(rec)
 	local level, pvp = Rooms(rec, rowOn)
@@ -982,7 +1001,7 @@ local function Layout(rec)
 	local fit = Opt("nameRoom") ~= "fixed"
 	local key = LayoutKey(rec)
 	local again = rec.laid ~= key
-	rec.laid = key
+	rec.laid, rec.laidOpts = key, FRAME.opts()
 	rec.pvpRoom = pvp > 0
 	local power = rec.byRole and rec.byRole.power
 	if again and power ~= nil and power.cut ~= nil and power.cut.place ~= nil then
@@ -2113,6 +2132,9 @@ local function Corners(rec, on)
 	local joined = rec.joined == true
 	if tostring(radius) .. ":" .. tostring(joined) ~= (rec.cornerKey or "nil:false") then
 		if InCombatLockdown() then
+			if rec.cornerKey ~= nil then
+				ns.UnitFrameExtra.tell(FRAME.TELL)
+			end
 			if not rec.cornersQueued then
 				rec.cornersQueued = true
 				ns.OutOfCombat(function()
@@ -2196,12 +2218,17 @@ function Apply(rec)
 	Corners(rec, on)
 	if not InCombatLockdown() then
 		Layout(rec)
-	elseif rec.laid ~= LayoutKey(rec) and not rec.layoutQueued then
-		rec.layoutQueued = true
-		ns.OutOfCombat(function()
-			rec.layoutQueued = nil
-			Run(LABELS[rec.kind], Apply, rec)
-		end)
+	elseif rec.laid ~= LayoutKey(rec) then
+		if rec.laidOpts ~= nil and rec.laidOpts ~= FRAME.opts() then
+			ns.UnitFrameExtra.tell(FRAME.TELL)
+		end
+		if not rec.layoutQueued then
+			rec.layoutQueued = true
+			ns.OutOfCombat(function()
+				rec.layoutQueued = nil
+				Run(LABELS[rec.kind], Apply, rec)
+			end)
+		end
 	end
 	for _, hook in ipairs(ns.UnitFrameExtra.after.apply) do
 		Run(hook.part, hook.fn, rec, on)
@@ -3288,6 +3315,28 @@ function ns.UnitFrameExtra.tell(line)
 	ns.OutOfCombat(function()
 		told[line] = nil
 	end)
+end
+
+function ns.UnitFrameExtra.pop(region, from, duration)
+	local ok, group = pcall(function()
+		local pop = region:CreateAnimationGroup()
+		ns.Own[pop] = true
+		local scale = pop:CreateAnimation("Scale")
+		scale:SetScaleFrom(from, from)
+		scale:SetScaleTo(1, 1)
+		scale:SetOrigin("CENTER", 0, 0)
+		scale:SetDuration(duration)
+		pcall(scale.SetSmoothing, scale, "OUT")
+		return pop
+	end)
+	return ok and group or nil
+end
+
+function ns.UnitFrameExtra.popNow(group)
+	if group ~= nil then
+		pcall(group.Stop, group)
+		pcall(group.Play, group)
+	end
 end
 
 ns.UnitFrameExtra.opt = Opt

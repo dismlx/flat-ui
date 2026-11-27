@@ -6,6 +6,7 @@ local PART = "Five-second rule"
 local MANA, RULE, REST = 0, 5, 1
 local SPARK = "Interface\\CastingBar\\UI-CastingBar-Spark"
 local SPARK_TALL, SPARK_MIN, SPARK_WIDE, SPARK_ALPHA = 2, 8, 0.6, 0.9
+local FLARE_SCALE, FLARE_TIME = 1.6, 0.3
 local TELL_WAITS = "Flat UI: the five-second rule spark shows when the fight ends."
 
 local IsSecret = ns.IsSecret
@@ -19,7 +20,8 @@ local function Own(object)
 	return object
 end
 
-local S = { ear = nil, hearing = false, rec = nil, start = nil, sample = nil, kind = nil }
+local S = { ear = nil, hearing = false, rec = nil, start = nil, sample = nil, kind = nil, flared = nil }
+local costly = {}
 
 local function Wanted()
 	return ns.Enabled(KEY) and Opt("manaRule") == true and not ns.PartStopped(KEY, PART)
@@ -56,7 +58,26 @@ local function MakeSet(parent)
 	spark:SetAlpha(SPARK_ALPHA)
 	spark:SetPoint("CENTER", spacer, "RIGHT", 0, 0)
 	spark:Hide()
-	return { holder = holder, spacer = spacer, spark = spark }
+	local ok, flare = pcall(function()
+		local group = spark:CreateAnimationGroup()
+		Own(group)
+		local grow = group:CreateAnimation("Scale")
+		grow:SetScaleFrom(1, 1)
+		grow:SetScaleTo(FLARE_SCALE, FLARE_SCALE)
+		grow:SetOrigin("CENTER", 0, 0)
+		grow:SetDuration(FLARE_TIME)
+		local fade = group:CreateAnimation("Alpha")
+		fade:SetFromAlpha(SPARK_ALPHA)
+		fade:SetToAlpha(0)
+		fade:SetDuration(FLARE_TIME)
+		pcall(group.SetToFinalAlpha, group, true)
+		group:SetScript("OnFinished", function()
+			spark:Hide()
+			spark:SetAlpha(SPARK_ALPHA)
+		end)
+		return group
+	end)
+	return { holder = holder, spacer = spacer, spark = spark, flare = ok and flare or nil }
 end
 
 local function PlaceSet(set, over)
@@ -129,22 +150,51 @@ local function Pick(rec)
 	return d ~= nil and d.shown == true and m.druid or nil
 end
 
-local function HideAll(rec)
+local function Flaring(set)
+	return set.flare ~= nil and set.flare:IsPlaying()
+end
+
+local function Quench(set)
+	if Flaring(set) then
+		pcall(set.flare.Stop, set.flare)
+	end
+	set.spark:SetAlpha(SPARK_ALPHA)
+end
+
+local function HideAll(rec, keepFlare)
 	local m = rec and rec.manaRule
 	if m == nil then
 		return
 	end
 	for _, set in pairs(m) do
-		set.spark:Hide()
+		if not (keepFlare and Flaring(set)) then
+			Quench(set)
+			set.spark:Hide()
+		end
 	end
 end
 
-local function Stop()
-	S.start, S.sample = nil, nil
+local function Stop(keepFlare)
+	S.start, S.sample, S.flared = nil, nil, nil
 	if S.ear then
 		S.ear:SetScript("OnUpdate", nil)
 	end
-	HideAll(S.rec)
+	HideAll(S.rec, keepFlare)
+end
+
+local function Flare(rec)
+	local set = Pick(rec)
+	if set == nil or set.flare == nil or not set.spark:IsShown() then
+		return
+	end
+	local ok, width = pcall(set.holder.GetWidth, set.holder)
+	if ok and ns.Finite(width) and width > 0 then
+		set.spacer:SetWidth(width)
+	end
+	Quench(set)
+	if not pcall(set.flare.Play, set.flare) then
+		set.spark:Hide()
+	end
 end
 
 local function Sweep()
@@ -155,14 +205,19 @@ local function Sweep()
 	end
 	local gone = now - S.start
 	if gone >= RULE then
+		if not S.flared then
+			S.flared = true
+			Flare(rec)
+		end
 		if not (S.sample and Testing()) then
-			Stop()
+			Stop(true)
 			return
 		elseif gone < RULE + REST then
-			HideAll(rec)
+			HideAll(rec, true)
 			return
 		end
-		S.start, gone = now, 0
+		S.start, gone, S.flared = now, 0, nil
+		HideAll(rec)
 	end
 	local set = Pick(rec)
 	for _, other in pairs(rec.manaRule) do
@@ -190,7 +245,10 @@ local function Start(rec, sample)
 	if S.ear == nil or rec.manaRule == nil then
 		return
 	end
-	S.rec, S.start, S.sample = rec, Now(), sample or nil
+	S.rec, S.start, S.sample, S.flared = rec, Now(), sample or nil, nil
+	for _, set in pairs(rec.manaRule) do
+		Quench(set)
+	end
 	S.ear:SetScript("OnUpdate", OnUpdate)
 	Sweep()
 end
@@ -198,23 +256,34 @@ end
 local function CostsMana(spellID)
 	local spells = C_Spell
 	if type(spells) ~= "table" or type(spells.GetSpellPowerCost) ~= "function" then
-		return false
+		return costly[spellID] == true
 	end
 	local ok, costs = pcall(spells.GetSpellPowerCost, spellID)
 	if not ok or IsSecret(costs) or type(costs) ~= "table" then
-		return false
+		return costly[spellID] == true
 	end
-	local paid = false
-	pcall(function()
+	local paid, plain = false, true
+	local read = pcall(function()
 		for _, entry in ipairs(costs) do
 			local kind = not IsSecret(entry) and type(entry) == "table" and entry.type or nil
-			if ns.Finite(kind) and kind == MANA then
+			if IsSecret(kind) or kind == nil then
+				plain = false
+				break
+			elseif ns.Finite(kind) and kind == MANA then
 				local cost, share = entry.cost, entry.costPercent
+				if IsSecret(cost) or IsSecret(share) then
+					plain = false
+					break
+				end
 				paid = (ns.Finite(cost) and cost > 0) or (ns.Finite(share) and share > 0)
 				break
 			end
 		end
 	end)
+	if not (read and plain) then
+		return costly[spellID] == true
+	end
+	costly[spellID] = paid
 	return paid
 end
 

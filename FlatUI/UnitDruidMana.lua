@@ -463,19 +463,6 @@ local function Hear(d, on)
 	d.hearing = true
 end
 
-local told = false
-
-local function Tell()
-	if told or type(ns.PanelShown) ~= "function" or ns.PanelShown() ~= true then
-		return
-	end
-	told = true
-	print(TELL_WAITS)
-	ns.OutOfCombat(function()
-		told = false
-	end)
-end
-
 local function DruidMana(rec)
 	if rec.kind ~= "player" then
 		return
@@ -494,7 +481,7 @@ local function DruidMana(rec)
 			return
 		end
 		if InCombatLockdown() then
-			Tell()
+			X.tell(TELL_WAITS)
 			if not rec.druidQueued then
 				rec.druidQueued = true
 				ns.OutOfCombat(function()
@@ -512,7 +499,7 @@ local function DruidMana(rec)
 	if not InCombatLockdown() then
 		Place(rec, d)
 	elseif not Placed(rec, d) then
-		Tell()
+		X.tell(TELL_WAITS)
 		if not rec.druidPlaceQueued then
 			rec.druidPlaceQueued = true
 			ns.OutOfCombat(function()

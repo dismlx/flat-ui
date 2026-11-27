@@ -10,6 +10,7 @@ local weak = { __mode = "k" }
 local state = { probed = false, works = false, why = nil, steps = {} }
 local bars, painted = setmetatable({}, weak), setmetatable({}, weak)
 local plates = setmetatable({}, weak)
+local raids = setmetatable({}, weak)
 local resource = {}
 local installed, missing = false, false
 
@@ -173,6 +174,101 @@ local function StepFrames()
 		RefreshFrames()
 	end
 end
+
+local function RaidOn(rec)
+	return rec.kind == "raid" and rec.made == true and Get("unitframes.healthByLeft") == true and Get("unitframes.flat") == true and ns.Enabled("unitframes")
+		and not ns.PartStopped("unitframes", PART) and X.active(rec) and Probe(false)
+end
+
+local function RaidBar(rec)
+	local entry = rec.byRole and rec.byRole.health
+	local bar = entry and entry.bar
+	if bar ~= nil and not ns.IsSecret(bar) and not ns.Forbidden(bar) then
+		return bar
+	end
+	return nil
+end
+
+local function RaidLive(rec)
+	local unit = X.unitOf(rec)
+	if type(unit) ~= "string" or ns.IsSecret(unit) then
+		return nil
+	end
+	local ok, exists = pcall(UnitExists, unit)
+	if not ok or ns.IsSecret(exists) or exists ~= true then
+		return nil
+	end
+	local okOnline, online = pcall(UnitIsConnected, unit)
+	if okOnline and not ns.IsSecret(online) and online == false then
+		return nil
+	end
+	return unit
+end
+
+local function PaintRaid(rec, fromGame)
+	local bar = RaidBar(rec)
+	if bar == nil then
+		return
+	end
+	local r = raids[rec]
+	local unit = RaidOn(rec) and RaidLive(rec) or nil
+	if unit ~= nil then
+		if r == nil then
+			r = {}
+			raids[rec] = r
+		end
+		if fromGame or not r.painted then
+			r.game = { bar:GetStatusBarColor() }
+		end
+		r.painted = true
+		Tint(bar, unit)
+		Drive()
+	elseif r ~= nil and r.painted then
+		r.painted = nil
+		local game = r.game
+		if game ~= nil and not fromGame then
+			bar:SetStatusBarColor(game[1], game[2], game[3], game[4])
+		end
+	end
+end
+
+local function StepRaids()
+	for rec, r in pairs(raids) do
+		if r.painted or RaidOn(rec) then
+			if not ns.EachPart("unitframes", PART, PaintRaid, rec, false) and ns.PartStopped("unitframes", PART) then
+				pcall(PaintRaid, rec, false)
+			end
+		end
+	end
+end
+
+local raidFollow = {}
+
+local function OnRaidColour(frame)
+	if ns.IsPlate(frame) then
+		return
+	end
+	local rec = X.known(frame)
+	if rec ~= nil and rec.kind == "raid" and (raids[rec] ~= nil or RaidOn(rec)) then
+		ns.EachPart("unitframes", PART, PaintRaid, rec, true)
+	end
+end
+
+local function ApplyRaid(rec)
+	if rec.kind ~= "raid" then
+		return
+	end
+	if raids[rec] == nil and not RaidOn(rec) then
+		return
+	end
+	if raidFollow.on == nil then
+		raidFollow.on = ns.FollowGlobal("CompactUnitFrame_UpdateHealthColor", OnRaidColour) == true
+	end
+	PaintRaid(rec, false)
+end
+
+table.insert(X.after.apply, { part = PART, fn = ApplyRaid })
+table.insert(X.after.raid, { part = PART, fn = ApplyRaid })
 
 local LOW_FRAMES = "Low health border"
 local LOW_KINDS = { player = true, pet = true, party = true, partypet = true, raid = true }
@@ -413,6 +509,7 @@ function Tick(_, elapsed)
 	end
 	clock = 0
 	StepFrames()
+	StepRaids()
 	StepLow()
 	StepResource()
 	Sync()
@@ -500,12 +597,15 @@ local function BorderPlate(frame, rec)
 	end
 	if low == nil then
 		if InCombatLockdown() and ns.MaybeProtected(bar) then
-			X.tell(TELL_LOW)
-			ns.OutOfCombat(function()
-				if ns.IsPlate(frame) then
-					RunPlate(frame, false)
-				end
-			end)
+			if not rec.lowQueued then
+				rec.lowQueued = true
+				ns.OutOfCombat(function()
+					rec.lowQueued = nil
+					if ns.IsPlate(frame) then
+						RunPlate(frame, false)
+					end
+				end)
+			end
 			return
 		end
 		local holder = CreateFrame("Frame", nil, bar)
@@ -579,7 +679,7 @@ end
 extra.leave[#extra.leave + 1] = function(frame)
 	local rec = plates[frame]
 	if rec ~= nil then
-		rec.painted, rec.game = nil, nil
+		rec.painted, rec.game, rec.lowQueued = nil, nil, nil
 		if rec.low ~= nil and rec.low.shown then
 			rec.low.shown = nil
 			rec.low.holder:Hide()
