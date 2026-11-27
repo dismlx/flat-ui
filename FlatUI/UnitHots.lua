@@ -18,7 +18,9 @@ local _, ns = ...
 -- gives nil for one it does not have, SpellDocumentation.lua:518-533) has no square, so each is checked in the game.
 -- A class without one, or a client that does not read auras by slot, makes nothing. Each heal over time has a place of its own in a row from the
 -- corner (Square corner), so a square never moves while the others come and go; Square size is its side in units, with a dark rim of one screen pixel,
--- and the row sits just inside the dispel border of UnitGroupMarks.lua (2 screen pixels inside the health bar). On a party frame with Debuff type icon
+-- and the row sits just inside the dispel border of UnitGroupMarks.lua (2 screen pixels inside the health bar). On a party frame, whose health bar is
+-- 10 units high (Blizzard_UnitFrame/Camelot/PartyMemberFrame.lua:9-11), the side is at most the bar's height less the row's inset and the dispel
+-- border on the far side, so a large size picked for raid cells stays inside the bar; raid cells keep the full size. On a party frame with Debuff type icon
 -- on party frames and Top right or Bottom right, the row starts just left of the spot of the type icon at the right end of the bar, so the two show
 -- side by side; raid frames, where the game draws its own type icons, keep the corner.
 --
@@ -28,12 +30,15 @@ local _, ns = ...
 -- encounter, a challenge mode or a PvP match, unless the game flags the spell as never secret (SecretPredicatesDocumentation.lua:80-82). A withheld
 -- aura, or one whose spell ID is withheld, is never read further; the member is read again when the fight or the restriction ends
 -- (PLAYER_REGEN_ENABLED, and ADDON_RESTRICTION_STATE_CHANGED with Inactive, RestrictedActionsDocumentation.lua:96-107), as UnitGroupMarks.lua reads
--- its debuffs again. The number of slots GetAuraSlots gives is a plain answer too, so in a fight, where the game hides which aura is which, the squares
--- of the last plain read stay while the member has at least as many auras of yours as at that read: a Sunder, a debuff or another healer's buff
--- changes nothing, and nor does a buff of yours that comes and goes in the fight (Inspiration, a bounce of Prayer of Mending, a Lifebloom), since
--- the count to hold is never raised in the fight. When the number drops below it one of yours ended, and as the game does not say which, the
--- squares it hides go and only those read plainly now stay, the new number the count to hold; a new heal over time cast in the fight waits for its
--- end. Each frame
+-- its debuffs again. The number of slots GetAuraSlots gives is a plain answer too, and a plain read also gives each heal over time's end
+-- (expirationTime, 0 for one that never ends). So in a fight, where the game hides which aura is which, each square of the last plain read stays until
+-- its time runs out, while the member has at least as many auras of yours as that read less those whose time ran out since: a Sunder, a debuff or
+-- another healer's buff changes nothing, and nor does a buff of yours that comes and goes in the fight (Inspiration, a bounce of Prayer of Mending, a
+-- Lifebloom), since the count to hold is never raised in the fight. A square whose time ran out goes, and the count to hold drops by one with it, so
+-- a heal over time that ends on time leaves the others lit and is never counted twice. When the number drops below the count to hold one of yours
+-- ended early (a shield used up), and as the game does not say which, the squares it hides go and only those read plainly now stay, the new number
+-- the count to hold; a new heal over time cast in the fight waits for its end, and one recast in the fight loses its square at its old end. An end
+-- sends UNIT_AURA (the aura goes), so no timer runs. Each frame
 -- hears UNIT_AURA for its own unit on a frame of the addon's own (RegisterUnitEvent), whose payload is never read; a burst is read once, a moment
 -- after the first. A frame the game hid hears nothing until the game draws it again, through the same calls UnitGroupMarks.lua follows.
 --
@@ -54,6 +59,9 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 -- The dispel border's thickness in screen pixels (UnitGroupMarks.lua), which the row stays inside, the wait before a burst of events is read, and
 -- how many times a read asks the game for more slots.
 local RIM_PX, SOON, MOST_ASKS = 2, 0.1, 4
+-- How soon before its end time a kept heal over time counts as run out when the member is read in a fight: the read comes the wait above after the
+-- aura went, and the end the game gave and the moment it goes can differ by the server's timing.
+local LATE = 0.5
 -- The heals over time of each class by the class file UnitClass gives, in the order of their places from the corner: the spell the name comes from,
 -- and the colour of its square with the word /flatui status says for it.
 local HOTS = {
@@ -162,7 +170,19 @@ end
 
 -- Reading a member --------------------------------------------------------------------------------------------------------------------------------
 
--- One aura of the player's on a unit: the place of its heal over time, false for another aura or a slot that went, or nil when the game withheld it.
+-- The end time of a plain aura (expirationTime, AuraUtil.lua), 0 for one that never ends or whose end cannot be read.
+local function EndOf(aura)
+	local ok, ends = pcall(function()
+		return aura.expirationTime
+	end)
+	if ok and ns.Finite(ends) and ends > 0 then
+		return ends
+	end
+	return 0
+end
+
+-- One aura of the player's on a unit: the place of its heal over time, false for another aura or a slot that went, or nil when the game withheld it,
+-- and for a heal over time its end time (EndOf).
 local function KindOfSlot(unit, slot)
 	if not ns.Finite(slot) then
 		return nil
@@ -185,23 +205,27 @@ local function KindOfSlot(unit, slot)
 	if not ns.Finite(id) then
 		return false
 	end
-	return KindOf(id)
+	local kind = KindOf(id)
+	return kind, kind and EndOf(aura) or nil
 end
 
--- The slots of one answer of GetAuraSlots: its continuation token first, then the slots (AuraUtil.lua:93-114). Marks the heals over time found and
--- returns the token to ask with again (nil when the answer was the last), whether one aura was withheld, and how many slots the answer gave, nil when
--- the game gave no answer. The number of slots is plain: the call carries no secret predicate.
-local function Batch(found, unit, ok, token, ...)
+-- The slots of one answer of GetAuraSlots: its continuation token first, then the slots (AuraUtil.lua:93-114). Marks the heals over time found, with
+-- the end of each in ends (0 when one of them never ends, else the latest), and returns the token to ask with again (nil when the answer was the
+-- last), whether one aura was withheld, and how many slots the answer gave, nil when the game gave no answer. The number of slots is plain: the call
+-- carries no secret predicate.
+local function Batch(found, ends, unit, ok, token, ...)
 	if not ok or IsSecret(token) then
 		return nil, true, nil
 	end
 	local withheld, count = false, select("#", ...)
 	for index = 1, count do
-		local kind = KindOfSlot(unit, (select(index, ...)))
+		local kind, endsAt = KindOfSlot(unit, (select(index, ...)))
 		if kind == nil then
 			withheld = true
 		elseif kind then
 			found[kind] = true
+			local was = ends[kind]
+			ends[kind] = (was == 0 or endsAt == 0) and 0 or math.max(was or 0, endsAt or 0)
 		end
 	end
 	if not ns.Finite(token) then
@@ -210,20 +234,20 @@ local function Batch(found, unit, ok, token, ...)
 	return token, withheld, count
 end
 
--- The heals over time of the player's on a unit, by place, whether the game withheld any of the player's auras there, and how many auras of the
--- player's the unit has (nil when the game would not say).
+-- The heals over time of the player's on a unit, by place, whether the game withheld any of the player's auras there, how many auras of the
+-- player's the unit has (nil when the game would not say), and the end time of each heal over time found, by place.
 local function Scan(unit)
-	local found, withheld, token, count = {}, false, nil, 0
+	local found, ends, withheld, token, count = {}, {}, false, nil, 0
 	for _ = 1, MOST_ASKS do
 		local more, slots
-		token, more, slots = Batch(found, unit, pcall(C_UnitAuras.GetAuraSlots, unit, FILTER, nil, token))
+		token, more, slots = Batch(found, ends, unit, pcall(C_UnitAuras.GetAuraSlots, unit, FILTER, nil, token))
 		withheld = withheld or more
 		count = count and slots and count + slots or nil
 		if token == nil then
 			break
 		end
 	end
-	return found, withheld, count
+	return found, withheld, count, ends
 end
 
 -- A line for /flatui status while a frame waits for auras the game withheld: the frames it holds for.
@@ -294,9 +318,33 @@ local function Make(rec)
 	return h
 end
 
--- What the corner, the size, the screen pixel and the type icon row give now, as one key.
+-- The height of a party frame's health bar in its units, plain, or nil (and nil on a raid frame, whose squares keep their full size).
+local function Tall(h)
+	if not h.party then
+		return nil
+	end
+	local ok, tall = pcall(h.box.GetHeight, h.box)
+	if ok and ns.Finite(tall) and tall > 0 then
+		return tall
+	end
+	return nil
+end
+
+-- The side of a square: Square size, and on a party frame at most the room the health bar has from the row's inset to the dispel border on its far
+-- side, so a size picked for raid cells does not hang out of the 10-unit party bar over the name row or the power bar.
+local function Side(h, px)
+	local size, tall = tonumber(Opt("hotSize")) or 6, Tall(h)
+	if tall ~= nil then
+		size = math.max(2, math.min(size, tall - px * (RIM_PX + 1) - px * RIM_PX))
+	end
+	return size
+end
+
+-- What the corner, the size, the screen pixel, the type icon row and the height of a party frame's health bar give now, as one key.
 local function Key(h)
-	return ("%s:%s:%.4f:%s"):format(tostring(Opt("hotCorner")), tostring(Opt("hotSize")), ns.Pixels(h.holder, 1), tostring(Opt("dispelIcon")))
+	local tall = Tall(h)
+	return ("%s:%s:%.4f:%s:%s"):format(tostring(Opt("hotCorner")), tostring(Opt("hotSize")), ns.Pixels(h.holder, 1), tostring(Opt("dispelIcon")),
+		tall and ("%.1f"):format(tall) or "-")
 end
 
 -- How far across from the corner the first square sits: just inside the dispel border, or on a party frame with Debuff type icon on party frames and
@@ -321,7 +369,8 @@ local function Place(h)
 	end
 	h.placed = key
 	local corner = CORNERS[Opt("hotCorner")] or CORNERS.tr
-	local size, px = Opt("hotSize"), ns.Pixels(h.holder, 1)
+	local px = ns.Pixels(h.holder, 1)
+	local size = Side(h, px)
 	local inset, from = px * (RIM_PX + 1), Across(h, corner, px)
 	for index, square in ipairs(h.squares) do
 		local x = corner[2] * (from + (index - 1) * (size + px))
@@ -345,7 +394,7 @@ local function Draw(h, found)
 end
 
 local function Clear(h)
-	h.withheld, h.kept, h.count = nil, nil, nil
+	h.withheld, h.kept, h.count, h.ends = nil, nil, nil, nil
 	Draw(h, {})
 end
 
@@ -359,6 +408,23 @@ local function Merged(found, kept)
 		all[index] = true
 	end
 	return all
+end
+
+-- The squares kept from the last plain read whose time has not run out (an end of 0 never does, nor one with no time to compare), and how many of the
+-- kept ones ran out.
+local function Live(h)
+	local live, gone = {}, 0
+	local ok, now = pcall(GetTime)
+	local timed = ok and ns.Finite(now)
+	for index in pairs(h.kept or {}) do
+		local ends = h.ends and h.ends[index]
+		if timed and ns.Finite(ends) and ends > 0 and ends <= now + LATE then
+			gone = gone + 1
+		else
+			live[index] = true
+		end
+	end
+	return live, gone
 end
 
 local Hear
@@ -375,22 +441,31 @@ local function Read(rec)
 		Say(rec, false)
 		return
 	end
-	local found, withheld, count = Scan(h.unit)
+	local found, withheld, count, ends = Scan(h.unit)
 	h.withheld = withheld or nil
 	Say(rec, withheld)
-	-- A plain read is what the member has, and is kept. Where the game withheld an aura of yours, the squares kept stay while the member has at least
-	-- as many auras of yours as at the last plain read: fewer means one of those ended, and the game does not say which, so only those read plainly
-	-- now stay, and the count to hold is the new one. With no answer at all nothing changes.
+	-- A plain read is what the member has, and is kept with the end of each. Where the game withheld an aura of yours, a kept square whose time ran
+	-- out goes, and the others stay while the member has at least as many auras of yours as at the last plain read less those that ran out: fewer
+	-- means one of yours ended early, and the game does not say which, so only those read plainly now stay, and the count to hold is the new one.
+	-- With no count at all only the squares whose time ran out go.
 	if not withheld then
-		h.kept, h.count = found, count
-	elseif count == nil then
-		found = Merged(found, h.kept or {})
-	elseif h.kept and h.count and count >= h.count then
-		-- The count to hold stays that of the last plain read (or of the last drop): a buff of yours that comes and goes in the fight, such as
-		-- Inspiration, Prayer of Mending bouncing off or a Lifebloom that ends, takes the count back to it and leaves the squares alone.
-		found = Merged(found, h.kept)
+		h.kept, h.count, h.ends = found, count, ends
 	else
-		h.kept, h.count = found, count
+		local live, gone = Live(h)
+		local hold = h.count and h.count - gone
+		if count == nil then
+			found = Merged(found, live)
+		elseif h.kept and hold and count >= hold then
+			-- The count to hold stays that of the last plain read (or of the last drop), less the heals over time that ran out: a buff of yours that
+			-- comes and goes in the fight, such as Inspiration, Prayer of Mending bouncing off or a Lifebloom that ends, takes the count back to it and
+			-- leaves the squares alone. Those that ran out leave the kept squares and the count, so an end is never counted twice.
+			found = Merged(found, live)
+			if gone > 0 then
+				h.kept, h.count = live, hold
+			end
+		else
+			h.kept, h.count, h.ends = found, count, ends
+		end
 	end
 	Draw(h, found)
 end
@@ -437,7 +512,7 @@ function Hear(rec, h, unit)
 	pcall(ear.UnregisterAllEvents, ear)
 	if h.unit ~= unit then
 		-- A new member, or none: nothing read of the last one is kept.
-		h.kept, h.count = nil, nil
+		h.kept, h.count, h.ends = nil, nil, nil
 	end
 	h.unit, h.heard = unit, nil
 	if unit == nil then
