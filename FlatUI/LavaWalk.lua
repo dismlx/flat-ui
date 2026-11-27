@@ -108,7 +108,8 @@ local S = { lava = false, where = {}, listening = false, deaf = false, live = fa
 local LAST = {}
 -- The bar: frame, outline, bar, track, band, mark, flash, word and count, once made; placed: the spot it was put at; file: the bar texture on it;
 -- width and lead: of the rows; lavaRGB and jumpRGB: the colours; shown: the word, its colour, the count and the band width written last. alpha:
--- the frame's alpha written last; strata: its strata written last; fadeInAt: when it began to fade in; fadeOutAt and fadeFrom: when it began to fade out, and from what alpha.
+-- the frame's alpha written last; strata: its strata written last; fadeInAt: when it began to fade in; fadeOutAt and fadeFrom: when it began to
+-- fade out, and from what alpha.
 local U = {}
 
 local Stop

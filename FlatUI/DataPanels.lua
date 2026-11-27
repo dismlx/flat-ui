@@ -34,9 +34,9 @@ local ADDON_NAME, ns = ...
 -- refresh, which asks InCombatLockdown, and when a stream drawn again makes a panel or shows it again. A panel under the mouse, or whose menu is
 -- open, is at full opacity, and so is every panel while /flatui move or Edit Mode is open (P.Lining), so a panel at 0% is not an empty box as it
 -- is lined up: the frame is asked IsMouseOver, which needs no mouse on it, and the movers and Edit Mode whether they are open, on a ticker every
--- HOVER seconds that runs only while a shown panel rests below full opacity, so slots that let clicks through still do. A change eases, rising over RISE seconds and falling over
--- FALL (each times the share of the way), by an OnUpdate of the panel's own frame that runs only while it eases; a panel just made or shown
--- takes its alpha at once. The alpha is written only when it changes.
+-- HOVER seconds that runs only while a shown panel rests below full opacity, so slots that let clicks through still do. A change eases, rising
+-- over RISE seconds and falling over FALL (each times the share of the way), by an OnUpdate of the panel's own frame that runs only while it
+-- eases; a panel just made or shown takes its alpha at once. The alpha is written only when it changes.
 -- While test mode is on (TestMode.lua), a slot whose stream has nothing to show shows the stream's sample, the widest text it shows (P.TextOf).
 -- The lines around the minimap write the tooltips of the same streams on buttons of their own (P.TipAt, MapText.lua), also with the panels off.
 -- Built on the data panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission: its streams, the bridge to LibDataBroker,
@@ -995,10 +995,6 @@ local function SetAlpha(panel, alpha)
 	end
 end
 
--- Gives a panel's frame the opacity it should have now: full while it is shown under the mouse or its menu is open, so its tooltips and clicks
--- stay usable at 0%, else the resting one. It eases there from where it is, up over RISE and down over FALL, each times the share of the way
--- (P.Ease); a call while it eases only aims it again. A frame that is hidden, or that P.Layout has just shown, takes it at once, so a new panel
--- never fades down from full on screen.
 -- True while /flatui move (Movers.lua) or the game's Edit Mode is open, so a faded panel is seen whole as its box is lined up, as Fade.lua
 -- keeps its frames (MoversOpen and Wanted there).
 function P.Lining()
@@ -1009,6 +1005,10 @@ function P.Lining()
 	return type(ns.EditModeOpen) == "function" and ns.EditModeOpen() == true
 end
 
+-- Gives a panel's frame the opacity it should have now: full while it is shown under the mouse or its menu is open, or while the movers or Edit
+-- Mode are open (P.Lining), so its tooltips and clicks stay usable at 0%, else the resting one. It eases there from where it is, up over RISE
+-- and down over FALL, each times the share of the way (P.Ease); a call while it eases only aims it again. A frame that is hidden, or that
+-- P.Layout has just shown, takes it at once, so a new panel never fades down from full on screen.
 function P.Fade(panel)
 	local frame = panel.frame
 	if not frame then
@@ -1834,22 +1834,22 @@ function P.OpenMenu(slot, stream, title, items)
 	return true
 end
 
--- The menu of a slot: a right click on a slot of Flat UI's own opens it, or Alt-right-click on another addon's feed, titled with the panel and the slot ("Top panel, third slot"). It lists
--- None, every stream and the feeds, as the slot's row on the options page does (ns.DataPanelChoices), the one the slot shows now in gold with a
--- tick, which does nothing; a pick sets the slot's row (ns.Set, and Home's Recent changes as for a change on the page, so Ctrl+Z and the reset
--- arrow take it back) and the module's refresh draws the panel again. A stream of Flat UI's own that shows nothing for this character now (its
--- Text run as the slot would, without test mode's sample) reads dim with its idle words, as "Soul shards (only for a warlock)", and can still be
--- picked. A pick that leaves the slot with no room (None, or such a stream) says so in chat with print, as the data panels have no chat switch:
--- "Flat UI: Soul shards shows nothing for this character now (only for a warlock), so the third slot of the top panel takes no room.", and that
--- the panel hides when it has nothing left to show. "Move left" and "Move right" swap the slot's row with that of its nearest neighbour that
--- takes room now (a None slot, or one with nothing to show, is passed over; a line is left out at either end) and open the menu again on the
--- slot that now holds the moved kind, so each press moves it on. While the panel has a slot set to None, "Add a slot after this one" (before,
--- for a free slot before it) opens a second menu at the same slot for the first such slot after it, else the nearest before it, titled with the
--- place the new slot lands ("Top panel, new third slot"), listing every choice but None. Its pick lands right beside the slot clicked: the rows
--- between it and the free slot shift one place toward the free slot, and the pick is written next to the slot clicked. A move or an add is one
--- batch in Recent changes (SetSlot), one line there and one Ctrl+Z. Its last line opens the Data panels page of the options (ns.OpenPanelPage,
--- Panel.lua; in a fight the window says it opens after it). SLOT_MENU stands for a stream in P.OpenMenu, for the label of its part; menu.target
--- is the free slot the second menu fills.
+-- The menu of a slot: a right click on a slot of Flat UI's own opens it, or Alt-right-click on another addon's feed, titled with the panel and the
+-- slot ("Top panel, third slot"). It lists None, every stream and the feeds, as the slot's row on the options page does (ns.DataPanelChoices), the
+-- one the slot shows now in gold with a tick, which does nothing; a pick sets the slot's row (ns.Set, and Home's Recent changes as for a change on
+-- the page, so Ctrl+Z and the reset arrow take it back) and the module's refresh draws the panel again. A stream of Flat UI's own that shows
+-- nothing for this character now (its Text run as the slot would, without test mode's sample) reads dim with its idle words, as "Soul shards (only
+-- for a warlock)", and can still be picked. A pick that leaves the slot with no room (None, or such a stream) says so in chat with print, as the
+-- data panels have no chat switch: "Flat UI: Soul shards shows nothing for this character now (only for a warlock), so the third slot of the top
+-- panel takes no room.", and that the panel hides when it has nothing left to show. "Move left" and "Move right" swap the slot's row with that of
+-- its nearest neighbour that takes room now (a None slot, or one with nothing to show, is passed over; a line is left out at either end) and open
+-- the menu again on the slot that now holds the moved kind, so each press moves it on. While the panel has a slot set to None, "Add a slot after
+-- this one" (before, for a free slot before it) opens a second menu at the same slot for the first such slot after it, else the nearest before it,
+-- titled with the place the new slot lands ("Top panel, new third slot"), listing every choice but None. Its pick lands right beside the slot
+-- clicked: the rows between it and the free slot shift one place toward the free slot, and the pick is written next to the slot clicked. A move or
+-- an add is one batch in Recent changes (SetSlot), one line there and one Ctrl+Z. Its last line opens the Data panels page of the options
+-- (ns.OpenPanelPage, Panel.lua; in a fight the window says it opens after it). SLOT_MENU stands for a stream in P.OpenMenu, for the label of its
+-- part; menu.target is the free slot the second menu fills.
 P.SLOT_MENU = { label = "Slot menu" }
 local ORDINALS = { "first", "second", "third", "fourth", "fifth", "sixth" }
 local TICK = " |TInterface\\Buttons\\UI-CheckBox-Check:0|t"
