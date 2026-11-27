@@ -798,6 +798,7 @@ ns.SETUP_STEPS = {
 		{ "hud.xpTextPlace", "o", "mock-xp-micro" },
 		{ "hud.xpTextSize", "o", "mock-xp-micro" },
 		{ "hud.xpTexture", "o", "mock-xp-micro" },
+		{ "hud.xpArt", "o", "behaviour", "Draws Flat UI's experience and reputation bars with the game's own modern bar art." },
 		{ "hud.xpTooltip", "o", "mock-xp-micro" },
 		{ "hud.xpClicks", "o", "behaviour", "Lets a Shift-click on the experience or reputation bar put your progress in the chat box, a Ctrl-click count this session's levelling numbers from now, and a click on the reputation bar open your reputations." },
 		{ "hud.xpSmooth", "o", "behaviour", "Slides the experience bar's fill up as you gain and makes the new part glow, and flashes the bar at a new level or standing." },

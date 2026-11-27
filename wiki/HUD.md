@@ -209,6 +209,7 @@ The rest of this section is about Flat UI's own bar.
 - **Experience colour** fills the bar. With **Rested experience** (on), a stretch shows how far your rested experience reaches, and the fill takes **Rested colour** while you are rested.
 - **Reputation fill** is **By standing** (the default) or **One colour**, with **Reputation colour**.
 - **Bar texture** sets the fill's texture.
+- **Bar art**: **Flat fill** (the default) or **The game's modern art**, which fills the experience bar with the game's purple, blue while you are rested, and the reputation bar with its standing's red, orange, yellow, green or blue, on the game's dark bar background. **Bar texture**, **Experience colour** and the standing colours then give way to it, and **Bar background** off leaves out the dark background. The tooltip, the quest stretch, the gains and the text work as before. Where the game has no such art, the bar keeps its flat fill and `/flatui status` says so.
 
 ### Text
 
