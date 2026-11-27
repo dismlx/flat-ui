@@ -3,8 +3,21 @@ local ADDON_NAME, ns = ...
 local Search = {}
 ns.PanelSearch = Search
 
-Search.PROFILE_ROWS = { "Profile in use", "New profile", "Duplicate profile", "Setup", "Copy from", "Delete profile", "Rename profile", "Reset profile", "In a dungeon", "In a raid",
-	"In a battleground or arena", "Everywhere else", "Export profile", "Import profile", "Export trackers", "Import trackers", "Export by module" }
+do
+	local PLACE = { section = "Switch automatically", tip = "profile switch automatically auto place instance zone" }
+	local SHARE = { section = "Share", tip = "share copy paste text string send" }
+	local PROFILE = { section = "Profile", tip = "profile" }
+	local rows = {}
+	for _, each in ipairs({
+		{ "Profile in use", PROFILE }, { "New profile", PROFILE }, { "Duplicate profile", PROFILE }, { "Setup", PROFILE }, { "Copy from", PROFILE },
+		{ "Delete profile", PROFILE }, { "Rename profile", PROFILE }, { "Reset profile", PROFILE }, { "In a dungeon", PLACE }, { "In a raid", PLACE },
+		{ "In a battleground or arena", PLACE }, { "Everywhere else", PLACE }, { "Export profile", SHARE }, { "Import profile", SHARE },
+		{ "Export trackers", SHARE }, { "Import trackers", SHARE }, { "Export by module", SHARE },
+	}) do
+		rows[#rows + 1] = { label = each[1], section = each[2].section, tip = each[2].tip }
+	end
+	Search.PROFILE_ROWS = rows
+end
 Search.ALIAS = { ["Duplicate profile"] = "New profile" }
 Search.ACTIONS = {
 	{ id = "test", label = "Test mode", tip = "samples sample frames preview" },
@@ -13,12 +26,30 @@ Search.ACTIONS = {
 	{ id = "looks", label = "Ready-made looks", tip = "profiles presets layouts" },
 }
 
-function Search.Words(typed)
-	local words = {}
-	for word in typed:lower():gmatch("%S+") do
-		words[#words + 1] = word
+Search.SPELLING = {
+	color = "colour", colors = "colours", colored = "coloured", coloring = "colouring", colorful = "colourful",
+	gray = "grey", grays = "greys", grayed = "greyed",
+	center = "centre", centers = "centres", centered = "centred",
+	favor = "favour", favorite = "favourite", favorites = "favourites",
+	honor = "honour",
+	armor = "armo", armour = "armo",
+}
+
+function Search.Word(word)
+	word = Search.SPELLING[word] or word
+	if #word >= 5 and word:sub(-1) == "s" and word:sub(-2) ~= "ss" then
+		word = word:sub(1, -2)
 	end
-	return words
+	return word
+end
+
+function Search.Words(typed)
+	local words, raw = {}, {}
+	for word in typed:lower():gmatch("%S+") do
+		words[#words + 1] = Search.Word(word)
+		raw[#raw + 1] = word
+	end
+	return words, raw
 end
 
 local function HasAll(text, words)

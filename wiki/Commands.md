@@ -14,9 +14,9 @@ Guide: [Getting started](Getting-started)
 | `/flatui new` (or `/flatui changes`) | Opens **What's new** on the newest version that has notes |
 | `/flatui new 0.5.45` | Opens **What's new** on that version, if it is one of the newest six. The window's "<" and ">" buttons step through the others. |
 | `/flatui options` | Opens Flat UI's page in the game's own options, which has one button that opens Flat UI. In a fight, after it. |
-| `/flatui border colour` | Any other words open the options window with them in **Search**: the results show lit, Enter opens the first, and a miss shows the closest pages. Typed in a fight before the window was first opened, the window opens as the fight ends with the search run. |
-| `/flatui #changed` | Lists every setting of the profile in use that you changed |
-| `/flatui #changed nameplate` | Lists the changed settings that match the other words |
+| `/flatui border colour` | Any other words open the options window with them in **Search**: the results show lit, Enter opens the first, and a miss shows the closest pages. US spellings and plurals work too, as `/flatui border color`. Typed in a fight before the window was first opened, the window opens as the fight ends with the search run. |
+| `/flatui #changed` | Lists every setting of the profile in use that you changed. **Reset these** at the foot of the window resets all it lists as one step. |
+| `/flatui #changed nameplate` | Lists the changed settings that match the other words, in their names, tips or choices |
 | `/flatui help` (or `/flatui ?`) | Lists the commands |
 
 While setup has the options window, a search from chat waits: chat says to search once setup is closed.

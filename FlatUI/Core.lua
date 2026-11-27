@@ -2506,7 +2506,7 @@ local function Refusal()
 	if not db then
 		return "Profiles are not ready yet."
 	end
-	return InCombatLockdown() and "Profiles change after combat." or nil
+	return InCombatLockdown() and "Profiles change after the fight." or nil
 end
 
 local function Apply(wasSpots)

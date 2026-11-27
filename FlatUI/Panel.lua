@@ -577,10 +577,29 @@ local function NewRow(parent, y, text, tip)
 	return row
 end
 
+function ui.Block(row, active)
+	if not row.block then
+		local block = Frame(row.frame)
+		block:SetAllPoints(row.frame)
+		block:SetFrameLevel(row.frame:GetFrameLevel() + 8)
+		Clickable(block, function()
+			if ui.ToNeed then
+				ui.ToNeed(row)
+			end
+		end)
+		row.Hover(block)
+		row.block = block
+	end
+	row.block:SetShown(not active)
+end
+
 local function SetActive(row, active)
 	if row.active ~= active then
 		row.active = active
 		row.frame:SetAlpha(active and 1 or DIM)
+	end
+	if row.item and (row.block or not active) then
+		ui.Block(row, active)
 	end
 end
 
@@ -1071,7 +1090,8 @@ local function BuildRow(parent, page, item, y)
 	local mark = ns.PanelTrust and ns.PanelTrust.Attach(row, item)
 	function row.Update()
 		local unmet = Unmet(page, item)
-		SetActive(row, unmet == nil and not Over(item))
+		row.unmet, row.over = unmet, unmet == nil and Over(item)
+		SetActive(row, unmet == nil and not row.over)
 		show()
 		if mark then
 			mark(unmet)
@@ -1772,7 +1792,7 @@ local function KeepProfile(pick)
 		switch.Keep(pick)
 		Say(("Switches to %s when the fight ends."):format(pick))
 	else
-		Say("Profiles change after combat.")
+		Say("Profiles change after the fight.")
 	end
 	RefreshAll()
 	return false
@@ -1816,6 +1836,12 @@ function ui.DeleteQuestion(name)
 		if used == name and key ~= me then
 			count = count + 1
 		end
+	end
+	local names = ns.PanelHome and ns.PanelHome.UserNames and ns.PanelHome.UserNames(name)
+	if type(names) == "table" and #names == count and count >= 1 and count <= 3 then
+		local who = count == 1 and names[1] or ("%s and %s"):format(table.concat(names, ", ", 1, count - 1), names[count])
+		return ('Delete "%s"? %s %s it and start%s as %s at their next login. %s'):format(name, who, count == 1 and "uses" or "use",
+			count == 1 and "s" or "", count == 1 and "a new character" or "new characters", back)
 	end
 	if count == 0 then
 		return ('Delete "%s"? No other character uses it. %s'):format(name, back)
@@ -1867,17 +1893,29 @@ local function BuildProfiles()
 	y = Header(child, "Profile", y)
 	local row = Row("Profile in use", "The profile this character uses. Pick another to switch to it at once; picked in a fight, it switches as the "
 		.. "fight ends.")
+	local Home = ns.PanelHome
 	local used = Menu(row, {
 		lines = function()
-			return ProfileNames(function() return true end)
+			local lines = ProfileNames(function() return true end)
+			for _, line in ipairs(lines) do
+				local count = Home and Home.UserCount and Home.UserCount(line[1]) or 0
+				if count > 0 then
+					line[2] = ("%s  (%d)"):format(line[1], count)
+				end
+			end
+			return lines
 		end,
 		selected = Current,
 		pick = function(name)
 			Act("UseProfile", name)
 		end,
 	})
+	local users = Dim(Label(row.frame, "GameFontHighlightSmall", "LEFT", ROW_W - CONTROL - FIELD - 10))
+	users:SetPoint("LEFT", row.frame, "LEFT", CONTROL + FIELD + 10, 0)
 	updates[#updates + 1] = function()
-		used.SetText(Current())
+		local now = Current()
+		used.SetText(now)
+		users:SetText(now ~= "" and Home and Home.UsedBy and Home.UsedBy(now) or "")
 	end
 
 	if type(ns.NewProfile) == "function" then
@@ -2329,7 +2367,8 @@ local function BuildSearchView()
 		end
 		if count ~= view.count then
 			view.count = count
-			ui.head.Set(nil, ui.ChangedHead(count, view.rest, true))
+			ui.head.Set(nil, ui.ChangedHead(count, view.said or view.rest, true))
+			ui.ResetMode(count)
 		end
 	end
 	return view
@@ -2441,6 +2480,52 @@ function ui.Reach(entry, item, always)
 	return false
 end
 
+function ui.ToNeed(row)
+	local item, path = row and row.item, row and row.unmet
+	if type(item) ~= "table" then
+		return
+	end
+	local Trust = ns.PanelTrust
+	if not IsText(path) then
+		if row.over then
+			local over = IsText(item.overText) and item.overText ~= "" and item.overText or "not used now"
+			local tip = IsText(item.tip) and #item.tip <= 140 and (" " .. item.tip) or ""
+			Say(("%s: %s now.%s"):format(IsText(item.label) and item.label or "This setting", (over:gsub("%s*now$", "")), tip))
+		end
+		return
+	end
+	local line = Trust and Trust.Prompt and Trust.Prompt(path, item) or ("Turn on %s first."):format(path)
+	if ui.mode or not ui.model then
+		Say(line)
+		return
+	end
+	local entry, need = ns.PanelHome.RowOf(ui.model, path)
+	local owner
+	for _, each in ipairs(ui.model.pages) do
+		if not owner and not each.parent and each.switchItem and each.switchItem.path == path then
+			owner = each
+		end
+	end
+	if owner and (not entry or need == owner.switchItem) then
+		if ui.searching or not ui.current or ns.PanelNav.Top(ui.model, ui.current) ~= owner then
+			ui.search:ClearFocus()
+			Go(owner)
+		end
+		Say((line:gsub("%.$", "")) .. ": the switch at the top of its page.")
+		return
+	end
+	if not entry then
+		Say(line)
+		return
+	end
+	if entry == ui.current and not ui.searching then
+		ui.Reach(entry, need, true)
+	else
+		Arrive(entry, need)
+	end
+	Say(line)
+end
+
 function ui.ShowChange(text, entry)
 	if not IsText(text) or type(entry) ~= "table" or type(entry.item) ~= "table" or ui.mode then
 		return text
@@ -2527,6 +2612,30 @@ function ui.ChangedHead(count, rest, now)
 	return typed and ('%s for "%s"'):format(head, typed) or head
 end
 
+ui.choiceWords = setmetatable({}, { __mode = "k" })
+
+function ui.ChoiceWords(item)
+	if item.kind ~= "choice" then
+		return ""
+	end
+	local text = ui.choiceWords[item]
+	if not text then
+		local parts = {}
+		local ok, list = pcall(ns.Choices, item)
+		if ok and type(list) == "table" then
+			for _, each in ipairs(list) do
+				local label = type(each) == "table" and each[2]
+				if type(label) == "string" and label ~= "" then
+					parts[#parts + 1] = label
+				end
+			end
+		end
+		text = table.concat(parts, "\n")
+		ui.choiceWords[item] = text
+	end
+	return text
+end
+
 local function Collect(words)
 	local groups = {}
 	local only, rest = Changing(words)
@@ -2543,9 +2652,9 @@ local function Collect(words)
 				end
 				local tier
 				if only then
-					tier = ns.PanelTrust.Changed(item) and (#rest == 0 and 1 or ns.PanelSearch.Tier(rest, item.label, item.tip, section, named)) or nil
+					tier = ns.PanelTrust.Changed(item) and (#rest == 0 and 1 or ns.PanelSearch.Tier(rest, item.label, item.tip, section, named .. "\n" .. ui.ChoiceWords(item))) or nil
 				else
-					tier = ns.PanelSearch.Tier(words, item.label, item.tip, section, named)
+					tier = ns.PanelSearch.Tier(words, item.label, item.tip, section, named .. "\n" .. ui.ChoiceWords(item))
 				end
 				if tier then
 					if not group then
@@ -2560,8 +2669,9 @@ local function Collect(words)
 		end
 	end
 	local profiles = { label = PROFILES_GROUP, hits = {} }
-	for _, label in ipairs(ns.PanelSearch.PROFILE_ROWS) do
-		local tier = ns.PanelSearch.Tier(words, label, "", PROFILES_GROUP, PROFILES_GROUP)
+	for _, record in ipairs(ns.PanelSearch.PROFILE_ROWS) do
+		local label = record.label
+		local tier = ns.PanelSearch.Tier(words, label, record.tip, record.section, PROFILES_GROUP)
 		if tier then
 			profiles.hits[#profiles.hits + 1] = { tier = tier, label = label, link = true, key = PROFILES_GROUP .. "/" .. label, Open = function()
 				ui.search:ClearFocus()
@@ -2643,7 +2753,7 @@ local function Lit(label, words)
 end
 
 local function Search(typed)
-	local words = ns.PanelSearch.Words(typed)
+	local words, raw = ns.PanelSearch.Words(typed)
 	if #words == 0 then
 		if ui.searching then
 			ui.searching = false
@@ -2673,6 +2783,7 @@ local function Search(typed)
 	local groups = Collect(words)
 	local only, rest = Changing(words)
 	view.only, view.rest, view.count = only, rest, nil
+	view.said = select(2, Changing(raw))
 	local lit = only and rest or words
 	local y = 8
 	local chips = {}
@@ -2734,16 +2845,76 @@ local function Search(typed)
 	local found = #view.shown
 	if only then
 		view.count = found
-		ui.head.Set(nil, ui.ChangedHead(found, rest))
+		ui.head.Set(nil, ui.ChangedHead(found, view.said))
 	else
 		ui.head.Set(nil, found == 0 and "No results" or found == 1 and "1 result" or ("%d results"):format(found))
 	end
 	ui.tabs.Hide()
 	ui.preview.Set(nil, 0)
-	ui.reset:Hide()
+	if only then
+		ui.ResetMode(found)
+	else
+		ui.reset:Hide()
+	end
 	ui.tip, ui.message = "", nil
 	ShowStrip()
 	LayoutNav()
+end
+
+function ui.ResetMode(count)
+	if not ui.reset then
+		return
+	end
+	if ui.resetLabel then
+		ui.resetLabel:SetText(count and ("Reset these (%d)"):format(count) or "Reset page")
+	end
+	ui.reset:SetWidth(count and 124 or 100)
+	if ui.strip and not ui.mode then
+		ui.strip:SetWidth(WIDTH - 24 - 330 - (count and 24 or 0))
+	end
+	if count then
+		ui.reset:SetAlpha(1)
+		ui.reset:SetShown(count > 0)
+	end
+end
+
+function ui.ResetListed()
+	local view = ui.searchView
+	if not (ui.searching and view and view.only) then
+		return
+	end
+	local Trust, list = ns.PanelTrust, {}
+	for _, row in ipairs(view.shown or {}) do
+		if row.item and Trust.Changed(row.item) then
+			list[#list + 1] = row.item
+		end
+	end
+	local count = #list
+	if count == 0 then
+		Say("Nothing to reset: every setting listed is at its default now.")
+		return
+	end
+	local typed = view.said and #view.said > 0 and (" " .. table.concat(view.said, " ")) or ""
+	local them = count == 1 and "it" or "them"
+	Ask(("Reset the %d changed setting%s listed? Ctrl+Z puts %s back."):format(count, count == 1 and "" or "s", them), function()
+		ui.batch = { label = "Reset of " .. CHANGED_WORD .. typed, what = "Reset these" }
+		local done = 0
+		local ok, err = pcall(function()
+			for _, item in ipairs(list) do
+				local target = item.shows and Trust.Partner(item) or item
+				if target and not ns.RowLive(target) and Trust.Changed(item) then
+					Write(target, target.default)
+					done = done + 1
+				end
+			end
+		end)
+		ui.batch = nil
+		if not ok then
+			geterrorhandler()(err)
+		end
+		RefreshAll()
+		Say(("Reset %d setting%s. Ctrl+Z puts %s back."):format(done, done == 1 and "" or "s", done == 1 and "it" or "them"))
+	end, nil, "Reset", "Keep", true)
 end
 
 local function SearchKey(key)
@@ -2825,6 +2996,7 @@ function ShowPage(entry)
 		view.scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -(HEAD + band))
 		view.scroller.Resize(CW, RIGHT_H - band)
 	end
+	ui.ResetMode(nil)
 	ui.reset:SetShown(not entry.profiles and not entry.home)
 	if not entry.profiles and not entry.home and ns.PanelTrust then
 		ui.reset:SetAlpha(ns.PanelTrust.Count(entry) == 0 and DIM or 1)
@@ -3244,7 +3416,11 @@ local function BuildFoot(window)
 	end)
 	ns.SecureReload(reload)
 	ui.ShowReload()
-	ui.reset = Button(foot, "Reset page", 100, function()
+	ui.reset, ui.resetLabel = Button(foot, "Reset page", 100, function()
+		if ui.searching then
+			ui.ResetListed()
+			return
+		end
 		local entry = ui.current
 		if entry and not entry.profiles and not entry.home then
 			local count = ns.PanelTrust.Count(entry)
@@ -3277,7 +3453,8 @@ local function BuildFoot(window)
 	end)
 	ui.reset:SetPoint("RIGHT", reload, "LEFT", -8, 0)
 	ui.reset:HookScript("OnEnter", function()
-		ui.message, ui.tip = nil, "Puts every setting of this tab back to its default. Settings the game holds keep their value."
+		ui.message, ui.tip = nil, ui.searching and "Puts every changed setting listed back to its default, as one step Ctrl+Z takes back."
+			or "Puts every setting of this tab back to its default. Settings the game holds keep their value."
 		ShowStrip()
 	end)
 	ui.reset:HookScript("OnLeave", function()
@@ -3329,7 +3506,7 @@ local function BuildTestSwitch(bar, close)
 		Place(on)
 		knob:SetColorTexture(Look.Colour(on and "on-accent" or "text-dim"))
 		Backing(outline, "line", 1, switch.hovered and "text-faint" or "line-strong")
-		word:SetText(fight and "After combat" or "Test mode")
+		word:SetText(fight and "After the fight" or "Test mode")
 		test:SetAlpha(fight and DIM or 1)
 	end
 	Painted(function()
@@ -3423,6 +3600,21 @@ local function BuildProfileName(bar)
 			Go(ui.model.profiles)
 		end
 	end)
+	frame:HookScript("OnMouseUp", function(_, button)
+		if button ~= "RightButton" or ui.mode or not ui.model or CurrentProfile() == "" then
+			return
+		end
+		OpenList(name, {
+			lines = function()
+				return ProfileNames(function() return true end)
+			end,
+			selected = CurrentProfile,
+			pick = function(pick)
+				Act("UseProfile", pick)
+			end,
+			right = true,
+		})
+	end)
 	frame:SetScript("OnEnter", function()
 		local now = CurrentProfile()
 		if now == "" then
@@ -3430,7 +3622,7 @@ local function BuildProfileName(bar)
 		end
 		local count = ns.PanelHome and ns.PanelHome.UserCount and ns.PanelHome.UserCount(now) or 1
 		ui.message = nil
-		ui.tip = ("Changes here are saved in %s, used by %d character%s. Click for Profiles."):format(now, count, count == 1 and "" or "s")
+		ui.tip = ("Changes here are saved in %s, used by %d character%s. Click for Profiles; right-click to switch."):format(now, count, count == 1 and "" or "s")
 		local want, rule = Waiting()
 		if want and want ~= now then
 			ui.tip = ui.tip .. (" Switches to %s when the fight ends%s."):format(want, rule and " (Switch automatically)" or "")

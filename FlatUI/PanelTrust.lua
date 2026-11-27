@@ -220,6 +220,23 @@ function Trust.ResetText(item)
 		words and words ~= "changed" and words or "its default")
 end
 
+function Trust.Prompt(path, item)
+	local def = ns.Def(path)
+	local name = type(def) == "table" and type(def.label) == "string" and def.label or path
+	local wanted = item and item.needsPath == path and item.needsIn or nil
+	if type(wanted) == "table" and #wanted == 1 then
+		if wanted[1] == false then
+			return ("Turn off %s first."):format(name)
+		elseif wanted[1] ~= true then
+			local shown = def and def.kind == "choice" and ChoiceLabel(def, wanted[1]) or tostring(wanted[1])
+			return ("Set %s to %s first."):format(name, shown)
+		end
+	elseif type(wanted) == "table" and #wanted > 1 then
+		return ("Change %s first."):format(name)
+	end
+	return ("Turn on %s first."):format(name)
+end
+
 function Trust.Attach(row, item)
 	local kit = ns.PanelKit
 	local dot, reset
@@ -233,7 +250,7 @@ function Trust.Attach(row, item)
 		dot:Hide()
 	end
 	return function(unmet)
-		row.need = unmet and Trust.Reason(unmet, item) or nil
+		row.need = unmet and (Trust.Reason(unmet, item) .. " Click to go to it.") or nil
 		if not dot then
 			return
 		end
