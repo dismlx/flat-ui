@@ -741,7 +741,7 @@ ns.SETUP_STEPS = {
 		{ "hud.xpTooltip", "o", "mock-xp-micro" },
 		{ "hud.xpClicks", "o", "behaviour", "Lets a Shift-click on the experience or reputation bar put your progress in the chat box, a Ctrl-click count this session's levelling numbers from now, and a click on the reputation bar open your reputations." },
 		{ "hud.xpSmooth", "o", "behaviour", "Slides the experience bar's fill up as you gain and makes the new part glow, and flashes the bar at a new level or standing." },
-		{ "hud.xpGainText", "o", "behaviour", "Shows each gain as a small +1,240 that rises from the end of the experience or reputation bar's fill and fades." },
+		{ "hud.xpGainText", "o", "behaviour", "Shows each gain as a small +1,240 that rises from the end of the experience or reputation bar's fill and fades, and a new level as Level 35 in gold." },
 		{ "hud.xpFill", "o", "mock-xp-micro" },
 		{ "hud.xpDividers", "o", "mock-xp-micro" },
 		{ "hud.xpQuest", "o", "mock-xp-micro" },

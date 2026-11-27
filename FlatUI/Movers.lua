@@ -38,6 +38,8 @@ local _, ns = ...
 -- saved spots they may also have.
 -- Shift and a right-click on a box hides its frame, or shows it again, when the Hidden frames page has a row for it (Hide.lua, ns.HideFrames), and
 -- the box of a hidden frame says so, as does the box of a frame that hangs from one. On any other box it resets nothing and says so in chat.
+-- A right press on a box, and a press on a button of the bar (Pick a frame, Reset all, Centre ticked, Done), counts only when it is let go over
+-- what was pressed (Released), as in the options window; a press slid off first does nothing.
 -- /flatui move in a fight (the options window's Move frames row and test mode's Move button give the same command) opens the movers as the
 -- fight ends: chat says so once, and a second one in the same fight takes it back (win.waitOpen). Movers a fight paused open again as it
 -- ends, and /flatui move in that fight ends their session instead: they stay closed. /flatui grab in a fight opens the movers and starts the
@@ -1601,6 +1603,13 @@ local function Label(parent, font, width)
 	return text
 end
 
+-- A press counts only when it is let go over what was pressed, as in the options window (ns.PanelKit.Clickable): the game sends the release to
+-- the frame the press began on, wherever the cursor is. A client that will not say whether the cursor is over counts as over.
+local function Released(frame)
+	local ok, over = pcall(frame.IsMouseOver, frame)
+	return not ok or ns.IsSecret(over) or over ~= false
+end
+
 local function MakeButton(parent, text, width, onClick)
 	local button = CreateFrame("Frame", nil, parent)
 	ns.Own[button] = true
@@ -1618,10 +1627,19 @@ local function MakeButton(parent, text, width, onClick)
 	button:SetScript("OnLeave", function()
 		ns.SetOutlineFill(outline, 0.18, 0.18, 0.18, 1)
 	end)
-	button:SetScript("OnMouseUp", function(_, mouseButton)
-		if mouseButton == "LeftButton" then
+	local down = false
+	button:SetScript("OnMouseDown", function(_, mouseButton)
+		down = mouseButton == "LeftButton"
+	end)
+	button:SetScript("OnMouseUp", function(self, mouseButton)
+		local wanted = down and mouseButton == "LeftButton"
+		down = false
+		if wanted and Released(self) then
 			onClick(label)
 		end
+	end)
+	button:SetScript("OnHide", function()
+		down = false
 	end)
 	return button
 end
@@ -2178,11 +2196,18 @@ local function MakeHandle(name)
 	end)
 	handle:SetScript("OnMouseDown", function(_, button)
 		handleLooks[name].dragged = false
+		handleLooks[name].right = button == "RightButton"
 		ns.Try(KEY, ns.MoversMode.Press, name, button)
 	end)
-	handle:SetScript("OnMouseUp", function(_, mouseButton)
+	handle:SetScript("OnMouseUp", function(self, mouseButton)
 		-- Shift and a right-click hides the frame of the box, or shows it again, as its tick on the Hidden frames page does (Hide.lua). On a box
-		-- that page has no row for it does nothing but say so: only a plain right-click resets.
+		-- that page has no row for it does nothing but say so: only a plain right-click resets. A right press slid off the box before it is let
+		-- go does neither (Released).
+		local right = handleLooks[name].right
+		handleLooks[name].right = false
+		if mouseButton == "RightButton" and not (right and Released(self)) then
+			return
+		end
 		local shift = mouseButton == "RightButton" and type(IsShiftKeyDown) == "function" and IsShiftKeyDown()
 		local hide = shift and ns.HideFrames and ns.HideFrames.Key(name)
 		if hide then
