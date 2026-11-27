@@ -56,8 +56,9 @@ local _, ns = ...
 -- UnitSpellTargetClass, withheld too (UnitDocumentation.lua:3148-3163), goes untouched to C_ClassColor.GetClassColor, which takes a withheld
 -- argument (ClassColorDocumentation.lua:11-25), and its colour to SetTextColor, which does too (SimpleFontStringAPIDocumentation.lua:675-686), as
 -- PlateThreatText.lua colours the name of an enemy's target; never compared or used as a key, and white whenever a step raises (no class given).
--- It takes the font of the bar's spell name and empties as the cast ends. /flatui status counts the casts that named their target, and how many
--- of those names showed in a class colour.
+-- It takes the font of the bar's spell name. Since 0.5.42 it stays as the cast ends, while the bar fades or holds Interrupted, and empties as the
+-- bar hides, the row goes off or the unit is no enemy; the next cast writes its own. /flatui status counts the casts that named their target, and
+-- how many of those names showed in a class colour.
 -- Sound when you are interrupted (None at first, main tab of Cast bars; 0.5.41): while the row names a sound and the page is on, a frame of its own
 -- hears the player's UNIT_SPELLCAST_INTERRUPTED and UNIT_SPELLCAST_CHANNEL_STOP (RegisterUnitEvent, started and stopped by ns.CastTimeSync and the
 -- row's changed handler, ns.CastKickedSoundPicked) and plays the sound (ns.PlayKit, ns.SOUNDS of IconRow.lua, at most once a second) when their
@@ -508,10 +509,18 @@ end
 
 -- One look at a target or focus bar: the name of its cast's target past its end while an enemy casts or channels at someone and the game would
 -- show that name (UnitShouldDisplaySpellTargetName, a plain answer, UnitDocumentation.lua:3116-3130), asked on every look, so a new target or a
--- new cast counts at once.
+-- new cast counts at once. Once the cast ends, a name that shows stays, in its colour, while the bar still shows (its fade, its Interrupted hold),
+-- the row is on and the unit is an enemy, so a kicked cast still says whom it was aimed at; it goes as the bar hides (0.5.42).
 local function AimLook(bar, unit, on)
 	local aim = aims[bar]
-	if not (on and (Flag(bar.casting) or Flag(bar.channeling)) and Hostile(unit)) then
+	local casts = Flag(bar.casting) or Flag(bar.channeling)
+	if not casts and aim and aim.shown and on and Hostile(unit) then
+		local ok, shown = pcall(bar.IsShown, bar)
+		if ok and Flag(shown) then
+			return
+		end
+	end
+	if not (on and casts and Hostile(unit)) then
 		AimHide(aim)
 		return
 	end

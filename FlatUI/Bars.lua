@@ -10,7 +10,8 @@ local _, ns = ...
 -- for an enemy cast that can be interrupted (Interrupt strip, below), Interrupt strip height thick.
 -- The spell icon of the player and pet bars and the latency zone of the player bar show with or without Flat fill: on the cover's marks with it
 -- (PaintMarks), and on a set of the addon's own without it (Cast marks without Flat fill, below), the zone in Latency zone colour (red at first,
--- LatencyTint). The game's own small icon of those bars, which
+-- LatencyTint). Since 0.5.42 the icon stays on the bar once the cast ends, through its finish fade and its Interrupted hold, and goes as the bar
+-- hides or the next cast gives its own; the zone goes as the cast ends. The game's own small icon of those bars, which
 -- Edit Mode's Lock to player frame shows on the same spot, is faded meanwhile (ApplyCastIcon).
 -- The names and numbers on the bars are sized and hidden with the font and the alpha of their font strings.
 
@@ -1617,7 +1618,8 @@ end
 
 -- The spell icon and the latency zone for the cast on a bar of the player or the pet. Their numbers come from UnitCastingInfo and
 -- UnitChannelInfo, which the game withholds for every unit but the player and the pet (SecretPredicatesDocumentation.lua:115-118), and each is
--- tested before it is used.
+-- tested before it is used. Once both give a plain nil, the cast has ended while the bar still shows: the latency zone goes, and the icon stays on
+-- the bar (a texture of it, so it fades with the game's FadeOutAnim or HoldFadeOutAnim) until the bar hides or the next cast gives its own (0.5.42).
 local function Marks(bar, record, wantIcon, wantLatency)
 	local unit = record.option == "pet" and "pet" or "player"
 	local name, _, texture, startMs, endMs = UnitCastingInfo(unit)
@@ -1626,8 +1628,18 @@ local function Marks(bar, record, wantIcon, wantLatency)
 		name, _, texture, startMs, endMs = UnitChannelInfo(unit)
 		channel = true
 	end
-	if ns.IsSecret(name) or name == nil then
+	if ns.IsSecret(name) then
 		HideMarks(record)
+		return
+	elseif name == nil then
+		if record.latency then
+			record.latency:Hide()
+		end
+		local icon = record.icon
+		if icon and not wantIcon then
+			icon:Hide()
+		end
+		record.marks = icon and icon:IsShown() or nil
 		return
 	end
 	local width, height = PlainNumber(bar:GetWidth()), PlainNumber(bar:GetHeight())
@@ -1688,7 +1700,8 @@ end
 
 local function PaintMarks(bar, record, state)
 	local option = record.key == "castbars" and record.option
-	local wantIcon = (option == "player" or option == "pet") and state ~= "interrupted" and ns.Get("castbars.playerIcon")
+	-- The icon stays through the Interrupted hold (0.5.42); the latency zone goes, as Marks hides it once the cast has ended.
+	local wantIcon = (option == "player" or option == "pet") and ns.Get("castbars.playerIcon")
 	local wantLatency = option == "player" and state ~= "interrupted" and ns.Get("castbars.latency")
 	if not wantIcon and not wantLatency then
 		HideMarks(record)
@@ -2222,8 +2235,21 @@ do
 			name, _, texture, startMs, endMs = UnitChannelInfo(set.unit)
 			channel = true
 		end
-		if ns.IsSecret(name) or name == nil then
+		if ns.IsSecret(name) then
 			HideSet(set)
+			return
+		elseif name == nil then
+			-- The cast has ended: while the bar still shows (its fade, its Interrupted hold) the icon stays and the zones go (0.5.42).
+			local ok, shown = pcall(bar.IsShown, bar)
+			if ok and not ns.IsSecret(shown) and shown == true then
+				ShowMark(set, "cast", false)
+				ShowMark(set, "channel", false)
+				if not wantIcon then
+					ShowMark(set, "icon", false)
+				end
+			else
+				HideSet(set)
+			end
 			return
 		end
 		local height = PlainNumber(bar:GetHeight())

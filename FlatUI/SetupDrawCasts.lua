@@ -37,7 +37,8 @@ local _, ns = ...
 -- channel, interrupted or shield, the interrupted one in Interrupted colour or the game's interrupted fill) at a share of its run, an enemy's in
 -- the interrupt colour its kick names (ready, cooling or far), DC.Swing and DC.PaintSwing for a swing timer (the main hand of a warrior, druid or
 -- hunter with Queued ability colour over the second half of each swing), and DC.CastProgress and DC.SwingProgress for the parts that move (the
--- player bar's pushback, +0.4 over the second half of a cast and -0.8 of a channel).
+-- player bar's pushback, +0.4 over the second half of a cast and through the Interrupted hold, and -0.8 of a channel). The player and pet icon,
+-- the pushback and the name of the cast's target stay while the cast is interrupted, as the live bars keep them through that hold (0.5.42).
 
 ns.SetupDrawings = ns.SetupDrawings or {}
 
@@ -639,11 +640,11 @@ local function ShowTime(row, look, opt, state)
 	end
 end
 
--- The name of an enemy cast's target past the end of a bar that has one (spec.aim) while Target of enemy casts is on, as CastTime.lua writes it, and
--- none while the cast is interrupted, as it empties as the cast ends.
-local function ShowAim(row, look, state)
+-- The name of an enemy cast's target past the end of a bar that has one (spec.aim) while Target of enemy casts is on, as CastTime.lua writes it,
+-- also while the cast is interrupted, as it stays through the bar's Interrupted hold (0.5.42).
+local function ShowAim(row, look)
 	if row.aim then
-		row.aim:SetShown(look.enabled and G("castbars.castTarget") == true and state ~= "interrupted")
+		row.aim:SetShown(look.enabled and G("castbars.castTarget") == true)
 	end
 end
 
@@ -706,14 +707,15 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 				Place(row.aim, "LEFT", bar, "RIGHT", 4, 0)
 			end
 			row.aim:SetText(spec.aim or "")
-			ShowAim(row, look, state)
+			ShowAim(row, look)
 			local ar, ag, ab = AimRGB(spec)
 			Look(row.aim, look.percent, ar, ag, ab, look.outline)
 		end
 	else
 		row.icon:SetSize(h, h)
 		Place(row.icon, "RIGHT", bar, "LEFT", -5, 0)
-		row.icon:SetShown(enabled and G("castbars.playerIcon") == true and state ~= "interrupted")
+		-- Also while the cast is interrupted, as Bars.lua keeps the icon through the Interrupted hold (0.5.42).
+		row.icon:SetShown(enabled and G("castbars.playerIcon") == true)
 	end
 	PaintTicks(row, look, state, w, part)
 	-- The spell name.
@@ -741,11 +743,11 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 		Look(row.time, look.percent, nil, nil, nil, look.outline)
 	end
 	-- The pushback past the right end of a player bar while Pushback on your bar is on: the setup row's sample, in Pushback colour in the spell
-	-- name's size.
+	-- name's size, also while the cast is interrupted, as CastTime.lua keeps the total through the Interrupted hold (0.5.41).
 	if row.push then
 		row.pushOn = enabled and G("castbars.pushback") == true
 		row.push:SetText(spec.push or "")
-		row.push:SetShown(row.pushOn and spec.push ~= nil and state ~= "interrupted")
+		row.push:SetShown(row.pushOn and spec.push ~= nil)
 		local pr, pg, pb = ns.Colour("castbars.pushbackColour")
 		Look(row.push, look.percent, pr, pg, pb, look.outline)
 	end
@@ -824,7 +826,8 @@ end
 
 -- The moving parts of a painted bar: its fill and spark at `part`, its state's colour, the spell name of a new state, the seconds left (and the
 -- whole cast, `total` seconds, after them while Total cast time too is on), and on a player bar a sample pushback over the second half of a cast
--- (+0.4) or a channel (-0.8, the share left under a half).
+-- (+0.4) or a channel (-0.8, the share left under a half), and the +0.4 of the interrupted cast through its Interrupted hold, as CastTime.lua keeps
+-- the total on the live bar (0.5.42).
 function DC.CastProgress(row, state, part, left, name, total)
 	if not row.look then
 		return
@@ -838,7 +841,7 @@ function DC.CastProgress(row, state, part, left, name, total)
 		PaintTicks(row, row.look, state, row.w, part)
 		PlaceLatency(row, row.look, state, row.w)
 		ShowTime(row, row.look, row.opt, state)
-		ShowAim(row, row.look, state)
+		ShowAim(row, row.look)
 	elseif state == "channel" then
 		DimTicks(row, part)
 	end
@@ -851,7 +854,8 @@ function DC.CastProgress(row, state, part, left, name, total)
 		end
 	end
 	if row.push then
-		local sample = ns.Finite(part) and ((state == "cast" and part >= 0.5 and "+0.4") or (state == "channel" and part <= 0.5 and "-0.8")) or nil
+		local sample = state == "interrupted" and "+0.4"
+			or ns.Finite(part) and ((state == "cast" and part >= 0.5 and "+0.4") or (state == "channel" and part <= 0.5 and "-0.8")) or nil
 		if sample then
 			row.push:SetText(sample)
 		end

@@ -1035,7 +1035,7 @@ ns.PAGES = {
 		{ key = "ownTime", kind = "bool", default = true, label = "Cast time on target and focus bars",
 			tip = "Seconds left, at the right end of the bar, in the spell name's size and outline." },
 		{ key = "castTarget", kind = "bool", default = true, label = "Target of enemy casts",
-			tip = "Whom the cast on your target's or focus's bar is aimed at, as > Bex, just past the bar's right end, so you see who is about to be hit or sheeped. The name takes the class colour of that player, as the game's nameplates colour it." },
+			tip = "Whom the cast on your target's or focus's bar is aimed at, as > Bex, just past the bar's right end, so you see who is about to be hit or sheeped. The name takes the class colour of that player, as the game's nameplates colour it. It stays while the bar fades or holds Interrupted, so you still see whom a kicked cast was aimed at." },
 		{ key = "playerTime", kind = "bool", default = false, label = "Cast time on your bars",
 			tip = "Seconds left, inside the right end of your cast bar and your pet's; the game's own time from Edit Mode is hidden meanwhile." },
 		{ key = "timeTotal", kind = "bool", default = false, label = "Total cast time too",
@@ -1047,7 +1047,7 @@ ns.PAGES = {
 		{ key = "iconPos", kind = "choice", default = "game", label = "Target and focus bar icon",
 			choices = { { "game", "Left of the bar" }, { "right", "Right of the bar" }, { "hidden", "Hidden" } } },
 		{ key = "playerIcon", kind = "bool", default = false, label = "Spell icon on player and pet bars",
-			tip = "The icon of the spell left of your cast bar and your pet's, as tall as the bar. With or without Flat fill. The game's own small icon, which Edit Mode's Lock to player frame shows, gives way to it." },
+			tip = "The icon of the spell left of your cast bar and your pet's, as tall as the bar. With or without Flat fill. It stays while the bar fades or holds Interrupted. The game's own small icon, which Edit Mode's Lock to player frame shows, gives way to it." },
 	},
 	{
 		key = "cooldowns", label = "Cooldowns",
