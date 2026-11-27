@@ -25,13 +25,17 @@ local ADDON_NAME, ns = ...
 -- leader and assistant icons, heal over time squares, the game's aura icons on a cell), which only its frames are made with, but for the dispel border,
 -- its type icon and the heal over time squares of a party frame, which the setup's party frames draw too (Mara's Magic debuff, Bex's squares in the
 -- colours and places of your class's heals over time, or two sample squares for a class with none, left of the type icon's spot on a right-hand
--- corner while Debuff type icon on party frames is on). With Blink as one lands the border and type icon blink three times as the marks are first
+-- corner while Debuff type icon on party frames is on, the last at half opacity with Fade as one runs out, as one in its last seconds). With Blink as one lands the border and type icon blink three times as the marks are first
 -- drawn, as they come into view and each time the row is turned on, in the live blink's steps (UnitGroupMarks.lua Blink). The setup's party frames show Mara's Star with
--- Raid marker on party frames, and Fay dead while someone resurrects her, with the game's resurrection icon centred on her picture, or at the left end
--- of her health bar with Picture None, with Resurrection icon on party frames (UnitGroupMarks.lua PlaceRez). Role icons for leaves out the icons of the
--- roles it leaves out on the party frames and the raid cells, as the live frames do (UnitParts.lua X.roleLeftOut). Its raid cells show the marks of
+-- Raid marker on party frames, and Fay dead while someone resurrects her, with the game's resurrection icon centred on her picture (or on its empty
+-- square with Picture None in Separate parts), or at the left end of her health bar with Picture None in One frame, with Resurrection icon on party
+-- frames (UnitGroupMarks.lua PlaceRez), and Dru, out of range, away with a grey AFK at the bottom of his picture (or its empty square), or at the left
+-- end of his health bar with Picture None in One frame, with AFK on party frames (UnitGroupMarks.lua PlaceAfk), in the Party frames step. Role icons for leaves out the icons of the
+-- roles it leaves out on the party frames and the raid cells, as the live frames do (UnitParts.lua X.roleLeftOut); its row is in the Party frames step,
+-- where Cole, Dru and Fay lose theirs with Tanks and healers and Mara hers with Healers only, and its bracket is on Bex's healer icon, which every
+-- choice keeps. Its raid cells show the marks of
 -- their rows: Aria's Skull (Raid marker on raid frames), her leader crown and Dru's
--- assistant icon (Leader and assistant icons on raid frames), and Cole as your target, with the border of Border for your target in the game's white or
+-- assistant icon (Leader and assistant icons on raid frames), Eli away with a grey AFK where the status text sits (AFK on raid frames), and Cole as your target, with the border of Border for your target in the game's white or
 -- Target border colour (UnitFrames.lua Colour).
 -- Right of the setup's pet (Wolf), while Pet target frame is on, the pet target frame of UnitPetTarget.lua is drawn as test mode draws its sample:
 -- Training Dummy at 65% in the hostile colour, Pet target width wide, a Skull left of it with Raid marker on target, focus, boss and pet target frames,
@@ -39,7 +43,8 @@ local ADDON_NAME, ns = ...
 -- Under the setup's player frame, for a druid while Druid mana in forms is on, the druid mana bar of UnitDruidMana.lua is drawn as in Cat Form (the
 -- frame's energy full): 60% full in mana blue, Mana bar height high, with "60%" or "3.6K" just right of it by Mana text at Power text size (85% of
 -- it with Smaller, lighter bar text), and with Mark the cost of a shift a white line at 35%, the cost of Cat Form, in the border, background,
--- Corners and hang of the live bar in either Frame style.
+-- Corners and hang of the live bar in either Frame style. With Five-second rule the spark of UnitManaRule.lua stands 40% of the way across the bar
+-- that shows the player's mana: that druid mana bar, else the power bar of a class with mana.
 
 local KEY = "unitframes"
 local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
@@ -653,10 +658,12 @@ end
 -- Marks of party and raid frames ---------------------------------------------------------------------------------------------------------
 
 -- The thickness of the dispel border in screen pixels, the size of its type icon and the atlas of the type icons (UnitGroupMarks.lua RIM_PX, ICON,
--- ATLAS), the word of each type in the atlas, and the point and the signs of the offsets of each Square corner (UnitHots.lua CORNERS).
+-- ATLAS), the word of each type in the atlas, the point and the signs of the offsets of each Square corner (UnitHots.lua CORNERS), and the opacity
+-- of the last square with Fade as one runs out, halfway through the live fade from 1 to 0.35 (UnitHots.lua FADE_LOW).
 local DISPEL = { px = 2, icon = 12, atlas = "RaidFrame-Icon-Debuff" }
 local TYPE_WORD = { magic = "Magic", curse = "Curse", disease = "Disease", poison = "Poison" }
 local HOT_CORNERS = { tl = { "TOPLEFT", 1, -1 }, tr = { "TOPRIGHT", -1, -1 }, bl = { "BOTTOMLEFT", 1, 1 }, br = { "BOTTOMRIGHT", -1, 1 } }
+local HOT_FADED = 0.5
 
 -- The marks of a party frame, of the setup or of test mode, or of a raid cell of test mode, on frames above its parts: the four edges of the dispel
 -- border and its type icon on a frame of their own (rim), and over it four heal over time squares (frame), as the live squares lie over the live
@@ -692,7 +699,8 @@ end
 -- time, a square each in a row from Square corner, Square size on a side with a dark rim of one screen pixel, just inside the dispel border, with
 -- Squares for your heals over time (UnitHots.lua Make and Place); with typeIcon and Top right or Bottom right the row starts just left of the icon's
 -- spot, so the two show side by side as on the live party frames; on a party frame (party) the side is at most the bar's height less the row's inset
--- and the dispel border on the far side (UnitHots.lua Side). on: the frame's switch.
+-- and one screen pixel (UnitHots.lua Side). With Fade as one runs out the last square is at HOT_FADED, as one in its last seconds. on: the frame's
+-- switch.
 local function PaintMarks(m, bar, root, on, dispel, typeIcon, hots, party)
 	m.frame:SetAllPoints(root)
 	m.rim:SetAllPoints(root)
@@ -750,16 +758,21 @@ local function PaintMarks(m, bar, root, on, dispel, typeIcon, hots, party)
 	if party then
 		local ok, tall = pcall(bar.GetHeight, bar)
 		if ok and ns.Finite(tall) and tall > 0 then
-			size = math.max(2, math.min(size, tall - inset - px * DISPEL.px))
+			size = math.max(2, math.min(size, tall - inset - px))
 		end
 	end
 	-- With the type icon row on a party frame and a right-hand corner the row starts one screen pixel left of the icon's spot, whether a debuff is
 	-- there or not (UnitHots.lua Across).
 	local from = (typeIcon and corner[2] < 0) and (1 + t + DISPEL.icon + px) or inset
+	-- With Fade as one runs out the last square is drawn halfway through its fade (UnitHots.lua Fade), so the row shows what it does.
+	local last = lit and Get("hotFade") == true and #hots or nil
 	for index, square in ipairs(m.squares) do
 		local c = lit and hots[index] or nil
 		square.back:SetShown(c ~= nil)
 		square.fill:SetShown(c ~= nil)
+		local alpha = index == last and HOT_FADED or 1
+		square.back:SetAlpha(alpha)
+		square.fill:SetAlpha(alpha)
 		if c then
 			square.back:ClearAllPoints()
 			square.back:SetPoint(corner[1], bar, corner[1], corner[2] * (from + (index - 1) * (size + px)), corner[3] * inset)
@@ -901,11 +914,11 @@ local function Sample(id)
 		local debuffed = number == 1 or number == 3
 		-- low: Mara's health while Low health border is on, so that the border shows (E.bars). dispel and hots: Mara's Magic debuff you can dispel and
 		-- the heals over time of yours on Bex (PaintMarks). marker: Mara's Star, with Raid marker on party frames (E.icons). dead and rez: Fay lies dead
-		-- while someone resurrects her, with Resurrection icon on party frames (E.icons).
+		-- while someone resurrects her, with Resurrection icon on party frames (E.icons). afk: Dru, out of range, is away too, with AFK on party frames.
 		return { kind = "party", cap = number == 1 and "Party" or nil, name = member[1], level = 19, class = member[2], player = true, react = FRIENDLY, role = member[3],
 			leader = number == 1, number = number, away = number == 4, auras = debuffed and { { "debuff", number == 1 and "magic" or "poison", false, 3, "12" } } or nil,
 			debuff = number == 1 and TYPE.magic or nil, low = number == 1 and 0.15 or nil, dispel = number == 1 and "magic" or nil, marker = number == 1 and 1 or nil,
-			hots = number == 2 and SampleHots(class) or nil, dead = number == 5 or nil, rez = number == 5 or nil }
+			hots = number == 2 and SampleHots(class) or nil, dead = number == 5 or nil, rez = number == 5 or nil, afk = number == 4 or nil }
 	end
 	number = tonumber(id:match("^partypet(%d)$"))
 	if number then
@@ -1004,8 +1017,11 @@ function E.make(stage, id, given)
 		Tex(top, "OVERLAY", 3), Tex(top, "OVERLAY", 2)
 	o.pvpTimer = Text(top)
 	o.shade = Tex(top, "OVERLAY", 7)
-	-- The resurrection icon of a party frame (E.icons).
+	-- The resurrection icon and the AFK word of a party frame (E.icons).
 	o.rez = sample.kind == "party" and Tex(top, "OVERLAY", 3) or nil
+	o.afk = sample.kind == "party" and Text(top) or nil
+	-- The spark of Five-second rule on the setup's player frame (E.manaRule); test mode shows the live spark's own sweep (UnitManaRule.lua).
+	o.rule = sample.kind == "player" and given == nil and Tex(top, "OVERLAY", 4) or nil
 	o.auras = {}
 	for index, aura in ipairs(sample.auras or {}) do
 		local icon = ns.IconNew(top)
@@ -1021,7 +1037,7 @@ function E.make(stage, id, given)
 	-- The regions the rows of the steps mark (design.md 4.3, part marks). body: the frame's box, placed in both styles and shown in One frame.
 	o.parts = { root = root, body = o.box, pic = o.pic, health = o.health, power = o.power, row = row, name = o.name, level = o.level, healthText = o.healthText,
 		powerText = o.powerText, pred = o.pred, shield = o.shield, absorb = o.absorb, kmark = o.kmark, kword = o.kword, kline = o.rLine, plate = o.plateIcon,
-		flag = o.flag, leader = o.leader, role = o.role, marker = o.marker, attack = o.attack, happy = o.happy, dead = o.deadText, rez = o.rez, aura = o.auras[1] and o.auras[1].frame,
+		flag = o.flag, leader = o.leader, role = o.role, marker = o.marker, attack = o.attack, happy = o.happy, dead = o.deadText, rez = o.rez, afk = o.afk, aura = o.auras[1] and o.auras[1].frame,
 		count = o.auras[1] and o.auras[1].count, time = o.auras[1] and o.auras[1].time, picLevel = o.picLevel, timer = o.pvpTimer, shadow = o.shadow,
 		petTarget = o.petTarget and o.petTarget.frame }
 	-- The rows of the druid mana bar mark it for a druid, and the power bar it hangs from for any other class, who never sees it.
@@ -1823,6 +1839,9 @@ function E.icons(o, g, L)
 	if o.rez then
 		o.rez:Hide()
 	end
+	if o.afk then
+		o.afk:Hide()
+	end
 	o.picLevel:Hide()
 	o.pvpTimer:Hide()
 	o.shade:Hide()
@@ -1838,6 +1857,8 @@ function E.icons(o, g, L)
 	end
 	if o.pic then
 		local shown = L.drawn or L.gameFace
+		-- The square the party marks sit in: the picture, or the empty place of Picture None in Separate parts, which E.picture places hidden.
+		local square = shown or L.cell
 		local px, py, side = L.picLeft, L.picTop, L.side
 		-- On a round picture the level and the PvP plate move in by INSET of the side on both axes, onto the circle at 45 degrees (UnitFrameLevel.lua
 		-- Update, UnitFrames.lua PlacePlate).
@@ -1886,16 +1907,16 @@ function E.icons(o, g, L)
 		if shown and s.marker and g.raidMarker and (s.kind == "target" or s.kind == "focus") then
 			Marker(o.pic, "BOTTOM", "TOP", 0, 1)
 		elseif s.marker and s.kind == "party" and L.on and Get("partyFrameMarker") == true then
-			-- A party member's marker is centred on the top of its picture, or of its health bar with none, at 16 units (UnitGroupMarks.lua MarkerSpot,
-			-- PARTY_MARK).
-			Marker(shown and o.pic or o.health, "CENTER", "TOP", 0, 0, 16)
+			-- A party member's marker is centred on the top of its picture, or of the empty square of Picture None in Separate parts (L.cell), or of its
+			-- health bar with none in One frame, at 16 units (UnitGroupMarks.lua MarkerSpot, PARTY_MARK).
+			Marker(square and o.pic or o.health, "CENTER", "TOP", 0, 0, 16)
 		end
-		-- A dead party member someone resurrects: the game's resurrection icon centred on the picture, or with none at the left end of the health
-		-- bar, clear of the Dead word (UnitGroupMarks.lua PlaceRez).
+		-- A dead party member someone resurrects: the game's resurrection icon centred on the picture or the empty square, or with none in One frame
+		-- at the left end of the health bar, clear of the Dead word (UnitGroupMarks.lua PlaceRez).
 		if o.rez and s.rez and L.on and Get("partyRezIcon") == true then
 			Art(o.rez, "rez")
 			o.rez:ClearAllPoints()
-			if shown then
+			if square then
 				o.rez:SetSize(REZ.size, REZ.size)
 				o.rez:SetPoint("CENTER", o.pic, "CENTER", 0, 0)
 			else
@@ -1903,6 +1924,21 @@ function E.icons(o, g, L)
 				o.rez:SetPoint("LEFT", o.health, "LEFT", REZ.inset, 0)
 			end
 			o.rez:Show()
+		end
+		-- A party member who is away: a soft grey AFK at the bottom of the picture or the empty square, or with none in One frame at the left end of the
+		-- health bar, in the bar text face at Small frame text size with an outline unless Bar text outline gives one (UnitGroupMarks.lua PlaceAfk,
+		-- StyleAfk). Not on a dead or offline member.
+		if o.afk and s.afk and not s.dead and not s.offline and L.on and Get("partyAfk") == true then
+			o.afk:SetText("AFK")
+			o.afk:ClearAllPoints()
+			if square then
+				o.afk:SetPoint("BOTTOM", o.pic, "BOTTOM", 0, 2)
+			else
+				o.afk:SetPoint("LEFT", o.health, "LEFT", 2, 0)
+			end
+			Style(o.afk, { percent = tonumber(g.smallTextSize) or 100, face = g.barTextFace ~= "default" and ns.FontFile(g.barTextFace) or nil,
+				flags = FLAGS[g.barTextOutline] or "OUTLINE", r = 0.8, g = 0.8, b = 0.8 })
+			o.afk:Show()
 		end
 		if shown and s.happy and g.petHappiness then
 			Art(o.happy, "happy")
@@ -2122,6 +2158,39 @@ function E.druidMana(o, g, L)
 	return top + tall + L.t, right
 end
 
+-- The spark of Five-second rule on the setup's player frame while the row is on, 40% of the way across the bar that shows the player's mana: the
+-- druid's mana bar under the frame while it is drawn (E.druidMana), else the power bar of a class whose power at rest is mana (REST) while it shows,
+-- as UnitManaRule.lua Pick chooses. The casting bar's spark in ADD blend, twice the bar's height (at least 8 units), as the live one.
+local MANA_RULE = { share = 0.4, file = "Interface\\CastingBar\\UI-CastingBar-Spark", tall = 2, least = 8, wide = 0.6, alpha = 0.9 }
+
+function E.manaRule(o, g, L)
+	local spark = o.rule
+	local bar = nil
+	if g.enabled and Get("manaRule") == true then
+		if L.druid then
+			bar = o.druid.frame
+		elseif L.power and REST[o.s.class] == nil then
+			bar = o.power
+		end
+	end
+	spark:SetShown(bar ~= nil)
+	if bar == nil then
+		return
+	end
+	local ok, width = pcall(bar.GetWidth, bar)
+	local okTall, tall = pcall(bar.GetHeight, bar)
+	width = ok and ns.Finite(width) and width or L.size.bar
+	tall = okTall and ns.Finite(tall) and tall > 0 and tall or L.size.power
+	local high = math.max(MANA_RULE.least, tall * MANA_RULE.tall)
+	spark:ClearAllPoints()
+	spark:SetPoint("CENTER", bar, "LEFT", width * MANA_RULE.share, 0)
+	spark:SetSize(high * MANA_RULE.wide, high)
+	spark:SetTexture(MANA_RULE.file)
+	spark:SetVertexColor(1, 1, 1, 1)
+	pcall(spark.SetBlendMode, spark, "ADD")
+	spark:SetAlpha(MANA_RULE.alpha)
+end
+
 function E.draw(o, g)
 	local L = Layout(o, g)
 	-- A druid's mana bar under the setup's player frame, drawn with the player's bars in Cat Form (E.bars, E.druidMana).
@@ -2191,6 +2260,9 @@ function E.draw(o, g)
 	if bottom then
 		o.height = math.max(o.height, bottom + L.t)
 		o.width = math.max(o.width, textRight)
+	end
+	if o.rule then
+		E.manaRule(o, g, L)
 	end
 	o.layout = L
 	return k
@@ -2292,6 +2364,7 @@ local function MakeCell(parent, extra)
 	cell.top = Frame(cell.frame)
 	cell.name = Text(cell.top)
 	cell.status = Text(cell.top)
+	cell.afk = Text(cell.top)
 	cell.role = Tex(cell.top, "OVERLAY", 2)
 	if extra then
 		cell.marks = MakeMarks(cell.frame)
@@ -2313,15 +2386,16 @@ function R.make(stage, count, columns)
 		local cell = MakeCell(o.root, "marks")
 		cell.data, cell.index = data, index
 		-- The fixed sample of the setup: the seventh is dead, the eighth out of range and the third has threat and is your target; the fifth is low on
-		-- health while Low health border is on; the first leads with a Skull on, and the fourth assists.
+		-- health while Low health border is on, and away (AFK on raid frames); the first leads with a Skull on, and the fourth assists.
 		cell.sample = { name = data[1], class = data[2], role = data[3], dead = index == 7, away = index == 8, threat = index == 3,
-			low = index == 5 and 0.15 or nil, target = index == 3, marker = index == 1 and 8 or nil, leader = index == 1, assist = index == 4 }
+			low = index == 5 and 0.15 or nil, target = index == 3, marker = index == 1 and 8 or nil, leader = index == 1, assist = index == 4,
+			afk = index == 5 }
 		o.cells[index] = cell
 	end
-	local first, aimed = o.cells[1], o.cells[3]
+	local first, aimed, away = o.cells[1], o.cells[3], o.cells[5]
 	o.parts = { root = o.root, cell = first and first.frame, health = first and first.health, power = first and first.power, name = first and first.name,
 		status = first and first.status, role = first and first.role, marker = first and first.marker, lead = first and first.lead,
-		target = aimed and aimed.health }
+		target = aimed and aimed.health, afk = away and away.afk }
 	return o
 end
 
@@ -2501,6 +2575,16 @@ local function PaintCell(cell, s, width, height, g)
 		cell.status:SetPoint("CENTER", cell.frame, "CENTER", 0, -4)
 		Style(cell.status, statusSpec)
 	end
+	-- AFK on raid frames: a soft grey AFK where the status text sits, at its size, with an outline unless Bar text outline gives one, never on a dead
+	-- or offline member (UnitGroupMarks.lua PlaceAfk, StyleAfk).
+	local afk = s.afk and on and Get("raidAfk") == true and not dead and not s.offline
+	cell.afk:SetShown(afk and true or false)
+	if afk then
+		cell.afk:SetText("AFK")
+		cell.afk:ClearAllPoints()
+		cell.afk:SetPoint("CENTER", cell.frame, "CENTER", 0, -4)
+		Style(cell.afk, { percent = 100, face = statusSpec.face, flags = statusSpec.flags or "OUTLINE", r = 0.8, g = 0.8, b = 0.8 })
+	end
 	if cell.marks then
 		CellMarks(cell, s, width, height, g, on, powerHeight)
 	end
@@ -2534,11 +2618,11 @@ local MARK = {
 	backdrop = { "player", "body" }, flat = { "player", "health" }, healthColour = { "player", "health" }, healthTexture = { "player", "health" },
 	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "boss", "health" },
 	lowHealth = { "party1", "health" }, lowHealthAt = { "party1", "health" }, lowHealthColour = { "party1", "health" }, hoverHighlight = { "player", "health" },
-	druidMana = { "player", "druid" }, druidManaText = { "player", "druid" }, druidManaHeight = { "player", "druid" }, druidManaShift = { "player", "druid" },
+	druidMana = { "player", "druid" }, druidManaText = { "player", "druid" }, druidManaHeight = { "player", "druid" }, druidManaShift = { "player", "druid" }, manaRule = { "player", "power" },
 	petTarget = { "pet", "petTarget" }, petTargetWidth = { "pet", "petTarget" }, petTargetWarn = { "pet", "petTarget" }, petTargetWarnColour = { "pet", "petTarget" },
 	lowHealthTarget = { "target", "health" }, lowHealthTargetAt = { "target", "health" }, lowHealthPulse = { "party1", "health" }, dispelBorder = { "party1", "health" }, dispelIcon = { "party1", "health" },
 	dispelFlash = { "party1", "health" },
-	hotSquares = { "party2", "health" }, hotCorner = { "party2", "health" }, hotSize = { "party2", "health" },
+	hotSquares = { "party2", "health" }, hotCorner = { "party2", "health" }, hotSize = { "party2", "health" }, hotFade = { "party2", "health" },
 	healPrediction = { "player", "pred" }, absorbShield = { "player", "shield" }, healAbsorb = { "player", "absorb" }, lookOwn = { "player", "health" },
 	lookBorder = { "player", "health" }, lookBack = { "player", "health" }, lookBackAlpha = { "player", "health" },
 	smallRow = { "pet", "row" }, levelPosition = { "target", "level" }, levelColour = { "player", "level" }, pvpWordColour = { "player", "level" }, levelSize = { "player", "level" },
@@ -2571,7 +2655,7 @@ local MARK = {
 	bossPowerBar = { "boss", "power" },
 	raidRangeAlpha = { "raid", "cell" }, raidRoleIcon = { "raid", "role" }, raidName = { "raid", "name" }, raidStatusText = { "raid", "status" },
 	raidFrameMarker = { "raid", "marker" }, raidLeaderIcon = { "raid", "lead" }, targetBorder = { "raid", "target" }, targetColour = { "raid", "target" },
-	partyFrameMarker = { "party1", "marker" }, partyRezIcon = { "party5", "rez" }, roleIconRoles = { "party1", "role" },
+	partyFrameMarker = { "party1", "marker" }, partyRezIcon = { "party5", "rez" }, roleIconRoles = { "party2", "role" }, raidAfk = { "raid", "afk" }, partyAfk = { "party4", "afk" },
 }
 
 -- Builds a scene: the frames of a list of items on a root frame, with a caption under each. make: the function for an item that is not a unit frame.

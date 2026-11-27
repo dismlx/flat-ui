@@ -1982,6 +1982,9 @@ ns.PAGES = {
 			tip = "Changed out of combat." },
 		{ key = "druidManaShift", kind = "bool", default = true, label = "Mark the cost of a shift", needs = "druidMana",
 			tip = "A thin line on the bar at the mana a shift into the form you are in costs, for a powershift: fill past it pays for one." },
+		-- UnitManaRule.lua: a spark of Flat UI's own across the player's mana bar for the 5 seconds after a spell that costs mana.
+		{ key = "manaRule", kind = "bool", default = false, label = "Five-second rule",
+			tip = "After you spend mana, a spark crosses your mana bar over 5 seconds. Spirit refills your mana again once it reaches the end. A druid in Bear or Cat Form sees it on the druid mana bar." },
 	},
 	{
 		key = "unitframesTarget", label = "Target frame", parent = "unitframes", owner = "unitframes",
@@ -2059,7 +2062,7 @@ ns.PAGES = {
 		{ key = "partyPowerText", kind = "choice", default = "game", label = "Power text", choices = ns.TEXT_FORMAT_CHOICES },
 		{ key = "partyPowerBar", kind = "bool", default = true, label = "Power bar" },
 		{ section = "Range" },
-		{ key = "partyRangeDim", kind = "bool", default = false, label = "Dim members out of range", tip = "Also dims a member whose range the game does not report." },
+		{ key = "partyRangeDim", kind = "bool", default = false, label = "Dim members out of range", tip = "Darkens the member's picture, name and bars. Their pet's frame dims by its own range. Also dims a member whose range the game does not report." },
 		{ key = "partyRangeOpacity", kind = "number", default = 50, min = 10, max = 100, step = 5, unit = "%", label = "Out of range opacity", needs = "partyRangeDim" },
 	},
 	{
@@ -2215,8 +2218,8 @@ ns.PAGES = {
 		{ key = "totemTimer", kind = "bool", default = true, label = "Totem time left" },
 		{ key = "totemSwipe", kind = "bool", default = true, label = "Totem cooldown swipe" },
 		{ key = "totemTimeSize", kind = "number", default = 80, min = 50, max = 200, step = 5, unit = "%", label = "Totem time size", needs = "totemTimer" },
-		-- UnitGroupMarks.lua: the colour and the type of a debuff you can dispel, the raid marker of a raid or party frame, the resurrection icon and the
-		-- AFK word of a party frame, the leader and assistant icons of a raid frame and the outline of your target on a party frame. UnitFrames.lua: the
+		-- UnitGroupMarks.lua: the colour and the type of a debuff you can dispel, the raid marker of a raid or party frame, the resurrection icon of a
+		-- party frame, the AFK word of a party or raid frame, the leader and assistant icons of a raid frame and the outline of your target on a party frame. UnitFrames.lua: the
 		-- border of your target on a raid frame.
 		{ section = "Party and raid frames" },
 		{ key = "dispelBorder", kind = "bool", default = true, label = "Border colour of a debuff you can dispel",
@@ -2234,9 +2237,11 @@ ns.PAGES = {
 		{ key = "raidFrameMarker", kind = "bool", default = true, label = "Raid marker on raid frames", tip = "The game's raid frames show none." },
 		{ key = "partyFrameMarker", kind = "bool", default = true, label = "Raid marker on party frames", tip = "The game's party frames show none." },
 		{ key = "partyRezIcon", kind = "bool", default = true, label = "Resurrection icon on party frames",
-			tip = "On the portrait of a dead member while someone resurrects them, also in a fight, breathing softly so two healers do not resurrect the same one. With Picture None it sits at the left end of the health bar, clear of the Dead word. The game's party frames show a summon already, and its raid frames both." },
+			tip = "On the portrait of a dead member while someone resurrects them, also in a fight, breathing softly so two healers do not resurrect the same one. With Picture None it sits in the empty picture square, or in One frame at the left end of the health bar, clear of the Dead word. The game's party frames show a summon already, and its raid frames both." },
 		{ key = "partyAfk", kind = "bool", default = true, label = "AFK on party frames",
-			tip = "A grey AFK at the bottom of the picture of a party member who is away, or at the left end of the health bar with Picture None, also in a fight. Hidden while they are dead or offline. The game's frames show none." },
+			tip = "A grey AFK at the bottom of the picture of a party member who is away, also of the empty picture square with Picture None, or in One frame at the left end of the health bar, also in a fight. It fades in, counts the time away from when Flat UI first saw the flag (AFK 3m, AFK 1h) and fades out as they come back. Hidden while they are dead or offline. The game's frames show none." },
+		{ key = "raidAfk", kind = "bool", default = true, label = "AFK on raid frames",
+			tip = "A grey AFK at the bottom of a raid member's cell, where the game's status text sits, while they are away, also in a fight. It fades and counts as on party frames. Hidden while they are dead or offline." },
 		{ key = "raidLeaderIcon", kind = "bool", default = true, label = "Leader and assistant icons on raid frames", tip = "The game's raid frames show none." },
 		{ key = "targetBorder", kind = "choice", default = "game", label = "Border for your target",
 			tip = "On raid frames, the border of your target. With Own colour the game's party frames get one too.",
@@ -2248,7 +2253,9 @@ ns.PAGES = {
 		{ key = "hotCorner", kind = "choice", default = "tr", label = "Square corner", needs = "hotSquares",
 			tip = "The corner of the health bar the squares sit in. On party frames a right-hand corner starts them just left of the debuff type icon.",
 			choices = { { "tl", "Top left" }, { "tr", "Top right" }, { "bl", "Bottom left" }, { "br", "Bottom right" } } },
-		{ key = "hotSize", kind = "number", default = 6, min = 4, max = 14, step = 1, label = "Square size", needs = "hotSquares", tip = "The side of each square. On party frames at most as tall as the health bar inside its border." },
+		{ key = "hotSize", kind = "number", default = 6, min = 4, max = 14, step = 1, label = "Square size", needs = "hotSquares", tip = "The side of each square. On party frames at most what fits inside the health bar, so 6 stays 6 there." },
+		{ key = "hotFade", kind = "bool", default = true, label = "Fade as one runs out", needs = "hotSquares",
+			tip = "A square fades over the last 3 seconds of its heal over time, so you see which to cast again. In a fight it fades by the end read before the pull." },
 	},
 	{
 		key = "hud", label = "Minimap", moduleLabel = "Minimap and HUD",

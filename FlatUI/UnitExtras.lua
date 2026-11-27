@@ -2,7 +2,10 @@ local ADDON_NAME, ns = ...
 
 -- Range, heal prediction and shields, the parts of a raid frame and the timers of the totem buttons. Raid frames follow the game's own range opacity with a value of
 -- their own: the game's answer about range is withheld from addon code, so it is handed to SetAlphaFromBoolean and never read. Party frames get a black layer
--- of the addon's own that a timer of the addon's own darkens by the same withheld answer. The prediction and shield segments, the parts of a raid frame and the
+-- of the addon's own that a timer of the addon's own darkens by the same withheld answer, over the member's own picture, name row and bars alone (in One frame
+-- its body; in Separate parts the button down to where the game hangs the pet frame and the debuff icons, X.cover), and each party pet one of its own over its
+-- frame by its own answer, so a pet left behind darkens alone and the debuff icons are never half dark. A layer the row asks for in a fight is made as it
+-- ends, and while the options window is open chat says so once a fight (X.tell). The prediction and shield segments, the parts of a raid frame and the
 -- parts of a totem button are regions the game shows and hides and never fades, so off is a change of opacity to 0 and on gives back the opacity they had
 -- (X.fade, UnitParts.lua). This file adds its work after the steps of UnitFrames.lua through ns.UnitFrameExtra: a part that stops on errors counts as off here,
 -- and every function can run twice with the same result. The menu of a right-click on the target frame opens at the cursor, as the player and focus menus do.
@@ -42,11 +45,45 @@ end
 
 -- Party range ------------------------------------------------------------------------------------------------
 
--- The layer of a party member: a frame of the addon's own above the member, with one black texture, made out of combat. It starts transparent.
+-- The units under the top of a party frame from which the game hangs the member's pet frame (64 by 23 at 23,-43) and row of debuff icons (at 48,-43)
+-- in a button 120 by 53 (Mainline/PartyFrameTemplates.xml:80, 364-376), where UnitFrames.lua keeps both (RowLevel): the member's own picture, name
+-- row and bars lie above it.
+local HANG = 43
+
+-- Anchors a region of the addon's own over a party member's own frame, out of combat, and returns the key of its place; again only when the key is
+-- not placed. In One frame it covers the body (X.body), margin units further out on every side; in Separate parts it runs from the top of the
+-- button, as wide as it, down to HANG and margin units further, so it stops above the pet frame and the debuff icons and leaves them to their own.
+-- A party pet's covers its body in One frame, else its own button.
+function X.cover(rec, region, margin, placed)
+	local body = X.joined(rec) and X.body(rec) or nil
+	local key = ("%s:%.3f"):format(body and "body" or "parts", margin)
+	if placed == key then
+		return key
+	end
+	region:ClearAllPoints()
+	if body ~= nil then
+		region:SetPoint("TOPLEFT", body, "TOPLEFT", -margin, margin)
+		region:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", margin, -margin)
+	elseif rec.kind == "party" then
+		region:SetPoint("TOPLEFT", rec.frame, "TOPLEFT", 0, 0)
+		region:SetPoint("BOTTOMRIGHT", rec.frame, "TOPRIGHT", 0, -(HANG + margin))
+	else
+		region:SetAllPoints(rec.frame)
+	end
+	return key
+end
+
+-- The margin of the shade: the border thickness, so it covers the borders round the member's picture, bars and body too.
+local function ShadeMargin(rec)
+	local t = ns.Pixels(rec.frame, ns.Get("general.thickness"))
+	return ns.Finite(t) and t or 1
+end
+
+-- The layer of a party member or a party pet: a frame of the addon's own above it, with one black texture, made out of combat. It starts transparent.
 local function Make(rec)
 	local ok, level = pcall(rec.frame.GetFrameLevel, rec.frame)
 	local box = X.frame(rec.frame, ok and X.number(level) and level + 10 or nil)
-	box:SetAllPoints(rec.frame)
+	rec.rangePlaced = X.cover(rec, box, ShadeMargin(rec))
 	local shade = X.layer(box, "OVERLAY", 7)
 	shade:SetColorTexture(0, 0, 0, 1)
 	shade:SetAlpha(0)
@@ -95,12 +132,16 @@ function X.rangeLook(rec)
 	end
 end
 
+-- A party pet out of range darkens with its own frame, by its own answer (UnitInRange takes partypetN, as the game's raid-style pet frames ask it,
+-- Shared/CompactUnitFrame.lua:1048).
 local function PartyRange(rec, on)
-	if rec.kind ~= "party" then
+	if rec.kind ~= "party" and rec.kind ~= "partypet" then
 		return
 	end
 	local want = on and not Off(PARTY) and Opt("partyRangeDim") == true
-	if want then
+	if rec.kind ~= "party" then
+		-- The line of /flatui status follows the party frames alone.
+	elseif want then
 		ns.Note(KEY, NOTE)
 	else
 		ns.ClearNote(KEY, NOTE)
@@ -110,8 +151,9 @@ local function PartyRange(rec, on)
 		if not want then
 			return
 		end
-		-- The layer is made out of combat, on a frame the game protects.
+		-- The layer is made out of combat, on a frame the game protects; while the options window is open chat says so once a fight (X.tell).
 		if InCombatLockdown() then
+			X.tell("Flat UI: party members dim by range when the fight ends.")
 			if not rec.rangeQueued then
 				rec.rangeQueued = true
 				ns.OutOfCombat(function()
@@ -126,6 +168,14 @@ local function PartyRange(rec, on)
 	rec.rangeBox:SetShown(want)
 	if want then
 		X.rangeLook(rec)
+	end
+end
+
+-- The layout of a frame changed, out of combat (UnitFrames.lua Layout): the shade covers the body again after a change of Frame style or border
+-- thickness.
+local function PlaceRange(rec)
+	if rec.rangeBox ~= nil then
+		rec.rangePlaced = X.cover(rec, rec.rangeBox, ShadeMargin(rec), rec.rangePlaced)
 	end
 end
 
@@ -403,6 +453,7 @@ end
 table.insert(X.after.rowText, { part = NAMEFIT, fn = FitName })
 table.insert(X.after.layout, { part = NAMEFIT, fn = FitName })
 table.insert(X.after.apply, { part = PARTY, fn = PartyRange })
+table.insert(X.after.layout, { part = PARTY, fn = PlaceRange })
 table.insert(X.after.apply, { part = RAID, fn = RaidParts })
 table.insert(X.after.apply, { part = RAIDRANGE, fn = RaidRange })
 table.insert(X.after.apply, { part = PREDICT, fn = Predict })

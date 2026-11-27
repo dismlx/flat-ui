@@ -24,7 +24,8 @@ local _, ns = ...
 -- above the limit cannot be stopped: its health is withheld (UnitHealth always is), and so is GetAlpha after a withheld SetAlpha
 -- (SimpleFrameAPIDocumentation.lua:276-288), so nothing tells it from a frame below; it plays unseen under the curve's alpha of 0. It is made out of
 -- combat, on a frame the game protects; in a fight only its alpha, its colour, whether it shows and whether its animation plays change (Play and Stop
--- on a frame of the addon's own that is not protected). It hides while the unit is plainly dead, a ghost or offline, and while the row, the frame or
+-- on a frame of the addon's own that is not protected). One the row asks for in a fight waits for its end, and while the options window is open chat
+-- says so once a fight (X.tell), on a nameplate too. It hides while the unit is plainly dead, a ghost or offline, and while the row, the frame or
 -- the part is off. The limit is Low health below, but for one of those other frames whose unit you cannot assist (UnitCanAssist, which carries no
 -- secret predicate, UnitDocumentation.lua:745-761, and a withheld or missing answer counts as an enemy), which takes Enemies below: an enemy target
 -- for Execute at 20% while a friendly one, such as the tank a healer targets, keeps the limit of the group.
@@ -36,6 +37,8 @@ local X = ns.UnitFrameExtra
 local PART, LOW = "health curve", "low health border"
 local EVERY = 0.1
 local WHITE = "Interface\\Buttons\\WHITE8X8"
+-- What chat says, once a fight and only while the options window is open, when a low health border waits for the end of the fight to be made.
+local TELL_LOW = "Flat UI: the low health border shows when the fight ends."
 local weak = { __mode = "k" }
 
 -- works: the feature test passed. probed: it has run. curve: the colour curve last made, with the settings it was made from. steps: the step curve of
@@ -420,6 +423,8 @@ function ApplyLow(rec, on)
 	end
 	if rec.lowHealth == nil then
 		if InCombatLockdown() then
+			-- While the options window is open chat says so once a fight (X.tell, UnitFrames.lua).
+			X.tell(TELL_LOW)
 			if not rec.lowQueued then
 				rec.lowQueued = true
 				ns.OutOfCombat(function()
@@ -596,6 +601,7 @@ local function BorderPlate(frame, rec)
 	end
 	if low == nil then
 		if InCombatLockdown() and ns.MaybeProtected(bar) then
+			X.tell(TELL_LOW)
 			ns.OutOfCombat(function()
 				if ns.IsPlate(frame) then
 					RunPlate(frame, false)

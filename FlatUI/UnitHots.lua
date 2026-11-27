@@ -19,8 +19,9 @@ local _, ns = ...
 -- A class without one, or a client that does not read auras by slot, makes nothing. Each heal over time has a place of its own in a row from the
 -- corner (Square corner), so a square never moves while the others come and go; Square size is its side in units, with a dark rim of one screen pixel,
 -- and the row sits just inside the dispel border of UnitGroupMarks.lua (2 screen pixels inside the health bar). On a party frame, whose health bar is
--- 10 units high (Blizzard_UnitFrame/Camelot/PartyMemberFrame.lua:9-11), the side is at most the bar's height less the row's inset and the dispel
--- border on the far side, so a large size picked for raid cells stays inside the bar; raid cells keep the full size. On a party frame with Debuff type icon
+-- 10 units high (Blizzard_UnitFrame/Camelot/PartyMemberFrame.lua:9-11), the side is at most the bar's height less the row's inset and one screen
+-- pixel, so a large size picked for raid cells stays inside the bar while the default 6 keeps its size at one screen pixel a unit (it may lie over the
+-- far dispel border by a pixel while one shows); raid cells keep the full size. On a party frame with Debuff type icon
 -- on party frames and Top right or Bottom right, the row starts just left of the spot of the type icon at the right end of the bar, so the two show
 -- side by side; raid frames, where the game draws its own type icons, keep the corner.
 --
@@ -42,8 +43,12 @@ local _, ns = ...
 -- hears UNIT_AURA for its own unit on a frame of the addon's own (RegisterUnitEvent), whose payload is never read; a burst is read once, a moment
 -- after the first. A frame the game hid hears nothing until the game draws it again, through the same calls UnitGroupMarks.lua follows.
 --
+-- With Fade as one runs out (on by default) each square fades from full to FADE_LOW over the last FADE_FOR seconds of its heal over time, by the end
+-- of the read it shows (in a fight, that of the last plain read, so by the end read before the pull), and is full again once a plain read gives it a
+-- new end (a recast out of a fight); one that never ends stays full. One OnUpdate of a frame of the addon's own fades every frame's squares, looking
+-- every FADE_STEP seconds while one fades and else once the next gets there, and runs only while a lit square has an end ahead.
 -- The squares are textures of the addon's own on a frame of its own over the health bar, made and placed out of combat on a frame the game protects;
--- in a fight only whether each shows changes. A new Square corner or Square size, or Debuff type icon on party frames turned on or off, waits for
+-- in a fight only whether each shows and its opacity change. A new Square corner or Square size, or Debuff type icon on party frames turned on or off, waits for
 -- the end of a fight, and while the options window is open chat says so once a fight (Tell). Nothing of the game's is changed.
 -- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLUnitFrames/UF_GroupFrames_HealerBuffs.lua:250-253, 260,
 -- 270, its heal over time families of Renew, Rejuvenation, Regrowth, Lifebloom, Wild Growth and Riptide; :1923-1949, a heal over time counts only when
@@ -59,6 +64,9 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 -- The dispel border's thickness in screen pixels (UnitGroupMarks.lua), which the row stays inside, the wait before a burst of events is read, and
 -- how many times a read asks the game for more slots.
 local RIM_PX, SOON, MOST_ASKS = 2, 0.1, 4
+-- Fade as one runs out: the seconds before its end over which a square fades, the opacity it fades to, and the seconds between two looks at the
+-- squares while one fades.
+local FADE_FOR, FADE_LOW, FADE_STEP = 3, 0.35, 0.1
 -- How soon before its end time a kept heal over time counts as run out when the member is read in a fight: the read comes the wait above after the
 -- aura went, and the end the game gave and the moment it goes can differ by the server's timing.
 local LATE = 0.5
@@ -312,7 +320,7 @@ local function Make(rec)
 		fill:SetPoint("TOPLEFT", back, "TOPLEFT", px, -px)
 		fill:SetPoint("BOTTOMRIGHT", back, "BOTTOMRIGHT", -px, px)
 		fill:Hide()
-		h.squares[index] = { back = back, fill = fill }
+		h.squares[index] = { back = back, fill = fill, alpha = 1 }
 	end
 	rec.hots = h
 	return h
@@ -330,12 +338,13 @@ local function Tall(h)
 	return nil
 end
 
--- The side of a square: Square size, and on a party frame at most the room the health bar has from the row's inset to the dispel border on its far
--- side, so a size picked for raid cells does not hang out of the 10-unit party bar over the name row or the power bar.
+-- The side of a square: Square size, and on a party frame at most the room the health bar has from the row's inset to one screen pixel short of its
+-- far edge, so a size picked for raid cells does not hang out of the 10-unit party bar over the name row or the power bar, while the default 6 keeps
+-- its size there at one screen pixel a unit; a square may lie over the far dispel border by a pixel while one shows, as before 0.5.41.
 local function Side(h, px)
 	local size, tall = tonumber(Opt("hotSize")) or 6, Tall(h)
 	if tall ~= nil then
-		size = math.max(2, math.min(size, tall - px * (RIM_PX + 1) - px * RIM_PX))
+		size = math.max(2, math.min(size, tall - px * (RIM_PX + 1) - px))
 	end
 	return size
 end
@@ -382,15 +391,107 @@ local function Place(h)
 	end
 end
 
-local function Draw(h, found)
+-- Fade as one runs out ---------------------------------------------------------------------------------------------------------------------------
+
+-- The frames with a lit square whose heal over time has an end still ahead, and the frame of the addon's own whose OnUpdate fades them: it looks at
+-- them every FADE_STEP seconds while one is in its last FADE_FOR seconds, else once the next one gets there, and hides (so it runs no more) once none
+-- is left. fadeWait and fadeWaited: the seconds to the next look and those gone since the last.
+local fading = setmetatable({}, { __mode = "k" })
+local fader, fadeWait, fadeWaited = nil, 0, 0
+
+local function Now()
+	local ok, now = pcall(GetTime)
+	if ok and ns.Finite(now) then
+		return now
+	end
+	return nil
+end
+
+-- Sets the opacity of each square of a frame: full, and with Fade as one runs out from full down to FADE_LOW over the last FADE_FOR seconds of its
+-- heal over time, by the end of the read it shows (h.shownEnds, plain numbers of GetTime). Its own textures, so in a fight too. Returns the seconds
+-- until the next of its squares starts to fade (0 while one fades), or nil when none has an end still ahead.
+local function Fade(h, now)
+	local on, soon = Opt("hotFade") == true and now ~= nil, nil
+	for index, square in ipairs(h.squares) do
+		local ends = h.shownEnds and h.shownEnds[index]
+		local alpha = 1
+		if on and square.lit and ns.Finite(ends) and ends > 0 then
+			local left = ends - now
+			if left < FADE_FOR then
+				alpha = FADE_LOW + (1 - FADE_LOW) * math.max(0, left) / FADE_FOR
+			end
+			if left > 0 then
+				local wait = math.max(0, left - FADE_FOR)
+				soon = soon and math.min(soon, wait) or wait
+			end
+		end
+		if square.alpha ~= alpha then
+			square.alpha = alpha
+			square.back:SetAlpha(alpha)
+			square.fill:SetAlpha(alpha)
+		end
+	end
+	return soon
+end
+
+-- One look at every frame that fades: each takes its opacity, a frame with nothing left to fade leaves the list, and the next look is set.
+local function FadeAll()
+	local now, soonest = Now(), nil
+	for h in pairs(fading) do
+		local soon = h.lit and Fade(h, now) or nil
+		if soon == nil then
+			fading[h] = nil
+		else
+			soonest = soonest and math.min(soonest, soon) or soon
+		end
+	end
+	fadeWaited = 0
+	if soonest == nil then
+		fader:Hide()
+	else
+		fadeWait = math.max(FADE_STEP, soonest)
+	end
+end
+
+-- The opacity of a frame's squares now, and the frame on the list of the fader while one of them has an end ahead.
+local function Faded(h)
+	local soon = Fade(h, Now())
+	if soon == nil then
+		fading[h] = nil
+		return
+	end
+	fading[h] = true
+	if fader == nil then
+		fader = Own(CreateFrame("Frame"))
+		fader:Hide()
+		fader:SetScript("OnUpdate", function(_, elapsed)
+			fadeWaited = fadeWaited + (ns.Finite(elapsed) and elapsed or 0)
+			if fadeWaited >= fadeWait then
+				X.run(PART, FadeAll)
+			end
+		end)
+	end
+	if not fader:IsShown() then
+		fadeWaited, fadeWait = 0, math.max(FADE_STEP, soon)
+		fader:Show()
+	else
+		fadeWait = math.min(fadeWait, math.max(FADE_STEP, soon))
+	end
+end
+
+-- Shows the squares of the heals over time found, each faded by the end it has in ends (by place; nil for none).
+local function Draw(h, found, ends)
 	local lit = false
 	for index, square in ipairs(h.squares) do
 		local on = found[index] == true
 		square.back:SetShown(on)
 		square.fill:SetShown(on)
+		square.lit = on
 		lit = lit or on
 	end
 	h.lit = lit or nil
+	h.shownEnds = lit and ends or nil
+	Faded(h)
 end
 
 local function Clear(h)
@@ -467,7 +568,18 @@ local function Read(rec)
 			h.kept, h.count, h.ends = found, count, ends
 		end
 	end
-	Draw(h, found)
+	-- The end each square fades by: that of this read for a heal over time read plainly now, else that of the last plain read it was kept from.
+	local times = ends
+	if h.ends ~= ends then
+		times = {}
+		for index, at in pairs(h.ends or {}) do
+			times[index] = at
+		end
+		for index, at in pairs(ends) do
+			times[index] = at
+		end
+	end
+	Draw(h, found, times)
 end
 
 -- The frames whose unit changed its auras, read together a moment after the first.

@@ -3,9 +3,10 @@ local _, ns = ...
 -- Marks on the game's party and raid frames: the colour of a debuff the player can dispel on a border just inside the health bar, with the icon of its
 -- type on a party frame, the raid marker of the unit of a raid frame or a party frame, the leader and assistant icons of a raid frame, an outline round
 -- the party frame of your target, and on a party frame the game's icon of a resurrection cast on the member, breathing while it runs, and a grey AFK
--- word for a member who is away. With Also on your player, target and focus frames the border is on those frames too. All are textures and text of the
+-- word for a member who is away, also on a raid frame. With Also on your player, target and focus frames the border is on those frames too. All are textures and text of the
 -- addon's own on a frame of its own over the game's frame, made and anchored out of combat; in a fight only their colour, opacity and visibility change,
--- and which raid marker shows.
+-- and which raid marker shows. A mark made or moved by a row changed in a fight waits for its end, and while the options window is open chat says so
+-- once a fight (AfterFight, X.tell).
 --
 -- What the player can dispel is the client's own aura filter HARMFUL|RAID: "harmful auras the player can dispel" (Blizzard_FrameXMLUtil/
 -- AuraUtil.lua:275), which the game's party frames (Shared/PartyMemberFrame.lua:143) and raid frames (Blizzard_PrivateAurasUI.lua:486) use for their
@@ -690,20 +691,24 @@ end
 
 -- Marks over a frame --------------------------------------------------------------------------------------------------------------------------------
 
--- Runs a step of a mark again once the fight is over, once however often it is asked in the fight.
+-- Runs a step of a mark again once the fight is over, once however often it is asked in the fight. While the options window is open chat says so once
+-- a fight (X.tell, UnitFrames.lua).
+local TELL_MARKS = "Flat UI: party and raid frame marks change when the fight ends."
+
 local function AfterFight(rec, flag, part, fn)
 	if rec[flag] then
 		return
 	end
 	rec[flag] = true
+	X.tell(TELL_MARKS)
 	ns.OutOfCombat(function()
 		rec[flag] = nil
 		X.run(part, fn, rec, X.active(rec))
 	end)
 end
 
--- The frame of the addon's own over a party or raid frame that holds its raid marker, on a raid frame its leader and assistant icons and on a party frame
--- the frame of its resurrection icon and its AFK word: six levels above the game's frame, made out of combat by the first row that needs it.
+-- The frame of the addon's own over a party or raid frame that holds its raid marker and its AFK word, on a raid frame its leader and assistant icons
+-- and on a party frame the frame of its resurrection icon: six levels above the game's frame, made out of combat by the first row that needs it.
 local function Holder(rec)
 	if rec.over == nil then
 		local frame = rec.frame
@@ -756,8 +761,10 @@ end
 
 -- Where the marker of a frame sits: at the top of a raid frame, and on a party frame at the top of the picture Flat UI draws (a Game portrait too), or
 -- of the game's portrait while that shows, as the game centres the marker of its target frame on the top of the portrait (Mainline/TargetFrame.xml:
--- 282-287), or at the top of the health bar of a frame that shows neither. The game's classic party frames have no marker (Mainline/
--- PartyFrameTemplates.xml:79-368).
+-- 282-287). With no picture at all (Picture None, or the frame's picture switch off) in Separate parts the picture's square stays empty
+-- (UnitFrames.lua ApplyPicture), so the marks take that square: the picture's frame while it is laid out (it has a side), else the game's portrait,
+-- which is only hidden and keeps its place. In One frame, where None takes the square away, they sit on the health bar. The game's classic party
+-- frames have no marker (Mainline/PartyFrameTemplates.xml:79-368).
 local function MarkerSpot(rec)
 	if rec.kind ~= "party" then
 		return rec.frame, "TOP", -1
@@ -767,6 +774,12 @@ local function MarkerSpot(rec)
 		return pic.frame, "CENTER", 0
 	elseif portrait ~= nil and not (pic ~= nil and pic.none) then
 		return portrait, "CENTER", 0
+	elseif pic ~= nil and pic.none and not X.joined(rec) then
+		if pic.side ~= nil then
+			return pic.frame, "CENTER", 0
+		elseif portrait ~= nil then
+			return portrait, "CENTER", 0
+		end
 	end
 	return HealthBar(rec), "CENTER", 0
 end
@@ -873,8 +886,9 @@ end)
 -- 1473-1474). A summon its party frames show already, in the icon right of the frame (UpdateNotPresentIcon, Mainline/PartyMemberFrame.lua:589-616, on
 -- INCOMING_SUMMON_CHANGED, :716-717), so that is left to the game. With Resurrection icon on party frames (on by default) a texture of the addon's own on
 -- a frame of its own over the holder of the marks shows that atlas while someone resurrects the member: REZ_SIZE units, centred on the picture Flat UI
--- draws or the game's portrait (MarkerSpot), or on a frame with neither (Picture None, as the ready-made Healer look has it) REZ_BAR units at the left
--- end of the health bar, 1 unit in, so the Dead word in the middle of the 10-unit bar (UnitText.lua Say) still reads. UnitHasIncomingResurrection is not
+-- draws or the game's portrait, or on the empty square of Picture None (as the ready-made Healer look has it) in Separate parts (MarkerSpot), or with
+-- Picture None in One frame REZ_BAR units at the left end of the health bar, 1 unit in, so the Dead word in the middle of the 10-unit bar (UnitText.lua
+-- Say) still reads. UnitHasIncomingResurrection is not
 -- in the generated docs, so its answer goes unread to the icon's opacity (FromAnswer). While the member is plainly dead (UnitIsDeadOrGhost) its frame
 -- breathes, an Alpha animation from 1 to REZ_LOW and back every REZ_BEAT seconds, so the icon is not missed beside the marker, the leader crown and the
 -- debuff icons; under the icon's opacity of 0 the beat plays unseen, as the low health beat does (HealthColour.lua). The icon is drawn again on
@@ -1008,47 +1022,178 @@ ns.AddEvent(KEY, "INCOMING_RESURRECT_CHANGED", function()
 	end
 end)
 
--- AFK on party frames -------------------------------------------------------------------------------------------------------------------------------
+-- AFK on party and raid frames ---------------------------------------------------------------------------------------------------------------------
 
--- The game's unit frames show nobody away, nor do its raid frames (Blizzard_UnitFrame has no UnitIsAFK). With AFK on party frames (on by default) a
+-- The game's unit frames show nobody away, nor do its raid frames (Blizzard_UnitFrame has no UnitIsAFK). With AFK on raid frames (on by default) a
+-- raid frame or a raid-style party frame gets the same word where the game's status text sits (PlaceAfk), at that text's size, for its member (the
+-- frame's unit, not a vehicle), drawn again in the frame's own full update (after.raid); 40 cells hear 40 members, as the heal over time squares
+-- do. With AFK on party frames (on by default) a
 -- font string of the addon's own on the holder of the marks says AFK, in a soft grey with an outline in the face and Small frame text size of the
--- bar text rows (X.ownSpec, UnitText.lua), at the bottom of the picture Flat UI draws or of the game's portrait (MarkerSpot), 2 units up, or on a frame
--- with neither at the left end of the health bar, 2 units in. It shows while UnitIsAFK is plainly true and goes when it is plainly false (it is plain
+-- bar text rows (X.ownSpec, UnitText.lua), at the bottom of the picture Flat UI draws, of the game's portrait or of the empty square of Picture None in
+-- Separate parts (MarkerSpot), 2 units up, or with Picture None in One frame at the left end of the health bar, 2 units in. It shows while UnitIsAFK is plainly true and goes when it is plainly false (it is plain
 -- except under chat lockdown, UnitDocumentation.lua:1778-1791); a withheld answer keeps what shows. It hides while the member is plainly dead or
 -- offline, where the Dead or Offline word and the resurrection icon speak. Each frame hears PLAYER_FLAGS_CHANGED, UNIT_CONNECTION and UNIT_HEALTH for
 -- its own member on a frame of the addon's own (RegisterUnitEvent, as the game's raid frames hear them, Shared/CompactUnitFrame.lua:339-352), whose
--- payload is never read, so the word comes and goes in a fight too, and on a revive. It is made and placed out of combat.
+-- payload is never read, so the word comes and goes in a fight too, and on a revive. It is made and placed out of combat. It fades in over AFK_IN
+-- seconds as the member goes and out over AFK_OUT as they come back (Alpha animations of the font string; a new member, or the row going off, hides it
+-- at once), and counts the time away from when Flat UI first saw the flag, plain numbers of GetTime: AFK for the first minute, then AFK 3m, and from
+-- an hour AFK 1h, written again every AFK_EVERY seconds by one ticker of the addon's own that runs only while a word counts.
 local AFK_EVENTS = { "PLAYER_FLAGS_CHANGED", "UNIT_CONNECTION", "UNIT_HEALTH" }
 local AFK_GREY = 0.8
+local AFK_IN, AFK_OUT, AFK_EVERY = 0.2, 0.3, 15
 
--- True when the member is plainly away, and neither plainly dead nor plainly offline; false when not; nil when the game withheld whether.
+-- Whether the member is plainly away (true or false; nil when the game withheld whether), and whether the word shows: away, and neither plainly dead
+-- nor plainly offline.
 local function Away(unit)
 	local away = Plain(_G.UnitIsAFK, unit)
 	if away ~= true then
-		return away
+		return away, away
 	end
-	return Plain(_G.UnitIsDeadOrGhost, unit) ~= true and Plain(_G.UnitIsConnected, unit) ~= false
+	return true, Plain(_G.UnitIsDeadOrGhost, unit) ~= true and Plain(_G.UnitIsConnected, unit) ~= false
 end
 
-local function ShowAfk(a)
-	if a.unit == nil then
-		a.text:Hide()
+local function Now()
+	local ok, now = pcall(GetTime)
+	if ok and ns.Finite(now) then
+		return now
+	end
+	return nil
+end
+
+-- The word: AFK, then with the minutes or hours away since the flag was first seen.
+local function AfkWord(a)
+	local word, now = a.word, Now()
+	if a.since ~= nil and now ~= nil then
+		local gone = now - a.since
+		if gone >= 3600 then
+			word = ("%s %dh"):format(a.word, math.floor(gone / 3600))
+		elseif gone >= 60 then
+			word = ("%s %dm"):format(a.word, math.floor(gone / 60))
+		end
+	end
+	if a.said ~= word then
+		a.said = word
+		a.text:SetText(word)
+	end
+end
+
+-- The words that count, and the ticker that writes them again; it stops with the last.
+local counting = setmetatable({}, { __mode = "k" })
+local afkTicker = nil
+
+local function CountAfk()
+	for a in pairs(counting) do
+		if a.since ~= nil then
+			AfkWord(a)
+		else
+			counting[a] = nil
+		end
+	end
+	if next(counting) == nil and afkTicker ~= nil then
+		pcall(afkTicker.Cancel, afkTicker)
+		afkTicker = nil
+	end
+end
+
+local function Counting(a)
+	counting[a] = a.since ~= nil or nil
+	if a.since ~= nil and afkTicker == nil and type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
+		local ok, ticker = pcall(C_Timer.NewTicker, AFK_EVERY, function()
+			X.run(AFK, CountAfk)
+		end)
+		afkTicker = ok and ticker or nil
+	end
+end
+
+-- The fades of the word: an Alpha animation from 0 to 1, and one from 1 to 0 that hides the word as it ends and puts its opacity back. Nil for each
+-- where the client makes none.
+local function AfkFades(text)
+	local ok, fadeIn, fadeOut = pcall(function()
+		local come = text:CreateAnimationGroup()
+		local rise = come:CreateAnimation("Alpha")
+		rise:SetFromAlpha(0)
+		rise:SetToAlpha(1)
+		rise:SetDuration(AFK_IN)
+		local go = text:CreateAnimationGroup()
+		local fall = go:CreateAnimation("Alpha")
+		fall:SetFromAlpha(1)
+		fall:SetToAlpha(0)
+		fall:SetDuration(AFK_OUT)
+		pcall(go.SetToFinalAlpha, go, true)
+		go:SetScript("OnFinished", function()
+			text:Hide()
+			text:SetAlpha(1)
+		end)
+		return come, go
+	end)
+	if ok then
+		return fadeIn, fadeOut
+	end
+	return nil, nil
+end
+
+-- The word shows (it fades in) or goes (it fades out, or with fade false at once).
+local function SetAway(a, away, fade)
+	if a.away == away then
 		return
 	end
-	local away = Away(a.unit)
-	if away ~= nil then
-		a.text:SetShown(away)
+	a.away = away
+	local text, fadeIn, fadeOut = a.text, a.fadeIn, a.fadeOut
+	if fadeIn and fadeIn:IsPlaying() then
+		pcall(fadeIn.Stop, fadeIn)
+	end
+	if away then
+		if fadeOut and fadeOut:IsPlaying() then
+			pcall(fadeOut.Stop, fadeOut)
+		end
+		AfkWord(a)
+		text:SetAlpha(1)
+		text:Show()
+		if fadeIn then
+			pcall(fadeIn.Play, fadeIn)
+		end
+	else
+		if not (fade and fadeOut and text:IsShown()) then
+			if fadeOut and fadeOut:IsPlaying() then
+				pcall(fadeOut.Stop, fadeOut)
+			end
+			text:Hide()
+			text:SetAlpha(1)
+		elseif not fadeOut:IsPlaying() and not pcall(fadeOut.Play, fadeOut) then
+			text:Hide()
+		end
 	end
 end
 
--- The frame of the addon's own that hears the member of one party frame, and nothing once it has no member. A new member starts with the word hidden.
+-- The count runs from the first plain answer that the member is away to the first that they are not, so a death or a disconnect while away does not
+-- start it again; a withheld answer keeps what shows and the count.
+local function ShowAfk(a)
+	if a.unit == nil then
+		a.since = nil
+		SetAway(a, false, false)
+		Counting(a)
+		return
+	end
+	local flag, shows = Away(a.unit)
+	if flag == nil then
+		return
+	end
+	a.since = flag and (a.since or Now()) or nil
+	SetAway(a, shows, true)
+	Counting(a)
+end
+
+-- The frame of the addon's own that hears the member of one party frame, and nothing once it has no member. A new member starts with the word hidden
+-- and no count.
 local function ListenAfk(a, unit)
 	if a.unit == unit then
 		return
 	end
 	pcall(a.ear.UnregisterAllEvents, a.ear)
 	a.unit = unit
-	a.text:Hide()
+	a.since = nil
+	SetAway(a, false, false)
+	Counting(a)
 	if unit == nil then
 		return
 	end
@@ -1060,9 +1205,30 @@ local function ListenAfk(a, unit)
 	end
 end
 
+-- Where the word sits on a raid frame: where the game's status text sits (statusText, frameHeight / 3 - 2 above the bottom between 3 units in from
+-- each side, Shared/CompactUnitFrame.lua:1958-1959), on its middle, else AFK_RAID_UP units above the bottom of the frame.
+local AFK_RAID_UP = 3
+
 -- Anchors the word, out of combat and again only when its spot changed. False when it changed in a fight: it keeps its place until the end.
 local function PlaceAfk(rec)
 	local a = rec.afk
+	if rec.kind == "raid" then
+		local status = X.path(rec.frame, "statusText")
+		local to = status or rec.frame
+		if a.to == to then
+			return true
+		elseif InCombatLockdown() then
+			return false
+		end
+		a.text:ClearAllPoints()
+		if status ~= nil then
+			a.text:SetPoint("CENTER", status, "CENTER", 0, 0)
+		else
+			a.text:SetPoint("BOTTOM", rec.frame, "BOTTOM", 0, AFK_RAID_UP)
+		end
+		a.to, a.onBar = to, false
+		return true
+	end
 	local to = MarkerSpot(rec)
 	local onBar = to ~= nil and to == HealthBar(rec)
 	if to == nil or (a.to == to and a.onBar == onBar) then
@@ -1080,9 +1246,24 @@ local function PlaceAfk(rec)
 	return true
 end
 
--- The face, outline and size of the word: those of the bar text rows at Small frame text size, with an outline unless Bar text outline gives one.
-local function StyleAfk(a)
-	local spec = { percent = tonumber(Opt("smallTextSize")) or 100 }
+-- The size of the game's status text of a raid frame against the size the word was made at, in percent, or nil where either is not plain.
+local function StatusSize(rec, a)
+	local status = X.path(rec.frame, "statusText")
+	if status == nil or a.base == nil then
+		return nil
+	end
+	local ok, _, size = pcall(status.GetFont, status)
+	if ok and ns.Finite(size) and size > 0 then
+		return math.max(50, math.min(200, size / a.base * 100))
+	end
+	return nil
+end
+
+-- The face, outline and size of the word: those of the bar text rows at Small frame text size, on a raid frame at the size of the game's status
+-- text, with an outline unless Bar text outline gives one.
+local function StyleAfk(a, rec)
+	local percent = rec.kind == "raid" and (StatusSize(rec, a) or 100) or tonumber(Opt("smallTextSize")) or 100
+	local spec = { percent = percent }
 	if type(X.ownSpec) == "function" then
 		spec = X.ownSpec("bar", spec)
 	end
@@ -1098,11 +1279,15 @@ local function MakeAfk(rec)
 	if text == nil then
 		return nil
 	end
-	text:SetText(type(_G.AFK) == "string" and not IsSecret(_G.AFK) and _G.AFK ~= "" and _G.AFK or "AFK")
+	local word = type(_G.AFK) == "string" and not IsSecret(_G.AFK) and _G.AFK ~= "" and _G.AFK or "AFK"
+	text:SetText(word)
 	text:SetTextColor(AFK_GREY, AFK_GREY, AFK_GREY)
 	text:Hide()
 	local ear = Own(CreateFrame("Frame"))
-	local a = { text = text, ear = ear }
+	-- base: the size the word was made at, before any style (StatusSize).
+	local okFont, _, base = pcall(text.GetFont, text)
+	local a = { text = text, ear = ear, word = word, said = word, base = okFont and ns.Finite(base) and base > 0 and base or nil }
+	a.fadeIn, a.fadeOut = AfkFades(text)
 	ear:SetScript("OnEvent", function()
 		X.run(AFK, ShowAfk, a)
 	end)
@@ -1111,12 +1296,16 @@ local function MakeAfk(rec)
 	return a
 end
 
+-- The row of the word on each kind of frame.
+local AFK_ROWS = { party = "partyAfk", raid = "raidAfk" }
+
 local function Afk(rec, on)
-	if rec.kind ~= "party" then
+	local row = AFK_ROWS[rec.kind]
+	if row == nil then
 		return
 	end
 	local a = rec.afk
-	if not (on and rec.made and not ns.PartStopped(KEY, AFK) and Opt("partyAfk") == true and type(_G.UnitIsAFK) == "function") then
+	if not (on and rec.made and not ns.PartStopped(KEY, AFK) and Opt(row) == true and type(_G.UnitIsAFK) == "function") then
 		if a then
 			ListenAfk(a, nil)
 		end
@@ -1134,7 +1323,7 @@ local function Afk(rec, on)
 	elseif not PlaceAfk(rec) then
 		AfterFight(rec, "afkQueued", AFK, Afk)
 	end
-	StyleAfk(a)
+	StyleAfk(a, rec)
 	-- The member of the frame, not a vehicle it is in.
 	ListenAfk(a, X.unitOf(rec))
 	ShowAfk(a)
@@ -1254,16 +1443,25 @@ end
 -- Your target on party frames ------------------------------------------------------------------------------------------------------------------------
 
 -- The game's classic party frames have no highlight for your target (Mainline/PartyFrameTemplates.xml:79-368). With Border for your target at Own colour
--- each gets an outline of Flat UI's own round the frame (ns.Outline) in the colour of the row, on a frame of its own one level above the game's frame, made
--- and anchored out of combat, under the frame of the dispel border, which calls for action. Whether the member is your target is UnitIsUnit, withheld where
+-- each gets an outline of Flat UI's own round the member's own picture, name row and bars (ns.Outline) in the colour of the row, on a frame of its own one
+-- level above the game's frame, made and anchored out of combat, under the frame of the dispel border, which calls for action. The frame covers what the
+-- range shade covers (X.cover, UnitExtras.lua): in One frame the body, in Separate parts the button down to where the game hangs the pet frame and the
+-- debuff icons, so the outline no longer runs through them; a border thickness and 1 unit further out, so it clears the border of the picture or the
+-- body, and anchored again out of combat after a change of Frame style (after.layout). Whether the member is your target is UnitIsUnit, withheld where
 -- the game restricts the comparison of units (SecretWhenUnitComparisonRestricted, UnitDocumentation.lua:2410-2426): the answer goes to the opacity of that
 -- frame as it is (FromAnswer), on a new target, a change of the group and a new member of the frame. Raid frames show it on their health bar border
 -- (UnitFrames.lua).
+-- The margin of the outline's frame: a border thickness and 1 unit, so the outline, just outside it, clears the border round the picture or the body.
+local function AimMargin(rec)
+	local t = ns.Pixels(rec.frame, ns.Get("general.thickness"))
+	return (ns.Finite(t) and t or 1) + 1
+end
+
 local function MakeAim(rec)
 	local frame = rec.frame
 	local ok, level = pcall(frame.GetFrameLevel, frame)
 	local box = X.frame(frame, ok and X.number(level) and level + 1 or nil)
-	box:SetAllPoints(frame)
+	local placed = X.cover(rec, box, AimMargin(rec))
 	box:SetAlpha(0)
 	local outline = ns.Outline(box, box)
 	if outline == nil then
@@ -1273,8 +1471,17 @@ local function MakeAim(rec)
 	-- The outline of a tool, drawn whatever the borders of the look say, with no background.
 	ns.KeepOutline(outline)
 	ns.SetOutline(outline, true, false)
-	rec.aim = { box = box, outline = outline }
+	rec.aim = { box = box, outline = outline, placed = placed }
 	return rec.aim
+end
+
+-- The layout of a party frame changed, out of combat (UnitFrames.lua Layout): the outline wraps the body again after a change of Frame style or
+-- border thickness.
+local function PlaceAim(rec)
+	local a = rec.aim
+	if a ~= nil then
+		a.placed = X.cover(rec, a.box, AimMargin(rec), a.placed)
+	end
 end
 
 local function Aim(rec, on)
@@ -1410,6 +1617,13 @@ table.insert(X.after.apply, { part = AFK, fn = Afk })
 table.insert(X.after.raid, { part = DISPEL, fn = Dispel })
 table.insert(X.after.raid, { part = MARKER, fn = Marker })
 table.insert(X.after.raid, { part = LEADER, fn = Leader })
+table.insert(X.after.raid, { part = AFK, fn = Afk })
 table.insert(X.after.picture, { part = MARKER, fn = Follow })
 table.insert(X.after.picture, { part = REZ, fn = FollowRez })
 table.insert(X.after.picture, { part = AFK, fn = FollowAfk })
+table.insert(X.after.layout, { part = AIM, fn = PlaceAim })
+-- A change of Frame style lands in Layout alone (rec.joined), out of combat: the marks that follow the picture take the empty square of Picture None, or
+-- leave it, there too.
+table.insert(X.after.layout, { part = MARKER, fn = Follow })
+table.insert(X.after.layout, { part = REZ, fn = FollowRez })
+table.insert(X.after.layout, { part = AFK, fn = FollowAfk })

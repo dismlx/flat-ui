@@ -607,7 +607,8 @@ local function Drive()
 	end
 end
 
--- The format of one bar: its game words and its own string, the place and the font. Out of combat the string is made; in combat the game's words stay until it is.
+-- The format of one bar: its game words and its own string, the place and the font. Out of combat the string is made; in combat the game's words stay until it
+-- is, and while the options window is open chat says so once a fight.
 local function Settle(rec, entry, on)
 	local mode = Mode(rec, entry, on)
 	if mode == "game" then
@@ -617,6 +618,8 @@ local function Settle(rec, entry, on)
 	end
 	if mode ~= "hide" and entry.own == nil then
 		if InCombatLockdown() then
+			-- While the options window is open chat says so once a fight (X.tell, UnitFrames.lua).
+			X.tell("Flat UI: the new health and power text shows when the fight ends.")
 			if not entry.queued then
 				entry.queued = true
 				ns.OutOfCombat(function()

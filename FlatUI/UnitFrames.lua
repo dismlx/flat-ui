@@ -3862,6 +3862,22 @@ function ns.PortraitStyleChanged(path)
 	end
 end
 
+-- While the options window is open, chat says a line once a fight when a change of a row waits for the end of the fight (as Hide.lua and /flatui
+-- move say theirs), so a row turned on or changed in a fight does not look broken: the files after this one call it where they queue a step with
+-- ns.OutOfCombat. A queue raised with the window closed (zoning, a new member) stays silent. The flag of each line goes once the fight is over.
+ns.UnitFrameExtra.told = {}
+function ns.UnitFrameExtra.tell(line)
+	local told = ns.UnitFrameExtra.told
+	if told[line] or type(ns.PanelShown) ~= "function" or ns.PanelShown() ~= true then
+		return
+	end
+	told[line] = true
+	print(line)
+	ns.OutOfCombat(function()
+		told[line] = nil
+	end)
+end
+
 -- What the files after this one use.
 ns.UnitFrameExtra.opt = Opt
 ns.UnitFrameExtra.active = Active
