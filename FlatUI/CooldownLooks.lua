@@ -402,12 +402,25 @@ local function AuraSpell(record)
 	return nil
 end
 
+local function Slot(record)
+	if record.sample then
+		return record.sample
+	end
+	local pool = R.pools and R.pools[record.row or 1]
+	for index = 1, 3 do
+		if pool and pool[index] == record then
+			return index
+		end
+	end
+	return nil
+end
+
 local function Decorate(record, size)
 	local level = Ask(record.top.GetFrameLevel, record.top)
 	level = Plain(level, "number") and level or 0
 	local wantCool = R.ShowOf(record) == "border"
 	local wantReady = Opt("readyGlow") == true
-	local wantProc = Opt("procGlow") == true and (record.spell ~= nil or record.sample == 3)
+	local wantProc = Opt("procGlow") == true and (record.spell ~= nil or Slot(record) == 3)
 	if (wantCool or wantReady or wantProc) and not record.deco then
 		record.deco = Layer(record.frame)
 	end
@@ -440,7 +453,7 @@ end
 local function DecorateAura(record)
 	local level = Ask(record.top.GetFrameLevel, record.top)
 	level = Plain(level, "number") and level or 0
-	if Opt("auraTime") == true and not record.aura and (record.sample == 2 or AuraSpell(record)) then
+	if Opt("auraTime") == true and not record.aura and (Slot(record) == 2 or AuraSpell(record)) then
 		record.aura = MakeAura(record)
 	end
 	local aura = record.aura
@@ -508,7 +521,7 @@ local function Proc(record)
 		return
 	end
 	local on = Opt("procGlow") == true and ns.Enabled(KEY)
-		and ((record.held ~= nil and record.sample == 3) or (record.spell ~= nil and ProcUp(record.spell)))
+		and ((record.held ~= nil and Slot(record) == 3) or (record.spell ~= nil and ProcUp(record.spell)))
 	local look = on and ProcLook(proc) or false
 	if proc.look == look then
 		return
@@ -673,7 +686,7 @@ end
 
 local function Aura(record)
 	local aura = record.aura
-	if not aura or (record.sample and record.held) then
+	if not aura or (record.held and (record.sample or Slot(record) == 2)) then
 		return
 	end
 	local expires, length, rate
@@ -789,7 +802,11 @@ function H.Aura(record, held, now)
 	if not aura then
 		return
 	end
-	if record.sample ~= 2 or Opt("auraTime") ~= true or ns.PartStopped(KEY, L.AURA_PART) then
+	local slot = Slot(record)
+	if slot ~= 2 and not record.sample then
+		return
+	end
+	if slot ~= 2 or Opt("auraTime") ~= true or ns.PartStopped(KEY, L.AURA_PART) then
 		held.aura = nil
 		if aura.key ~= nil or aura.frame:IsShown() then
 			aura.key = nil
@@ -948,8 +965,9 @@ function R.Held(record)
 		if record.held then
 			record.held = nil
 			Border(record, false)
-			if record.sample then
-				H.Proc(record)
+			H.Proc(record)
+			if record.aura and not ns.PartStopped(KEY, L.AURA_PART) then
+				ns.EachPart(KEY, L.AURA_PART, Aura, record)
 			end
 		end
 		return false
@@ -979,9 +997,9 @@ function R.Held(record)
 	end
 	if record.sample then
 		record.count:SetText(record.sample == 3 and Opt("useCount") == true and "5" or "")
-		H.Aura(record, held, now)
-		H.Proc(record)
 	end
+	H.Aura(record, held, now)
+	H.Proc(record)
 	R.Look(record, cooling, false, nil)
 	Border(record, IsInterrupt(record.spell))
 	return true

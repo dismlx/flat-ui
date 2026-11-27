@@ -197,12 +197,32 @@ local function GameLookAll()
 	end
 end
 
+local lookSaid = { line = "Flat UI: action buttons take their new look when the fight ends.",
+	keys = { "backdrop", "crop", "border", "empty", "emptyAlpha", "hoverColour", "pressedColour", "checkedColour" } }
+
+function lookSaid.Check()
+	local parts = {}
+	for _, key in ipairs(lookSaid.keys) do
+		parts[#parts + 1] = tostring(ns.Get(KEY .. "." .. key))
+	end
+	local sig = table.concat(parts, ";")
+	if lookSaid.sig ~= nil and sig ~= lookSaid.sig and not lookSaid.told and InCombatLockdown() and type(ns.PanelShown) == "function"
+		and ns.PanelShown() == true then
+		lookSaid.told = true
+		print(lookSaid.line)
+	end
+	lookSaid.sig = sig
+end
+
 local gameLookFrame = CreateFrame("Frame")
 ns.Own[gameLookFrame] = true
 for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }) do
 	pcall(gameLookFrame.RegisterEvent, gameLookFrame, event)
 end
-gameLookFrame:SetScript("OnEvent", function()
+gameLookFrame:SetScript("OnEvent", function(_, event)
+	if event == "PLAYER_REGEN_ENABLED" then
+		lookSaid.told = nil
+	end
 	if OwnOn() and not ns.Enabled(KEY) then
 		ns.OutOfCombat(GameLookAll)
 	end
@@ -701,6 +721,7 @@ local function Watch()
 end
 
 local function Refresh()
+	lookSaid.Check()
 	ns.Each(KEY, StyleBar)
 	Plates()
 	local own = OwnOn()

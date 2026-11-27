@@ -2165,6 +2165,41 @@ function ns.CooldownRemove(spellID)
 	return false, ("%s is not picked."):format(Name(spellID))
 end
 
+function R.RowShown(id)
+	if not Known(id) then
+		return nil
+	end
+	local row = R.Call("Assigned", id)
+	return row and R.RowOn(row) and row or 1
+end
+
+function R.RowsOn()
+	for row = 2, CD.MAX_ROWS do
+		if R.RowOn(row) then
+			return true
+		end
+	end
+	return false
+end
+
+function ns.CooldownOrderLines()
+	local rows, places = {}, {}
+	for _, id in ipairs(List()) do
+		rows[#rows + 1] = { id, Name(id) }
+	end
+	Distinguish(rows)
+	for _, line in ipairs(rows) do
+		local row = R.RowShown(line[1])
+		if row == nil then
+			line[2] = line[2] .. " (not known)"
+		else
+			places[row] = (places[row] or 0) + 1
+			line[2] = ("%d. %s"):format(places[row], line[2]) .. (row > 1 and (" (row %d)"):format(row) or "")
+		end
+	end
+	return rows
+end
+
 function R.Move(spellID, step)
 	local list = List()
 	local at
@@ -2176,15 +2211,30 @@ function R.Move(spellID, step)
 	if not at then
 		return false, ("%s is not picked."):format(Whole(spellID) and Name(spellID) or tostring(spellID))
 	end
-	local to = at + step
-	if to < 1 then
-		return false, ("%s is first already."):format(Name(spellID))
-	elseif to > #list then
-		return false, ("%s is last already."):format(Name(spellID))
+	local name, mine = Name(spellID), R.RowShown(spellID)
+	if mine == nil then
+		return false, ("%s is not known yet, so it has no place on the row."):format(name)
 	end
-	list[at], list[to] = list[to], list[at]
+	local to = at + step
+	while list[to] ~= nil and R.RowShown(list[to]) ~= mine do
+		to = to + step
+	end
+	if list[to] == nil then
+		return false, (step < 0 and "%s is first on its row already." or "%s is last on its row already."):format(name)
+	end
+	table.remove(list, at)
+	table.insert(list, to, spellID)
 	QueueLayout()
-	return true, ("%s is now number %d of the row."):format(Name(spellID), to)
+	local place = 0
+	for index = 1, to do
+		if R.RowShown(list[index]) == mine then
+			place = place + 1
+		end
+	end
+	if R.RowsOn() then
+		return true, ("%s is now number %d of row %d."):format(name, place, mine)
+	end
+	return true, ("%s is now number %d of the row."):format(name, place)
 end
 
 function ns.CooldownMoveLeft(spellID)
