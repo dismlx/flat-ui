@@ -2750,12 +2750,12 @@ ns.PAGES = {
 			tip = "What share of your spell damage, spell healing or attack power a spell or ability adds: a cast, a tick or a target, and for weapon abilities their weapon damage and the share of attack power the weapon's speed gives. WoW: Forever's own values, from the game's spell data and tooltips and, where they do not say, from tests in the game (many by wowsims/forever), Blizzard's notes and a few rules of the wowsims/forever simulator. ~ marks an estimate." },
 		{ key = "spellStats", kind = "bool", default = true, label = "With your stats",
 			tip = "How much that share is with your stats now, and the threat your attack power adds. The game withholds your stats in fights: then the numbers are those from before the fight, and a line says so." },
-		-- SpellLines.lua: a total line under the power lines, and a dim line of rates under it (SpellModel.lua works them out, G.Expect gives the
-		-- expected cast with crits, misses and a spell's Spell Piercing).
+		-- SpellLines.lua: a total line under the power lines, and under it a dim line of each rate (SpellModel.lua works them out, G.Expect gives the
+		-- expected cast with crits, misses and a spell's Spell Piercing; 0.5.42: a label and a figure each, so none wraps).
 		{ key = "spellTotal", kind = "bool", default = true, label = "Total of a cast", needs = "spellPower",
-			tip = "What one cast does now with your stats, base and bonus together, as in Total 973 a cast (556 + 417). A spell over time says its total over its duration and a tick, a channel its whole channel, a heal its healing, and a weapon strike one hit with the weapon you wear." },
+			tip = "What one cast does now with your stats, the rank's own base and what your stats add together, as in Total 973 a cast (556 + 417), or Shield Slam Rank 4 with 101 block value, Total 857 a hit (655 + 202). A spell over time says its total over its duration and a tick, a channel its whole channel, a heal its healing, and a weapon strike one hit with the weapon you wear." },
 		{ key = "spellRates", kind = "bool", default = true, label = "Average and rates", needs = "spellTotal",
-			tip = "A dim line under the total: what a cast does on average with crits, misses and, for a spell, the damage your Spell Piercing adds, against the enemy Against names under Gear comparison, and that for a second of cast time (the global cooldown for an instant) and for a point of mana, with how many casts a full bar of mana gives. Not for rage or energy." },
+			tip = "Dim lines under the total, each with its figure on the right: Expected, what that total does on average with crits, misses and, for a spell, the damage your Spell Piercing adds, against the enemy Against names under Gear comparison, so it is less than the total but for what crits add; Per second, of cast time (of the global cooldown for an instant); and for a spell that costs mana, Per point of mana, with how many casts a full bar of mana gives." },
 		-- It needs no other row: the gear comparison counts it too, in item tooltips and the window (GearModel.lua), as Against and the rows after it
 		-- serve the window (design 2.5: the low rank factor while its row is on).
 		{ key = "spellLowRank", kind = "bool", default = true, label = "Less for low ranks (estimate)",
@@ -2765,7 +2765,7 @@ ns.PAGES = {
 			tip = "On a spell with more ranks: the level of the next rank, as Next rank: Rank 6 at level 32, or in green that you can learn it now. A rank no trainer teaches, from the class books of Ahn'Qiraj, says it comes from a book. Not at the top rank or once you know a higher one, nor on talents, pet spells and judgements." },
 		{ key = "spellThreat", kind = "choice", default = "special", label = "Threat lines",
 			choices = { { "special", "Where threat is special or changed" }, { "all", "On every spell" }, { "off", "Off" } },
-			tip = "Where threat is special or changed: abilities with threat of their own, and spells whose threat your stance, form, Righteous Fury, talents or gear change, with what changes it; not a damage dealer's Battle Stance or Cat Form, nor heals at the usual half a point a point healed. Stances, forms and Righteous Fury say what their own text does not. A spell whose threat on WoW: Forever is not known, such as Whirlwind, Execute, Power Word: Shield and the absorbs, gets no line." },
+			tip = "Where threat is special or changed: abilities with threat of their own, and spells whose threat your stance, form, Righteous Fury, talents or gear change; not a damage dealer's Battle Stance or Cat Form, nor heals at the usual half a point a point healed. With your stats the line gives the threat of one hit or cast, from the same total as Total of a cast, and under it how it is made and each multiplier, as Shield Slam in Defensive Stance with Defiance 3/3: ~2,401 a hit, (damage + ~255) x 2.16, Defensive Stance x1.8, Defiance 3/3 x1.2. A taunt, a flat threat and the rest say their rule. Stances, forms and Righteous Fury say what their own text does not. A spell whose threat on WoW: Forever is not known, such as Whirlwind, Execute, Power Word: Shield and the absorbs, gets no line." },
 		{ section = "Showing" },
 		{ key = "spellWhen", kind = "choice", default = "always", label = "Show spell lines",
 			choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } },
@@ -2776,7 +2776,7 @@ ns.PAGES = {
 		-- SpellLines.lua, GearLines.lua and GearAvoid.lua: how many dim notes a block of lines keeps (M.Fmt).
 		{ key = "tipDetail", kind = "choice", default = "compact", label = "Notes under the lines",
 			choices = { { "compact", "Compact" }, { "full", "Full" } },
-			tip = "For spell and item tooltips alike. Compact keeps at most one dim line of notes under each block, its notes joined; Full shows every note, such as what a multiplier comes from or why a figure is an estimate." },
+			tip = "For spell and item tooltips alike. Compact keeps at most one dim line of notes under each block, its notes joined; Full shows every note, such as what a multiplier comes from or why a figure is an estimate. The rates under a spell's total and how its threat is made are short dim lines that show in both." },
 	},
 	-- GearLines.lua, GearModel.lua, GearAvoid.lua, GearWindow.lua and GearSearch.lua (parts of Chat and tooltips): what an item changes for the spells
 	-- you chose, in item tooltips and the Gear comparison window, and the item finder beside it.
