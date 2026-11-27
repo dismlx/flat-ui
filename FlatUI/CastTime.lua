@@ -635,9 +635,14 @@ do
 	end
 end
 
+local WatchAgain, Watching
+
 local function Step()
 	pcall(LookAims, AimOn())
 	pcall(LookKicks, KickTimeOn())
+	if WatchAgain then
+		pcall(WatchAgain)
+	end
 	LookList(OWN, OwnOn())
 	LookList(MINE, MineOn())
 	ns.EachPlate(LookPlate, PlateRow())
@@ -661,7 +666,7 @@ local function Fades()
 end
 
 local function Wanted()
-	if AimOn() or KickTimeOn() or KT.live > 0 then
+	if AimOn() or KickTimeOn() or KT.live > 0 or (Watching and Watching()) then
 		return true
 	end
 	for _, aim in pairs(aims) do
@@ -992,7 +997,7 @@ do
 		{ unit = "target", row = "castbars.targetSound", bar = "TargetFrameSpellBar", label = "Sound when your target casts" },
 	}
 	for _, rec in ipairs(WATCH) do
-		rec.on, rec.played, rec.byUnit = false, 0, false
+		rec.on, rec.played, rec.byUnit, rec.serial, rec.again = false, 0, false, 0, 0
 	end
 	K.watch = WATCH
 
@@ -1068,8 +1073,10 @@ do
 		local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
 		if sound and type(ns.PlayKit) == "function" then
 			rec.at = now
+			rec.heard, rec.waitFor = rec.serial, nil
 			if ns.PlayKit(sound[1], "castbars") then
 				rec.played = rec.played + 1
+				return true
 			end
 		end
 	end
@@ -1081,9 +1088,51 @@ do
 		if not rec.byUnit and (ns.IsSecret(unit) or unit ~= rec.unit) then
 			return
 		end
+		rec.serial, rec.waitFor = rec.serial + 1, nil
 		pcall(C_Timer.After, 0, function()
 			pcall(WatchLook, rec)
 		end)
+	end
+
+	local function WatchCaster(rec)
+		local ok, guid = pcall(UnitGUID, rec.unit)
+		if ok and not ns.IsSecret(guid) and guid ~= rec.guid then
+			rec.guid = guid
+			rec.serial, rec.waitFor = rec.serial + 1, nil
+		end
+	end
+
+	function WatchAgain()
+		for _, rec in ipairs(WATCH) do
+			if rec.on and WatchOn(rec) then
+				local bar = PlayerBar(rec.bar)
+				if not (bar and (Flag(bar.casting) or Flag(bar.channeling))) then
+					rec.waitFor = nil
+				elseif type(ns.InterruptReady) == "function" then
+					WatchCaster(rec)
+					if rec.heard ~= rec.serial then
+						local ready = ns.InterruptReady(rec.unit)
+						if ready == false or ready == "far" then
+							rec.waitFor = rec.serial
+						elseif ready == true and rec.waitFor == rec.serial then
+							rec.waitFor = nil
+							if WatchLook(rec) then
+								rec.again = rec.again + 1
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	function Watching()
+		for _, rec in ipairs(WATCH) do
+			if rec.on then
+				return true
+			end
+		end
+		return false
 	end
 
 	local function WatchListen(rec)
@@ -1118,13 +1167,69 @@ do
 		rec.byUnit = on and byUnit
 	end
 
-	local LAND_ROW, LAND_LOOK, LAND_FOR, LAND_FRESH = "castbars.landSound", 0.05, 0.4, 0.3
+	local LAND_ROW, LAND_LOOK, LAND_FOR, LAND_FRESH = "castbars.landSound", 0.05, 0.4, 0.1
 	local LAND_BARS = { "TargetFrameSpellBar", "FocusFrameSpellBar" }
-	local L = { on = false, played = 0, at = nil, frame = nil, ticker = nil }
+	local LAND_UNITS, LAND_SELVES = { "target", "focus" }, { "player", "pet" }
+	local LAND_STOPS = { UNIT_SPELLCAST_INTERRUPTED = true, UNIT_SPELLCAST_CHANNEL_STOP = true }
+	local WORD_ROW, WORD_GAP, WORD_RGB = "combattext.kicks", 0.3, { 0.2, 0.85, 0.35 }
+	local L = { on = false, played = 0, at = nil, frame = nil, ticker = nil, otherAt = {}, icons = {}, shown = 0 }
 	K.land = L
 
-	local function LandOn()
+	local function LandSoundOn()
 		return ns.Enabled("castbars") and KITS[Get(LAND_ROW)] ~= nil
+	end
+
+	local function LandWordOn()
+		return Get(WORD_ROW) == true and ns.Enabled("combattext")
+	end
+
+	local function LandOn()
+		return LandSoundOn() or LandWordOn()
+	end
+
+	local function Within(at, span)
+		local now = GetTime()
+		return at ~= nil and now >= at and now - at < span
+	end
+
+	local function LandIcon(spell)
+		if ns.IsSecret(spell) or type(spell) ~= "number" or type(C_Spell) ~= "table" or type(C_Spell.GetSpellTexture) ~= "function" then
+			return nil
+		end
+		local icon = L.icons[spell]
+		if icon == nil then
+			local ok, got = pcall(C_Spell.GetSpellTexture, spell)
+			icon = ok and not ns.IsSecret(got) and type(got) == "number" and got or false
+			L.icons[spell] = icon
+		end
+		return icon or nil
+	end
+
+	local function LandWordShow()
+		local text = ns.ScrollText
+		if not (LandWordOn() and type(text) == "table" and type(text.On) == "function" and text.On("out")) or Within(L.wordAt, WORD_GAP) then
+			return
+		end
+		L.wordAt = GetTime()
+		local r, g, b = ns.Colour("castbars.interruptReady")
+		if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+			r, g, b = WORD_RGB[1], WORD_RGB[2], WORD_RGB[3]
+		end
+		local word = type(_G.INTERRUPTED) == "string" and _G.INTERRUPTED or "Interrupted"
+		local icon = LandIcon(Within(L.spellAt, LAND_FOR) and L.spell or nil)
+		if text.Show("out", "word", word, nil, false, r, g, b, nil, nil, false, icon) then
+			L.shown = L.shown + 1
+		end
+	end
+
+	local function LandWord()
+		if Within(L.spellAt, LAND_FOR) or type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then
+			LandWordShow()
+		elseif not pcall(C_Timer.After, 0, function()
+			pcall(LandWordShow)
+		end) then
+			LandWordShow()
+		end
 	end
 
 	local function Fresh(bar)
@@ -1141,8 +1246,11 @@ do
 	end
 
 	local function LandPlay()
+		if LandWordOn() then
+			pcall(LandWord)
+		end
 		local now = GetTime()
-		if L.at and now >= L.at and now - L.at < KICK_GAP then
+		if not LandSoundOn() or (L.at and now >= L.at and now - L.at < KICK_GAP) then
 			return
 		end
 		local kit = KITS[Get(LAND_ROW)]
@@ -1156,12 +1264,12 @@ do
 	end
 
 	local function LandLook(snap)
-		if not L.on or type(ns.CastBarInterrupted) ~= "function" then
+		if not L.on or type(ns.CastBarInterrupted) ~= "function" or Within(L.sureAt, LAND_FOR) then
 			return true
 		end
 		for index, name in ipairs(LAND_BARS) do
 			local bar = PlayerBar(name)
-			if bar and ns.CastBarInterrupted(bar) and (snap[index] or Fresh(bar)) then
+			if bar and not Within(L.otherAt[LAND_UNITS[index]], LAND_FOR) and ns.CastBarInterrupted(bar) and (snap[index] or Fresh(bar)) then
 				LandPlay()
 				return true
 			end
@@ -1178,7 +1286,14 @@ do
 	end
 
 	local function LandHeard(spell)
-		if not (type(ns.InterruptSpell) == "function" and ns.InterruptSpell(spell)) then
+		if ns.IsSecret(spell) or type(spell) ~= "number" then
+			return
+		end
+		local kick = type(ns.InterruptSpell) == "function" and ns.InterruptSpell(spell) == true
+		if kick or not (L.kick and Within(L.spellAt, LAND_FOR)) then
+			L.spell, L.spellAt, L.kick = spell, GetTime(), kick
+		end
+		if not kick or Within(L.sureAt, LAND_FOR) then
 			return
 		end
 		local snap = {}
@@ -1201,14 +1316,47 @@ do
 		L.ticker = ok and ticker or nil
 	end
 
-	local function LandEvent(_, _, unit, _, spell)
-		if L.on and not ns.IsSecret(unit) and (unit == "player" or unit == "pet") then
+	local function Mine(by)
+		for _, token in ipairs(LAND_SELVES) do
+			local ok, guid = pcall(UnitGUID, token)
+			if ok and not ns.IsSecret(guid) and type(guid) == "string" and guid == by then
+				return true
+			end
+		end
+		return false
+	end
+
+	local function LandStopped(unit, by)
+		if ns.IsSecret(by) or type(by) ~= "string" or by == "" then
+			return
+		end
+		local ok, foe = pcall(UnitCanAttack, "player", unit)
+		if not (ok and not ns.IsSecret(foe) and foe == true) then
+			return
+		end
+		if Mine(by) then
+			L.sureAt = GetTime()
+			LandStop()
+			LandPlay()
+		else
+			L.otherAt[unit] = GetTime()
+		end
+	end
+
+	local function LandEvent(_, event, unit, _, spell, by)
+		if not L.on or ns.IsSecret(unit) or type(unit) ~= "string" then
+			return
+		end
+		if LAND_STOPS[event] then
+			pcall(LandStopped, unit, by)
+		elseif unit == "player" or unit == "pet" then
 			pcall(LandHeard, spell)
 		end
 	end
 
 	local function LandListen()
 		local on = LandOn()
+		L.sound, L.word = LandSoundOn(), LandWordOn()
 		if on == L.on then
 			return
 		end
@@ -1230,6 +1378,9 @@ do
 			pcall(frame.UnregisterEvent, frame, "UNIT_SPELLCAST_SUCCEEDED")
 		elseif not (frame.RegisterUnitEvent and pcall(frame.RegisterUnitEvent, frame, "UNIT_SPELLCAST_SUCCEEDED", "player", "pet")) then
 			pcall(frame.RegisterEvent, frame, "UNIT_SPELLCAST_SUCCEEDED")
+		end
+		for event in pairs(LAND_STOPS) do
+			pcall(on and frame.RegisterEvent or frame.UnregisterEvent, frame, event)
 		end
 	end
 
@@ -1273,11 +1424,37 @@ do
 		end
 	end
 
+	local function Sample(row, id)
+		local kit = ns.Enabled("castbars") and KITS[Get(row)]
+		local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
+		local mode = ns.TestMode
+		if sound and type(ns.PlayKit) == "function" and type(mode) == "table" and type(mode.Sound) == "function" and mode.Sound(id) then
+			ns.PlayKit(sound[1], "castbars")
+		end
+	end
+
+	function ns.CastWatchSample(unit)
+		for _, rec in ipairs(WATCH) do
+			if rec.unit == unit and WatchOn(rec) then
+				Sample(rec.row, "cast" .. unit)
+			end
+		end
+	end
+
+	function ns.CastLandSample()
+		Sample(LAND_ROW, "castland")
+	end
+
 	function ns.CastKickedSoundPicked(path)
 		pcall(KickListen)
+		Sync()
 		if type(ns.CombatCueSoundPicked) == "function" then
 			ns.CombatCueSoundPicked(path)
 		end
+	end
+
+	function ns.CastLandSync()
+		pcall(KickListen)
 	end
 end
 
@@ -1390,11 +1567,15 @@ function ns.StatusLines()
 	end
 	for _, rec in ipairs(K.watch or {}) do
 		if rec.on then
-			lines[#lines + 1] = ("%s: %d played."):format(rec.label, rec.played)
+			lines[#lines + 1] = ("%s: %d played, %d of them as your interrupt came back during the cast."):format(rec.label, rec.played, rec.again)
 		end
 	end
-	if K.land and K.land.on then
-		lines[#lines + 1] = ("Sound when your interrupt lands: %d played."):format(K.land.played)
+	local land = K.land
+	if land and land.on and land.sound then
+		lines[#lines + 1] = ("Sound when your interrupt lands: %d played."):format(land.played)
+	end
+	if land and land.on and land.word then
+		lines[#lines + 1] = ("Your interrupts in the Outgoing area: %d shown."):format(land.shown)
 	end
 	return lines
 end

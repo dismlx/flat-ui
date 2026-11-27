@@ -291,6 +291,7 @@ local SWING_TIMERS = {
 
 local SWING_GRACE, SWING_FADE = 0.4, 0.25
 local idleSince, swingFaded = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
+local combatLeft = setmetatable({}, { __mode = "k" })
 
 local function SwingIdle(timer)
 	local mode = ns.Enabled("swing") and ns.Get("swing.idle")
@@ -303,7 +304,18 @@ local function SwingIdle(timer)
 	end
 	if mode == "combat" then
 		local ok, fighting = pcall(UnitAffectingCombat, "player")
-		return ok and fighting == false
+		if not ok or ns.IsSecret(fighting) then
+			return false
+		elseif fighting ~= false then
+			combatLeft[timer] = true
+			return false
+		end
+		local left, now = combatLeft[timer], GetTime()
+		if left == true then
+			left = now
+			combatLeft[timer] = left
+		end
+		return type(left) ~= "number" or left > now or now - left >= SWING_FADE
 	end
 	if ns.IsSecret(ending) then
 		return false
@@ -488,6 +500,18 @@ local function ApplySwingReverse(timer)
 	end
 end
 
+local function SwingWholeAlpha(outline, alpha)
+	if type(outline) ~= "table" then
+		return
+	end
+	if outline.holder then
+		pcall(outline.holder.SetAlpha, outline.holder, alpha)
+	end
+	if outline.backdrop then
+		pcall(outline.backdrop.SetAlpha, outline.backdrop, alpha)
+	end
+end
+
 local function SwingFadeStep(timer)
 	local bar = timer.StatusBar
 	if bar == nil or ns.Forbidden(bar) then
@@ -495,14 +519,22 @@ local function SwingFadeStep(timer)
 	end
 	local ending, editing, since = timer.swingEndTime, timer.isInEditMode, idleSince[timer]
 	local swinging = ns.IsSecret(ending) or ending ~= nil
+	local mode = ns.Enabled("swing") and ns.Get("swing.idle")
+	local quit = mode == "combat" and combatLeft[timer] or nil
 	local left
-	if not swinging and since ~= nil and not (ns.IsSecret(editing) or editing == true) and ns.Enabled("swing") and ns.Get("swing.idle") == "hide" then
-		local t = GetTime() - since - SWING_GRACE
-		if t >= 0 and t < SWING_FADE then
+	if not (ns.IsSecret(editing) or editing == true) then
+		local t
+		if mode == "hide" and not swinging and since ~= nil then
+			t = GetTime() - since - SWING_GRACE
+		elseif type(quit) == "number" then
+			t = GetTime() - quit
+		end
+		if t and t >= 0 and t < SWING_FADE then
 			left = 1 - t / SWING_FADE
 		end
 	end
-	local base = swingFaded[timer]
+	local base, own = swingFaded[timer], seen[timer]
+	local whole = own and own.whole
 	if left then
 		if base == nil then
 			local ok, alpha = pcall(bar.GetAlpha, bar)
@@ -510,11 +542,13 @@ local function SwingFadeStep(timer)
 			swingFaded[timer] = base
 		end
 		pcall(bar.SetAlpha, bar, base * left)
+		SwingWholeAlpha(whole, left)
 	elseif base ~= nil then
 		swingFaded[timer] = nil
-		if not swinging then
+		if not swinging or mode == "combat" then
 			pcall(bar.SetAlpha, bar, base)
 		end
+		SwingWholeAlpha(whole, 1)
 	end
 end
 
@@ -876,6 +910,18 @@ end
 local function SwingInFlight()
 	if not ns.Enabled("swing") then
 		return false
+	end
+	if ns.Get("swing.idle") == "combat" then
+		local fading, at = false, GetTime()
+		EachTimer(function(timer)
+			local quit = combatLeft[timer]
+			if type(quit) == "number" and at >= quit and at - quit < SWING_FADE then
+				fading = true
+			end
+		end)
+		if fading then
+			return true
+		end
 	end
 	if ns.Get("swing.idle") ~= "hide" and not ns.Get("swing.textOwn") and math.abs(ns.Get("swing.rangeAlpha") / 100 - GAME_RANGE_ALPHA) <= 0.0001 then
 		return false
@@ -1888,9 +1934,38 @@ do
 	end
 
 	local function HideStrip(strip)
+		if strip then
+			strip.answer = nil
+		end
 		if strip and strip.shown then
 			pcall(strip.tex.Hide, strip.tex)
 			strip.shown = false
+		end
+	end
+
+	local function BlinkStrip(strip)
+		local group = strip.blink
+		if group == nil then
+			local ok, made = pcall(function()
+				local blink = strip.tex:CreateAnimationGroup()
+				local down = blink:CreateAnimation("Alpha")
+				down:SetFromAlpha(1)
+				down:SetToAlpha(0.3)
+				down:SetDuration(0.12)
+				down:SetOrder(1)
+				local up = blink:CreateAnimation("Alpha")
+				up:SetFromAlpha(0.3)
+				up:SetToAlpha(1)
+				up:SetDuration(0.13)
+				up:SetOrder(2)
+				return blink
+			end)
+			group = ok and not ns.IsSecret(made) and type(made) == "table" and made or false
+			strip.blink = group
+		end
+		if group then
+			pcall(group.Stop, group)
+			pcall(group.Play, group)
 		end
 	end
 
@@ -1975,6 +2050,11 @@ do
 		if not strip.shown then
 			tex:Show()
 			strip.shown = true
+		end
+		local was = strip.answer
+		strip.answer = answer
+		if answer == true and (was == false or was == "far") then
+			BlinkStrip(strip)
 		end
 	end
 
