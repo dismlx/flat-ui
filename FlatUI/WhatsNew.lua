@@ -19,6 +19,9 @@ local BOLD_ON, BOLD_OFF = "\001", "\002"
 local FULL = "The full changelog is on CurseForge."
 local EMPTY = "No notes for this version here. The full changelog is on CurseForge."
 local UPDATED = "Flat UI updated to %s. /flatui new shows what changed."
+local FOOT = "Open it again with /flatui new."
+local STEP_W, FILTER_W = 80, 200
+local MORE = "^And %d+ more changes? in the full changelog"
 
 local function IsText(value)
 	return not ns.IsSecret(value) and type(value) == "string"
@@ -127,14 +130,166 @@ local function Head(index)
 	return head
 end
 
+local function Plain(text)
+	return (text:gsub(BOLD_ON, ""):gsub(BOLD_OFF, ""):lower())
+end
+
+local function Places(page, pages)
+	local list = {}
+	local function Add(value)
+		if IsText(value) and value ~= "" then
+			list[#list + 1] = value:lower()
+		end
+	end
+	local parent = pages[page.parent or ""] or pages[page.owner or ""]
+	Add(page.label)
+	Add(page.moduleLabel)
+	if parent and parent ~= page then
+		Add(parent.label)
+		Add(parent.moduleLabel)
+	end
+	return list
+end
+
+local function Rows()
+	if W.rows then
+		return W.rows
+	end
+	local rows, pages = {}, {}
+	local all = type(ns.PAGES) == "table" and ns.PAGES or {}
+	for _, page in ipairs(all) do
+		if type(page) == "table" and IsText(page.key) then
+			pages[page.key] = page
+		end
+	end
+	for _, page in ipairs(all) do
+		if type(page) == "table" then
+			local places, section = Places(page, pages), nil
+			for _, item in ipairs(page) do
+				if type(item) == "table" and IsText(item.section) then
+					section = item.section:lower()
+				elseif type(item) == "table" and item.key and IsText(item.path) and IsText(item.label) and ns.RowShown(item.path) then
+					local name = item.label:lower()
+					rows[name] = rows[name] or {}
+					table.insert(rows[name], { path = item.path, label = item.label, section = section, places = places })
+				end
+			end
+		end
+	end
+	W.rows = rows
+	return rows
+end
+
+local function Says(text, word)
+	if not word or #word < 3 then
+		return false
+	end
+	local at = 1
+	while true do
+		local from, to = text:find(word, at, true)
+		if not from then
+			return false
+		end
+		local before, after = text:sub(from - 1, from - 1), text:sub(to + 1, to + 1)
+		if not before:find("%w") and not after:find("%w") then
+			return true
+		end
+		at = to + 1
+	end
+end
+
+local function Score(row, text)
+	local score = Says(text, row.section) and 4 or 0
+	for index, place in ipairs(row.places) do
+		if Says(text, place) then
+			score = score + (index == 1 and 2 or 1)
+		end
+	end
+	return score
+end
+
+local function Target(raw)
+	W.targets = W.targets or {}
+	local known = W.targets[raw]
+	if known ~= nil then
+		return known or nil
+	end
+	local rows, text, found = Rows(), Plain(raw), false
+	for name in raw:gmatch(BOLD_ON .. "([^" .. BOLD_OFF .. "]+)" .. BOLD_OFF) do
+		local list = rows[name:lower()]
+		if list and #list == 1 then
+			found = list[1]
+		elseif list then
+			local best, top, tied = nil, 0, false
+			for _, row in ipairs(list) do
+				local score = Score(row, text)
+				if score > top then
+					best, top, tied = row, score, false
+				elseif score == top and score > 0 then
+					tied = true
+				end
+			end
+			if best and not tied then
+				found = best
+			end
+		end
+		if found then
+			break
+		end
+	end
+	W.targets[raw] = found
+	return found or nil
+end
+
+local function Foot(text)
+	if W.foot then
+		W.foot:SetText(text or FOOT)
+	end
+end
+
+local function Open(line)
+	local row = line.row
+	if not row or type(ns.OpenPanelRow) ~= "function" then
+		return
+	end
+	local busy = type(ns.PanelInMode) == "function" and ns.PanelInMode() and type(ns.PanelShown) == "function" and ns.PanelShown()
+	if not busy then
+		W.frame:Hide()
+	end
+	ns.OpenPanelRow(row.path)
+end
+
 local function Line(index)
 	local line = W.lines[index]
 	if not line then
 		local child = W.scroller.child
 		line = { text = kit.Label(child, "GameFontHighlight", "LEFT", TEXT_W, true), dot = kit.Fill(child, "ARTWORK") }
 		line.dot:SetSize(4, 4)
+		line.hit = kit.Frame(child)
+		line.lit = kit.Fill(child, "BACKGROUND")
+		line.lit:SetAllPoints(line.hit)
+		line.lit:Hide()
 		kit.Painted(function()
 			kit.Solid(line.dot, "accent")
+			kit.Solid(line.lit, "hover")
+		end)
+		kit.Clickable(line.hit, function()
+			Open(line)
+		end)
+		line.hit:EnableMouse(false)
+		line.hit:SetScript("OnEnter", function()
+			if line.row then
+				W.hovered = line
+				line.lit:Show()
+				Foot(("Click: open %s in the options."):format(line.row.label))
+			end
+		end)
+		line.hit:SetScript("OnLeave", function()
+			if W.hovered == line then
+				W.hovered = nil
+			end
+			line.lit:Hide()
+			Foot()
 		end)
 		W.lines[index] = line
 	end
@@ -159,34 +314,80 @@ local function Texts(section)
 	return list
 end
 
-function W.Fill(sections)
-	local child = W.scroller.child
-	local y, heads, used = 0, 0, 0
-	for _, section in ipairs(sections) do
-		heads = heads + 1
-		local head = Head(heads)
-		head.text:ClearAllPoints()
-		head.text:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -y)
-		head.text:SetText(section.version)
-		head.text:Show()
-		head.rule:ClearAllPoints()
-		head.rule:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -(y + HEAD_H - 8))
-		head.rule:SetWidth(LIST_W - BAR)
-		head.rule:Show()
-		y = y + HEAD_H
-		for _, text in ipairs(Texts(section)) do
-			used = used + 1
-			local line = Line(used)
-			line.raw = text
-			line.text:ClearAllPoints()
-			line.text:SetPoint("TOPLEFT", child, "TOPLEFT", INDENT, -y)
-			line.text:SetText(Lit(text))
-			line.text:Show()
-			line.dot:ClearAllPoints()
-			line.dot:SetPoint("TOPLEFT", child, "TOPLEFT", 2, -(y + 5))
-			line.dot:Show()
-			y = y + Height(line.text, 14) + LINE_GAP
+local function Matches(text, words)
+	if #words == 0 then
+		return true
+	end
+	local plain = Plain(text)
+	for _, word in ipairs(words) do
+		if not plain:find(word, 1, true) then
+			return false
 		end
+	end
+	return true
+end
+
+function W.Fill(sections, words)
+	local child = W.scroller.child
+	local y, heads, used, matched, total = 0, 0, 0, 0, 0
+	words = words or {}
+	if W.hovered then
+		W.hovered.lit:Hide()
+		W.hovered = nil
+		Foot()
+	end
+	local function Put(text, row)
+		used = used + 1
+		local line = Line(used)
+		line.raw, line.row = text, row
+		line.text:ClearAllPoints()
+		line.text:SetPoint("TOPLEFT", child, "TOPLEFT", INDENT, -y)
+		line.text:SetText(Lit(text))
+		line.text:Show()
+		line.dot:ClearAllPoints()
+		line.dot:SetPoint("TOPLEFT", child, "TOPLEFT", 2, -(y + 5))
+		line.dot:Show()
+		local tall = Height(line.text, 14)
+		line.hit:ClearAllPoints()
+		line.hit:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -(y - 3))
+		line.hit:SetSize(INDENT + TEXT_W, tall + 6)
+		line.hit:EnableMouse(row ~= nil)
+		line.hit:Show()
+		line.lit:Hide()
+		y = y + tall + LINE_GAP
+	end
+	for _, section in ipairs(sections) do
+		local list = {}
+		for _, text in ipairs(Texts(section)) do
+			local counted = text ~= EMPTY and not text:find(MORE)
+			if counted then
+				total = total + 1
+			end
+			if #words == 0 or (counted and Matches(text, words)) then
+				list[#list + 1] = text
+				matched = matched + (counted and 1 or 0)
+			end
+		end
+		if #list > 0 then
+			heads = heads + 1
+			local head = Head(heads)
+			head.text:ClearAllPoints()
+			head.text:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -y)
+			head.text:SetText(section.version)
+			head.text:Show()
+			head.rule:ClearAllPoints()
+			head.rule:SetPoint("TOPLEFT", child, "TOPLEFT", 0, -(y + HEAD_H - 8))
+			head.rule:SetWidth(LIST_W - BAR)
+			head.rule:Show()
+			y = y + HEAD_H
+			for _, text in ipairs(list) do
+				Put(text, text ~= EMPTY and Target(text) or nil)
+			end
+			y = y + PART_GAP
+		end
+	end
+	if used == 0 then
+		Put(('No change mentions "%s".'):format(table.concat(words, " ")), nil)
 		y = y + PART_GAP
 	end
 	for index = heads + 1, #W.heads do
@@ -194,11 +395,15 @@ function W.Fill(sections)
 		W.heads[index].rule:Hide()
 	end
 	for index = used + 1, #W.lines do
-		W.lines[index].raw = nil
-		W.lines[index].text:Hide()
-		W.lines[index].dot:Hide()
+		local line = W.lines[index]
+		line.raw, line.row = nil, nil
+		line.text:Hide()
+		line.dot:Hide()
+		line.hit:EnableMouse(false)
+		line.hit:Hide()
+		line.lit:Hide()
 	end
-	return math.max(0, y - PART_GAP - LINE_GAP)
+	return math.max(0, y - PART_GAP - LINE_GAP), matched, total
 end
 
 function W.Relit()
@@ -309,8 +514,41 @@ function W.Build()
 	end)
 	W.title = kit.Label(frame, "GameFontNormalLarge", "LEFT", INNER - MARK - 12)
 	W.title:SetPoint("LEFT", W.mark, "RIGHT", 12, 0)
-	W.line = kit.Dim(kit.Label(frame, "GameFontHighlight", "LEFT", INNER, true))
+	W.newer, W.newerText = kit.Button(frame, "", STEP_W, function()
+		W.Step(W.newerVersion)
+	end)
+	W.older, W.olderText = kit.Button(frame, "", STEP_W, function()
+		W.Step(W.olderVersion)
+	end)
+	for _, button in ipairs({ W.newer, W.older }) do
+		button:SetFrameLevel(grip:GetFrameLevel() + 2)
+		button:HookScript("OnEnter", function(self)
+			local version = self == W.newer and W.newerVersion or W.olderVersion
+			if version then
+				Foot(("Shows what changed in %s."):format(version))
+			end
+		end)
+		button:HookScript("OnLeave", function()
+			Foot()
+		end)
+		button:Hide()
+	end
+	W.newer:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(PAD + (MARK - kit.BUTTON) / 2))
+	W.line = kit.Dim(kit.Label(frame, "GameFontHighlight", "LEFT", INNER - FILTER_W - 10, true))
 	W.line:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(PAD + MARK + 10))
+	W.filter = kit.Field(frame, FILTER_W, 40, nil, "Filter")
+	W.filter:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(PAD + MARK + 6))
+	W.filter:SetFrameLevel(grip:GetFrameLevel() + 2)
+	W.filter:SetScript("OnEnterPressed", function(self)
+		self:ClearFocus()
+	end)
+	W.filter:HookScript("OnTextChanged", function(self)
+		local typed = self:GetText()
+		if typed ~= W.typed and W.state then
+			W.state.offset = 0
+			W.Update()
+		end
+	end)
 	W.card = kit.Frame(frame)
 	W.card:SetSize(INNER, LIST_MAX + 2 * CARD_PAD)
 	local edge = ns.Outline(W.card, W.card, true)
@@ -325,9 +563,10 @@ function W.Build()
 	W.close:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, PAD)
 	W.options = kit.Button(frame, "Open Flat UI's options", OPTIONS_W, W.Options, true)
 	W.options:SetPoint("RIGHT", W.close, "LEFT", -GAP, 0)
-	W.foot = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", INNER - OPTIONS_W - CLOSE_W - 2 * GAP))
+	W.foot = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", INNER - OPTIONS_W - CLOSE_W - 2 * GAP, true))
 	W.foot:SetPoint("LEFT", frame, "BOTTOMLEFT", PAD, PAD + kit.BUTTON / 2)
-	W.foot:SetText("Open it again with /flatui new.")
+	pcall(W.foot.SetMaxLines, W.foot, 2)
+	W.foot:SetText(FOOT)
 	frame:SetScript("OnShow", function(self)
 		local faded = 0
 		self:SetAlpha(0)
@@ -347,6 +586,7 @@ function W.Build()
 	frame:SetScript("OnHide", function(self)
 		self:SetScript("OnUpdate", nil)
 		self:SetAlpha(1)
+		W.filter:ClearFocus()
 		if not W.fighting then
 			W.fought = nil
 			Sound("IG_MAINMENU_CLOSE")
@@ -359,18 +599,91 @@ function W.Build()
 	return frame
 end
 
+local function Stepping(section, step)
+	local data = W.Data()
+	local at
+	for index, each in ipairs(data) do
+		if not at and (each == section or Same(each.version, section.version)) then
+			at = index
+		end
+	end
+	local index = at and at + step
+	while index and data[index] do
+		if #Notes(data[index]) > 0 then
+			return data[index]
+		end
+		index = index + step
+	end
+	return nil
+end
+
+local function Steps(state)
+	local sections = state.sections or {}
+	local older = sections[#sections] and Stepping(sections[#sections], 1)
+	local newer = #sections == 1 and Stepping(sections[1], -1) or nil
+	W.olderVersion = older and older.version or nil
+	W.newerVersion = newer and newer.version or nil
+	W.olderText:SetText(older and ("< " .. older.version) or "")
+	W.newerText:SetText(newer and (newer.version .. " >") or "")
+	W.older:SetShown(older ~= nil)
+	W.newer:SetShown(newer ~= nil)
+	W.older:ClearAllPoints()
+	if newer then
+		W.older:SetPoint("RIGHT", W.newer, "LEFT", -GAP, 0)
+	else
+		W.older:SetPoint("TOPRIGHT", W.frame, "TOPRIGHT", -PAD, -(PAD + (MARK - kit.BUTTON) / 2))
+	end
+	local room = (older and STEP_W + GAP or 0) + (newer and STEP_W + GAP or 0)
+	W.title:SetWidth(INNER - MARK - 12 - room)
+end
+
+local function Words(typed)
+	local words = {}
+	if IsText(typed) then
+		for word in typed:gsub("|", ""):lower():gmatch("%S+") do
+			words[#words + 1] = word
+		end
+	end
+	return words
+end
+
+function W.Step(version)
+	if not version then
+		return
+	end
+	W.stepping = true
+	local ok, err = pcall(ns.OpenWhatsNew, version)
+	W.stepping = nil
+	if not ok then
+		geterrorhandler()(err)
+	end
+end
+
 function W.Update()
 	local state, frame = W.state, W.frame
 	if not (state and frame) then
 		return
 	end
 	W.title:SetText(("What's new in Flat UI %s"):format(state.version))
-	W.line:SetText(state.line or "")
+	Steps(state)
+	W.typed = W.filter:GetText()
+	local words = Words(W.typed)
+	local tall, matched, total = W.Fill(state.sections, words)
+	if #words > 0 then
+		local typed = table.concat(words, " ")
+		W.line:SetText(('%d of %d %s %s "%s".'):format(matched, total, total == 1 and "change" or "changes", matched == 1 and "mentions" or "mention", typed))
+	else
+		W.line:SetText(state.line or "")
+	end
 	local top = math.max(TOP, PAD + MARK + 10 + Height(W.line, 14) + 10)
+	local list = math.max(LIST_MIN, math.min(LIST_MAX, tall))
+	if #words == 0 then
+		W.kept = { top = top, list = list }
+	elseif W.kept then
+		top, list = math.max(top, W.kept.top), math.max(list, W.kept.list)
+	end
 	W.card:ClearAllPoints()
 	W.card:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -top)
-	local tall = W.Fill(state.sections)
-	local list = math.max(LIST_MIN, math.min(LIST_MAX, tall))
 	W.scroller.Resize(LIST_W, list)
 	W.scroller.SetContent(tall)
 	W.scroller.Scroll(state.offset or 0)
@@ -381,7 +694,11 @@ end
 
 function W.Show(state)
 	local frame = W.frame or W.Build()
+	local fresh = state ~= W.state and not W.reopening and not W.stepping
 	W.state = state
+	if fresh and W.filter:GetText() ~= "" then
+		W.filter:SetText("")
+	end
 	if not frame:IsShown() then
 		if not W.reopening then
 			frame:ClearAllPoints()
@@ -395,7 +712,7 @@ end
 
 local function Later(fn)
 	if InCombatLockdown() then
-		print("Flat UI: What's new opens after the fight.")
+		print("Flat UI: the What's new window opens after the fight.")
 	end
 	ns.OutOfCombat(fn)
 	return true
@@ -419,20 +736,29 @@ function ns.OpenWhatsNew(version)
 		end
 	else
 		local now = Version()
-		section = (now and W.Find(now)) or W.Data()[1]
+		for _, each in ipairs(W.Data()) do
+			if not section and #Notes(each) > 0 and not (now and Newer(each.version, now)) then
+				section = each
+			end
+		end
+		section = section or W.Data()[1]
 	end
 	if not section then
 		print("Flat UI: no notes of what changed here. " .. FULL)
 		return false
 	end
-	local older
-	for _, other in ipairs(W.Data()) do
-		if not older and Newer(section.version, other.version) then
-			older = other.version
+	local first, last
+	for _, each in ipairs(W.Data()) do
+		if #Notes(each) > 0 then
+			first = first or each.version
+			last = each.version
 		end
 	end
-	local state = { sections = { section }, version = section.version,
-		line = older and ("/flatui new %s shows an older version."):format(older) or FULL }
+	local line = FULL
+	if first and last and first ~= last then
+		line = ("The buttons at the top right step through the versions here, %s to %s. %s"):format(last, first, FULL)
+	end
+	local state = { sections = { section }, version = section.version, line = line }
 	return Later(function()
 		W.Show(state)
 	end)

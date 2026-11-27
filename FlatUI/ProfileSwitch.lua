@@ -4,7 +4,7 @@ local Switch = {}
 ns.ProfileSwitch = Switch
 
 local NONE = "No change"
-local last, pending, wanted
+local last, pending, wanted, Shown
 Switch.KINDS = {
 	{ key = "dungeon", label = "In a dungeon" },
 	{ key = "raid", label = "In a raid" },
@@ -13,6 +13,7 @@ Switch.KINDS = {
 }
 
 local KIND_OF = { party = "dungeon", raid = "raid", pvp = "pvp", arena = "pvp" }
+local WORDS = { dungeon = "dungeons", raid = "raids", pvp = "battlegrounds and arenas", other = "everywhere else" }
 
 function Switch.Kind()
 	local ok, inside, instanceType = pcall(IsInInstance)
@@ -144,7 +145,23 @@ local function Run()
 		return
 	end
 	if ns.UseProfile(name) then
-		print(("Flat UI: Switched to %s."):format(name))
+		local why = WORDS[last]
+		local line = why and ("switched to %s, the profile for %s (Profiles > Switch automatically)."):format(name, why) or ("switched to %s."):format(name)
+		print("Flat UI: " .. line)
+		Shown(line:sub(1, 1):upper() .. line:sub(2))
+	end
+end
+
+local function Later(fn)
+	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+		C_Timer.After(0, function()
+			local ok, err = pcall(fn)
+			if not ok then
+				geterrorhandler()(err)
+			end
+		end)
+	else
+		fn()
 	end
 end
 
@@ -155,8 +172,16 @@ function Switch.Entered(initialLogin, reloadingUi)
 		return
 	end
 	local kind = Switch.Kind()
-	if initialLogin or reloadingUi then
+	if reloadingUi then
 		last = kind
+		return
+	end
+	if initialLogin then
+		last = kind
+		local name = Switch.Get(kind)
+		if name and name ~= ns.Profile() then
+			Later(Run)
+		end
 		return
 	end
 	if kind ~= last then
@@ -187,7 +212,7 @@ function Switch.Wanted()
 	return nil
 end
 
-local function Shown(message)
+function Shown(message)
 	if type(ns.RefreshPanel) == "function" then
 		pcall(ns.RefreshPanel)
 	end
@@ -222,16 +247,7 @@ function Switch.CombatEnded()
 	if not (wanted or pending) then
 		return
 	end
-	if C_Timer and C_Timer.After then
-		C_Timer.After(0, function()
-			local ok, err = pcall(AfterFight)
-			if not ok then
-				geterrorhandler()(err)
-			end
-		end)
-	else
-		AfterFight()
-	end
+	Later(AfterFight)
 end
 
 local events = CreateFrame("Frame")

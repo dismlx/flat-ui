@@ -11,7 +11,9 @@ SOURCE = os.path.join(ROOT, 'CHANGELOG.md')
 OUT = os.path.join(ROOT, 'FlatUI', 'WhatsNewData.lua')
 USAGE = 'Usage: python3 tools/dev/make_whatsnew.py [--check]'
 SECTIONS = 6
+WHOLE = 3
 MAX_BULLETS = 40
+TRIMS = (40, 20, 10)
 MAX_BYTES = 200000
 HEADING = re.compile(r'^##\s+(\d+(?:\.\d+)+)\s*$')
 BULLET = re.compile(r'^-\s+(.*)$')
@@ -85,7 +87,7 @@ def read_sections(path):
     return sections
 
 
-def section_lines(section):
+def section_lines(section, limit=None):
     lines = []
     for bullet in section['bullets']:
         text = game_text(bullet['text'])
@@ -97,9 +99,9 @@ def section_lines(section):
             text = '\n'.join([text] + ['- ' + sub for sub in subs])
         if text:
             lines.append(text)
-    if len(lines) > MAX_BULLETS:
-        left = len(lines) - MAX_BULLETS
-        lines = lines[:MAX_BULLETS]
+    if limit is not None and len(lines) > limit:
+        left = len(lines) - limit
+        lines = lines[:limit]
         lines.append('And %d more %s in the full changelog on CurseForge.' % (left, 'change' if left == 1 else 'changes'))
     return lines
 
@@ -125,12 +127,24 @@ def lua_string(text):
     return ''.join(out)
 
 
-def lua_text(sections):
-    out = ['local _, ns = ...\n', '\n', 'ns.WhatsNewData = {\n']
+def first_limits(sections):
+    limits, whole = [], 0
     for section in sections:
+        if whole < WHOLE:
+            limits.append(None)
+            if section_lines(section):
+                whole += 1
+        else:
+            limits.append(MAX_BULLETS)
+    return limits
+
+
+def lua_text(sections, limits):
+    out = ['local _, ns = ...\n', '\n', 'ns.WhatsNewData = {\n']
+    for section, limit in zip(sections, limits):
         out.append('\t{\n')
         out.append('\t\tversion = %s,\n' % lua_string(section['version']))
-        lines = section_lines(section)
+        lines = section_lines(section, limit)
         if lines:
             out.append('\t\tlines = {\n')
             for line in lines:
@@ -141,6 +155,25 @@ def lua_text(sections):
         out.append('\t},\n')
     out.append('}\n')
     return strip_lua.strip(''.join(out))
+
+
+def size_of(text):
+    return len(text.encode('utf-8'))
+
+
+def fitted(sections):
+    limits = first_limits(sections)
+    text = lua_text(sections, limits)
+    for index in range(len(sections) - 1, -1, -1):
+        for trim in TRIMS:
+            if size_of(text) < MAX_BYTES:
+                return text, limits
+            if limits[index] is None or limits[index] > trim:
+                limits[index] = trim
+                text = lua_text(sections, limits)
+    if size_of(text) >= MAX_BYTES:
+        raise Fail('the file would be %d bytes, %d or more, even with every version cut to %d lines' % (size_of(text), MAX_BYTES, TRIMS[-1]))
+    return text, limits
 
 
 def read_back(text, sections):
@@ -160,15 +193,13 @@ def main():
         return 2
     try:
         sections = read_sections(SOURCE)
-        text = lua_text(sections)
+        text, limits = fitted(sections)
         read_back(text, sections)
-        size = len(text.encode('utf-8'))
-        if size >= MAX_BYTES:
-            raise Fail('the file would be %d bytes, %d or more' % (size, MAX_BYTES))
+        size = size_of(text)
     except Fail as err:
         print('FAILED: %s; nothing written.' % err)
         return 1
-    summary = ', '.join('%s %d' % (s['version'], len(section_lines(s))) for s in sections)
+    summary = ', '.join('%s %d' % (s['version'], len(section_lines(s, limit))) for s, limit in zip(sections, limits))
     print('WhatsNewData.lua: %d versions (%s); %d bytes' % (len(sections), summary, size))
     current = None
     if os.path.exists(OUT):

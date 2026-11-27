@@ -1640,7 +1640,7 @@ function S.Close()
 end
 
 S.mode = {
-	title = "Flat UI setup", waiting = "Flat UI: Setup opens after combat.",
+	title = "Flat UI setup", waiting = "Flat UI: setup opens after the fight.",
 	Build = S.Build, Enter = S.Enter, Update = S.Update, Frame = S.Frame, Hidden = S.Hidden, Close = S.Close,
 }
 
