@@ -2354,7 +2354,7 @@ local function LoadSettings()
 	FlatUIDB = FlatUIDB or {}
 	db = FlatUIDB
 	local version = tonumber(db.settingsVersion) or 0
-	ns.newInstall = type(db.profiles) ~= "table"
+	ns.newInstall = fresh
 	if type(db.profiles) ~= "table" then
 		db.profiles = { [DEFAULT] = FromOlder(version) }
 		if fresh then

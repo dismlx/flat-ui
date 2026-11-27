@@ -141,13 +141,18 @@ local function Line(index)
 	return line
 end
 
-local function Texts(section)
+local function Notes(section)
 	local list = {}
 	for _, text in ipairs(type(section.lines) == "table" and section.lines or {}) do
 		if IsText(text) and text ~= "" then
 			list[#list + 1] = text
 		end
 	end
+	return list
+end
+
+local function Texts(section)
+	local list = Notes(section)
 	if #list == 0 then
 		list[1] = EMPTY
 	end
@@ -304,10 +309,9 @@ function W.Build()
 	end)
 	W.title = kit.Label(frame, "GameFontNormalLarge", "LEFT", INNER - MARK - 12)
 	W.title:SetPoint("LEFT", W.mark, "RIGHT", 12, 0)
-	W.line = kit.Dim(kit.Label(frame, "GameFontHighlight", "LEFT", INNER))
+	W.line = kit.Dim(kit.Label(frame, "GameFontHighlight", "LEFT", INNER, true))
 	W.line:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -(PAD + MARK + 10))
 	W.card = kit.Frame(frame)
-	W.card:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -TOP)
 	W.card:SetSize(INNER, LIST_MAX + 2 * CARD_PAD)
 	local edge = ns.Outline(W.card, W.card, true)
 	kit.Painted(function()
@@ -362,6 +366,9 @@ function W.Update()
 	end
 	W.title:SetText(("What's new in Flat UI %s"):format(state.version))
 	W.line:SetText(state.line or "")
+	local top = math.max(TOP, PAD + MARK + 10 + Height(W.line, 14) + 10)
+	W.card:ClearAllPoints()
+	W.card:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, -top)
 	local tall = W.Fill(state.sections)
 	local list = math.max(LIST_MIN, math.min(LIST_MAX, tall))
 	W.scroller.Resize(LIST_W, list)
@@ -369,13 +376,12 @@ function W.Update()
 	W.scroller.Scroll(state.offset or 0)
 	state.offset = nil
 	W.card:SetHeight(list + 2 * CARD_PAD)
-	frame:SetHeight(TOP + list + 2 * CARD_PAD + 14 + kit.BUTTON + PAD)
+	frame:SetHeight(top + list + 2 * CARD_PAD + 14 + kit.BUTTON + PAD)
 end
 
 function W.Show(state)
 	local frame = W.frame or W.Build()
 	W.state = state
-	W.Update()
 	if not frame:IsShown() then
 		if not W.reopening then
 			frame:ClearAllPoints()
@@ -383,6 +389,7 @@ function W.Show(state)
 		end
 		frame:Show()
 	end
+	W.Update()
 	return frame:IsShown() == true
 end
 
@@ -452,7 +459,7 @@ end
 
 function W.Login()
 	local db, now = ns.Account(), Version()
-	if type(db) ~= "table" or not now then
+	if type(db) ~= "table" or not now or #Parts(now) == 0 then
 		return
 	end
 	local seen = IsText(db.seenVersion) and #Parts(db.seenVersion) > 0 and db.seenVersion or nil
@@ -468,10 +475,11 @@ function W.Login()
 	if mode == "off" then
 		return
 	end
-	local sections = seen and W.Since(seen, now) or {}
-	if #sections == 0 then
-		local first = W.Find(now)
-		sections = first and { first } or {}
+	local sections = {}
+	for _, section in ipairs(seen and W.Since(seen, now) or { W.Find(now) }) do
+		if #Notes(section) > 0 then
+			sections[#sections + 1] = section
+		end
 	end
 	local Act
 	if mode == "chat" or #sections == 0 or Welcoming() then
