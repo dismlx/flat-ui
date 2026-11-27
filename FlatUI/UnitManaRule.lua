@@ -310,21 +310,6 @@ local function Hear(on)
 	S.hearing = true
 end
 
--- While the options window is open, chat says once a fight that the spark waits for its end, as the druid mana bar says its own. A refresh in a fight
--- with the window closed stays silent. The flag goes once the fight is over.
-local told = false
-
-local function Tell()
-	if told or type(ns.PanelShown) ~= "function" or ns.PanelShown() ~= true then
-		return
-	end
-	told = true
-	print(TELL_WAITS)
-	ns.OutOfCombat(function()
-		told = false
-	end)
-end
-
 local ManaRule
 
 -- The sparks of the player frame: made and placed out of combat, the casts heard while the row is on, and test mode's sweep looping while it is on.
@@ -338,7 +323,9 @@ function ManaRule(rec)
 		return
 	end
 	if Sets(rec) then
-		Tell()
+		-- While the options window is open chat says once a fight that the spark waits for its end (X.tell, UnitFrames.lua); a refresh in a fight with
+		-- the window closed stays silent.
+		X.tell(TELL_WAITS)
 		if not rec.manaRuleQueued then
 			rec.manaRuleQueued = true
 			ns.OutOfCombat(function()

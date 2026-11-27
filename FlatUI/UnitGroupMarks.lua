@@ -5,7 +5,8 @@ local _, ns = ...
 -- the party frame of your target, and on a party frame the game's icon of a resurrection cast on the member, breathing while it runs, and a grey AFK
 -- word for a member who is away, also on a raid frame. With Also on your player, target and focus frames the border is on those frames too. All are textures and text of the
 -- addon's own on a frame of its own over the game's frame, made and anchored out of combat; in a fight only their colour, opacity and visibility change,
--- and which raid marker shows.
+-- and which raid marker shows. A mark made or moved by a row changed in a fight waits for its end, and while the options window is open chat says so
+-- once a fight (AfterFight, X.tell).
 --
 -- What the player can dispel is the client's own aura filter HARMFUL|RAID: "harmful auras the player can dispel" (Blizzard_FrameXMLUtil/
 -- AuraUtil.lua:275), which the game's party frames (Shared/PartyMemberFrame.lua:143) and raid frames (Blizzard_PrivateAurasUI.lua:486) use for their
@@ -690,12 +691,16 @@ end
 
 -- Marks over a frame --------------------------------------------------------------------------------------------------------------------------------
 
--- Runs a step of a mark again once the fight is over, once however often it is asked in the fight.
+-- Runs a step of a mark again once the fight is over, once however often it is asked in the fight. While the options window is open chat says so once
+-- a fight (X.tell, UnitFrames.lua).
+local TELL_MARKS = "Flat UI: party and raid frame marks change when the fight ends."
+
 local function AfterFight(rec, flag, part, fn)
 	if rec[flag] then
 		return
 	end
 	rec[flag] = true
+	X.tell(TELL_MARKS)
 	ns.OutOfCombat(function()
 		rec[flag] = nil
 		X.run(part, fn, rec, X.active(rec))

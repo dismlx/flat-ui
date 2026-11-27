@@ -4,7 +4,8 @@ local ADDON_NAME, ns = ...
 -- their own: the game's answer about range is withheld from addon code, so it is handed to SetAlphaFromBoolean and never read. Party frames get a black layer
 -- of the addon's own that a timer of the addon's own darkens by the same withheld answer, over the member's own picture, name row and bars alone (in One frame
 -- its body; in Separate parts the button down to where the game hangs the pet frame and the debuff icons, X.cover), and each party pet one of its own over its
--- frame by its own answer, so a pet left behind darkens alone and the debuff icons are never half dark. The prediction and shield segments, the parts of a raid frame and the
+-- frame by its own answer, so a pet left behind darkens alone and the debuff icons are never half dark. A layer the row asks for in a fight is made as it
+-- ends, and while the options window is open chat says so once a fight (X.tell). The prediction and shield segments, the parts of a raid frame and the
 -- parts of a totem button are regions the game shows and hides and never fades, so off is a change of opacity to 0 and on gives back the opacity they had
 -- (X.fade, UnitParts.lua). This file adds its work after the steps of UnitFrames.lua through ns.UnitFrameExtra: a part that stops on errors counts as off here,
 -- and every function can run twice with the same result. The menu of a right-click on the target frame opens at the cursor, as the player and focus menus do.
@@ -150,8 +151,9 @@ local function PartyRange(rec, on)
 		if not want then
 			return
 		end
-		-- The layer is made out of combat, on a frame the game protects.
+		-- The layer is made out of combat, on a frame the game protects; while the options window is open chat says so once a fight (X.tell).
 		if InCombatLockdown() then
+			X.tell("Flat UI: party members dim by range when the fight ends.")
 			if not rec.rangeQueued then
 				rec.rangeQueued = true
 				ns.OutOfCombat(function()
