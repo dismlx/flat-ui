@@ -491,7 +491,7 @@ ns.PAGES = {
 		{ key = "targetMarkColour", kind = "colour", default = "ffffffff", label = "Target mark colour", needs = "targetMark",
 			tip = "The colour of the target mark, its glow and its arrows." },
 		{ key = "targetMarkGlow", kind = "bool", default = true, label = "Soft glow round the mark", needs = "targetMark",
-			tip = "A soft glow in Target mark colour fades out from the target mark, past the threat ring. Off leaves the bright outline alone." },
+			tip = "A soft glow in Target mark colour fades out from the target mark, past the threat ring while that shows. Off leaves the bright outline alone." },
 		{ key = "targetArrows", kind = "bool", default = true, label = "Arrows at your target", needs = "targetMark",
 			tip = "Two arrows in Target mark colour, edged in black so they read on bright ground, point in at your target's health bar from both sides, outside what sits beside it: its class icon, quest mark, level box, raid marker, elite icon, threat value and auras. They move out with the threat value as it grows in a fight." },
 		{ key = "targetArrowSize", kind = "number", default = 100, min = 50, max = 200, step = 10, unit = "%", label = "Arrow size", needs = "targetArrows",

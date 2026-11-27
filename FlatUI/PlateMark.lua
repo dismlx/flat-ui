@@ -89,11 +89,22 @@ local function MarkPx()
 	return math.max(K.BAND, RingPx()) + K.GAP
 end
 
-local function GlowFrom()
-	if Ringed() then
+local function GlowFrom(ring)
+	if ring then
 		return math.max(MarkPx(), Border() + RingPx())
 	end
 	return MarkPx()
+end
+
+local function RingOn(unitFrame)
+	if not Ringed() then
+		return false
+	end
+	if type(ns.PlateRingShown) ~= "function" then
+		return true
+	end
+	local ok, shown = pcall(ns.PlateRingShown, unitFrame)
+	return not ok or shown == true
 end
 
 local function Glowing()
@@ -109,7 +120,7 @@ local function Grain()
 end
 
 local function Reach()
-	return GlowFrom() + (Glowing() and #GLOW * Grain() or 0)
+	return GlowFrom(Ringed()) + (Glowing() and #GLOW * Grain() or 0)
 end
 
 local function Tall(height)
@@ -246,13 +257,13 @@ local function Colours(mark, r, g, b)
 	end
 end
 
-local function Look(mark)
+local function Look(mark, ring)
 	local r, g, b = ns.Colour(KEY .. ".targetMarkColour")
 	ns.SetOutlineThickness(mark.outline, MarkPx())
 	ns.SetOutlineColour(mark.outline, r, g, b)
 	Colours(mark, r, g, b)
 	local box = mark.box
-	local from, unit = ns.Pixels(box, GlowFrom()), ns.Pixels(box, Grain())
+	local from, unit = ns.Pixels(box, GlowFrom(ring)), ns.Pixels(box, Grain())
 	if mark.from ~= from or mark.unit ~= unit then
 		mark.from, mark.unit = from, unit
 		Rings(mark, from, unit)
@@ -416,7 +427,7 @@ local function Follow(unitFrame, mark, elapsed)
 	local bar = Bar(unitFrame)
 	local x, y, w, h, scale = Screen(bar)
 	local base = Read(UIParent, "GetEffectiveScale")
-	if x == nil or w <= 0 or h <= 0 or not (ns.Finite(base) and base > 0) or Read(unitFrame, "IsVisible") ~= true then
+	if x == nil or w <= 0 or h <= 0 or not (ns.Finite(base) and base > 0) or Read(bar, "IsVisible") ~= true then
 		root:Hide()
 		return
 	end
@@ -428,7 +439,7 @@ local function Follow(unitFrame, mark, elapsed)
 		S.styled = Styled(unitFrame)
 		S.ext = Scan(unitFrame, x, y, w, scale, tall * base / 2)
 		Layer(mark, StrataOf(unitFrame), K.MARK)
-		Look(mark)
+		Look(mark, RingOn(unitFrame))
 	end
 	if not S.styled then
 		root:Hide()
@@ -606,7 +617,7 @@ function ns.PlateMarkSample(p, spec, o, m)
 	box:SetPoint("TOP", p.bar, "TOP", 0, 0)
 	box:SetPoint("BOTTOM", p.bar, "BOTTOM", 0, 0)
 	box:SetPoint("RIGHT", o.levelSquare and p.lvl or p.bar, "RIGHT", 0, 0)
-	Look(mark)
+	Look(mark, Ringed() and p.ringShown == true)
 	mark.root:SetAlpha(1)
 	mark.root:Show()
 	if not mark.arrowsOn or type(P) ~= "table" or type(P.Put) ~= "function" then
