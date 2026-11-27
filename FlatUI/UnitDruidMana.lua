@@ -33,10 +33,19 @@ local _, ns = ...
 -- shows for a druid in any form, at 60% in caster form, and is painted again as the rows change; the real rule comes back as test mode ends. The
 -- game's player frame is not changed: no field written, no method called.
 -- Mana text (Percent by default; Current or None): a font string of the addon's own just right of the bar, on its frame, so it fades in and out with
--- it, in the face, outline and colour of the bar text rows of the Unit frames page (X.ownSpec, UnitText.lua) at 85% of the game's small font. Each feed
+-- it, in the face, outline and colour of the bar text rows of the Unit frames page (X.ownSpec, UnitText.lua) at Power text size (85% at first) of the
+-- game's small font, as the player frame's power text has it (UnitFrames.lua ApplyText), and under Smaller, lighter bar text at 85% of that with no
+-- outline unless Bar text outline gives one. Each feed
 -- writes it unread: UnitPowerPercent of mana through the curve CurveConstants.ScaleTo100 (UnitDocumentation.lua:2838-2856, as UnitText.lua writes a
 -- power percent) to SetFormattedText, or UnitPower of mana through AbbreviateNumbers (or BreakUpLargeNumbers with Number style Full) to SetText, both
 -- of which take withheld values. The sample of test mode reads 60%, or 3.6K with Current.
+-- Mark the cost of a shift (on by default): a thin white line of one screen pixel across the bar at the mana a cast of the form the druid is in costs
+-- (Cat Form for a cat, Bear or Dire Bear Form for a bear), so fill past it means a powershift is affordable. The form is GetShapeshiftForm, its spell
+-- the fourth answer of GetShapeshiftFormInfo (Blizzard_ActionBar/Shared/StanceBar.lua:70), its cost the mana entry (type 0) of
+-- C_Spell.GetSpellPowerCost (SpellDocumentation.lua:535-549, SpellSharedDocumentation.lua:46-58, no secret tag), against UnitPowerMax of mana. The
+-- line is placed only from plain numbers, a cost above 0 and below the most; where the game withholds one in a fight the line keeps its place while
+-- the form is the same, hides for another form, and is placed again once the fight is over. It is placed again on a change of form, of the most mana
+-- and of the layout. The sample of test mode in caster form has it at 35%.
 -- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLResourceBars/Init.lua:19, resourceBarsDruidFixedMana, a
 -- Forever and TBC option whose bar is not in the package; EnhanceQoLUnitFrames/UF_Helper.lua:1773-1823, a druid's second power is mana, shown
 -- while the main power is not): the mana of a druid in forms, here a bar under the game's player frame.
@@ -47,9 +56,11 @@ local PART = "Druid mana"
 -- The power type of mana (Enum.PowerType.Mana) and its token, the height of the bar in screen pixels where Mana bar height has none, and the fill of a
 -- solid bar.
 local MANA, TOKEN, HEIGHT_PX = 0, "MANA", 4
--- The units between the bar and its text, the size of the text against the game's small font, and the mana the sample of test mode shows with
--- Current (its 60%).
+-- The units between the bar and its text, the size of the text against the game's small font where Power text size has none, and the mana the sample
+-- of test mode shows with Current (its 60%).
 local TEXT_GAP, TEXT_PERCENT, SAMPLE_MANA = 4, 85, 3600
+-- Where the sample of test mode marks the cost of a shift, as a share of the bar, and the opacity of the line.
+local SAMPLE_SHIFT, TICK_ALPHA = 0.35, 0.9
 -- The seconds of the fade as the bar shows and as it goes.
 local FADE_IN, FADE_OUT = 0.15, 0.2
 local WHITE = "Interface\\Buttons\\WHITE8X8"
@@ -156,6 +167,13 @@ local function Make(rec)
 	bar:SetMinMaxValues(0, 1)
 	bar:SetValue(0)
 	d.outline = ns.Outline(holder, bar)
+	-- The line of Mark the cost of a shift, over the fill, placed by Mark.
+	local tick = bar:CreateTexture(nil, "OVERLAY", nil, 7)
+	ns.Own[tick] = true
+	tick:SetTexture(WHITE)
+	tick:SetVertexColor(1, 1, 1, TICK_ALPHA)
+	tick:Hide()
+	d.tick = tick
 	-- The mana text, on the frame that fades, just right of the bar.
 	d.text = ns.OwnText(holder, "OVERLAY", "GameFontHighlightSmall")
 	if d.text then
@@ -265,12 +283,112 @@ local function Paint(d)
 		X.outline(d.outline, true, Opt("backdrop"))
 	end
 	if d.text then
-		local spec = { percent = TEXT_PERCENT }
+		-- Power text size, as the player frame's power text has it, and under Smaller, lighter bar text 85% of it with no outline unless Bar text
+		-- outline gives one (UnitFrames.lua ApplyText).
+		local light = Opt("lookLightText") == true
+		local percent = tonumber(Opt("powerTextSize")) or TEXT_PERCENT
+		local spec = { percent = light and percent * 0.85 or percent }
 		if type(X.ownSpec) == "function" then
 			spec = X.ownSpec("bar", spec)
 		end
+		if light and spec.flags == nil then
+			spec.flags = ""
+		end
 		ns.TextStyle(d.text, spec)
 		d.text:SetShown(TextMode() ~= nil)
+	end
+end
+
+-- A plain number of a call, or nil.
+local function Plain(ok, value)
+	if ok and ns.Finite(value) then
+		return value
+	end
+	return nil
+end
+
+-- The spell of the form the druid is in (nil in caster form or where the game does not say), and the mana a cast of it costs and the most mana, both
+-- plain, or nil.
+local function ShiftCost()
+	if type(GetShapeshiftForm) ~= "function" or type(GetShapeshiftFormInfo) ~= "function" then
+		return nil
+	end
+	local index = Plain(pcall(GetShapeshiftForm))
+	if index == nil or index < 1 then
+		return nil
+	end
+	local okInfo, _, _, _, spell = pcall(GetShapeshiftFormInfo, index)
+	spell = Plain(okInfo, spell)
+	if spell == nil or spell <= 0 then
+		return nil
+	end
+	local spells = C_Spell
+	if type(spells) ~= "table" or type(spells.GetSpellPowerCost) ~= "function" then
+		return spell
+	end
+	local okCost, costs = pcall(spells.GetSpellPowerCost, spell)
+	local cost = nil
+	if okCost and not IsSecret(costs) and type(costs) == "table" then
+		pcall(function()
+			for _, entry in ipairs(costs) do
+				local kind = not IsSecret(entry) and type(entry) == "table" and entry.type or nil
+				if ns.Finite(kind) and kind == MANA then
+					cost = Plain(true, entry.cost)
+					break
+				end
+			end
+		end)
+	end
+	local most = Plain(pcall(UnitPowerMax, "player", MANA))
+	if cost == nil or most == nil or cost <= 0 or cost >= most then
+		return spell
+	end
+	return spell, cost, most
+end
+
+-- Places the line of Mark the cost of a shift at share of the bar's width, or hides it with no share.
+local function PlaceTick(d, share)
+	local tick = d.tick
+	local ok, width = pcall(d.holder.GetWidth, d.holder)
+	if share == nil or not ok or not ns.Finite(width) or width <= 0 then
+		tick:Hide()
+		return
+	end
+	local x = width * share
+	tick:ClearAllPoints()
+	tick:SetPoint("TOP", d.bar, "TOPLEFT", x, 0)
+	tick:SetPoint("BOTTOM", d.bar, "BOTTOMLEFT", x, 0)
+	tick:SetWidth(ns.Pixels(d.holder, 1))
+	tick:Show()
+end
+
+-- The line of Mark the cost of a shift: the sample's 35% in test mode in caster form, else the cost of the form the druid is in. Where a number is
+-- withheld it keeps its place for the same form and hides for another, and Mark runs again once the fight is over.
+local function Mark(d)
+	if d.tick == nil then
+		return
+	end
+	if Opt("druidManaShift") ~= true then
+		d.tickFor, d.tickShare = nil, nil
+		PlaceTick(d, nil)
+		return
+	elseif d.sample then
+		PlaceTick(d, SAMPLE_SHIFT)
+		return
+	end
+	local spell, cost, most = ShiftCost()
+	if cost ~= nil then
+		d.tickFor, d.tickShare = spell, cost / most
+	elseif spell == nil or spell ~= d.tickFor then
+		d.tickFor, d.tickShare = nil, nil
+	end
+	PlaceTick(d, d.tickShare)
+	if cost == nil and spell ~= nil and InCombatLockdown() and not d.markQueued then
+		d.markQueued = true
+		ns.OutOfCombat(function()
+			d.markQueued = nil
+			X.run(PART, Mark, d)
+		end)
 	end
 end
 
@@ -381,6 +499,9 @@ local function Show(d)
 	elseif show then
 		Feed(d, fresh)
 	end
+	if show then
+		Mark(d)
+	end
 end
 
 local function OnEvent(d, event, unit, token)
@@ -394,6 +515,9 @@ local function OnEvent(d, event, unit, token)
 		end
 		if d.shown and not d.sample then
 			Feed(d)
+			if event == "UNIT_MAXPOWER" then
+				Mark(d)
+			end
 		end
 		return
 	end

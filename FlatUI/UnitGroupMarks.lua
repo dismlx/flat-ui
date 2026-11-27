@@ -2,9 +2,10 @@ local _, ns = ...
 
 -- Marks on the game's party and raid frames: the colour of a debuff the player can dispel on a border just inside the health bar, with the icon of its
 -- type on a party frame, the raid marker of the unit of a raid frame or a party frame, the leader and assistant icons of a raid frame, an outline round
--- the party frame of your target, and on a party frame the game's icon of a resurrection cast on the member. With Also on your player, target and focus frames the border is on those frames too. All are textures of the addon's own
--- on a frame of its own over the game's frame, made and anchored out of combat; in a fight only their colour, opacity and visibility change, and which
--- raid marker shows.
+-- the party frame of your target, and on a party frame the game's icon of a resurrection cast on the member, breathing while it runs, and a grey AFK
+-- word for a member who is away. With Also on your player, target and focus frames the border is on those frames too. All are textures and text of the
+-- addon's own on a frame of its own over the game's frame, made and anchored out of combat; in a fight only their colour, opacity and visibility change,
+-- and which raid marker shows.
 --
 -- What the player can dispel is the client's own aura filter HARMFUL|RAID: "harmful auras the player can dispel" (Blizzard_FrameXMLUtil/
 -- AuraUtil.lua:275), which the game's party frames (Shared/PartyMemberFrame.lua:143) and raid frames (Blizzard_PrivateAurasUI.lua:486) use for their
@@ -50,6 +51,7 @@ local _, ns = ...
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
 local DISPEL, MARKER, LEADER, AIM, REZ = "Dispel highlight", "Raid frame marker", "Leader icons", "Target border", "Resurrection icon"
+local AFK = "AFK word"
 local FILTER = "HARMFUL|RAID"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local MARKER_FILE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
@@ -701,7 +703,7 @@ local function AfterFight(rec, flag, part, fn)
 end
 
 -- The frame of the addon's own over a party or raid frame that holds its raid marker, on a raid frame its leader and assistant icons and on a party frame
--- its resurrection icon: six levels above the game's frame, made out of combat by the first row that needs it.
+-- the frame of its resurrection icon and its AFK word: six levels above the game's frame, made out of combat by the first row that needs it.
 local function Holder(rec)
 	if rec.over == nil then
 		local frame = rec.frame
@@ -732,6 +734,24 @@ local function FromAnswer(region, call, ...)
 	return set
 end
 
+-- True for a plain true answer of a call the game gives a unit, false for a plain false, nil when it failed or was withheld.
+local function Plain(call, unit)
+	if type(call) ~= "function" or unit == nil then
+		return nil
+	end
+	local ok, answer = pcall(call, unit)
+	if ok and not IsSecret(answer) and type(answer) == "boolean" then
+		return answer
+	end
+	return nil
+end
+
+-- The health bar of a frame: the bar Flat UI styles, else the game's.
+local function HealthBar(rec)
+	local entry = rec.byRole.health
+	return entry and entry.target or rec.parts.health
+end
+
 -- Raid markers -------------------------------------------------------------------------------------------------------------------------------------
 
 -- Where the marker of a frame sits: at the top of a raid frame, and on a party frame at the top of the picture Flat UI draws (a Game portrait too), or
@@ -748,8 +768,7 @@ local function MarkerSpot(rec)
 	elseif portrait ~= nil and not (pic ~= nil and pic.none) then
 		return portrait, "CENTER", 0
 	end
-	local entry = rec.byRole.health
-	return entry and entry.target or rec.parts.health, "CENTER", 0
+	return HealthBar(rec), "CENTER", 0
 end
 
 -- Anchors the marker, out of combat and again only when its spot changed. False when the spot changed in a fight: the marker keeps its place until the end.
@@ -853,39 +872,90 @@ end)
 -- frames put the icon RaidFrame-Icon-Rez in the middle of the frame (CompactUnitFrame_GetCenterStatusIconState, Shared/CompactUnitFrame.lua:1411-1414,
 -- 1473-1474). A summon its party frames show already, in the icon right of the frame (UpdateNotPresentIcon, Mainline/PartyMemberFrame.lua:589-616, on
 -- INCOMING_SUMMON_CHANGED, :716-717), so that is left to the game. With Resurrection icon on party frames (on by default) a texture of the addon's own on
--- the holder of the marks, REZ_SIZE units, centred on the spot of the raid marker (the picture Flat UI draws, the game's portrait, else the health bar,
--- MarkerSpot) and a sublevel under it, shows that atlas while someone resurrects the member. UnitHasIncomingResurrection is not in the generated docs,
--- so its answer goes unread to the icon's opacity (FromAnswer). The icon is drawn again on INCOMING_RESURRECT_CHANGED (UnitDocumentation.lua:3622-3630),
--- which the game's raid frames hear (CompactUnitFrame.lua:48, 155), for every party frame, since the payload is not read, and on a new member of the
--- frame; a texture's opacity changes in a fight too, so a combat resurrection shows. A client without the atlas shows none.
-local REZ_SIZE = 20
+-- a frame of its own over the holder of the marks shows that atlas while someone resurrects the member: REZ_SIZE units, centred on the picture Flat UI
+-- draws or the game's portrait (MarkerSpot), or on a frame with neither (Picture None, as the ready-made Healer look has it) REZ_BAR units at the left
+-- end of the health bar, 1 unit in, so the Dead word in the middle of the 10-unit bar (UnitText.lua Say) still reads. UnitHasIncomingResurrection is not
+-- in the generated docs, so its answer goes unread to the icon's opacity (FromAnswer). While the member is plainly dead (UnitIsDeadOrGhost) its frame
+-- breathes, an Alpha animation from 1 to REZ_LOW and back every REZ_BEAT seconds, so the icon is not missed beside the marker, the leader crown and the
+-- debuff icons; under the icon's opacity of 0 the beat plays unseen, as the low health beat does (HealthColour.lua). The icon is drawn again on
+-- INCOMING_RESURRECT_CHANGED (UnitDocumentation.lua:3622-3630), which the game's raid frames hear (CompactUnitFrame.lua:48, 155), for every party frame,
+-- since the payload is not read, and on a new member of the frame; a texture's opacity changes in a fight too, so a combat resurrection shows. A client
+-- without the atlas shows none.
+local REZ_SIZE, REZ_BAR, REZ_LOW, REZ_BEAT = 20, 14, 0.45, 1
 local REZ_ATLAS = "RaidFrame-Icon-Rez"
 
 -- Anchors the icon, out of combat and again only when its spot changed. False when it changed in a fight: it keeps its place until the end.
 local function PlaceRez(rec)
 	local r = rec.rezIcon
 	local to = MarkerSpot(rec)
-	if to == nil or r.to == to then
+	local onBar = to ~= nil and to == HealthBar(rec)
+	if to == nil or (r.to == to and r.onBar == onBar) then
 		return true
 	elseif InCombatLockdown() then
 		return false
 	end
 	r.icon:ClearAllPoints()
-	r.icon:SetPoint("CENTER", to, "CENTER", 0, 0)
-	r.to = to
+	if onBar then
+		r.icon:SetSize(REZ_BAR, REZ_BAR)
+		r.icon:SetPoint("LEFT", to, "LEFT", 1, 0)
+	else
+		r.icon:SetSize(REZ_SIZE, REZ_SIZE)
+		r.icon:SetPoint("CENTER", to, "CENTER", 0, 0)
+	end
+	r.to, r.onBar = to, onBar
 	return true
 end
 
+-- The beat of the icon's frame: down to REZ_LOW and back, half of REZ_BEAT each, repeated. Nil when the client refuses the animation; the icon then
+-- just shows.
+local function RezBeat(frame)
+	if type(frame.CreateAnimationGroup) ~= "function" then
+		return nil
+	end
+	local okGroup, group = pcall(frame.CreateAnimationGroup, frame)
+	local made = okGroup and group ~= nil and pcall(group.SetLooping, group, "REPEAT")
+	for order, alphas in ipairs({ { 1, REZ_LOW }, { REZ_LOW, 1 } }) do
+		local okFade, fade = false, nil
+		if made then
+			okFade, fade = pcall(group.CreateAnimation, group, "Alpha")
+		end
+		made = okFade and fade ~= nil and pcall(fade.SetFromAlpha, fade, alphas[1]) and pcall(fade.SetToAlpha, fade, alphas[2])
+			and pcall(fade.SetDuration, fade, REZ_BEAT / 2) and pcall(fade.SetOrder, fade, order)
+	end
+	return made and group or nil
+end
+
 local function MakeRez(rec)
-	local icon = Own(Holder(rec):CreateTexture(nil, "OVERLAY", nil, 6))
+	local holder = Holder(rec)
+	local frame = X.frame(holder)
+	frame:SetAllPoints(holder)
+	local icon = Own(frame:CreateTexture(nil, "OVERLAY", nil, 6))
 	icon:SetSize(REZ_SIZE, REZ_SIZE)
 	icon:SetAlpha(0)
 	icon:Hide()
-	local r = { icon = icon }
+	local r = { frame = frame, icon = icon, beat = RezBeat(frame) }
 	r.art = AtlasExists(REZ_ATLAS) and pcall(icon.SetAtlas, icon, REZ_ATLAS) or false
 	rec.rezIcon = r
 	PlaceRez(rec)
 	return r
+end
+
+-- The beat plays while the member is plainly dead, and stops at full opacity otherwise.
+local function Breathe(r, dead)
+	local beat = r.beat
+	if beat == nil then
+		return
+	end
+	local ok, playing = pcall(beat.IsPlaying, beat)
+	playing = ok and not IsSecret(playing) and playing == true
+	if dead and not playing then
+		pcall(beat.Play, beat)
+	elseif not dead then
+		if playing then
+			pcall(beat.Stop, beat)
+		end
+		pcall(r.frame.SetAlpha, r.frame, 1)
+	end
 end
 
 local function Rez(rec, on)
@@ -896,6 +966,7 @@ local function Rez(rec, on)
 	if not (on and rec.made and not ns.PartStopped(KEY, REZ) and Opt("partyRezIcon") == true and type(_G.UnitHasIncomingResurrection) == "function") then
 		if r then
 			r.icon:Hide()
+			Breathe(r, false)
 		end
 		return
 	end
@@ -918,6 +989,7 @@ local function Rez(rec, on)
 	else
 		pcall(r.icon.SetAlpha, r.icon, 0)
 	end
+	Breathe(r, Plain(_G.UnitIsDeadOrGhost, unit) == true)
 	r.icon:Show()
 end
 
@@ -935,6 +1007,145 @@ ns.AddEvent(KEY, "INCOMING_RESURRECT_CHANGED", function()
 		end
 	end
 end)
+
+-- AFK on party frames -------------------------------------------------------------------------------------------------------------------------------
+
+-- The game's unit frames show nobody away, nor do its raid frames (Blizzard_UnitFrame has no UnitIsAFK). With AFK on party frames (on by default) a
+-- font string of the addon's own on the holder of the marks says AFK, in a soft grey with an outline in the face and Small frame text size of the
+-- bar text rows (X.ownSpec, UnitText.lua), at the bottom of the picture Flat UI draws or of the game's portrait (MarkerSpot), 2 units up, or on a frame
+-- with neither at the left end of the health bar, 2 units in. It shows while UnitIsAFK is plainly true and goes when it is plainly false (it is plain
+-- except under chat lockdown, UnitDocumentation.lua:1778-1791); a withheld answer keeps what shows. It hides while the member is plainly dead or
+-- offline, where the Dead or Offline word and the resurrection icon speak. Each frame hears PLAYER_FLAGS_CHANGED, UNIT_CONNECTION and UNIT_HEALTH for
+-- its own member on a frame of the addon's own (RegisterUnitEvent, as the game's raid frames hear them, Shared/CompactUnitFrame.lua:339-352), whose
+-- payload is never read, so the word comes and goes in a fight too, and on a revive. It is made and placed out of combat.
+local AFK_EVENTS = { "PLAYER_FLAGS_CHANGED", "UNIT_CONNECTION", "UNIT_HEALTH" }
+local AFK_GREY = 0.8
+
+-- True when the member is plainly away, and neither plainly dead nor plainly offline; false when not; nil when the game withheld whether.
+local function Away(unit)
+	local away = Plain(_G.UnitIsAFK, unit)
+	if away ~= true then
+		return away
+	end
+	return Plain(_G.UnitIsDeadOrGhost, unit) ~= true and Plain(_G.UnitIsConnected, unit) ~= false
+end
+
+local function ShowAfk(a)
+	if a.unit == nil then
+		a.text:Hide()
+		return
+	end
+	local away = Away(a.unit)
+	if away ~= nil then
+		a.text:SetShown(away)
+	end
+end
+
+-- The frame of the addon's own that hears the member of one party frame, and nothing once it has no member. A new member starts with the word hidden.
+local function ListenAfk(a, unit)
+	if a.unit == unit then
+		return
+	end
+	pcall(a.ear.UnregisterAllEvents, a.ear)
+	a.unit = unit
+	a.text:Hide()
+	if unit == nil then
+		return
+	end
+	for _, event in ipairs(AFK_EVENTS) do
+		local ok = type(a.ear.RegisterUnitEvent) == "function" and pcall(a.ear.RegisterUnitEvent, a.ear, event, unit)
+		if not ok then
+			pcall(a.ear.RegisterEvent, a.ear, event)
+		end
+	end
+end
+
+-- Anchors the word, out of combat and again only when its spot changed. False when it changed in a fight: it keeps its place until the end.
+local function PlaceAfk(rec)
+	local a = rec.afk
+	local to = MarkerSpot(rec)
+	local onBar = to ~= nil and to == HealthBar(rec)
+	if to == nil or (a.to == to and a.onBar == onBar) then
+		return true
+	elseif InCombatLockdown() then
+		return false
+	end
+	a.text:ClearAllPoints()
+	if onBar then
+		a.text:SetPoint("LEFT", to, "LEFT", 2, 0)
+	else
+		a.text:SetPoint("BOTTOM", to, "BOTTOM", 0, 2)
+	end
+	a.to, a.onBar = to, onBar
+	return true
+end
+
+-- The face, outline and size of the word: those of the bar text rows at Small frame text size, with an outline unless Bar text outline gives one.
+local function StyleAfk(a)
+	local spec = { percent = tonumber(Opt("smallTextSize")) or 100 }
+	if type(X.ownSpec) == "function" then
+		spec = X.ownSpec("bar", spec)
+	end
+	if spec.flags == nil then
+		spec.flags = "OUTLINE"
+	end
+	spec.r, spec.g, spec.b = AFK_GREY, AFK_GREY, AFK_GREY
+	ns.TextStyle(a.text, spec)
+end
+
+local function MakeAfk(rec)
+	local text = ns.OwnText(Holder(rec), "OVERLAY", "GameFontNormalSmall")
+	if text == nil then
+		return nil
+	end
+	text:SetText(type(_G.AFK) == "string" and not IsSecret(_G.AFK) and _G.AFK ~= "" and _G.AFK or "AFK")
+	text:SetTextColor(AFK_GREY, AFK_GREY, AFK_GREY)
+	text:Hide()
+	local ear = Own(CreateFrame("Frame"))
+	local a = { text = text, ear = ear }
+	ear:SetScript("OnEvent", function()
+		X.run(AFK, ShowAfk, a)
+	end)
+	rec.afk = a
+	PlaceAfk(rec)
+	return a
+end
+
+local function Afk(rec, on)
+	if rec.kind ~= "party" then
+		return
+	end
+	local a = rec.afk
+	if not (on and rec.made and not ns.PartStopped(KEY, AFK) and Opt("partyAfk") == true and type(_G.UnitIsAFK) == "function") then
+		if a then
+			ListenAfk(a, nil)
+		end
+		return
+	end
+	if a == nil then
+		if InCombatLockdown() then
+			AfterFight(rec, "afkQueued", AFK, Afk)
+			return
+		end
+		a = MakeAfk(rec)
+		if a == nil then
+			return
+		end
+	elseif not PlaceAfk(rec) then
+		AfterFight(rec, "afkQueued", AFK, Afk)
+	end
+	StyleAfk(a)
+	-- The member of the frame, not a vehicle it is in.
+	ListenAfk(a, X.unitOf(rec))
+	ShowAfk(a)
+end
+
+-- The picture of a party frame was drawn again, or the game's portrait is shown in its place: the word follows it, out of combat.
+local function FollowAfk(rec)
+	if rec.afk ~= nil and not PlaceAfk(rec) then
+		AfterFight(rec, "afkQueued", AFK, Afk)
+	end
+end
 
 -- Leaders and assistants on raid frames --------------------------------------------------------------------------------------------------------------
 
@@ -1145,6 +1356,9 @@ function X.unitChanged(rec)
 	if rec.rezIcon then
 		X.run(REZ, Rez, rec, X.active(rec))
 	end
+	if rec.afk then
+		X.run(AFK, Afk, rec, X.active(rec))
+	end
 end
 
 -- The lines of /flatui status: the frames that show the dispel border now, and Border for your target while a party or raid frame is styled.
@@ -1192,8 +1406,10 @@ table.insert(X.after.apply, { part = MARKER, fn = Marker })
 table.insert(X.after.apply, { part = LEADER, fn = Leader })
 table.insert(X.after.apply, { part = AIM, fn = Aim })
 table.insert(X.after.apply, { part = REZ, fn = Rez })
+table.insert(X.after.apply, { part = AFK, fn = Afk })
 table.insert(X.after.raid, { part = DISPEL, fn = Dispel })
 table.insert(X.after.raid, { part = MARKER, fn = Marker })
 table.insert(X.after.raid, { part = LEADER, fn = Leader })
 table.insert(X.after.picture, { part = MARKER, fn = Follow })
 table.insert(X.after.picture, { part = REZ, fn = FollowRez })
+table.insert(X.after.picture, { part = AFK, fn = FollowAfk })
