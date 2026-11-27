@@ -61,6 +61,9 @@ local T = {
 	COPY_NONE_FOOT = "Nothing to copy: each of those trinkets is here already, or the list is full.",
 	NOW_FOOT = "Queue now: the %s list looks again now.",
 	NOW_FOOT_FIGHT = "Queue now: the %s list looks again as the fight ends.",
+	BAR_LINES = { "Drag to move the window.", "Double-click: put it back at its first place." },
+	RESET_DONE = "Trinket queue: the window is back at its first place.",
+	DOUBLE_CLICK = 0.35,
 }
 
 local W = { frame = nil, n = "top", offset = 0, addOffset = 0, version = -1, painted = nil, runs = 0, faults = {}, elapsed = 0, message = nil,
@@ -526,7 +529,16 @@ function U.MakeBar(frame)
 			pcall(U.Dropped)
 		end
 	end)
-	U.Drops(bar, true)
+	U.Drops(bar)
+	bar:SetScript("OnMouseUp", function(_, mouse)
+		Run(U.BarUp, mouse)
+	end)
+	bar:SetScript("OnEnter", function()
+		Run(Z.Say, bar, T.TITLE, T.BAR_LINES)
+	end)
+	bar:SetScript("OnLeave", function()
+		Z.Untip(bar)
+	end)
 	W.title = U.Label(bar, TITLE_FONT)
 	W.title:SetPoint("LEFT", bar, "LEFT", L.PAD, 0)
 	W.title:SetText(T.TITLE)
@@ -916,6 +928,36 @@ end
 function U.DragStart()
 	W.frame:StartMoving()
 	W.moving = true
+	W.barDragged = true
+end
+
+function U.BarUp(mouse)
+	if U.Drop() then
+		W.lastBarUp = nil
+		Z.Paint()
+		return
+	end
+	if W.moving or W.barDragged or mouse ~= "LeftButton" then
+		W.barDragged, W.lastBarUp = nil, nil
+		return
+	end
+	local now = GetTime()
+	if W.lastBarUp and now - W.lastBarUp <= T.DOUBLE_CLICK then
+		W.lastBarUp = nil
+		U.ResetPlace()
+		return
+	end
+	W.lastBarUp = now
+end
+
+function U.ResetPlace()
+	local kit = ns.MoverKit
+	if type(kit) == "table" and type(kit.Restore) == "function" then
+		pcall(kit.Restore, NAME, nil)
+	end
+	W.dropped, W.placed = nil, nil
+	U.Place()
+	print(T.RESET_DONE)
 end
 
 function U.Dropped()
