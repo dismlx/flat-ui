@@ -307,7 +307,7 @@ local function Normalise(def, value)
 	return nil
 end
 
-local RENAMED = { ["trackers.grow"] = { middle = "center" }, ["partycd.show"] = { used = "cooling" }, ["combattext.whose"] = { mine = "one" } }
+local RENAMED = { ["trackers.grow"] = { middle = "center" }, ["partycd.show"] = { used = "cooling" }, ["combattext.whose"] = { mine = "one" }, ["threat.view"] = { auto = "both" } }
 for _, path in ipairs({ "fonts.outline", "chat.outline", "actionbars.textOutline" }) do
 	RENAMED[path] = { outline = "thin" }
 end

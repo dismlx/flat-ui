@@ -293,7 +293,7 @@ local function Slide(row, parent, dy)
 	Put(row, parent, dy)
 end
 
-function L.Order(rows, n, scope, parent, keys)
+function L.Order(rows, n, scope, parent, keys, plain)
 	local last = L.last[rows]
 	local fresh = last == nil or L.scope[rows] ~= scope or parent == nil or not parent:IsShown()
 	local animate = L.On()
@@ -312,7 +312,7 @@ function L.Order(rows, n, scope, parent, keys)
 			end
 		end
 		if row then
-			L.Sheen(row, index == 1)
+			L.Sheen(row, index == 1 and not plain)
 		end
 	end
 	for index = n + 1, #rows do
