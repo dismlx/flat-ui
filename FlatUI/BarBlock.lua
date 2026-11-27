@@ -26,9 +26,12 @@ local _, ns = ...
 -- Leave vehicle button hangs from the main bar in the game (VehicleLeaveButton.xml:4), which Movers leaves to the game, so it is not placed
 -- here; /flatui block facts still lists it.
 -- All of it is planned out of combat. A bar the game does not stack (Action bars 6 to 8) and a bar the player has placed in Edit Mode stay
--- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
+-- where the block put them in a fight; the others are put back by the game's stack until the fight ends. A change of a block's bars, Stack
+-- direction, Line up bars or gap in a fight waits for its end too, and the first one in a fight says so in chat (TellWait).
 -- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours, or with Own panel colour in Panel
--- colour at Panel opacity (75% by default), set at once (ns.SetOutlineFill). Fade the block: the alpha of each
+-- colour at Panel opacity (75% by default), set at once (ns.SetOutlineFill). While a block holds the main bar and Flat UI's page arrows show left of
+-- it, the panel widens to take them and the page number in (ns.OwnPagerRect, read again after OwnBars.lua places them: ns.BarBlockPanels), and so
+-- does the area of Full opacity under the mouse. Fade the block: the alpha of each
 -- held frame (SetAlpha, which the game allows in a fight) eases to the faded value over Fade time, once the block has not been wanted for Wait
 -- before fading, and back to full in a tenth of a second when it is: in a fight, under the mouse (over its own block, or over Flat UI's page arrows
 -- left of a main bar it holds, ns.OwnPagerOver), with a target (Full
@@ -36,7 +39,8 @@ local _, ns = ...
 -- cast (Full opacity as you cast, off by default: while UnitCastingInfo or UnitChannelInfo of the player gives a plain name, and for a moment
 -- after each spell or item used, UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the fade's own frame, so an instant
 -- use holds the block for 1.5 s, a global cooldown, and Wait before fading after it),
--- with something on the cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a
+-- in Edit Mode and while /flatui move is open (ns.EditModeOpen, ns.MoverKit.IsOpen, as on the Fading page), so the tabs and the box sit over
+-- bars seen whole, with something on the cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a
 -- child of the totem bar that opens up over the bar, out of the area under the mouse (MultiCastActionBarFrame.xml:106-107,
 -- MultiCastActionBarFrame.lua:637-641). The arrow that opens the totem flyout sticks out over the bar too, and counts as under the mouse while
 -- the game shows it. The alpha a frame had is read once and put back when the fade goes off or the block stops. With Flat UI's own buttons
@@ -518,6 +522,20 @@ end
 -- it only with the cursor on a totem slot or the summon button (MultiCastActionBarFrame.lua:378-381, 452-455, 604-606, 926-931) and hides it
 -- once the cursor is off them and off the arrow (:391-394, 457-460, 803-805, 825-830, 940-943), so a shown arrow is a cursor on the totem bar.
 -- It hangs from the slot, a child of the bar (MultiCastActionBarFrame.xml:210), so it is read with IsVisible.
+-- The rectangle of a block, left, bottom, right and top in UIParent units, with Flat UI's page arrows and page number left of its main bar while they
+-- show (ns.OwnPagerRect), which the background panel takes in.
+local function PanelRect(plan)
+	local left, bottom = plan.spotX - plan.width / 2, plan.spotY
+	local right, top = left + plan.width, bottom + plan.height
+	if plan.spots[BARS.main.frame] and type(ns.OwnPagerRect) == "function" then
+		local l, b, r, t = ns.OwnPagerRect()
+		if ns.Finite(l) and ns.Finite(b) and ns.Finite(r) and ns.Finite(t) then
+			left, bottom, right, top = math.min(left, l), math.min(bottom, b), math.max(right, r), math.max(top, t)
+		end
+	end
+	return left, bottom, right, top
+end
+
 local function Under(plan)
 	local x, y = Cursor()
 	if not plan then
@@ -534,8 +552,8 @@ local function Under(plan)
 		return false
 	end
 	local pad = Opt("background") and Opt("backgroundPad") or 0
-	local left, bottom = plan.spotX - plan.width / 2, plan.spotY
-	local right, top = left + plan.width, bottom + plan.height
+	-- The panel's rectangle: with Background panel on, the pad round the page arrows counts too.
+	local left, bottom, right, top = PanelRect(plan)
 	for name, spot in pairs(plan.spots) do
 		-- Flat UI's experience bar under the block is in the block's own rectangle.
 		local seen = AROUND_SET[name] and not spot.under and state.seen[name]
@@ -586,7 +604,16 @@ local function Casting()
 	return false
 end
 
+-- While /flatui move is open (Movers.lua), as on the Fading page (Fade.lua, MoversOpen), so the block's tabs and box sit over bars seen whole.
+local function MoversOpen()
+	local kit = ns.MoverKit
+	return type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
+end
+
 local function Full(plan)
+	if ns.EditModeOpen() or MoversOpen() then
+		return true
+	end
 	if (Opt("fadeCombat") and InCombatLockdown()) or (Opt("fadeMouse") and Under(plan)) or Holding() or FlyoutOpen() then
 		return true
 	end
@@ -720,7 +747,8 @@ local function FadeTick(_, elapsed)
 	ns.Try(KEY, Fade, dt)
 end
 
--- The panel behind a block from its plan and the options: off with no plan, with the page off and with its own switch off.
+-- The panel behind a block from its plan and the options: off with no plan, with the page off and with its own switch off. It covers the block's
+-- rectangle and, while the block holds the main bar, Flat UI's page arrows and page number left of it (PanelRect).
 local function Panel(block, on)
 	local plan = block.last
 	block.panelOn = on and plan ~= nil and Opt("background") == true
@@ -740,14 +768,27 @@ local function Panel(block, on)
 			ns.SetOutlineFill(outline, nil)
 		end
 		local pad = Opt("backgroundPad")
+		local left, bottom, right, top = PanelRect(plan)
 		block.panel:ClearAllPoints()
-		block.panel:SetSize(plan.width + 2 * pad, plan.height + 2 * pad)
-		block.panel:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", plan.spotX - plan.width / 2 - pad, plan.spotY - pad)
+		block.panel:SetSize(right - left + 2 * pad, top - bottom + 2 * pad)
+		block.panel:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left - pad, bottom - pad)
 		block.panel:Show()
 	elseif block.panel then
 		block.panel:Hide()
 	end
 	return plan ~= nil
+end
+
+-- Flat UI's page arrows were placed (OwnBars.lua, F.Pager): the panels that show take them in again.
+function ns.BarBlockPanels()
+	if not ns.Enabled(KEY) then
+		return
+	end
+	for _, block in ipairs(blocks) do
+		if block.panelOn then
+			Panel(block, true)
+		end
+	end
 end
 
 -- The panels behind the blocks and the fade, from the plans in use and the options. The fade is off with no plan, with the page off and with
@@ -937,7 +978,35 @@ local function Watch(_, elapsed)
 	end
 end
 
+-- The rows that lay a block out (its bars, Stack direction, Line up bars and the gap), as one string, and the line chat gets once a fight when one
+-- of them changes in it: the block lays out again as the fight ends (Replan), as a cast bar takes its new size then (CastBarSize.lua). The first
+-- Refresh only reads them, so a /reload in a fight says nothing.
+local WAIT_LINE = "Flat UI: the bar block lays out again when the fight ends."
+local function Layout()
+	local parts = {}
+	for n = 1, #blocks do
+		local suffix = SUFFIX[n]
+		for _, key in ipairs({ "bars" .. n, "direction" .. suffix, "align" .. suffix, "ownGap" .. suffix, "barGap" .. suffix }) do
+			parts[#parts + 1] = tostring(Opt(key))
+		end
+	end
+	return table.concat(parts, ";")
+end
+
+local function TellWait()
+	local layout = Layout()
+	local was = state.layout
+	state.layout = layout
+	if was ~= nil and was ~= layout and InCombatLockdown() and not state.told then
+		state.told = true
+		print(WAIT_LINE)
+	end
+end
+
 local function Refresh()
+	if ns.Enabled(KEY) then
+		TellWait()
+	end
 	if not ns.Enabled(KEY) then
 		if state.watch then
 			state.watch:Hide()
@@ -1452,6 +1521,7 @@ ns.Register(KEY, {
 		PLAYER_SPECIALIZATION_CHANGED = Queue,
 		PLAYER_REGEN_ENABLED = function()
 			Record("stop")
+			state.told = nil
 			if state.pending then
 				Queue()
 			end

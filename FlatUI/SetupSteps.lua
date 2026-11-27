@@ -283,6 +283,8 @@ ns.SETUP_STEPS = {
 		{ "actionbars.hotkeyY", "r", "mock-action-row" },
 		{ "actionbars.nameShow", "o", "mock-action-row" },
 		{ "actionbars.nameSize", "o", "mock-action-row" },
+		{ "actionbars.nameColour", "r", "behaviour", "Sets the colour of the macro names on the action buttons; white by default." },
+		{ "actionbars.namePoint", "r", "behaviour", "Chooses where the macro name shows on the action buttons: at the bottom as the game has it, at the top or in the centre." },
 		{ "actionbars.countSize", "o", "mock-action-row" },
 		{ "actionbars.countColour", "r", "behaviour", "Sets the colour of the count on the action buttons, the reagents, arrows or stacks a button has; white by default." },
 		{ "actionbars.countPoint", "r", "behaviour", "Chooses the corner of the action buttons where the count shows: bottom right as the game has it, bottom left, top left, top right or bottom." },

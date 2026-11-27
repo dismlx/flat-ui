@@ -26,7 +26,8 @@ local _, ns = ...
 -- Cooldown Panels by Philipp Barth (R41Z0R), adapted with his permission (CooldownPanels.lua:2553-2722, 26865-26940, 26942-27267, 28581-28593):
 -- a frame of Flat UI's own hangs from the game's PlayerFrame or TargetFrame by SetPoint on Flat UI's frame, out of combat, as Your buffs hangs
 -- from the player frame (OwnBuffs.lua). CooldownLooks.lua has the rules, the lists of one icon, the glows, the buff time and the samples of test
--- mode (TestMode.lua): Update, Ready and Recheck ask it first, and Layout asks it for the samples of an empty row.
+-- mode (TestMode.lua) and of the look preview (ns.CooldownLookChanged): Update, Ready and Recheck ask it first, and Layout asks it for the samples
+-- of an empty row.
 -- ns.SpellKnown, ns.SpellBookList, ns.BarSpells and ns.ActionSpell also give the gear comparison and the spell lines of Chat and tooltips their
 -- list, their bar import and the spell of a macro's slot (GearLines.lua, SpellLines.lua): the same reads of the spell book and the action slots as
 -- Add a spell and Add the spells of a bar make, whatever the switch of this page, and nothing is written.

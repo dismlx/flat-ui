@@ -8,7 +8,7 @@ local _, ns = ...
 -- back when the module, the row or the part goes off. A faded frame still takes clicks and shows tooltips, since alpha does not touch the mouse.
 --
 -- One frame of the addon's own runs every 0.05 s while the module is on. A row is at full opacity while the mouse is over the row's hover frame
--- (the Main action bar row's includes Flat UI's page arrows, FlatUIBar1PageUp and FlatUIBar1PageDown, left of its bar),
+-- (the Main action bar row's includes Flat UI's page arrows and page number, FlatUIBar1PageUp, FlatUIBar1PageDown and FlatUIBar1PageNumber, left of its bar),
 -- in a fight (with In combat ticked), with a target (With a target ticked; not the Target frame row, see When shown), while you cast or channel
 -- and for 1.5 s, a global cooldown, after an instant spell or an item use, so its cooldown sweep can be read (While casting ticked:
 -- UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the module's own frame, and UnitCastingInfo and UnitChannelInfo), while
@@ -193,7 +193,7 @@ end
 local WINDOWS_ROW = { row = "bagWindows", label = "Bag windows", frames = {}, opens = true }
 local ENTRIES = {
 	-- Flat UI's page arrows lie left of its main bar (OwnBars.lua); with the game's buttons the names are not there.
-	{ bar = true, row = "main", label = "Main action bar", frames = { "MainActionBar" }, beside = { "FlatUIBar1PageUp", "FlatUIBar1PageDown" } },
+	{ bar = true, row = "main", label = "Main action bar", frames = { "MainActionBar" }, beside = { "FlatUIBar1PageUp", "FlatUIBar1PageDown", "FlatUIBar1PageNumber" } },
 	{ bar = true, row = "bar2", label = "Action bar 2", frames = { "MultiBarBottomLeft" } },
 	{ bar = true, row = "bar3", label = "Action bar 3", frames = { "MultiBarBottomRight" } },
 	{ bar = true, row = "bar4", label = "Action bar 4", frames = { "MultiBarRight" } },

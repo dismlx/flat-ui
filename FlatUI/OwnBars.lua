@@ -22,8 +22,11 @@ local _, ns = ...
 -- header. They page on the left button only, play the game's scroll click as they page (SOUNDKIT.U_CHAT_SCROLL_BUTTON, as
 -- MainActionBar.lua:164-182), and say in a tooltip which way they page, the page you are on and the key of that command (NEXTACTIONPAGE,
 -- PREVIOUSACTIONPAGE, short as the hotkeys are with Hotkey text at Short): hooks of Flat UI's own buttons (HookScript), which only play the sound
--- and draw the tooltip. A change of profile reaches the row through ActionBars.lua's Refresh (ns.OwnPagerChanged); the mouse over a shown arrow
--- counts as over the main bar for Fading and the bar block (ns.OwnPagerOver).
+-- and draw the tooltip. The page number is a third secure button of the same action (FlatUIBar1PageNumber, action 1) under the number, so a left
+-- click on it goes back to page 1, in a fight too, with the same click sound unless it was on page 1 already, and its tooltip says the page and,
+-- past page 1, "Click: back to page 1". A change of profile reaches the row through ActionBars.lua's Refresh (ns.OwnPagerChanged); the mouse over a
+-- shown arrow or the number counts as over the main bar for Fading and the bar block (ns.OwnPagerOver), and the bar block's background panel
+-- widens to take them in (ns.OwnPagerRect, told after each placing through ns.BarBlockPanels).
 -- Quick Keybind Mode (the game's Key Bindings) works on the game's own buttons: while it is open the game's eight bars are given back where they
 -- are (alpha 1, the mouse on) and Flat UI's are hidden, out of combat; as it closes, or just before a fight starts, the game's bars are parked
 -- again and Flat UI's shown. A mode opened in a fight waits for its end. A fight that starts while the mode is open says so in one chat line: Flat
@@ -181,13 +184,20 @@ end
 self:GetFrameRef("game1"):EnableMouse(false)
 ]=]
 
--- The page arrows of the main bar: the game's paging action on a click (SECURE_ACTIONS.actionbar), on the button's release as Flat UI's buttons.
+-- The page arrows of the main bar: the game's paging action on a click (SECURE_ACTIONS.actionbar), on the button's release as Flat UI's buttons. The
+-- page number under the text takes the same action with a page number, 1 (SecureTemplates.lua:329-330, C_ActionBar.SetActionBarPage).
 local PAGER_WIRE = [=[
-for _, dir in ipairs(newtable("Up", "Down")) do
+for _, dir in ipairs(newtable("Up", "Down", "Number")) do
 	local b = self:GetFrameRef("page" .. dir)
-	b:SetAttribute("useOnKeyDown", false)
-	b:SetAttribute("action", dir == "Up" and "increment" or "decrement")
-	b:SetAttribute("type", "actionbar")
+	if b then
+		b:SetAttribute("useOnKeyDown", false)
+		if dir == "Number" then
+			b:SetAttribute("action", 1)
+		else
+			b:SetAttribute("action", dir == "Up" and "increment" or "decrement")
+		end
+		b:SetAttribute("type", "actionbar")
+	end
 end
 ]=]
 -- The two arrows and the number: where the game's are, else the place of its XML from the bar's bottom left (the group's bottom right 4 left of
@@ -264,22 +274,39 @@ local function Atlas(button, which, atlas)
 	end
 end
 
--- The tooltip of a page arrow: which way it pages, the page shown now and the key of that command.
+-- The page the main bar shows now, or nil.
+function F.Page()
+	local get = C_ActionBar and C_ActionBar.GetActionBarPage or _G.GetActionBarPage
+	if type(get) ~= "function" then
+		return nil
+	end
+	local ok, page = pcall(get)
+	return ok and ns.Finite(page) and page or nil
+end
+
+-- The tooltip of a page arrow: which way it pages, the page shown now and the key of that command. The page number's says the page and, past page
+-- 1, that a click goes back to it.
 function F.PagerTip(button)
 	local tip = GameTooltip
 	local pager = S.pager
 	if tip == nil or not pager then
 		return
 	end
+	local page = F.Page()
+	if rawequal(button, pager.Number) then
+		tip:SetOwner(button, "ANCHOR_RIGHT")
+		tip:SetText(page and ("Page %d"):format(page) or "Page", 1, 1, 1)
+		if page ~= 1 then
+			tip:AddLine("Click: back to page 1", 0.8, 0.8, 0.8)
+		end
+		tip:Show()
+		return
+	end
 	local up = rawequal(button, pager.Up)
 	tip:SetOwner(button, "ANCHOR_RIGHT")
 	tip:SetText(up and "Next page" or "Previous page", 1, 1, 1)
-	local get = C_ActionBar and C_ActionBar.GetActionBarPage or _G.GetActionBarPage
-	if type(get) == "function" then
-		local ok, page = pcall(get)
-		if ok and ns.Finite(page) then
-			tip:AddLine(("Page %d"):format(page), 1, 0.82, 0)
-		end
+	if page then
+		tip:AddLine(("Page %d"):format(page), 1, 0.82, 0)
 	end
 	local keys = {}
 	if type(GetBindingKey) == "function" and type(GetBindingText) == "function" then
@@ -301,7 +328,8 @@ function F.PagerTip(button)
 	tip:Show()
 end
 
--- The hooks of a page arrow, once: the game's scroll click after a click that paged, and the tooltip.
+-- The hooks of a page arrow or the page number, once: the game's scroll click after a click that paged (the number's on a page past 1 only,
+-- read before the click), and the tooltip.
 function F.HookPager(button)
 	local pager = S.pager
 	pager.hooked = pager.hooked or {}
@@ -309,7 +337,13 @@ function F.HookPager(button)
 		return
 	end
 	pager.hooked[button] = true
-	button:HookScript("PostClick", function()
+	button:HookScript("PreClick", function()
+		pager.from = F.Page()
+	end)
+	button:HookScript("PostClick", function(self)
+		if rawequal(self, pager.Number) and pager.from == 1 then
+			return
+		end
 		local sound = SOUNDKIT and SOUNDKIT.U_CHAT_SCROLL_BUTTON
 		if sound and type(PlaySound) == "function" then
 			pcall(PlaySound, sound)
@@ -360,6 +394,15 @@ function F.MakePager()
 		holder:Hide()
 		pager.holder, pager.text = holder, text
 	end
+	-- The page number takes a click: a secure button of the paging action under the number's holder, which takes no mouse, so the number stays on top.
+	local name = "FlatUIBar1PageNumber"
+	local number = _G[name] or CreateFrame("Button", name, bar, "SecureActionButtonTemplate")
+	number:RegisterForClicks("LeftButtonUp")
+	number:SetFrameLevel(bar:GetFrameLevel() + 9)
+	number:Hide()
+	pager.Number = number
+	F.HookPager(number)
+	S.header:SetFrameRef("pageNumber", number)
 end
 
 -- The bars, the header, the buttons and the watchers; the frame refs the snippets walk.
@@ -572,7 +615,7 @@ function F.PageText()
 			end
 			if okShown and not ns.IsSecret(shown) and shown == true then
 				local okOwner, owner = pcall(tip.GetOwner, tip)
-				if okOwner and not ns.IsSecret(owner) and (rawequal(owner, pager.Up) or rawequal(owner, pager.Down)) then
+				if okOwner and not ns.IsSecret(owner) and (rawequal(owner, pager.Up) or rawequal(owner, pager.Down) or rawequal(owner, pager.Number)) then
 					pcall(F.PagerTip, owner)
 				end
 			end
@@ -619,6 +662,11 @@ function F.Pager()
 			pager.holder:SetSize(def.w, def.h)
 			pager.holder:ClearAllPoints()
 			pager.holder:SetPoint("CENTER", S.bars[1], "BOTTOMLEFT", x / scale, y / scale)
+			-- Its button, over the number's rectangle in the bar's units.
+			t[#t + 1] = ("p = self:GetFrameRef('pageNumber') if p then p:ClearAllPoints() p:SetPoint('CENTER', bar, 'BOTTOMLEFT', %.3f, %.3f) "
+				.. "p:SetWidth(%.3f) p:SetHeight(%.3f) p:Show() end"):format(x, y, def.w * scale, h)
+		else
+			t[#t + 1] = "p = self:GetFrameRef('pageNumber') if p then p:Hide() end"
 		end
 	end
 	local text = table.concat(t, "\n")
@@ -629,6 +677,10 @@ function F.Pager()
 	pager.holder:SetShown(show)
 	if show then
 		F.PageText()
+	end
+	-- The bar block's background panel takes the arrows in (ns.OwnPagerRect), now that they are placed.
+	if type(ns.BarBlockPanels) == "function" then
+		ns.BarBlockPanels()
 	end
 end
 
@@ -1136,14 +1188,14 @@ function ns.OwnBarOf(name)
 	return nil
 end
 
--- True while the mouse is over one of the page arrows of the main bar that shows: Fading (its Main action bar row) and the bar block's fade count it as
--- over the main bar, since the arrows sit left of the bar's rectangle. A withheld answer counts as over, as Fading's own reads do.
+-- True while the mouse is over one of the page arrows or the page number of the main bar that shows: Fading (its Main action bar row) and the bar
+-- block's fade count it as over the main bar, since the arrows sit left of the bar's rectangle. A withheld answer counts as over, as Fading's own reads do.
 function ns.OwnPagerOver()
 	local pager = S.pager
 	if not (S.built and pager) then
 		return false
 	end
-	for _, dir in ipairs({ "Up", "Down" }) do
+	for _, dir in ipairs({ "Up", "Down", "Number" }) do
 		local button = pager[dir]
 		if button then
 			local okShown, shown = pcall(button.IsVisible, button)
@@ -1156,6 +1208,34 @@ function ns.OwnPagerOver()
 		end
 	end
 	return false
+end
+
+-- The rectangle round the page arrows and the page number of the main bar while they show, in UIParent units: left, bottom, right and top, or nil.
+-- The bar block's background panel and its mouse area take it in (BarBlock.lua).
+function ns.OwnPagerRect()
+	local pager = S.pager
+	if not (S.built and pager and pager.holder) then
+		return nil
+	end
+	local okShown, shown = pcall(pager.holder.IsVisible, pager.holder)
+	if not okShown or ns.IsSecret(shown) or shown ~= true then
+		return nil
+	end
+	local left, bottom, right, top
+	for _, part in ipairs({ pager.Up, pager.Down, pager.holder }) do
+		local l, b, w, h = nil, nil, nil, nil
+		if part then
+			l, b, w, h = Rect(part)
+		end
+		if l then
+			left, bottom = math.min(left or l, l), math.min(bottom or b, b)
+			right, top = math.max(right or (l + w), l + w), math.max(top or (b + h), b + h)
+		end
+	end
+	if left then
+		return left, bottom, right, top
+	end
+	return nil
 end
 
 -- Page arrows on the main bar changed: the arrows are placed, shown or hidden on the next check out of combat.

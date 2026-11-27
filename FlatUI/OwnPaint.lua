@@ -3,7 +3,7 @@ local _, ns = ...
 -- The paint of Flat UI's own action buttons (design 3.4, 3.6, 3.7, 6.3, research/own-buttons/design.md). OwnBars.lua makes the buttons; this file works out
 -- what each one shows from the slot it holds and draws it: icon, count, macro name, hotkey, cooldown, charges, loss of control, usable and range colours,
 -- checked, the blink of Attack while it swings and of Auto Shot or Shoot while it repeats (the button's Flash texture, on and off every 0.4 s, as on the
--- game's buttons), equipped, proc, empty-slot opacity, the pressed look from a key, the tooltip (set again every 0.2 s while it is up, as the game's buttons
+-- game's buttons), equipped, proc, the pulse of a spell pointed at in the spellbook or the talents (STEP.spellmark), empty-slot opacity, the pressed look from a key, the tooltip (set again every 0.2 s while it is up, as the game's buttons
 -- set theirs, so a cooldown remaining counts down, and at once when a modifier key goes down or up) and the repaint after a click. The look modules colour through painters (ns.OwnPainter) and take proc changes through ns.OnOwnProc; nothing here hooks a function of
 -- the game. ns.OnOwnReady tells them when a cooldown longer than the global cooldown has ended on a button (Flash when ready, ButtonStates.lua): seen
 -- between two passes, or as the button's own cooldown frame finishes its swipe (OnCooldownDone, hooked on Flat UI's own frame), once a cooldown. When
@@ -29,7 +29,7 @@ local _, ns = ...
 -- This file is not a module. It works while ns.OwnOn() is true.
 
 local WEAK = { __mode = "k" }
-local ORDER = { "slot", "icon", "text", "hotkey", "cooldown", "usable", "range", "checked", "flash", "equipped", "proc", "empty" }
+local ORDER = { "slot", "icon", "text", "hotkey", "cooldown", "usable", "range", "checked", "flash", "equipped", "proc", "empty", "spellmark" }
 -- The events that start the work, and the events it listens for once it runs (design 3.4).
 local FIRST = { "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }
 local EVENTS = { "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_UPDATE_STATE", "ACTIONBAR_UPDATE_COOLDOWN", "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES",
@@ -49,6 +49,7 @@ local SETS = {
 	hotkey = { hotkey = true },
 	empty = { empty = true },
 	items = { checked = true, text = true, usable = true },
+	spellmark = { spellmark = true },
 }
 -- The steps that end in a colour on the icon, and in the colour of the hotkey.
 local COLOUR = { icon = true, cooldown = true, usable = true, range = true }
@@ -63,6 +64,8 @@ local P = {
 	numbersHidden = setmetatable({}, WEAK),
 	pressed = setmetatable({}, WEAK),
 	alpha = setmetatable({}, WEAK),
+	-- the buttons whose spell highlight (the pulse of a spell pointed at in the spellbook) is shown now
+	marked = setmetatable({}, WEAK),
 	-- the buttons that blink now, the time since the last blink, and whether auto attack is on (PLAYER_ENTER_COMBAT and PLAYER_LEAVE_COMBAT; nil
 	-- until one of them is heard)
 	flashing = setmetatable({}, WEAK),
@@ -84,6 +87,8 @@ local P = {
 	grid = false,
 	started = false,
 	subscribed = false,
+	-- true once ActionBarController_UpdateAllSpellHighlights is followed
+	marks = false,
 	pending = false,
 	since = 1,
 	tries = 0,
@@ -570,6 +575,34 @@ function STEP.proc(button, st)
 	SetProc(button, st, st.has and Glowing(st) or false)
 end
 
+-- The pulse the game gives the buttons of a spell pointed at in the spellbook or the talents: the spellbook marks the slots that hold it
+-- (UpdateOnBarHighlightMarksBySpell, ActionButton.lua:86-88, a slot to an index) and asks the game's buttons to show it
+-- (ActionBarController_UpdateAllSpellHighlights, followed in Start). GetOnBarHighlightMark only reads that mark. The button's own
+-- SpellHighlightTexture and SpellHighlightAnim (ActionButtonTemplate.xml:61-77), as SharedActionButton_RefreshSpellHighlight shows them on the
+-- game's buttons; texture and animation calls, so also in a fight.
+function STEP.spellmark(button, st)
+	local on = false
+	if st.has and type(GetOnBarHighlightMark) == "function" then
+		local ok, mark = pcall(GetOnBarHighlightMark, st.slot)
+		on = ok and not ns.IsSecret(mark) and mark ~= nil and mark ~= false
+	end
+	if (P.marked[button] == true) == on then
+		return
+	end
+	local texture, anim = button.SpellHighlightTexture, button.SpellHighlightAnim
+	if texture == nil or anim == nil then
+		return
+	end
+	P.marked[button] = on or nil
+	if on then
+		texture:Show()
+		anim:Play()
+	else
+		texture:Hide()
+		anim:Stop()
+	end
+end
+
 -- An empty button is drawn at its painter's opacity, and normal while an action is on the cursor. Alpha is not protected.
 function STEP.empty(button, st)
 	local want = 1
@@ -1043,8 +1076,20 @@ local function OnUpdate(_, elapsed)
 	Pressed()
 end
 
+-- The spellbook and the talents ask the game's buttons to show their spell highlight; Flat UI's take it from the same marks.
+local function FollowMarks()
+	if not P.marks and ns.FollowGlobal("ActionBarController_UpdateAllSpellHighlights", function()
+		if On() then
+			All(SETS.spellmark)
+		end
+	end) ~= nil then
+		P.marks = true
+	end
+end
+
 local function Start()
 	if P.started then
+		FollowMarks()
 		return true
 	end
 	if not On() then
@@ -1064,6 +1109,7 @@ local function Start()
 		P.subscribed = true
 		ns.OnOwnSlots(SlotsChanged)
 	end
+	FollowMarks()
 	Sync()
 	All()
 	return true
