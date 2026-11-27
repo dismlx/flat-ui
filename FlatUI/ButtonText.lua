@@ -415,9 +415,10 @@ local function Pass()
 	end
 	state.dirty = false
 	local o, defaults = {}, true
+	local ownMain = (type(ns.OwnOn) == "function" and ns.OwnOn() == true) or (type(ns.OwnWanted) == "function" and ns.OwnWanted() == true)
 	for key, default in pairs(DEFAULTS) do
 		o[key] = Opt(key)
-		defaults = defaults and (key == "hotkeyText" or (key == "hotkeyEmpty" and only) or o[key] == default)
+		defaults = defaults and (key == "hotkeyText" or (key == "hotkeyEmpty" and ownMain) or o[key] == default)
 	end
 	local holding = Holding()
 	local flags = Flags(o)
