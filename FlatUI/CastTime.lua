@@ -704,7 +704,12 @@ do
 			end
 			KickColour(kick)
 			kick.id, kick.duration = id, duration
-			if pcall(KickBind, kick, duration) then
+			local bound = pcall(KickBind, kick, duration)
+			if not bound and kick.binding ~= nil then
+				-- A binding that refused this duration lets go of the font string, so the poll writes it alone.
+				pcall(kick.binding.SetEnabled, kick.binding, false)
+			end
+			if bound then
 				kick.mode = "binding"
 			elseif pcall(KickWrite, kick) then
 				kick.mode = "poll"
