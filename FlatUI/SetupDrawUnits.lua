@@ -29,6 +29,7 @@ local TYPE = { magic = { 0.2, 0.6, 1 }, poison = { 0, 0.6, 0.1 }, curse = { 0.6,
 	steal = { 0.2, 0.6, 1 } }
 local HEALTH, POWER = { cur = 7000, max = 10000, pct = 70, miss = 3000 }, { cur = 4200, max = 6000, pct = 70, miss = 1800 }
 local FRACTION = 0.7
+local TRAIL = { share = 0.15, alpha = 0.45 }
 local SIZE = { large = { bar = 124, health = 20, power = 10 }, small = { bar = 76, health = 12, power = 6 }, boss = { bar = 110, health = 14, power = 7 },
 	pet2 = { bar = 60, health = 10, power = 0 } }
 local ART = { leader = { "UI-HUD-UnitFrame-Player-Group-LeaderIcon", 1, 0.82, 0 }, attack = { "UI-HUD-UnitFrame-Player-CombatIcon", 0.9, 0.2, 0.2 },
@@ -791,6 +792,7 @@ function E.make(stage, id, given)
 		o[role .. "Text"] = Text(top, "GameFontHighlightSmall")
 	end
 	o.pred, o.shield, o.absorb = Tex(o.health, "ARTWORK", 1), Tex(o.health, "ARTWORK", 2), Tex(o.health, "ARTWORK", 3)
+	o.trail = Tex(o.health, "ARTWORK", -1)
 	o.deadText = Text(o.healthTop, "GameFontHighlightSmall")
 	if LOW[sample.kind] or ENEMY_LOW[sample.kind] then
 		o.low = MakeLow(root, o.health, 4)
@@ -839,7 +841,7 @@ function E.make(stage, id, given)
 		end
 	end
 	o.parts = { root = root, body = o.box, pic = o.pic, health = o.health, power = o.power, row = row, name = o.name, level = o.level, healthText = o.healthText,
-		powerText = o.powerText, pred = o.pred, shield = o.shield, absorb = o.absorb, kmark = o.kmark, kword = o.kword, kline = o.rLine, plate = o.plateIcon,
+		powerText = o.powerText, pred = o.pred, shield = o.shield, absorb = o.absorb, trail = o.trail, kmark = o.kmark, kword = o.kword, kline = o.rLine, plate = o.plateIcon,
 		flag = o.flag, leader = o.leader, role = o.role, marker = o.marker, attack = o.attack, happy = o.happy, dead = o.deadText, rez = o.rez, afk = o.afk, aura = o.auras[1] and o.auras[1].frame,
 		count = o.auras[1] and o.auras[1].count, time = o.auras[1] and o.auras[1].time, picLevel = o.picLevel, timer = o.pvpTimer, shadow = o.shadow,
 		petTarget = o.petTarget and o.petTarget.frame }
@@ -933,6 +935,7 @@ local function Layout(o, g)
 	L.rowOn = L.on and g.strip and g.square and ((not (k.group == "small" or k.group == "pet2")) or g.smallRow) and not L.nameless
 	L.rowH = L.rowOn and (L.large and ROW.height or ROW.small) or 0
 	L.power = size.power > 0 and (not L.on or k.power == nil or Get(k.power) ~= false)
+	L.powerFaded = L.on and s.kind == "party" and Get("partyPowerFor") == "healer" and (s.role == "tank" or s.role == "damage")
 	L.tall = L.rowOn and g.portraitSize ~= "bars"
 	local bar = size.bar
 	local start, seam, nameSeam, drop, apart, inside = t, t, 0, 2 * t, 3 * t, t
@@ -1200,7 +1203,7 @@ function E.bars(o, g, L)
 	local trough = L.joined and Trough() or nil
 	for _, role in ipairs({ "health", "power" }) do
 		local frame, fill = o[role], o[role .. "Fill"]
-		local live = role == "health" or L.power
+		local live = role == "health" or (L.power and not L.powerFaded)
 		local height = role == "health" and size.health or size.power
 		frame:SetShown(live)
 		Box(frame, o.root, L.barsLeft, role == "health" and L.healthTop or L.powerTop, size.bar, height)
@@ -1274,6 +1277,13 @@ function E.bars(o, g, L)
 			Solid(segment[1], segment[5], segment[6], segment[7], segment[8])
 		end
 	end
+	local trail = L.on and g.flat and s.kind == "target" and Get("lostTrail") == true and not (Get("lookLostColour") == true and g.backdrop)
+		and not s.dead and not s.offline
+	o.trail:SetShown(trail and true or false)
+	if trail then
+		Stretch(o.trail, o.health, bar * hp, bar * math.min(1, hp + TRAIL.share), size.health)
+		Solid(o.trail, 1, 1, 1, TRAIL.alpha)
+	end
 	local percent
 	if not L.on then
 		percent = 100
@@ -1299,7 +1309,7 @@ function E.bars(o, g, L)
 		if mode ~= "game" and (g.ownTextWhen == "hover" or (g.ownTextWhen == "notfull" and brim)) then
 			words = nil
 		end
-		if s.dead or s.offline or (L.on and role == "power" and Get("lookNoPowerText") == true) or not (role == "health" or L.power) then
+		if s.dead or s.offline or (L.on and role == "power" and Get("lookNoPowerText") == true) or not (role == "health" or (L.power and not L.powerFaded)) then
 			words = nil
 		end
 		if role == "health" then
@@ -2285,7 +2295,7 @@ local MARK = {
 	portraitTot = { "tot", "pic" }, portraitParty = { "party1", "pic" }, portraitPartypet = { "partypet1", "pic" }, squarePortrait = { "player", "pic" },
 	frameStyle = { "player", "body" }, powerSpace = { "player", "body" }, barBorder = { "player", "body" }, corners = { "player", "body" }, elite = { "target", "pic" },
 	backdrop = { "player", "body" }, flat = { "player", "health" }, healthColour = { "player", "health" }, healthTexture = { "player", "health" },
-	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "boss", "health" },
+	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, lostTrail = { "target", "trail" }, status = { "player", "pic" }, threat = { "boss", "health" },
 	lowHealth = { "party1", "health" }, lowHealthAt = { "party1", "health" }, lowHealthColour = { "party1", "health" }, hoverHighlight = { "player", "health" },
 	druidMana = { "player", "druid" }, druidManaText = { "player", "druid" }, druidManaHeight = { "player", "druid" }, druidManaShift = { "player", "druid" }, manaRule = { "player", "power" },
 	energyTick = { "player", "power" },
@@ -2319,7 +2329,7 @@ local MARK = {
 	totPicture = { "tot", "pic" }, totName = { "tot", "name" }, totNameFit = { "tot", "name" }, totHealthBy = { "tot", "health" }, totHealthText = { "tot", "healthText" },
 	totPowerBar = { "tot", "power" }, totSpot = { "tot", "root" },
 	partyPicture = { "party1", "pic" }, partypetPicture = { "partypet1", "pic" }, partyName = { "party1", "name" }, partyNameFit = { "party1", "name" }, partyHealthBy = { "party1", "health" },
-	partyHealthText = { "party1", "healthText" }, partyPowerText = { "party1", "powerText" }, partyPowerBar = { "party1", "power" },
+	partyHealthText = { "party1", "healthText" }, partyPowerText = { "party1", "powerText" }, partyPowerBar = { "party1", "power" }, partyPowerFor = { "party2", "power" },
 	partyRangeDim = { "party4", "root" }, partyRangeOpacity = { "party4", "root" },
 	bossName = { "boss", "name" }, bossNameFit = { "boss", "name" }, bossPowerText = { "boss", "powerText" }, bossLevel = { "boss", "level" }, bossHealthBy = { "boss", "health" }, bossHealthText = { "boss", "healthText" },
 	bossPowerBar = { "boss", "power" },
@@ -2557,6 +2567,9 @@ function D.Fill(o, hp)
 	if L.on and g.flat and g.healthByLeft then
 		local r, gr, b = Left(hp)
 		Fill(o.healthFill, o.healthFile, r, gr, b, 1)
+	end
+	if o.trail and o.trail:IsShown() then
+		Stretch(o.trail, o.health, width, bar * math.min(1, hp + TRAIL.share), height)
 	end
 	local was = s.health or FRACTION
 	for _, segment in ipairs(o.segments or {}) do

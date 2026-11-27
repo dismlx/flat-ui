@@ -1536,7 +1536,7 @@ local function RowColour(rec)
 		end
 	end
 	if r == nil and kind == "boss" then
-		r, g, b = ns.ReactionColour(UnitOf(rec))
+		r, g, b = FRAME.reaction(UnitOf(rec))
 		from = "reaction"
 	end
 	rec.colourFrom = r ~= nil and from or nil

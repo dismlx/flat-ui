@@ -11,6 +11,7 @@ local TELL_WAITS = "Flat UI: the five-second rule spark shows when the fight end
 local TICK_PART = "Energy tick"
 local ENERGY, TICK, ON_BEAT, RISE, MISSES, FRESH = 3, 2, 0.25, 15, 3, 0.5
 local TELL_TICK = "Flat UI: the energy tick spark shows when the fight ends."
+local SMOOTH = { steps = 6, quiet = 10, note = "Unit frames: Energy tick: this client sends energy in small steps, so there is no beat to show." }
 local TICK_EVENTS = { "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER" }
 
 local IsSecret = ns.IsSecret
@@ -25,7 +26,8 @@ local function Own(object)
 end
 
 local S = { ear = nil, hearing = false, rec = nil, start = nil, sample = nil, kind = nil, flared = nil }
-local E = { ear = nil, hearing = false, rec = nil, anchor = nil, last = nil, misses = 0, sample = nil, phase = nil, driving = false, flaredAt = nil }
+local E = { ear = nil, hearing = false, rec = nil, anchor = nil, last = nil, misses = 0, sample = nil, phase = nil, driving = false, flaredAt = nil,
+	small = 0, smooth = false, lastRise = nil }
 local costly = {}
 
 local function Wanted()
@@ -490,8 +492,17 @@ function TickDrive()
 	end
 end
 
+local function Unsmooth()
+	E.small = 0
+	if E.smooth then
+		E.smooth = false
+		ns.ClearNote(KEY, SMOOTH.note)
+	end
+end
+
 local function TickStop()
 	E.last, E.phase, E.misses = nil, nil, 0
+	Unsmooth()
 	if E.sample then
 		E.anchor, E.sample = nil, nil
 	end
@@ -515,6 +526,8 @@ local function Energy()
 end
 
 local function Rise(now)
+	E.lastRise = now
+	Unsmooth()
 	local anchor = E.anchor
 	if anchor == nil or E.sample then
 		E.anchor, E.misses, E.sample = now, 0, nil
@@ -550,12 +563,24 @@ local function OnTickEvent(event, unit)
 	local value = Energy()
 	local last = E.last
 	E.last = value
-	if value == nil or last == nil or value - last < RISE then
+	if value == nil or last == nil or value - last < 1 then
 		return
 	end
 	local now = Now()
-	if now ~= nil then
+	if now == nil then
+		return
+	elseif value - last >= RISE then
 		Rise(now)
+		return
+	end
+	local ok, most = pcall(UnitPowerMax, "player", ENERGY)
+	if E.smooth or (E.lastRise ~= nil and now - E.lastRise < SMOOTH.quiet) or not (ok and ns.Finite(most) and value < most) then
+		return
+	end
+	E.small = E.small + 1
+	if E.small >= SMOOTH.steps then
+		E.smooth = true
+		ns.Note(KEY, SMOOTH.note)
 	end
 end
 
@@ -632,6 +657,50 @@ local function OnTickRefresh()
 		EnergyTick(rec)
 	end
 end
+
+local function RuleLine()
+	local rec = S.rec or X.known(_G.PlayerFrame)
+	if rec == nil then
+		return nil
+	elseif rec.manaRuleQueued then
+		return "Five-second rule: waits for the fight to end"
+	end
+	local m, set = rec.manaRule, Pick(rec)
+	if set ~= nil and m ~= nil and set == m.druid then
+		return "Five-second rule: on, on the druid mana bar"
+	elseif set ~= nil then
+		return "Five-second rule: on, on the power bar"
+	end
+	return "Five-second rule: on, shows while a mana bar shows"
+end
+
+local function TickLine()
+	local rec = E.rec or X.known(_G.PlayerFrame)
+	local now = Now()
+	if rec ~= nil and rec.energyTickQueued then
+		return "Energy tick: waits for the fight to end"
+	elseif PowerKind() ~= ENERGY then
+		return "Energy tick: shows while your power is energy"
+	elseif E.smooth then
+		return "Energy tick: the game sends energy in small steps here, so there is no beat to show"
+	elseif E.sample then
+		return "Energy tick: a sample beat while test mode is on"
+	elseif E.anchor ~= nil and E.lastRise ~= nil and now ~= nil then
+		return ("Energy tick: in step, last tick %.1f seconds ago"):format(math.max(0, now - E.lastRise))
+	end
+	return ("Energy tick: waiting for the first tick of %d energy or more"):format(RISE)
+end
+
+ns.AddStatus(KEY, function()
+	local lines = {}
+	if Wanted() then
+		lines[#lines + 1] = RuleLine()
+	end
+	if TickWanted() and Energetic() then
+		lines[#lines + 1] = TickLine()
+	end
+	return lines
+end)
 
 table.insert(X.after.apply, { part = PART, fn = ManaRule })
 table.insert(X.after.refresh, { part = PART, fn = OnRefresh })

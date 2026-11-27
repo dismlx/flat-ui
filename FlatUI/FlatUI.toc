@@ -111,6 +111,7 @@ UnitDruidMana.lua
 UnitManaRule.lua
 UnitPetTarget.lua
 UnitHots.lua
+UnitTrail.lua
 Hud.lua
 MapButtons.lua
 AuraTime.lua

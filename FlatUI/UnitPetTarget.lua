@@ -167,8 +167,12 @@ local function Fill(jump)
 	end
 	if dead or not (LeftOn() and ns.HealthLeftTint(bar, UNIT)) then
 		local r, g, b = GREY, GREY, GREY
-		if not dead then
+		if not dead and type(X.reaction) == "function" then
+			r, g, b = X.reaction(UNIT)
+		elseif not dead then
 			r, g, b = ns.ReactionColour(UNIT)
+		end
+		if not dead then
 			if r == nil then
 				r, g, b = ns.Colour(KEY .. ".healthColour")
 			end

@@ -242,13 +242,20 @@ local function Empty(rec)
 	return ok and X.number(max) and max == 0
 end
 
+local NOT_HEALER = { TANK = true, DAMAGER = true }
+
+local function NotHealer(rec)
+	return rec.kind == "party" and Opt("partyPowerFor") == "healer" and NOT_HEALER[X.role(X.unitOf(rec))] == true
+end
+
 local function Power(rec, on)
 	local row, bar = POWER_ROWS[rec.kind], rec.parts.power
 	if row == nil or bar == nil then
 		return
 	end
 	rec.emptyPower = Empty(rec)
-	local hide = on and not Off(POWER) and (Opt(row) == false or rec.emptyPower)
+	rec.notHealer = NotHealer(rec)
+	local hide = on and not Off(POWER) and (Opt(row) == false or rec.emptyPower or rec.notHealer)
 	Fade(POWER, bar, hide)
 	local entry = rec.byRole.power
 	if hide and entry ~= nil then
@@ -282,6 +289,9 @@ local function RolesChanged()
 			end
 			if rec.kind == "party" or rec.kind == "player" then
 				X.run(MARKS, Marks, rec, on)
+			end
+			if on and rec.kind == "party" and NotHealer(rec) ~= (rec.notHealer == true) then
+				X.run(X.labels[rec.kind], X.apply, rec)
 			end
 		end
 	end

@@ -33,6 +33,9 @@ local function BorderColour(rec)
 	if player then
 		return ns.ClassColourOf(unit)
 	end
+	if type(X.reaction) == "function" then
+		return X.reaction(unit)
+	end
 	return ns.ReactionColour(unit)
 end
 
