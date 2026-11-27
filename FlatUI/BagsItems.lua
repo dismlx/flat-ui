@@ -81,7 +81,10 @@ local _, ns = ...
 -- (ContainerFrame.lua:1866-1909, 1970-1988), with isLocked and isReadable read live from C_Container.GetContainerItemInfo. The other buttons draw
 -- the quest border and the junk coin with textures of their own in the same art (TEXTURE_ITEM_QUEST_BANG and TEXTURE_ITEM_QUEST_BORDER,
 -- Blizzard_FrameXMLBase/Constants.lua:274-275; the atlas bags-junkcoin, ContainerFrame.xml:139-143). The item level is a text of this file
--- (NumberFontNormal at 12 with an outline, as Items.lua:491-531 sets its own) from ns.Items.LevelOf, in the quality colour. The marks are
+-- (NumberFontNormal at 12 with an outline, as Items.lua:491-531 sets its own) from ns.Items.LevelOf, in the quality colour; a bag or quiver
+-- (Enum.ItemClass Container 1 and Quiver 11, B.Categories.Kind), which has no item level, shows how many slots it has in the same place in the dim
+-- text colour instead, read from its tooltip once per item ID (B.Slots.SizeOf, BagsSlots.lua: by bag and slot for a slot the game holds now, else
+-- by link), in both windows and for every character, while Item level is on; it is not kept as the record's level. The marks are
 -- ItemMarks' answers drawn as ItemMarks.lua:366-460 draws them (BoE, the red tint, the Feed Pet icon of C_Spell.GetSpellTexture), and Bags' own
 -- green plus at the bottom left of a recipe this character can learn now (ItemMarks.Learnable): all four on this character's items, with Unusable
 -- and Learnable asked by bag and slot for a live slot and by link for the bank away from the banker, and the BoE mark alone on another
@@ -137,6 +140,8 @@ local GREY = 0.4
 local PANEL = { 0.118, 0.118, 0.118 }
 local CROP, CROP_MOST = 8, 15
 local LEVEL_FONT, LEVEL_SIZE = "NumberFontNormal", 12
+-- Forever's item classes Container and Quiver (Enum.ItemClass), whose buttons show how many slots they have where gear shows its item level.
+local CONTAINER_CLASS, QUIVER_CLASS = 1, 11
 local FREE_FONT, FREE_COLOUR = "NumberFontNormalLarge", { 0.85, 0.85, 0.85 }
 -- The lowest quality each choice of Quality border lets through; Off is none.
 local MIN_QUALITY = { all = 0, uncommon = 2, rare = 3, epic = 4 }
@@ -966,16 +971,35 @@ local function OwnQuest(button, state, record)
 	end
 end
 
+-- How many slots a bag or quiver has (B.Slots.SizeOf), for the number where gear shows its item level, or nil for any other item or while its
+-- tooltip does not say. A slot the game holds now (a live record on a button of the bags, or of the bank at the banker) is read by its bag and slot,
+-- any other by its link.
+local function SlotsOf(state, record, link)
+	local class = Ask(Categories.Kind, record)
+	if class ~= CONTAINER_CLASS and class ~= QUIVER_CLASS then
+		return nil
+	end
+	local live = record.live == true and state.kind ~= "offline"
+	local size = Ask(B.Slots and B.Slots.SizeOf, record.id, link, live and record.bag or nil, live and record.slot or nil)
+	if ns.Finite(size) and size > 0 then
+		return math.floor(size)
+	end
+	return nil
+end
+
 local function Level(button, state, record, link)
-	local value = nil
-	if record ~= nil and link ~= nil and Opt("itemLevel") ~= false then
-		value = LevelOf(link)
+	local value, size = nil, nil
+	if record ~= nil and Opt("itemLevel") ~= false then
+		value = link ~= nil and LevelOf(link) or nil
 		-- The record's level is filled by the first part that works it out (design §2.2).
 		if value ~= nil and record.level == nil then
 			record.level = value
 		end
+		if value == nil then
+			size = SlotsOf(state, record, link)
+		end
 	end
-	local text = Mark(button, state, "level", value ~= nil, LevelText)
+	local text = Mark(button, state, "level", value ~= nil or size ~= nil, LevelText)
 	if text and value ~= nil then
 		local r, g, b = QualityColour(record.quality)
 		if r == nil then
@@ -983,6 +1007,10 @@ local function Level(button, state, record, link)
 		end
 		pcall(text.SetTextColor, text, r, g, b, 1)
 		pcall(text.SetText, text, tostring(math.floor(value + 0.5)))
+	elseif text and size ~= nil then
+		-- In the dim text colour, so a bag's size never reads as an item level.
+		pcall(text.SetTextColor, text, DIM_TEXT[1], DIM_TEXT[2], DIM_TEXT[3], 1)
+		pcall(text.SetText, text, tostring(size))
 	end
 end
 

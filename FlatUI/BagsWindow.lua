@@ -7,17 +7,17 @@ local _, ns = ...
 -- The title bar holds, left to right:
 -- the character picker, the name of the character shown, in its class colour (RAID_CLASS_COLORS) and with its realm when that is not this
 -- character's, with "as of" and the day of what is shown when it is not live (date and time, WL/apis.yaml:35306, 42024). A click opens a menu of
--- Flat UI's own (BagsLayout.lua) with every character Bags keeps, by realm, this realm first; while a search is typed each line says how many items
--- match there, the keyring's included, worked out one character a frame once the menu opens, never while the player types, from names the client
--- has loaded only;
+-- Flat UI's own (BagsLayout.lua) with every character Bags keeps, by realm, this realm first, each with its gold at its right as last seen; while a
+-- search is typed each line says how many items match there instead, the keyring's included, worked out one character a frame once the menu
+-- opens, never while the player types, from names the client has loaded only;
 -- the search box (B.Search.Box, BagsSearch.lua, told its window for its menu of quick searches), which B.Window.Focus gives the keyboard for the
 -- bag search key, and which shows how many items match there while a search is typed (B.Search.SetCount, at the opening and at each update: the
--- stacks of the character shown added up, the keyring's included, as the picker counts them); the view button, Sections or Bag by bag; the sort
--- button, on live slots only: ns.BagSort.Run and ns.BagSort.Sound (BagSort.lua:283-325), which looks busy and takes no click from the moment the
--- game is asked to sort (BagSort tells its watchers, ns.BagSort.Watch) until the window is laid out again once the items have stopped moving,
--- six and a half seconds at most, and for as long as the sort hold of Bags.lua lasts (B.Sorting), also when the window closed and opened again
--- meanwhile; nothing arrives at the top shelf then either; the bank button on the bag window (B.Bank.Toggle, BagsBank.lua); and the close
--- button, a cross with no box, as Windows draws the game's.
+-- stacks of the character shown added up, the keyring's included, as the picker counts them); the view button, Sections or Bag by bag (it writes Show
+-- items as the options window does, so Home's Recent changes lists it and Ctrl+Z takes it back); the sort button, on live slots only: ns.BagSort.Run
+-- and ns.BagSort.Sound (BagSort.lua:283-325), which looks busy and takes no click from the moment the game is asked to sort (BagSort tells its
+-- watchers, ns.BagSort.Watch) until the window is laid out again once the items have stopped moving, six and a half seconds at most, and for as long
+-- as the sort hold of Bags.lua lasts (B.Sorting), also when the window closed and opened again meanwhile; nothing arrives at the top shelf then
+-- either; the bank button on the bag window (B.Bank.Toggle, BagsBank.lua); and the close button, a cross with no box, as Windows draws the game's.
 -- Dragging the title bar or the character picker moves the window (StartMoving and StopMovingOrSizing, :4797, 4813, with SetDontSavePosition and
 -- SetUserPlaced, :4605, 4778, so the client keeps no place of its own); a drag that starts on the picker opens no menu. Where it is let go is saved
 -- as its spot in the movers, also when the window closes during the drag: the box of its entry in Movers.lua, put with its corner at the window's,
@@ -2462,8 +2462,9 @@ end
 
 -- The buttons of the title bar ------------------------------------------------------------------------------------------------------------------
 
--- The character picker: every character Bags keeps, by realm, this realm and the connected ones first; the one shown is ticked. While a search is
--- typed, the menu's title names it and each line fills in how many items match there, one character a frame.
+-- The character picker: every character Bags keeps, by realm, this realm and the connected ones first; the one shown is ticked, and each line has
+-- that character's gold at its right as Flat UI last saw it (c.money, as the gold tooltip lists it). While a search is typed, the menu's title
+-- names it and that column fills in how many items match there instead, one character a frame.
 function Clicks.picker(w)
 	local which = w.which
 	local viewed = Layout.Viewed(which)
@@ -2495,6 +2496,7 @@ function Clicks.picker(w)
 		return a.realm < b.realm
 	end)
 	local items, jobs = {}, {}
+	local searching = Call(Search, "Active") == true
 	for _, group in ipairs(order) do
 		table.sort(group.list, function(a, b)
 			local am, bm = a.key == me, b.key == me
@@ -2507,8 +2509,9 @@ function Clicks.picker(w)
 		for _, c in ipairs(group.list) do
 			local level = Finite(c.level) and ("  " .. DIM_HEX .. math.floor(c.level) .. "|r") or ""
 			local key = c.key
+			local gold = (not searching and Finite(c.money) and c.money >= 0) and Money(c.money) or nil
 			items[#items + 1] = { text = ClassHex(c.class) .. Plain(NameOf(key, c)) .. "|r" .. level, tick = key == viewed, part = "window",
-				pick = function()
+				right = gold, pick = function()
 					Call(B, "SetViewing", which, key ~= me and key or nil)
 					Request("layout", which)
 					TitleLine(w)
@@ -2519,7 +2522,6 @@ function Clicks.picker(w)
 	if #jobs == 0 then
 		return
 	end
-	local searching = Call(Search, "Active") == true
 	local title = "Characters"
 	if searching then
 		local text = Call(Search, "Text")
@@ -2567,9 +2569,20 @@ function Tips.picker(w, owner)
 	end
 end
 
+-- The view button writes the row Show items as the options window writes it, and notes the change as it does (ns.PanelHome.Noted with the row of
+-- Config.lua, ns.Def), so Home's Recent changes lists it with its Undo and Ctrl+Z takes it back; an open options window shows its rows again.
 function Clicks.view(w)
 	local view = Opt("view") == "bags" and "sections" or "bags"
+	local before = ns.Get("bags.view")
 	ns.Set("bags.view", view)
+	local home = ns.PanelHome
+	local def = type(ns.Def) == "function" and ns.Def("bags.view") or nil
+	if type(home) == "table" and type(home.Noted) == "function" and type(def) == "table" then
+		pcall(home.Noted, def, before, ns.Get("bags.view"))
+	end
+	if type(ns.RefreshPanel) == "function" then
+		pcall(ns.RefreshPanel)
+	end
 	Request("layout", nil)
 	ArrangeBar(w)
 end

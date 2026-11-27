@@ -32,8 +32,9 @@ local _, ns = ...
 -- in the first empty keyring slot (C_Container.PickupContainerItem, as the game's keyring button, Camelot/MainMenuBarBagButtons.lua:47-62, 177-200;
 -- the game refuses anything that is not a key), a full keyring says so in one line, and a drag does nothing. A plain click on an empty bag slot
 -- puts in a spare bag from the bags: the largest bag (INVTYPE_BAG, Enum.ItemClass.Container) in the backpack and bags, its size read once per
--- item from its tooltip (C_TooltipInfo.GetBagItem against the game's CONTAINER_SLOTS), a general bag first of two the same size, and for the
--- reagent bag slot a reagent bag (Enum.ItemContainerSubclass.Reagent) alone, the only kind it takes; it goes on the cursor
+-- item from its tooltip (C_TooltipInfo.GetBagItem against the game's CONTAINER_SLOTS; Slots.SizeOf reads the same, by a link through GetHyperlink
+-- where the game holds no slot, for the size BagsItems.lua writes on a bag or quiver), a general bag first of two the same size, and for the reagent
+-- bag slot a reagent bag (Enum.ItemContainerSubclass.Reagent) alone, the only kind it takes; it goes on the cursor
 -- (C_Container.PickupContainerItem) and into the slot with PutItemInBag when C_PaperDollInfo.CursorCanGoInSlot says it can, else back to its place
 -- (ClearCursor). The spares are looked for once a pass of the row, only while a slot is empty, and again at a click or a tooltip. None of them is
 -- protected. In a fight they say so in one line and do nothing. A plain click on a slot that holds a bag (the keyring too) with nothing on the
@@ -239,19 +240,17 @@ local function SizePattern()
 	return sizePattern
 end
 
--- The slots of a bag in the bags, read once per item ID from its tooltip (C_TooltipInfo.GetBagItem), 0 when it does not say. A tooltip that has
--- not loaded yet (one line) is read again next time.
-local function BagSize(bag, slot, id)
+-- The slots of a bag, read once per item ID from its tooltip (C_TooltipInfo.GetBagItem for a slot the game holds now, else GetHyperlink of its link),
+-- 0 when it does not say. A tooltip that has not loaded yet (one line) is read again next time.
+local function ReadSize(id, get, ...)
 	local known = sizes[id]
 	if known then
 		return known
 	end
-	local api = C_TooltipInfo
-	local get = Usable(api) and api.GetBagItem or nil
 	if type(get) ~= "function" then
 		return 0
 	end
-	local ok, data = pcall(get, bag, slot)
+	local ok, data = pcall(get, ...)
 	if not (ok and Usable(data) and Usable(data.lines)) then
 		return 0
 	end
@@ -270,6 +269,32 @@ local function BagSize(bag, slot, id)
 		sizes[id] = size
 	end
 	return size
+end
+
+local function Tooltips(name)
+	local api = C_TooltipInfo
+	local fn = Usable(api) and api[name] or nil
+	return type(fn) == "function" and fn or nil
+end
+
+local function BagSize(bag, slot, id)
+	return ReadSize(id, Tooltips("GetBagItem"), bag, slot)
+end
+
+-- The slots of a bag or quiver anywhere, for the number on its button in the bag and bank windows (BagsItems.lua): by the bag and slot the game
+-- holds it in now (bag and slot given), else by its link (another character's, or the bank away from the banker). The size of an item ID is read
+-- once and shared with the spare bags above; 0 while its tooltip does not say.
+function Slots.SizeOf(id, link, bag, slot)
+	if not ns.Finite(id) then
+		return 0
+	end
+	if ns.Finite(bag) and ns.Finite(slot) then
+		return ReadSize(id, Tooltips("GetBagItem"), bag, slot)
+	end
+	if type(link) == "string" and not ns.IsSecret(link) and link ~= "" then
+		return ReadSize(id, Tooltips("GetHyperlink"), link)
+	end
+	return sizes[id] or 0
 end
 
 -- The largest spare bag in the backpack and bags, for a bag slot and for the reagent bag slot apart (the reagent bag slot takes reagent bags alone,

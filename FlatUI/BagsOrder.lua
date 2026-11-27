@@ -31,15 +31,23 @@ local _, ns = ...
 -- The menu: a right click on a title that can be dragged, with no item on the cursor, opens a menu of BagsLayout's (Layout.Menu) with Move to the
 -- top, Move up, Move down and Move to the bottom, among the sections that window shows, Fold or Unfold, Hide this section on every section of Flat
 -- UI's own but Other, the lines of its group's row on a section of a group (below), and while an order is saved, a line that puts Flat UI's order
--- back, while a section that window shows is open, Fold every section, while a section is folded, Unfold every section, and while a section the
--- rows show is hidden, Show hidden sections (3), which opens the Hidden button's menu (below) under the title.
+-- back, while a section that window shows is open, Fold every section, while a section that window shows is folded, Unfold every section (a fold
+-- kept for a hidden section, or for a kind of a group its row does not show now, does not count), and while a section the rows show is hidden,
+-- Show hidden sections (3), which opens the Hidden button's menu (below) under the title.
 -- At the live bank (B.Bank.Live), while Deposit and Take out is on (the row that shows those buttons, B.Opt("bankButtons")), a section of the
 -- player's own slots also has Put <section> in the bank in the bag window and Take <section> out in the bank window, which run the pass of Deposit
 -- and Take out of BagsBank.lua with the section (B.Categories.Of) in place of the search, and its tooltip says so; not on Keep in place, whose
 -- items stay pinned. A section with items placed in it by hand (B.Categories.PlacedCount, not Keep in place or Junk, which take none) has a line
 -- that puts them back in their own sections (B.Categories.PutBack, one line in chat), "Put back the 3 items placed here", or on a section the
--- player made "Empty this section (3 items)"; the tooltip of one of Flat UI's own sections says how many are placed there. On Keep in place it also
--- has BagsPins.lua's lines; on a section the player made, Rename, Colour and Delete this section; and in the player's own bag window, New section
+-- player made "Empty this section (3 items)"; the tooltip of one of Flat UI's own sections says how many are placed there. A put back asks
+-- nothing, so until the next one or a reload the section's menu also has "Bring back the 3 items you put back" (B.Categories.LastPutBack and
+-- Unput), which puts back each placement not changed since, says how many came back (3 of 4 when one is placed elsewhere now) and flashes the
+-- section Back (B.Custom.Took). While a search is typed (B.Search.Active), a section that holds items placed by hand has "Place the 7 items that
+-- match the search here": every item the window shows (st.cells, folded sections too) that the search finds (B.Search.Match) and that is in
+-- another section, not in New items, Junk (so the sell list stays as it is) or Keep in place, is placed there at once (B.Categories.PlaceAll,
+-- refused in a fight as a drop is), with one line in chat, the section flashing Placed 7, in both windows and for any character, since placements
+-- are by item ID for the account. On Keep in place it also has BagsPins.lua's lines; on every section the Colour lines, and on a section the
+-- player made Rename and Delete this section; and in the player's own bag window, New section
 -- (B.Custom.MenuLines, BagsCustom.lua). + New section, the title after the last section that makes one, never
 -- moves, folds or opens this menu. The row Section order on the Bags page does the same reset. Moving
 -- sections works in a fight: it only lays the windows out, and their buttons are not protected (BagsLayout.lua).
@@ -61,13 +69,16 @@ local _, ns = ...
 -- the order and its fold stay, so it comes back where it was. After the last section of the Sections view, in either window and for any character,
 -- BagsLayout.lua draws Hidden (3), a dim title with no cell, while a section the rows show is hidden (Order.HiddenCount); a click on it opens a
 -- menu of Layout.Menu (Order.HiddenMenu) with each hidden section, a click on one showing it again, after Show every hidden section while two or
--- more are hidden. It never moves, folds or takes a drop. The rows Hidden sections (ns.BagsHiddenLines, ns.BagsHiddenPick), which also lists a
--- hidden section the rows do not show now marked (not in use now), and Folded sections, which marks a folded one that is hidden, are on the Bags
--- page. A hide or a show lays both windows out again and, from a window, draws the rows of an open options window again (ns.RefreshPanel).
+-- more are hidden; either says in chat what shows again, and the section shown again flashes Shown (B.Custom.Took). Its tooltip names the hidden
+-- sections (Order.HiddenLabels: "Potions, Rings and Junk", "and 3 more" after eight). It never moves, folds, takes a drop or fades while a search
+-- is typed. The rows Hidden sections (ns.BagsHiddenLines, ns.BagsHiddenPick), which also lists a hidden section the rows do not show now marked
+-- (not in use now), and Folded sections, which marks a folded one that is hidden, or one the rows do not show now (not in use now), are on the
+-- Bags page. A hide or a show lays both windows out again and, from a window, draws the rows of an open options window again (ns.RefreshPanel).
 -- Groups: on a section of a group (B.Categories.GroupRow: Equipment, Consumables or Trade goods), the menu writes that group's row of the Bags page
--- as the options window does (ns.Set, Core.lua, which refreshes the module and so lays both windows out again, then ns.RefreshPanel): with two
--- choices (Trade goods) one line, Split by kind or Join into one section; with three, the row's label and each of its choices (ns.Choices of its
--- row in Config.lua), the one in use ticked.
+-- as the options window does (ns.Set, Core.lua, which refreshes the module and so lays both windows out again, then ns.RefreshPanel), and notes
+-- the change as the options window does (ns.PanelHome.Noted), so Home's Recent changes lists it and Ctrl+Z takes it back: with two choices
+-- (Trade goods) one line, Split by kind or Join into one section; with three, the row's label and each of its choices (ns.Choices of its row in
+-- Config.lua), the one in use ticked.
 
 local B = ns.Bags
 local Order = B.Order
@@ -83,9 +94,9 @@ local RESET_LINE = "Put the sections back in Flat UI's order"
 local TIPS = {
 	drag = "Drag the title to move this section. Right-click it to move it, or to put Flat UI's order back.",
 	-- A section of Flat UI's own that can be hidden, and one of a group (B.Categories.GroupRow).
-	dragHide = "Drag the title to move this section. Right-click it to move or hide it, or to put Flat UI's order back.",
-	dragGroup = "Drag the title to move this section. Right-click it to move or hide it, to split its group by kind or join it into one, or "
-		.. "to put Flat UI's order back.",
+	dragHide = "Drag the title to move this section. Right-click it to move, hide or colour it, or to put Flat UI's order back.",
+	dragGroup = "Drag the title to move this section. Right-click it to move, hide or colour it, to split its group by kind or join it into one, "
+		.. "or to put Flat UI's order back.",
 	keep = "Your pinned slots, in the order of your bags: nothing here is sorted, and after a clean up Flat UI puts each item back in its slot. "
 		.. "Ctrl+right-click an item to pin or unpin its slot. Drag the title to move this section, or right-click it for more.",
 	-- While Put pinned items back is off (BagsPins.lua).
@@ -98,11 +109,28 @@ local TIPS = {
 	own = "Right-click it to rename, colour or delete this section of yours.",
 }
 local UNFOLD_ALL, FOLD_ALL = "Unfold every section", "Fold every section"
--- What a title's menu says in chat once it put back the items placed in its section.
+-- What a title's menu says in chat once it put back the items placed in its section, and once it brought them back (B.Categories.Unput).
 local PUT_BACK = {
-	one = "Flat UI: 1 item goes back to its own section.",
-	many = "Flat UI: %d items go back to their own sections.",
+	one = "Flat UI: 1 item goes back to its own section. Right-click the title to bring it back.",
+	many = "Flat UI: %d items go back to their own sections. Right-click the title to bring them back.",
+	undo = "Bring back the %d items you put back",
+	undoOne = "Bring back the item you put back",
+	back = "Flat UI: %d items are back in %s.",
+	backOne = "Flat UI: 1 item is back in %s.",
+	backSome = "Flat UI: %d of the %d items are back in %s; the others are placed in another section now.",
+	none = "Flat UI: nothing to bring back.",
+	flash = "Back",
 }
+-- The line of a title's menu that places there every item the search finds (B.Categories.PlaceAll), what it says and how its section flashes.
+local PLACE_ALL = {
+	one = "Place the item that matches the search here",
+	many = "Place the %d items that match the search here",
+	sayOne = "Flat UI: 1 item is placed in %s.",
+	say = "Flat UI: %d items are placed in %s.",
+	flash = "Placed %d",
+}
+-- The sections an item the search finds is not placed from: the top shelf, Junk (so the sell list stays as it is) and Keep in place (its pins).
+local PLACE_SKIP = { new = true, junk = true, keep = true }
 -- After a title's tip, while items are placed in its section by hand.
 local PLACED_TIP = { one = "1 item is placed here by hand.", many = "%d items are placed here by hand." }
 -- After the tip of a click: what a Shift-click does, on a section among others open and on the one open alone.
@@ -132,6 +160,8 @@ local HIDE_SAY = {
 	one = "Flat UI: %s shows again.",
 	none = "Flat UI: no bag section is hidden.",
 }
+-- The words a section shown again flashes (B.Custom.Took), and how many hidden sections the tooltip of the Hidden button names before "and 3 more".
+local SHOWN_FLASH, HIDDEN_NAMES = "Shown", 8
 -- The lines of a title's menu that split a group of sections by kind or join it, for a row of two choices (Trade goods); a row of three (Equipment,
 -- Consumables) lists its choices under its label, the one in use ticked.
 local SPLIT_LINE, JOIN_LINE = "Split by kind", "Join into one section"
@@ -652,20 +682,28 @@ end
 
 -- The menu of the Hidden button after the last section (BagsLayout.lua), and of Show hidden sections in a title's menu: each hidden section the
 -- rows show now, which a click shows again, after a line that shows them all while two or more are hidden. Under anchor, for st's window.
+-- A pick says in chat what shows again, as Hide this section says what hid, and the section shown again flashes Shown at its next placing in that
+-- window (B.Custom.Took), as a section brought back flashes Back.
 function Order.HiddenMenu(st, anchor)
 	local keys = HiddenNow(true)
+	local which = type(st) == "table" and st.which or nil
 	local items = {}
 	if #keys >= 2 then
 		items[1] = { text = SHOW_ALL, part = "order", pick = function()
-			ShowAll()
+			if ShowAll() then
+				print(HIDE_SAY.all)
+			end
 		end }
 	end
 	for _, key in ipairs(keys) do
 		items[#items + 1] = { text = (SectionLabel(key):gsub("|", "||")), part = "order", pick = function()
-			SetHidden(key, false)
+			if SetHidden(key, false) then
+				print(HIDE_SAY.one:format((SectionLabel(key):gsub("|", "||"))))
+				Call(B, "Part", "custom", Call, B.Custom, "Took", which, key, nil, nil, SHOWN_FLASH)
+			end
 		end }
 	end
-	Call(B.Layout, "Menu", anchor, SHOW_TITLE, items, type(st) == "table" and st.which or nil)
+	Call(B.Layout, "Menu", anchor, SHOW_TITLE, items, which)
 end
 
 -- How many hidden sections the rows show now, for the Hidden button's title (BagsLayout.lua).
@@ -673,13 +711,41 @@ function Order.HiddenCount()
 	return #HiddenNow(true)
 end
 
+-- The hidden sections the rows show now by their labels, in the order the windows show them, as one text ("Potions, Rings and Junk"; after
+-- HIDDEN_NAMES of them "and 3 more"), for the tooltip of the Hidden button (BagsLayout.lua); nil while none is hidden.
+function Order.HiddenLabels()
+	local keys = HiddenNow(true)
+	local labels = {}
+	for index = 1, math.min(#keys, HIDDEN_NAMES) do
+		labels[index] = SectionLabel(keys[index])
+	end
+	if #labels == 0 then
+		return nil
+	end
+	local more = #keys - #labels
+	if more > 0 then
+		return ("%s and %d more"):format(table.concat(labels, ", "), more)
+	end
+	if #labels == 1 then
+		return labels[1]
+	end
+	return ("%s and %s"):format(table.concat(labels, ", ", 1, #labels - 1), labels[#labels])
+end
+
 -- Writes a row of the Bags page from a title's menu as the options window writes it (ns.Set), which refreshes the module and so lays both windows
--- out again, then shows the options window's rows again.
+-- out again, notes the change as the options window notes one (ns.PanelHome.Noted with the row of Config.lua, ns.Def), so Home's Recent changes
+-- lists it with its Undo and Ctrl+Z takes it back, then shows the options window's rows again.
 local function SetRow(path, value)
-	if ns.Get(path) == value then
+	local before = ns.Get(path)
+	if before == value then
 		return
 	end
 	ns.Set(path, value)
+	local home = ns.PanelHome
+	local def = type(ns.Def) == "function" and ns.Def(path) or nil
+	if type(home) == "table" and type(home.Noted) == "function" and type(def) == "table" then
+		pcall(home.Noted, def, before, ns.Get(path))
+	end
 	Repaint()
 	Request()
 end
@@ -810,21 +876,90 @@ local function PutBackText(key, count)
 	return count == 1 and "Put back the item placed here" or ("Put back the %d items placed here"):format(count)
 end
 
+-- The line of a title's menu that brings back what the last put back of its section took away (B.Categories.LastPutBack, Unput), until the next put
+-- back or a reload: one line in chat, n of m when some are placed in another section since, and the section flashes Back.
+local function BackLines(st, key, items, label)
+	local okLast, count, lastKey = pcall(Call, B.Categories, "LastPutBack")
+	if not (okLast and ns.Finite(count) and count > 0 and lastKey == key) then
+		return
+	end
+	items[#items + 1] = { text = count == 1 and PUT_BACK.undoOne or PUT_BACK.undo:format(count), part = "order", pick = function()
+		local back, total = Call(B.Categories, "Unput")
+		if not (ns.Finite(back) and back > 0) then
+			print(PUT_BACK.none)
+			return
+		end
+		if ns.Finite(total) and back < total then
+			print(PUT_BACK.backSome:format(back, total, label))
+		else
+			print(back == 1 and PUT_BACK.backOne:format(label) or PUT_BACK.back:format(back, label))
+		end
+		Call(B, "Part", "custom", Call, B.Custom, "Took", st.which, key, nil, nil, PUT_BACK.flash)
+	end }
+end
+
+-- While a search is typed (B.Search.Active), the line of a title's menu that places in its section every item the window shows that the search
+-- finds (B.Search.Match) and that is in another section, but not in New items, Junk or Keep in place (PLACE_SKIP), by B.Categories.PlaceAll: on a
+-- section that holds items placed by hand (B.Categories.Placeable: not Keep in place or Junk). The cells of the layout (st.cells) hold every item
+-- the window shows, the items of a folded section too. Placements are by item ID for the account, so it works in the bank window and for another
+-- character as well. One line in chat, and the section flashes Placed 7.
+local function PlaceLines(st, key, items, label)
+	if Call(B.Search, "Active") ~= true or PLACE_SKIP[key] then
+		return
+	end
+	local okPlace, placeable = pcall(Call, B.Categories, "Placeable", key)
+	if not (okPlace and placeable == true) or type(st.cells) ~= "table" then
+		return
+	end
+	local records, seen = {}, {}
+	for _, entry in pairs(st.cells) do
+		local record = type(entry) == "table" and entry.record or nil
+		local id = type(record) == "table" and record.id or nil
+		if ns.Finite(id) and not seen[id] then
+			local okMatch, match = pcall(Call, B.Search, "Match", record)
+			if okMatch and match == true then
+				local okOf, of = pcall(Call, B.Categories, "Of", record)
+				if okOf and type(of) == "string" and of ~= key and not PLACE_SKIP[of] then
+					seen[id] = true
+					records[#records + 1] = record
+				end
+			end
+		end
+	end
+	local n = #records
+	if n == 0 then
+		return
+	end
+	items[#items + 1] = { text = n == 1 and PLACE_ALL.one or PLACE_ALL.many:format(n), part = "order", pick = function()
+		local count = Call(B.Categories, "PlaceAll", key, records)
+		if not (ns.Finite(count) and count > 0) then
+			return
+		end
+		print(count == 1 and PLACE_ALL.sayOne:format(label) or PLACE_ALL.say:format(count, label))
+		Call(B, "Part", "custom", Call, B.Custom, "Took", st.which, key, nil, nil, PLACE_ALL.flash:format(count))
+	end }
+end
+
 -- The menu of a title (a right click with no item on the cursor), under anchor.
 function Order.Menu(st, sec, anchor)
 	if not Movable(st, sec) then
 		return
 	end
-	local shown, open = {}, false
+	-- folded: a section the window shows is folded, so Unfold every section changes what it shows (a fold of a hidden section, or of a kind of a
+	-- group its row does not show now, is kept and shows nothing).
+	local shown, open, folded = {}, false, false
 	for _, other in ipairs(st.sections or {}) do
 		if Movable(st, other) then
 			shown[#shown + 1] = other.key
-			open = open or not Order.Folded(other.key)
+			local isFolded = Order.Folded(other.key)
+			open = open or not isFolded
+			folded = folded or isFolded
 		end
 	end
 	local key = sec.key
 	local at = IndexOf(shown, key)
 	local items = {}
+	local label = type(sec.label) == "string" and sec.label:gsub("|", "||") or key
 	local function Line(text, target, after)
 		items[#items + 1] = { text = text, part = "order", pick = function()
 			if Order.Move(key, target, after) then
@@ -850,6 +985,8 @@ function Order.Menu(st, sec, anchor)
 			end
 		end }
 	end
+	BackLines(st, key, items, label)
+	PlaceLines(st, key, items, label)
 	items[#items + 1] = { text = Order.Folded(key) and "Unfold" or "Fold", part = "order", pick = function()
 		Toggle(st, sec)
 	end }
@@ -866,7 +1003,6 @@ function Order.Menu(st, sec, anchor)
 	GroupLines(key, items)
 	-- At the live bank, the section's items go into the bank from the bag window, or out of it from the bank window, by the pass of Deposit and Take
 	-- out (BagsBank.lua) with the section in place of the search. Not Keep in place, whose items stay in their pinned slots.
-	local label = type(sec.label) == "string" and sec.label:gsub("|", "||") or key
 	if Banking(st, sec) then
 		local function Mine(record)
 			return Call(B.Categories, "Of", record) == key
@@ -891,7 +1027,7 @@ function Order.Menu(st, sec, anchor)
 			Order.FoldAll(st)
 		end }
 	end
-	if Folds() then
+	if folded then
 		items[#items + 1] = { text = UNFOLD_ALL, part = "order", pick = function()
 			Order.UnfoldAll(st)
 		end }
@@ -974,7 +1110,8 @@ local function IsHidden(key)
 	return ok and hidden == true
 end
 
--- Every folded section by its label, in the order the windows show them, a hidden one marked so (it keeps its fold while hidden).
+-- Every folded section by its label, in the order the windows show them, a hidden one marked so (it keeps its fold while hidden), and one the rows
+-- do not show now (Rings with Equipment at One section, B.Categories.Exists) marked (not in use now), as Hidden sections marks it.
 function ns.BagsFoldLines()
 	local folded = Folds()
 	if not folded then
@@ -992,7 +1129,10 @@ function ns.BagsFoldLines()
 		lines[1] = { "all", UNFOLD_ALL }
 	end
 	for _, key in ipairs(keys) do
-		lines[#lines + 1] = { "fold:" .. key, SectionLabel(key) .. (IsHidden(key) and HIDDEN_MARK or "") }
+		local okExists, exists = pcall(Call, B.Categories, "Exists", key)
+		local okOwn, own = pcall(Call, B.Custom, "Is", key)
+		local unused = okExists and exists == false and not (okOwn and own == true)
+		lines[#lines + 1] = { "fold:" .. key, SectionLabel(key) .. (IsHidden(key) and HIDDEN_MARK or "") .. (unused and UNUSED_MARK or "") }
 	end
 	return lines
 end

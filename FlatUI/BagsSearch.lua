@@ -26,12 +26,13 @@ local _, ns = ...
 -- Enum.ItemConsumableSubclass, wowless, data/products/wowf/enums.yaml:4630-4651 and 4694-4711), #trade, #reagent, #recipe, #ammo, #bag and #key
 -- (the rules of those sections), #boe (ItemMarks' answer, ns.ItemMarks.BoE, ItemMarks.lua:184-191), #bound, #set, #usable and #unusable (ItemMarks'
 -- tooltip test, ns.ItemMarks.Unusable, :247-279), #learnable (a recipe this character can learn now, ns.ItemMarks.Learnable, the green plus of
--- BagsItems.lua), and the qualities #poor to #legendary. q takes 0 to 7, the English names or the client's
--- (ITEM_QUALITY0_DESC to ITEM_QUALITY7_DESC, Enum.ItemQuality, enums.yaml:5101-5111); ilvl compares the item level of weapons and armour
--- (ns.Items.LevelOf, Items.lua:425-438), and an item with no level never matches it. tip:stamina or tip:"chance to hit" looks for its text,
--- plainly and in lower case, in the item's tooltip: every left and right text of C_TooltipInfo.GetHyperlink of the record's link (the "item:" link
--- of a kept record), with the client's colour codes taken out, read once per link and kept for the session (at most TIP_MOST links, then begun
--- again), so the picker of characters counts it cheaply.
+-- BagsItems.lua), #placed (an item placed by hand in a section that is not hidden, B.Categories.PlacedKey), #pinned (an item of my bags in the slot
+-- pinned for it, B.Pins.Of of BagsPins.lua, as Keep in place holds it, also while that is hidden), and the qualities #poor to #legendary. q takes 0
+-- to 7, the English names or the client's (ITEM_QUALITY0_DESC to ITEM_QUALITY7_DESC, Enum.ItemQuality, enums.yaml:5101-5111); ilvl compares the item
+-- level of weapons and armour (ns.Items.LevelOf, Items.lua:425-438), and an item with no level never matches it. tip:stamina or tip:"chance to hit"
+-- looks for its text, plainly and in lower case, in the item's tooltip: every left and right text of C_TooltipInfo.GetHyperlink of the record's link
+-- (the "item:" link of a kept record), with the client's colour codes taken out, read once per link and kept for the session (at most TIP_MOST links,
+-- then begun again), so the picker of characters counts it cheaply.
 --
 -- A record whose name the client has not loaded yet matches nil, unknown, when only its name could decide: it is drawn dimmed until the name
 -- comes. The search never asks the server for an item: the name, the binding, the tooltips and the item level are read only once
@@ -50,13 +51,13 @@ local _, ns = ...
 -- the box shows how many items match at its right, left of the cross, in the dim text colour and red at 0: its window counts them for the
 -- character it shows, as its character picker does (Search.SetCount, BagsWindow.lua), and the text keeps clear of it (SetTextInsets).
 -- A right click on the box (OnMouseUp) opens a menu of BagsLayout's (B.Layout.Menu) of quick searches, New items, Junk, Bind on equip, Quest items,
--- Cannot use, Recipes you can learn, Consumables, Trade goods, Green and better and Epic and better, each with its term at the right; a pick
--- types the term (the one typed now is ticked), and Clear, while a search is typed, clears it. Under a Recent header it lists the last RECENT (5)
--- searches typed, newest first, the one typed now ticked, and Clear recent: a search is kept when Enter is pressed, when the box loses the keyboard
--- and when it is cleared (the cross, Clear, the bags closing), but not a quick search or one of fewer than two letters, in FlatUIDB.bags.recent
--- for the account (ns.Account; BagsData.lua resets only its v and chars), so they last between sessions. The menu belongs to the box's window, and
--- closes with it. Up and Down in a box that has the keyboard (OnArrowPressed, Recall) bring the recent searches back, newest first, and Down goes
--- forward again to what was typed. The help and the short lines end with the bag search key as the client names it (B.Window.KeyName,
+-- Cannot use, Recipes you can learn, Consumables, Trade goods, Placed by hand, Green and better and Epic and better, each with its term at the right;
+-- a pick types the term (the one typed now is ticked), and Clear, while a search is typed, clears it. Under a Recent header it lists the last RECENT
+-- (5) searches typed, newest first, the one typed now ticked, and Clear recent: a search is kept when Enter is pressed, when the box loses the
+-- keyboard and when it is cleared (the cross, Clear, the bags closing), but not a quick search or one of fewer than two letters, in
+-- FlatUIDB.bags.recent for the account (ns.Account; BagsData.lua resets only its v and chars), so they last between sessions. The menu belongs to the
+-- box's window, and closes with it. Up and Down in a box that has the keyboard (OnArrowPressed, Recall) bring the recent searches back, newest first,
+-- and Down goes forward again to what was typed. The help and the short lines end with the bag search key as the client names it (B.Window.KeyName,
 -- BagsWindow.lua: GetBindingKey and GetBindingText), or how to bind one.
 -- The bag search key: Bindings.xml binds a click of FlatUIBagSearchButton (CLICK FlatUIBagSearchButton:LeftButton), a plain button of Flat UI's own
 -- made here as the file loads, a child of UIParent with no size and no point that hears the release only, as the bank key's (BagsBank.lua), named
@@ -100,6 +101,7 @@ local HELP = {
 	"#gear  #weapon  #armour  #consumable  #potion  #elixir  #flask  #food  #bandage  #scroll",
 	"#trade  #reagent  #recipe  #ammo  #bag  #key",
 	"#poor  #common  #uncommon  #rare  #epic  #legendary",
+	"#placed finds what you placed in a section by hand, #pinned what sits in its pinned slot.",
 	"Quality: q:rare, q>=uncommon, q<3. Item level: ilvl:20-30, ilvl>40.",
 	"tip: looks in each item's tooltip: tip:stamina, tip:\"fire resistance\", tip:agility #boe.",
 	"For example: #boe q>=uncommon, !#junk mail, (cloth | leather) #gear.",
@@ -119,6 +121,7 @@ local QUICK = {
 	{ "Recipes you can learn", "#learnable" },
 	{ "Consumables", "#consumable" },
 	{ "Trade goods", "#trade" },
+	{ "Placed by hand", "#placed" },
 	{ "Green and better", "q>=uncommon" },
 	{ "Epic and better", "q>=epic" },
 }
@@ -393,6 +396,25 @@ local KEYWORDS = {
 	end,
 	set = function(record)
 		return record.set == true
+	end,
+	-- An item placed in a section by hand, as the windows show it (B.Categories.PlacedKey: not one placed in a hidden section).
+	placed = function(record)
+		local placedKey = Categories.PlacedKey
+		if type(placedKey) ~= "function" then
+			return false
+		end
+		local ok, key = pcall(placedKey, record)
+		return ok and type(key) == "string"
+	end,
+	-- An item of my bags in the slot pinned for it (B.Pins.Of, BagsPins.lua), as Keep in place holds it.
+	pinned = function(record)
+		local pins = B.Pins
+		local of = type(pins) == "table" and pins.Of or nil
+		if record.live ~= true or type(of) ~= "function" then
+			return false
+		end
+		local ok, pinned = pcall(of, record)
+		return ok and pinned == true
 	end,
 	unusable = function(record)
 		local answer = Unusable(record)

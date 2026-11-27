@@ -15,17 +15,20 @@ local _, ns = ...
 -- "bag" of Bag by bag, "+add" of the title that makes one, "+hidden" of the title of hidden sections), and none is used twice: the next number
 -- is above every number saved in the list, the placements, the folds and the order. A section of the player's own cannot be hidden (its title's
 -- menu has Delete instead of Hide this section, BagsOrder.lua). At most MOST sections, a name of 1 to LONGEST letters, trimmed, with no bar,
--- unique and none of Flat UI's own section names, whatever the case. A section of the player's own holds only the items placed in it by hand
+-- unique and none of Flat UI's own section names (their names at Each kind too, such as Potions), whatever the case; a section made before keeps
+-- its name, since Read does not check it. A section of the player's own holds only the items placed in it by hand
 -- (FlatUIDB.bags.placed, whose shape stays { [itemID] = key }): Make, Rename and Delete change the list alone, and Delete also takes the
 -- section's placements (its items go back to their own sections; their sell and keep lists stay), its fold and its place in the order away.
 -- Delete asks nothing, so the last section deleted is kept in this file (lastGone, never saved: its key, name, colour, place in the list, placed
 -- item IDs, fold and place in the order) until the next delete or a reload, and Restore brings it back with the same key: the first line of + New
 -- section's menu and of the row Custom sections.
 -- An item placed elsewhere since keeps its new place, MOST_PLACED still counts, and a section made since with the same name, or MOST sections,
--- refuses it with a line. An entry may also have colour, the ID of one of COLOURS, set from its title's menu (Colour): its title's text takes it in
--- both windows and for every character, and its + slot's + at rest; Plain, the first, takes it away. Sweep, after the module's Start
--- (ns.AddStart), takes away every placement, fold and order key of a section the list does not have, saying nothing; until then BagsCategories
--- skips them. Read keeps what it read until a write or until the saved list changes, since Is is asked for every item at each layout.
+-- refuses it with a line. An entry may also have colour, the ID of one of COLOURS, set from its title's menu (Colour): its title's text and rule
+-- take it in both windows and for every character, and its + slot's + at rest; Plain, the first, takes it away. Every section of Flat UI's own but
+-- the two shelves takes a colour the same way (its title's menu has the same Colour lines), kept for the account in FlatUIDB.bags.colours =
+-- { [key] = ID } beside the order, the folds and the hidden sections, read with a type test at each use; an empty set is not kept. Sweep, after the
+-- module's Start (ns.AddStart), takes away every placement, fold and order key of a section the list does not have, saying nothing; until then
+-- BagsCategories skips them. Read keeps what it read until a write or until the saved list changes, since Is is asked for every item at each layout.
 --
 -- The name box: one frame of Flat UI's own on UIParent, made the first time a name is asked, in the DIALOG strata as the bag menus are
 -- (BagsLayout.lua:2155), clamped to the screen (SetClampedToScreen, WL/uiobjects.yaml:4581) and taking the mouse (EnableMouse, :7170), in the bag
@@ -85,7 +88,9 @@ local _, ns = ...
 -- takes no drop.
 --
 -- The bells: the section that took an item flashes in the Highlight colour and says what happened for a moment ("Kept: Linen Cloth", "Moved in: ...",
--- "Bought: ...", "On your sell list", "Pinned", "Made", "Renamed", "Back"), on a frame of its own over the section. The words are on a tag of their
+-- "Bought: ...", "On your sell list", "Pinned", "Made", "Renamed", "Back"; and from BagsOrder.lua's menus, which pass their own words to Took,
+-- "Shown" for a hidden section shown again, "Placed 7" for the items the search found and "Back" for placements brought back), on a frame of its
+-- own over the section. The words are on a tag of their
 -- own (the panel colour, outlined in the Highlight colour), as wide as they need and in the title's font, so a narrow section never cuts them: on the
 -- title's row right after its text; where that would pass the content's right edge, over the first row of the section's cells; for a section with no
 -- cells, at the content's right edge on its title's row. Only a window narrower than the words cuts them. A section that is not laid out within
@@ -484,14 +489,16 @@ local function Sorted()
 	return keys, names
 end
 
--- Whether a name is one of Flat UI's own sections, in lower case: every label of B.Categories.LIST, the bank's Added and New section.
+-- Whether a name is one of Flat UI's own sections, in lower case: every label of B.Categories.LIST and its label at Each kind (Potions), the bank's
+-- Added and New section.
 local function BuiltIn(lower)
 	if lower == ADDED_WORD:lower() or lower == ADD_WORD:lower() then
 		return true
 	end
 	local list = B.Categories and B.Categories.LIST
 	for _, entry in ipairs(type(list) == "table" and list or {}) do
-		if type(entry) == "table" and type(entry.label) == "string" and entry.label:lower() == lower then
+		if type(entry) == "table" and ((type(entry.label) == "string" and entry.label:lower() == lower)
+			or (type(entry.each) == "string" and entry.each:lower() == lower)) then
 			return true
 		end
 	end
@@ -769,29 +776,89 @@ function Custom.Restore(which)
 	return true, "Flat UI: " .. text
 end
 
--- The colour of a section of the player's own (COLOURS), as red, green and blue, or nil for Plain or any other section. Its title's text takes it
--- (BagsLayout.lua's PaintTitle), and its + slot's + at rest.
-function Custom.Colour(key)
+-- The keys of Flat UI's own sections that may take a colour: every key of B.Categories.LIST but the two shelves, made the first time it is asked.
+local ownKeys = nil
+
+local function OwnKey(key)
+	if not ownKeys then
+		local list = B.Categories and B.Categories.LIST
+		if type(list) ~= "table" then
+			return false
+		end
+		ownKeys = {}
+		for _, entry in ipairs(list) do
+			local listKey = type(entry) == "table" and entry.key or nil
+			if type(listKey) == "string" and listKey ~= "new" and listKey ~= "free" then
+				ownKeys[listKey] = true
+			end
+		end
+	end
+	return type(key) == "string" and ownKeys[key] == true
+end
+
+-- The ID of the colour a section has (COLOURS), "plain" for none: a section of the player's own keeps it on its entry, one of Flat UI's own in
+-- FlatUIDB.bags.colours = { [key] = ID } for the account (read with a type test at each use; an empty set is not kept).
+local function ColourId(key)
 	local entry = type(key) == "string" and Read().entries[key] or nil
-	local colour = entry and type(entry.colour) == "string" and COLOUR_OF[entry.colour] or nil
+	local id
+	if entry then
+		id = entry.colour
+	elseif OwnKey(key) then
+		local bags = Bags(false)
+		local colours = bags and bags.colours
+		id = type(colours) == "table" and colours[key] or nil
+	end
+	if type(id) == "string" and COLOUR_OF[id] then
+		return id
+	end
+	return "plain"
+end
+
+-- The colour of a section (COLOURS), as red, green and blue, or nil for Plain: a section of the player's own, or one of Flat UI's own given one
+-- from its title's menu. Its title's text and rule take it (BagsLayout.lua's PaintTitle), and its + slot's + at rest.
+function Custom.Colour(key)
+	local colour = COLOUR_OF[ColourId(key)]
 	if colour and colour[3] then
 		return colour[3], colour[4], colour[5]
 	end
 	return nil
 end
 
--- Gives a section of the player's own a colour of COLOURS ("plain" takes it away); both windows are laid out again.
+-- Gives a section a colour of COLOURS ("plain" takes it away): on the entry of a section of the player's own, else in FlatUIDB.bags.colours for one
+-- of Flat UI's own. Both windows are laid out again.
 local function SetColour(key, id)
-	local entry = type(key) == "string" and Read().entries[key] or nil
-	if not entry or not COLOUR_OF[id] then
+	if not COLOUR_OF[id] then
 		return
 	end
 	local value = id ~= "plain" and id or nil
-	if entry.colour ~= value then
-		entry.colour = value
-		Changed()
-		Request("layout")
+	local entry = type(key) == "string" and Read().entries[key] or nil
+	if entry then
+		if entry.colour ~= value then
+			entry.colour = value
+			Changed()
+			Request("layout")
+		end
+		return
 	end
+	if not OwnKey(key) or ColourId(key) == id then
+		return
+	end
+	local bags = Bags(value ~= nil)
+	if not bags then
+		return
+	end
+	if value then
+		if type(bags.colours) ~= "table" then
+			bags.colours = {}
+		end
+		bags.colours[key] = value
+	elseif type(bags.colours) == "table" then
+		bags.colours[key] = nil
+		if next(bags.colours) == nil then
+			bags.colours = nil
+		end
+	end
+	Request("layout")
 end
 
 -- After the module's Start: every placement, fold and order key of a section the list does not have goes, saying nothing.
@@ -1141,21 +1208,24 @@ local function RestoreText()
 	return "Bring back " .. Plain(name)
 end
 
--- The lines BagsOrder.lua adds to a title's menu: Rename, Colour with its colours (a tick on the one it has) and Delete this section on a section
--- of the player's own, and New section in the player's own bag window.
+-- The lines BagsOrder.lua adds to a title's menu: Rename on a section of the player's own; Colour with its colours (a tick on the one it has) on
+-- every section, the player's own and Flat UI's own (BagsOrder.lua asks only for a title that moves: never New items, Free slots, + New section or
+-- Hidden); Delete this section on a section of the player's own; and New section in the player's own bag window.
 function Custom.MenuLines(st, sec, anchor)
 	local items = {}
 	if type(st) ~= "table" or type(sec) ~= "table" then
 		return items
 	end
 	local which, key = st.which, sec.key
-	if Custom.Is(key) then
+	local mine = Custom.Is(key)
+	if mine then
 		items[#items + 1] = { text = "Rename", part = PART, pick = function()
 			Custom.Ask({ mode = "rename", key = key, anchor = anchor, which = which })
 		end }
+	end
+	if mine or OwnKey(key) then
 		items[#items + 1] = { text = "Colour", header = true }
-		local entry = Read().entries[key]
-		local current = entry and type(entry.colour) == "string" and COLOUR_OF[entry.colour] and entry.colour or "plain"
+		local current = ColourId(key)
 		for _, colour in ipairs(COLOURS) do
 			local id = colour[1]
 			local text = colour[2]
@@ -1167,6 +1237,8 @@ function Custom.MenuLines(st, sec, anchor)
 				SetColour(key, id)
 			end }
 		end
+	end
+	if mine then
 		items[#items + 1] = { text = DeleteText("Delete this section", Custom.Count(key)), part = PART, pick = function()
 			Announce(Custom.Delete(key))
 		end }
