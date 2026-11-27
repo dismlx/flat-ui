@@ -147,6 +147,10 @@ Guide: [Combat](Combat)
 | `/flatui tracker set 1 health 40` | Shows pet tracker 1's health in red under 40% |
 | `/flatui tracker set 3 kit bell` | Gives tracker 3 a sound of its own, as the **Sound** row of **Edit a tracker** does |
 | `/flatui tracker proc colour 1 ffd100` | Sets one proc's colour; `proc time` and `proc trigger` set its time and trigger |
+| `/flatui tracker proc colour Execute ff3030` | Gives a proc of your class its own colour, by its name or its number in **Remove a proc**; the art, border and glow take it at once |
+| `/flatui tracker proc sound Overpower bell` | Gives a proc its own sound: `none`, `spell`, `chimes`, `bell`, `warhorn`, `raid`, `alarm` or `whisper`. `none` silences it |
+| `/flatui tracker proc time Revenge 5` | Gives a proc its own time in seconds; `0` is no time limit |
+| `/flatui tracker proc reset Execute` | Puts a proc's colour, sound and time back as the page has them |
 | `/flatui tracker check` | Says what each tracker shows and why, and what happened in the last fight |
 | `/flatui tracker test` | Shows each look for 3 seconds: fine, low, missing, then the game's own look |
 

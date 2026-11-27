@@ -1613,7 +1613,7 @@ ns.PAGES = {
 		{ key = "restoreProc", kind = "list", default = 0, label = "Bring back a proc", none = "Choose a proc", items = "ProcTurnedOff", pick = "ProcRestore",
 			needs = "procAuto", tip = "A proc of your class you removed shows again without being added." },
 		{ key = "procColour", kind = "colour", default = "ffffd100", label = "Colour", changed = "ProcColourChanged",
-			tip = "The border of a proc alert, and the plain arc of a proc with no art of its own. /flatui tracker proc colour sets one proc's colour, which also tints its art." },
+			tip = "The border of a proc alert, and the plain arc of a proc with no art of its own. /flatui tracker proc colour sets one proc's colour, which also tints its art, and works on the procs of your class too, by name: /flatui tracker proc colour Execute ff3030. proc sound Overpower bell, proc time Revenge 5 and proc reset Execute set a proc's sound and time or put them back." },
 		{ key = "procSound", kind = "choice", default = "spell", label = "Sound",
 			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },

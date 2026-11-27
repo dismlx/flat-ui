@@ -11,7 +11,7 @@ local K = {
 	NO_SOUND = "Trackers: the game played no sound, so proc alerts are silent.",
 	COUNT = { SPELL_ACTIVATION_OVERLAY_SHOW = "show", SPELL_ACTIVATION_OVERLAY_HIDE = "hide", SPELL_ACTIVATION_OVERLAY_GLOW_SHOW = "glowShow",
 		SPELL_ACTIVATION_OVERLAY_GLOW_HIDE = "glowHide" },
-	USAGE = "Usage: /flatui tracker proc colour 1 ffd100, proc time 1 10 or proc trigger 1 aura.",
+	USAGE = "Usage: /flatui tracker proc colour 1 ffd100, proc sound 1 bell, proc time 1 10, proc trigger 1 aura or proc reset 1. A proc of your class goes by its name or its number in Remove a proc, as proc colour Execute ff3030.",
 	AUTO_KINDS = { proc = true, reactive = true }, AUTO_LINE = 1000,
 }
 local A = { list = {}, byId = {}, stale = true }
@@ -136,6 +136,20 @@ local function OffSet(make)
 		saved.procsOff = {}
 	end
 	return saved.procsOff
+end
+
+local function LookSet(make)
+	local saved = ns.Character()
+	if type(saved) ~= "table" then
+		return {}
+	end
+	if type(saved.procLooks) ~= "table" then
+		if not make then
+			return {}
+		end
+		saved.procLooks = {}
+	end
+	return saved.procLooks
 end
 
 local function Off(entry)
@@ -679,6 +693,17 @@ local function Build()
 				else
 					entry.glow = nil
 				end
+				local look = LookSet(false)[row.name]
+				look = type(look) == "table" and look or {}
+				entry.colour = Plain(look.colour, "string") and look.colour or nil
+				if look.sound == false or Plain(look.sound, "number") then
+					entry.sound = look.sound
+				else
+					entry.sound = nil
+				end
+				if Plain(look.time, "number") and look.time >= 0 and look.time <= K.MAX_TIME then
+					entry.time = look.time > 0 and look.time or nil
+				end
 				if Refused(entry) then
 					entry.trigger = "aura"
 				end
@@ -1150,18 +1175,91 @@ local function Find(text)
 			return entry, found[1]
 		end
 	end
+	for _, entry in ipairs(ns.ProcAutoEntries()) do
+		local number = Line(entry.name)
+		if number and ((text:find("^%d+$") and K.AUTO_LINE + number == tonumber(text)) or entry.name:lower() == wanted) then
+			return entry, K.AUTO_LINE + number, true
+		end
+	end
 	return nil
 end
 
+local function Restyled(auto)
+	if auto then
+		Build()
+	end
+	ns.TrackerDirty()
+	for _, name in ipairs({ "ProcArtChanged", "ProcGlowChanged" }) do
+		if type(ns[name]) == "function" then
+			pcall(ns[name])
+		end
+	end
+end
+
+local function Keep(entry, field, value)
+	local look = LookSet(true)[entry.name] or {}
+	LookSet(true)[entry.name] = look
+	look[field] = value
+end
+
+local function SoundWord(value)
+	local word = value:lower()
+	if word == "none" or word == "off" then
+		return false, "none"
+	end
+	local kit = K.KITS[word]
+	return kit, kit and word or nil
+end
+
 local function Word(text)
-	local word, proc, value = text:match("^(%S+)%s+(%S+)%s*(.-)$")
+	local word = text:match("^(%S+)")
 	if not word then
 		return K.USAGE
 	end
 	word = word:lower()
-	local entry, number = Find(proc)
+	local proc, value
+	if word == "reset" then
+		proc, value = text:match("^%S+%s+(.-)%s*$"), ""
+	else
+		proc, value = text:match("^%S+%s+(.-)%s+(%S+)%s*$")
+	end
+	if not proc or proc == "" then
+		return K.USAGE
+	end
+	local entry, number, auto = Find(proc)
 	if not entry then
 		return ('No proc found for "%s".'):format(proc)
+	end
+	local label = auto and ("%s (of your class)"):format(entry.name) or ("Proc %d"):format(number)
+	if word == "reset" then
+		if auto then
+			LookSet(true)[entry.name] = nil
+		else
+			local row = RowOf(entry)
+			entry.colour, entry.sound = nil, nil
+			if row and Plain(row.seconds, "number") and row.seconds > 0 and row.seconds <= K.MAX_TIME then
+				entry.time = row.seconds
+			end
+		end
+		Restyled(auto)
+		return ("%s: colour, sound and time are as the page has them."):format(label)
+	elseif word == "sound" then
+		local kit, name = SoundWord(value)
+		if kit == nil then
+			return ('%s: "%s" is not a sound. Use none, spell, chimes, bell, warhorn, raid, alarm or whisper.'):format(label, value)
+		end
+		if auto then
+			Keep(entry, "sound", kit)
+		end
+		entry.sound = kit
+		Restyled(auto)
+		if kit ~= false then
+			Sound(entry, true)
+		end
+		return ("%s: sound is %s."):format(label, name)
+	end
+	if auto and word == "trigger" then
+		return ("%s: add it with Add a proc to give it a trigger of its own."):format(label)
 	end
 	if word == "colour" then
 		local hex = value:lower():gsub("^#", "")
@@ -1169,19 +1267,27 @@ local function Word(text)
 			hex = "ff" .. hex
 		end
 		if not (#hex == 8 and hex:find("^%x+$")) then
-			return ("Proc %d: %s is not a colour. Six or eight digits, such as ffd100."):format(number, value)
+			return ("%s: %s is not a colour. Six or eight digits, such as ffd100."):format(label, value)
+		end
+		if auto then
+			Keep(entry, "colour", hex)
 		end
 		entry.colour = hex
-		ns.TrackerDirty()
-		return ("Proc %d: colour is %s."):format(number, hex:sub(3))
+		Restyled(auto)
+		return ("%s: colour is %s."):format(label, hex:sub(3))
 	elseif word == "time" then
 		local seconds = tonumber(value)
 		if not (seconds and seconds >= 0 and seconds <= K.MAX_TIME) then
-			return ("Proc %d: time is 0 to %d seconds."):format(number, K.MAX_TIME)
+			return ("%s: time is 0 to %d seconds."):format(label, K.MAX_TIME)
 		end
-		entry.time = seconds
-		ns.TrackerDirty()
-		return seconds == 0 and ("Proc %d: no time limit."):format(number) or ("Proc %d: time is %s seconds."):format(number, tostring(seconds))
+		if auto then
+			Keep(entry, "time", seconds)
+			entry.time = seconds > 0 and seconds or nil
+		else
+			entry.time = seconds
+		end
+		Restyled(auto)
+		return seconds == 0 and ("%s: no time limit."):format(label) or ("%s: time is %s seconds."):format(label, tostring(seconds))
 	elseif word == "trigger" then
 		local def = P.triggers[value:lower()]
 		if not def then
