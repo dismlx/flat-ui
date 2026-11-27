@@ -70,7 +70,7 @@ local function FrameColour(rec)
 	if player then
 		return ns.ClassColourOf(unit)
 	end
-	return ns.ReactionColour(unit)
+	return X.reaction(unit)
 end
 
 local function ByColour(rec, by)
@@ -79,7 +79,7 @@ local function ByColour(rec, by)
 		if unit == nil then
 			return nil
 		end
-		return ns.ReactionColour(unit)
+		return X.reaction(unit)
 	end
 	return FrameColour(rec)
 end

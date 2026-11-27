@@ -77,9 +77,9 @@ local function NameColour(rec)
 		if player then
 			return ns.ClassColourOf(unit)
 		end
-		return ns.ReactionColour(unit)
+		return X.reaction(unit)
 	elseif mode == "reaction" then
-		return ns.ReactionColour(unit)
+		return X.reaction(unit)
 	end
 	return nil
 end
