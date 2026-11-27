@@ -86,7 +86,7 @@ ns.SETUP_STEPS = {
 		{ "nameplates.healthTextSize", "o", "mock-nameplate" },
 		{ "nameplates.healthTextOutline", "r", "mock-nameplate" },
 		{ "nameplates.healthTextColour", "r", "mock-nameplate" },
-		{ "nameplates.healthTextWhen", "o", "behaviour", "Chooses whether health text shows on every nameplate or only on the target." },
+		{ "nameplates.healthTextWhen", "o", "behaviour", "Chooses whether health text shows on every nameplate, only on the target, or on the target and the focus." },
 		{ "nameplates.healthFormat", "c", "mock-nameplate" },
 		{ "nameplates.level", "c", "mock-nameplate" },
 		{ "nameplates.levelShape", "o", "mock-nameplate" },

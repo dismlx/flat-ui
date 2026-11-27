@@ -5,7 +5,8 @@ local _, ns = ...
 -- spell name, the size of the spell icon, and the spark and the shield. Every call is in a pcall; a part that fails on enough plates stops
 -- alone, puts back what it changed and has a line in /flatui status. A row at its default makes no call the game did not make.
 -- Show health text at Only on the target finds the target by its plate frame (ns.PlateUnitFrame), as Nameplates.lua's Show auras does, since the
--- game's isTarget comes from a unit comparison the client can withhold; the texts are looked at again as the target changes.
+-- game's isTarget comes from a unit comparison the client can withhold; the texts are looked at again as the target changes. On the target and
+-- focus keeps the text on the focus's plate too, found the same way, and looks again as the focus changes.
 
 local KEY = "nameplates"
 local EXTRA = ns.PlateExtra
@@ -277,9 +278,10 @@ local function HealthPart(unitFrame, st, on)
 	end
 	local mine = when ~= "always" or format ~= "game"
 	if mine or st.htFaded then
-		-- The target's plate is compared as a frame: the game's isTarget comes from a unit comparison the client can withhold.
-		local target = ns.PlateUnitFrame("target") == unitFrame
-		local fade = (ns.Enabled(KEY) and not Opt("healthText")) or format ~= "game" or (when == "target" and not target)
+		-- The target's plate (and the focus's, at On the target and focus) is compared as a frame: the game's isTarget comes from a unit comparison the
+		-- client can withhold.
+		local shown = ns.PlateUnitFrame("target") == unitFrame or (when == "focus" and ns.PlateUnitFrame("focus") == unitFrame)
+		local fade = (ns.Enabled(KEY) and not Opt("healthText")) or format ~= "game" or (when ~= "always" and not shown)
 		for _, fontString in ipairs(strings) do
 			ns.SetFaded(fontString, fade)
 		end
@@ -365,8 +367,9 @@ local function FormatPart(unitFrame, st, on)
 	end
 	own:SetTextColor(colourR, colourG, colourB, 1)
 	local unit = unitFrame.unit
-	local target = ns.PlateUnitFrame("target") == unitFrame
-	local shown = Opt("healthText") and (Opt("healthTextWhen") ~= "target" or target) and Plain(unit, "string")
+	local when = Opt("healthTextWhen")
+	local seen = when == "always" or ns.PlateUnitFrame("target") == unitFrame or (when == "focus" and ns.PlateUnitFrame("focus") == unitFrame)
+	local shown = Opt("healthText") and seen and Plain(unit, "string")
 		and AnyShown(Strings(healthBar, HEALTH_TEXTS))
 	own:SetShown(shown and true or false)
 	if shown then
@@ -542,3 +545,8 @@ EXTRA.refresh[#EXTRA.refresh + 1] = FollowThreat
 followName = ns.FollowGlobal("CompactUnitFrame_UpdateName", OnName) == true
 followHealth = ns.FollowGlobal("CompactUnitFrame_UpdateHealth", OnHealth) == true
 ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", Retarget)
+ns.AddEvent(KEY, "PLAYER_FOCUS_CHANGED", function()
+	if Opt("healthTextWhen") == "focus" then
+		Retarget()
+	end
+end)
