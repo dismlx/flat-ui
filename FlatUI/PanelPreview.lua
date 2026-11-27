@@ -22,7 +22,8 @@ local PRIMARY = { enabled = 1, show = 2, style = 3, health = 4 }
 -- The drawing of each page that has a band.
 local NAMEPLATE = "mock-nameplate"
 local DRAWINGS = {
-	nameplates = NAMEPLATE, nameplatesHealth = NAMEPLATE, nameplatesColours = NAMEPLATE, nameplatesThreat = NAMEPLATE, nameplatesText = NAMEPLATE,
+	-- The Threat tab draws the threat samples of setup's step of nameplate colours and threat, whose parts mark each threat row.
+	nameplates = NAMEPLATE, nameplatesHealth = NAMEPLATE, nameplatesColours = NAMEPLATE, nameplatesThreat = "mock-nameplate-threat", nameplatesText = NAMEPLATE,
 	nameplatesCast = "mock-nameplate-cast", nameplatesMarks = "mock-nameplate-marks", nameplatesAuras = "mock-nameplate-auras", nameplatesGame = "mock-nameplate-stack",
 	unitframes = "mock-unit-frames", unitframesParty = "mock-party-frames", unitframesBoss = "mock-raid-cells", unitframesRaid = "mock-raid-cells",
 	unitframesPlayer = "mock-unit-frame", unitframesTarget = "mock-unit-frame", unitframesFocus = "mock-unit-frame", unitframesPet = "mock-unit-frame",
