@@ -891,6 +891,7 @@ local function AtlasExists(name)
 	end
 	return false
 end
+ns.AtlasExists = AtlasExists
 
 function ns.ClassAtlas(token)
 	if type(token) ~= "string" or IsSecret(token) then

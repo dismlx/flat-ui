@@ -484,32 +484,54 @@ The **Personal resource display** page can also lay your shields over its health
 
 ## Charges
 
-The **Charges** page (on by default) shows your own buffs that have charges as a round spell icon with a ring of glowing orbs round it, one for each charge. Lit orbs are the charges left, each a soft sphere in the spell's colour with a faint glow. The display stays on screen while the buff is up and fades out as it leaves you.
+The **Charges** page (on by default) shows your own buffs that have charges as a row of glowing gems, like the game's own class resources: combo points, arcane charges, chi or holy power. Each charge is a gem in a socket: lit gems are the charges left, and empty sockets the ones used. The spell's name sits small above the left end of the row, the charges left as a large number at its right end, and the time left small above its right end, all outlined. The row sits just under the bars of the personal resource display, the width of the bars, stays while the buff is up and fades out as it leaves you.
 
-It covers Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, and any buff with more than one charge that you add yourself.
+It covers Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, the stacks of a shaman's Maelstrom Weapon, and any buff with more than one charge that you add yourself.
 
-### How the orbs move
+### The gems of each spell
 
-- With **Show used charges** (on), each charge you use stays as a faint ring in its place, so you see how many are gone.
-- With **Burst as a charge goes** (on), the orb of a charge that goes flashes white, swells and fades in about a third of a second.
-- As you cast the buff again, or it gains charges, the orbs light in turn, each with a small pop.
-- On the last charge, the last orb pulses amber, and red in the buff's last 10 seconds.
-- There are as many orbs as the most charges the buff has had since you cast it, at most 10. With more, the number shows on the icon.
-- Two buffs at once, such as a priest's Inner Fire and Shadowguard, sit side by side in one row, centred.
+Each spell has the game's resource art that suits it, in its own colour:
+
+- Lightning Shield: the blue charged combo points, electric blue.
+- Water Shield: the chi orbs, tinted sea green.
+- Earth Shield: the druid's combo points, tinted earthy green.
+- Maelstrom Weapon: the arcane charges, tinted electric blue white.
+- Inner Fire: the druid's combo points, tinted gold.
+- Shadowguard: the arcane charges, violet.
+- Holy Shield: the holy power runes, warm gold.
+- A spell you added: the charged combo points in your class colour.
+
+Where the game lacks a piece of that art, the next set fills in for it, and then Flat UI's own soft glow and ring, so the row always draws.
+
+### How the gems move
+
+- As a charge goes, its gem plays the game's fade of a spent resource with a quick white flash, with **Burst as a charge goes** (on).
+- As you cast the buff again, or it gains charges or stacks, the gems light in turn, each with a short glow.
+- On the last charge, the last gem pulses.
+- There are as many gems as the most charges the buff has had since you cast it, at most 10. Maelstrom Weapon keeps as many as the most stacks it has had, at most 10, and lights one more with each stack.
+- With **Show used charges** (on), each charge you use stays as an empty socket. Off, only the charges left show.
+- Two buffs at once, such as a shaman's Lightning Shield and Maelstrom Weapon, sit one above the other.
 
 ### Look
 
-- **Orb style**: a **Ring round the icon** (the default), an **Arc over the icon** or a **Row under the icon**.
-- **Spin** (**Slow** by default, or **Still** or **Fast**) turns the ring, or sways the orbs of an arc or a row.
-- **Icon size** (40 px) and **Orb size** (12 px) set the sizes.
-- **Colour**: the **Spell's own colour** (the default: Lightning Shield electric blue, Water Shield sea green, Earth Shield earthy green, Inner Fire gold, Shadowguard violet, Holy Shield warm white gold, and your class colour for a spell you added), your **Class colour**, or **One colour**, set with **Orb colour**.
-- **Time left** (on) writes the time under the icon, amber in its last 10 seconds.
+- **Orb style**: **Resource bar** (the default), **Spell art**, **Ring round the icon**, **Arc over the icon** or **Row under the icon**.
+- **Spell art** shows the game's own spell alert art for the buff, Maelstrom Weapon's for now, fainter on one charge and brighter with each one, with the count, time and name under it. A buff without such art, such as Lightning Shield, shows the resource bar.
+- **Fill the width** (on) stretches the sockets to share the width of the bars; the gems keep their shape. Off, square gems sit centred. At its own spot the row keeps square gems.
+- **Gem size** (20 px) sets the height of each gem, 3 px apart. The text grows and shrinks with it.
+- **Name**, **Count** and **Time left** (all on) choose the text. The time turns amber in its last 10 seconds. With **Count** off, the number shows only past 10 charges.
+- **Colour**: the **Spell's own colour** (the default, as listed above), your **Class colour**, or **One colour**, set with **Orb colour**. Class colour and One colour tint the gems.
+
+The ring, arc and row of orbs round the icon stay as choices. Their orbs sit close round the middle, and **Spell icon** (off) shows the round spell icon there; without it the orbs ring the count. **Spin** (**Slow** by default, or **Still** or **Fast**) turns the ring, or sways the orbs of an arc or a row, and **Icon size** (40 px) and **Orb size** (12 px) set their sizes.
+
+### Where it sits
+
+**Place** puts the row **Under the personal resource display** (the default), **Above the personal resource display**, or at its **Own spot**. Under or above, it sits just clear of the bars, past a **Your buffs** row on that side, and follows them. While that display is off or hidden, the row goes to its own spot, the **Charges** box of `/flatui move`, under the middle of the screen until you move it.
 
 ### When it shows
 
-**Only in combat** and **Hide while mounted** (both off) hide it at those times. **Sound when the last charge goes** (**None** by default) plays as such a buff leaves you on its last charge before its time is up.
+**Only in combat** and **Hide while mounted** (both off) hide it at those times. **Sound when the last charge goes** (**None** by default) plays as such a buff leaves you on its last charge before its time is up; Maelstrom Weapon, which you spend on purpose, plays none.
 
-In a fight, while the game hides your buffs, the game itself lights the orbs and writes the time left. The bursts, pops and pulse come back once it shows your buffs again.
+In a fight, while the game hides your buffs, the game itself lights the gems and writes the count and time left. The glows, fades and pulse come back once it shows your buffs again.
 
 ### Which spells
 
@@ -517,13 +539,13 @@ In a fight, while the game hides your buffs, the game itself lights the orbs and
 
 ### Seeing it
 
-`/flatui move` places it (the **Charges** box, under the middle of the screen). Test mode, a change of its look out of combat, and `/flatui charges` show a sample: Lightning Shield with 3 charges, one used every 2 seconds, then cast again.
+Test mode, a change of its look out of combat, and `/flatui charges` show a sample in the look you chose: Lightning Shield with 3 charges, one used every 2 seconds, then cast again, or with **Spell art**, Maelstrom Weapon gaining a stack each second up to 5.
 
 ### Charges commands
 
 | Command | What it does |
 | --- | --- |
-| `/flatui charges` | A sample for 8 seconds, out of combat and while none of its buffs is on you |
+| `/flatui charges` | A sample for 8 seconds in the look you chose, out of combat and while none of its buffs is on you |
 | `/flatui charges add Lightning Shield` | Adds a buff with charges, by name, spell ID or shift-clicked spell |
 | `/flatui charges remove Lightning Shield` | Takes one off |
 | `/flatui charges list` | Lists the buffs it shows |

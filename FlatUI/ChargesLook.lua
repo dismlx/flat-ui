@@ -7,6 +7,7 @@ local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
 local TAU = math.pi * 2
 
 L.GLOW, L.RING = MEDIA .. "Glow.tga", MEDIA .. "Ring.tga"
+L.FONT = MEDIA .. "Fonts\\IBMPlexSans-SemiBold.ttf"
 L.MASK_ATLAS, L.MASK_FILE = "CircleMaskScalable", "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 L.MOST = 10
 L.BURST, L.FLASH, L.SWELL = 0.35, 0.15, 1.8
@@ -15,9 +16,10 @@ L.FADE, L.FADE_IN = 0.4, 0.15
 L.SPIN = { still = 0, slow = TAU / 14, fast = TAU / 4 }
 L.AMBER, L.RED = { 1, 0.7, 0.2 }, { 1, 0.22, 0.18 }
 L.LOW, L.CLOCK = 10, 0.1
-L.PULSE = 1.4
-L.HALO, L.BODY, L.CORE, L.GHOST = 2.4, 1.3, 0.55, 0.95
+L.PULSE, L.PULSE_GROW = 1.4, 0.16
+L.HALO, L.BODY, L.CORE, L.GHOST = 2.4, 1.7, 0.8, 1.15
 L.CROP = 0.06
+L.RINGS = { ring = true, arc = true, row = true }
 
 local IsSecret = ns.IsSecret
 
@@ -37,6 +39,22 @@ local function Number(key, default)
 	return ns.Finite(value) and value or default
 end
 L.Number = Number
+
+function L.Kind(d)
+	local style = Opt("style")
+	if L.RINGS[style] then
+		return "orb", style
+	end
+	local B = ns.ChargesBar
+	if style == "art" and B and B.ArtFor(d.family) then
+		return "art", "art"
+	end
+	return "pip", "bar"
+end
+
+function L.Ringed()
+	return L.RINGS[Opt("style")] == true
+end
 
 function L.Mask(owner, texture)
 	local ok, mask = pcall(owner.CreateMaskTexture, owner)
@@ -102,7 +120,7 @@ function L.Face(d, owner)
 	return face
 end
 
-function L.PaintFace(face, size, r, g, b)
+function L.PaintFace(face, size, r, g, b, shown)
 	face.back:SetSize(size * 1.9, size * 1.9)
 	face.back:SetVertexColor(r, g, b, 0.22)
 	face.shade:SetSize(size * 1.4, size * 1.4)
@@ -110,10 +128,13 @@ function L.PaintFace(face, size, r, g, b)
 	face.rim:SetSize(size * 1.1, size * 1.1)
 	face.sheen:SetSize(size * 1.02, size * 1.02)
 	face.sheen:SetVertexColor(r, g, b, 0.45)
+	for _, texture in ipairs({ face.back, face.shade, face.icon, face.rim, face.sheen }) do
+		texture:SetShown(shown ~= false)
+	end
 end
 
 function L.New(parent)
-	local d = { spots = {}, orbs = {}, n = 0, phase = 0, lit = 0, clock = 0 }
+	local d = { spots = {}, pools = {}, orbs = {}, n = 0, phase = 0, lit = 0, clock = 0 }
 	local frame = Own(CreateFrame("Frame", nil, parent))
 	frame:SetSize(1, 1)
 	frame:SetAlpha(0)
@@ -137,10 +158,8 @@ function L.New(parent)
 	top:SetAllPoints(own)
 	top:SetFrameLevel(own:GetFrameLevel() + 8)
 	d.number = L.Text(top, "NumberFontNormal")
-	if d.number then
-		d.number:SetPoint("CENTER", centre, "CENTER", 0, 0)
-	end
 	d.time = L.Text(top, "NumberFontNormalSmall")
+	d.name = L.Text(top, "GameFontHighlightSmall")
 	return d
 end
 
@@ -160,8 +179,21 @@ function L.Orb(d, index)
 	if orb then
 		return orb
 	end
+	local B = ns.ChargesBar
+	if d.kind == "pip" and B then
+		orb = B.Pip(d, index)
+	elseif d.kind == "art" and B then
+		orb = B.Layer(d, index)
+	else
+		orb = L.MakeOrb(d, index)
+	end
+	d.orbs[index] = orb
+	return orb
+end
+
+function L.MakeOrb(d, index)
 	local spot = L.Spot(d, index)
-	orb = { index = index }
+	local orb = { index = index }
 	orb.ghost = Own(d.own:CreateTexture(nil, "BORDER", nil, 0))
 	orb.ghost:SetTexture(L.RING)
 	pcall(orb.ghost.SetBlendMode, orb.ghost, "ADD")
@@ -181,8 +213,29 @@ function L.Orb(d, index)
 	orb.flash:SetPoint("CENTER", spot, "CENTER", 0, 0)
 	orb.flash:SetVertexColor(1, 1, 1, 1)
 	orb.flash:SetAlpha(0)
-	d.orbs[index] = orb
+	orb.regions = { orb.ghost, orb.burst, orb.flash }
 	return orb
+end
+
+function L.HideOrb(orb)
+	L.Rest(orb)
+	orb.frame:Hide()
+	for _, region in ipairs(orb.regions) do
+		region:Hide()
+	end
+end
+
+function L.Swap(d, kind)
+	for index = 1, L.MOST do
+		local orb = d.orbs[index]
+		if orb then
+			L.HideOrb(orb)
+		end
+	end
+	d.pulse = nil
+	d.pools[kind] = d.pools[kind] or {}
+	d.orbs = d.pools[kind]
+	d.kind = kind
 end
 
 local function Light(value)
@@ -190,6 +243,16 @@ local function Light(value)
 end
 
 function L.TintOrb(orb, r, g, b)
+	if orb.tints then
+		for index, bar in ipairs(orb.bars) do
+			local tint = orb.tints[index]
+			if tint then
+				bar:SetStatusBarColor(tint[1], tint[2], tint[3], tint[4])
+			end
+		end
+		orb.tint = nil
+		return
+	end
 	orb.bars[1]:SetStatusBarColor(r, g, b, 0.3)
 	orb.bars[2]:SetStatusBarColor(r, g, b, 1)
 	orb.bars[3]:SetStatusBarColor(Light(r), Light(g), Light(b), 0.9)
@@ -204,41 +267,55 @@ function L.PaintOrb(d, orb, size, r, g, b)
 	orb.ghost:SetSize(size * L.GHOST, size * L.GHOST)
 	orb.ghost:SetVertexColor(r, g, b, 0.32)
 	orb.ghost:SetShown(Opt("ghosts") ~= false and orb.index <= d.n)
-	orb.burst:SetSize(size * L.BODY, size * L.BODY)
+	orb.bw, orb.bh, orb.swell = size * L.BODY, size * L.BODY, L.SWELL
+	orb.burst:SetSize(orb.bw, orb.bh)
 	orb.burst:SetVertexColor(r, g, b, 1)
+	orb.burst:Show()
 	orb.flash:SetSize(size * 1.7, size * 1.7)
+	orb.flash:Show()
 	L.TintOrb(orb, r, g, b)
 	orb.frame:SetShown(orb.index <= d.n)
 end
 
+function L.Line(d)
+	local percent = math.max(80, math.min(150, d.size / 40 * 100))
+	return math.floor(14 * percent / 100 + 2), percent
+end
+
 function L.Geometry(d)
 	local style, size, orb, n = d.style, d.size, d.orb, math.max(1, d.n)
-	local radius = size / 2 + orb * 0.95
-	local edge = orb * 0.75
-	d.radius = radius
+	local radius = (size / 2 + orb) * 0.75
+	local edge = orb * 0.85
+	local line = L.Line(d)
+	local over = Opt("name") ~= false and line or 0
+	local under = Opt("time") ~= false and line or 0
+	d.radius, d.cx, d.over, d.under = radius, 0, over, under
+	local top, bottom
 	if style == "row" then
-		local gap = orb * 1.35
+		local gap = orb * 1.45
 		d.gap = gap
-		d.rowY = -(size / 2 + orb * 1.05)
-		local top, bottom = size / 2 + 2, size / 2 + orb * 1.05 + edge
-		d.w = math.max(size + 6, (n - 1) * gap + orb * 1.6)
-		d.h = top + bottom
-		d.cy = (bottom - top) / 2
+		d.rowY = -(size / 2 + orb * 0.9)
+		top, bottom = size / 2 + 2, size / 2 + orb * 0.9 + edge
+		d.w = math.max(size + 6, (n - 1) * gap + orb * 1.8)
 	elseif style == "arc" then
-		local step = orb * 1.4 / radius
-		d.span = math.min((n - 1) * step, math.rad(200))
-		local top, bottom = radius + edge, size / 2 + 3
+		local step = orb * 1.5 / radius
+		d.span = math.min((n - 1) * step, math.rad(220))
+		top, bottom = radius + edge, size / 2 + 3
 		d.w = 2 * (radius + edge)
-		d.h = top + bottom
-		d.cy = (bottom - top) / 2
 	else
+		top, bottom = radius + edge, radius + edge
 		d.w = 2 * (radius + edge)
-		d.h = d.w
-		d.cy = 0
 	end
+	top, bottom = top + over, bottom + under
+	d.h = top + bottom
+	d.cy = (bottom - top) / 2
 end
 
 function L.PlaceSpots(d)
+	if d.kind ~= "orb" then
+		ns.ChargesBar.PlaceSpots(d)
+		return
+	end
 	local n, phase, orb = d.n, d.phase, d.orb
 	local sway = d.speed > 0
 	for index = 1, n do
@@ -277,35 +354,72 @@ function L.Colour(d)
 	return 0.4, 0.7, 1
 end
 
-function L.TextLook(d)
-	local percent = math.max(80, math.min(150, d.size / 40 * 100))
-	if d.time then
-		ns.TextStyle(d.time, { percent = percent, flags = "OUTLINE" })
-		d.time:ClearAllPoints()
-		d.time:SetPoint("TOP", d.frame, "BOTTOM", 0, d.style == "row" and 2 or d.orb * 0.4)
+function L.Style(text, percent)
+	if text then
+		ns.TextStyle(text, { percent = percent, flags = "OUTLINE", face = L.FONT })
 	end
-	if d.number then
-		ns.TextStyle(d.number, { percent = percent * 1.2, flags = "OUTLINE" })
+end
+
+function L.TextLook(d, set)
+	set = set or d
+	if d.kind ~= "orb" then
+		ns.ChargesBar.TextLook(d, set)
+		return
+	end
+	local _, percent = L.Line(d)
+	local time, number, name = set.time, set.number, set.name
+	if time then
+		L.Style(time, percent)
+		time:ClearAllPoints()
+		time:SetPoint("TOP", d.frame, "BOTTOM", 0, d.under + (d.style == "row" and 2 or d.orb * 0.3))
+	end
+	if number then
+		L.Style(number, percent * 1.2)
+		number:ClearAllPoints()
+		number:SetPoint("CENTER", d.centre, "CENTER", 0, 0)
+	end
+	if name then
+		L.Style(name, percent * 0.9)
+		name:ClearAllPoints()
+		name:SetPoint("BOTTOM", d.frame, "TOP", 0, -d.over + 1)
+		name:SetText(d.title or "")
+		name:SetShown(Opt("name") ~= false)
 	end
 end
 
 function L.Paint(d, top)
-	d.style = Opt("style")
-	d.speed = L.SPIN[Opt("spin")] or 0
+	local kind, style = L.Kind(d)
+	if d.kind ~= kind then
+		L.Swap(d, kind)
+	end
+	d.style = style
+	d.speed = kind == "orb" and (L.SPIN[Opt("spin")] or 0) or 0
 	d.size = Number("iconSize", 40)
 	d.orb = Number("orbSize", 12)
+	d.pip = Number("pipSize", 20)
+	d.faceShown = kind == "orb" and Opt("icon") == true
 	d.n = math.max(1, math.min(L.MOST, top or d.n or 1))
-	L.Geometry(d)
-	d.frame:SetSize(d.w, d.h)
-	d.centre:ClearAllPoints()
-	d.centre:SetPoint("CENTER", d.frame, "CENTER", 0, d.cy)
 	local r, g, b = L.Colour(d)
 	d.r, d.g, d.b = r, g, b
-	L.PaintFace(d.face, d.size, r, g, b)
+	local B = ns.ChargesBar
+	if kind == "orb" then
+		L.Geometry(d)
+	else
+		B.Geometry(d)
+		B.Look(d)
+	end
+	d.frame:SetSize(d.w, d.h)
+	d.centre:ClearAllPoints()
+	d.centre:SetPoint("CENTER", d.frame, "CENTER", d.cx or 0, d.cy)
+	L.PaintFace(d.face, d.size, r, g, b, d.faceShown)
 	for index = 1, L.MOST do
 		local orb = index <= d.n and L.Orb(d, index) or d.orbs[index]
 		if orb then
-			L.PaintOrb(d, orb, d.orb, r, g, b)
+			if kind == "orb" then
+				L.PaintOrb(d, orb, d.orb, r, g, b)
+			else
+				B.PaintPiece(d, orb)
+			end
 		end
 	end
 	L.PlaceSpots(d)
@@ -339,15 +453,18 @@ function L.Rest(orb)
 	orb.frame:SetAlpha(1)
 	orb.burst:SetAlpha(0)
 	orb.flash:SetAlpha(0)
+	if orb.pop then
+		orb.pop:SetAlpha(0)
+	end
 end
 
 function L.Burst(d, orb, now)
 	L.Rest(orb)
 	Value(orb, orb.index - 1)
 	if Opt("burst") ~= false then
-		orb.anim = { kind = "burst", start = now, size = d.orb * L.BODY }
-		orb.burst:SetSize(d.orb * L.BODY, d.orb * L.BODY)
-		orb.burst:SetAlpha(1)
+		orb.anim = { kind = "burst", start = now }
+		orb.burst:SetSize(orb.bw, orb.bh)
+		orb.burst:SetAlpha(orb.burstAlpha or 1)
 		orb.flash:SetAlpha(1)
 		d.busy = true
 	end
@@ -370,7 +487,9 @@ function L.Secret(d, value)
 		end
 	end
 	if d.number then
-		d.number:SetText("")
+		if Opt("count") == false or not pcall(d.number.SetText, d.number, value) then
+			d.number:SetText("")
+		end
 	end
 end
 
@@ -407,7 +526,8 @@ function L.Count(d, count, animate, now)
 	end
 	d.pulse = pulse
 	if d.number then
-		d.number:SetText(count > L.MOST and tostring(count) or "")
+		local shown = count > L.MOST or (count > 0 and Opt("count") ~= false)
+		d.number:SetText(shown and tostring(count) or "")
 	end
 end
 
@@ -420,29 +540,33 @@ function L.Animate(orb, now)
 	local t = now - anim.start
 	if anim.kind == "burst" then
 		local p = math.min(1, t / L.BURST)
-		local grow = 1 + (L.SWELL - 1) * Ease(p)
-		orb.burst:SetSize(anim.size * grow, anim.size * grow)
-		orb.burst:SetAlpha(1 - p)
+		local grow = 1 + ((orb.swell or L.SWELL) - 1) * Ease(p)
+		orb.burst:SetSize(orb.bw * grow, orb.bh * grow)
+		orb.burst:SetAlpha((orb.burstAlpha or 1) * (1 - p))
 		orb.flash:SetAlpha(math.max(0, 1 - t / L.FLASH))
 		if p >= 1 then
 			L.Rest(orb)
-			orb.burst:SetSize(anim.size, anim.size)
+			orb.burst:SetSize(orb.bw, orb.bh)
 		end
 		return
 	end
 	if t < 0 then
 		return
 	end
+	local glow = orb.pop or orb.flash
+	local peak = orb.pop and 1 or 0.6
 	if not anim.lit then
 		anim.lit = true
 		Value(orb, orb.index)
-		orb.flash:SetAlpha(0.6)
+		glow:SetAlpha(peak)
 	end
+	local from = orb.popFrom or L.POP_FROM
 	local p = math.min(1, t / L.POP)
-	orb.frame:SetScale(L.POP_FROM - (L.POP_FROM - 1) * Ease(p))
+	local fade = math.min(1, t / (orb.popTime or L.POP))
+	orb.frame:SetScale(from - (from - 1) * Ease(p))
 	orb.frame:SetAlpha(p)
-	orb.flash:SetAlpha(0.6 * (1 - p))
-	if p >= 1 then
+	glow:SetAlpha(peak * (1 - fade))
+	if p >= 1 and fade >= 1 then
 		L.Rest(orb)
 	end
 end
@@ -454,7 +578,10 @@ function L.Pulse(d, now)
 	end
 	local wave = 0.5 + 0.5 * math.sin(now * TAU * L.PULSE)
 	orb.frame:SetAlpha(0.55 + 0.45 * wave)
-	orb.frame:SetScale(1 + 0.16 * wave)
+	orb.frame:SetScale(1 + (orb.pulseGrow or L.PULSE_GROW) * wave)
+	if orb.tints then
+		return
+	end
 	local colour = d.low and L.RED or L.AMBER
 	if orb.tint ~= colour then
 		L.TintOrb(orb, colour[1], colour[2], colour[3])

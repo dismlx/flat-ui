@@ -160,8 +160,8 @@ Guide: [Combat](Combat)
 | `/flatui absorbs test` | Shows sample bars of **Absorb shields** for a few seconds |
 | `/flatui absorbs check` | Says the amount, time and secrecy of each shield on you |
 | `/flatui absorbs add 17`, `remove 17`, `list` | Adds, removes or lists the shields it follows |
-| `/flatui charges` | Shows a sample of **Charges** for 8 seconds, out of combat and while none of its buffs is on you |
-| `/flatui charges add Lightning Shield`, `remove`, `list` | Adds a buff with charges by name, spell ID or shift-clicked spell, takes one off, or lists them |
+| `/flatui charges` | Shows a sample of **Charges** in its look for 8 seconds, out of combat and while none of its buffs is on you: Lightning Shield losing its charges, or Maelstrom Weapon gaining stacks with **Spell art** |
+| `/flatui charges add Lightning Shield`, `remove`, `list` | Adds a buff with charges or stacks by name, spell ID or shift-clicked spell, takes one off, or lists them |
 | `/flatui enemy add Blink 15` | Adds an enemy ability and its cooldown in seconds |
 | `/flatui enemy hide 2139` | Hides an ability, by name or spell ID |
 | `/flatui enemy list` | Lists the abilities shown and whether their use can be seen here |

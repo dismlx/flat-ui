@@ -72,6 +72,7 @@ OwnBuffs.lua
 Absorbs.lua
 ResourceBarrier.lua
 ChargesLook.lua
+ChargesBar.lua
 ChargesGame.lua
 Charges.lua
 TrackerShapes.lua

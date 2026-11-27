@@ -5,7 +5,6 @@ ns.ChargesGame = G
 
 local SLOT_ICON, SLOT_ORB = "icon", "orb"
 local NUMBER_SHOWN, NUMBER_HIDDEN = "%d", " "
-local ORB_SIZE = 1.6
 
 local IsSecret = ns.IsSecret
 local L = ns.ChargesLook
@@ -30,18 +29,20 @@ function G.TimeOptions()
 	return G.timeOptions or nil
 end
 
-function G.Formatter()
-	if G.formatter == nil then
+function G.Formatter(always)
+	local key = always and "always" or "over"
+	if G.formatters[key] == nil then
 		local call = type(C_StringUtil) == "table" and C_StringUtil.CreateNumericRuleFormatter or nil
 		local ok, formatter = pcall(call)
 		if ok and formatter ~= nil and not IsSecret(formatter) then
 			ok = pcall(formatter.AddBreakpoint, formatter, { threshold = 0, format = NUMBER_HIDDEN })
-			ok = ok and pcall(formatter.AddBreakpoint, formatter, { threshold = L.MOST + 1, format = NUMBER_SHOWN })
+			ok = ok and pcall(formatter.AddBreakpoint, formatter, { threshold = always and 1 or L.MOST + 1, format = NUMBER_SHOWN })
 		end
-		G.formatter = ok and formatter or false
+		G.formatters[key] = ok and formatter or false
 	end
-	return G.formatter or nil
+	return G.formatters[key] or nil
 end
+G.formatters = {}
 
 local function Invoke(object, method, ...)
 	return object[method](object, ...)
@@ -69,15 +70,25 @@ function G.Texts(rec, button, top)
 		end
 	end
 	local number = L.Text(top, "NumberFontNormal")
-	local formatter = G.Formatter()
-	if number and formatter then
+	if number then
 		number:SetPoint("CENTER", d.centre, "CENTER", 0, 0)
-		if pcall(button.SetApplicationCount, button, number, { formatter = formatter }) then
-			rec.number = number
-		else
-			number:Hide()
-		end
-	elseif number then
+		rec.number = number
+		G.Bind(rec)
+	end
+	rec.name = L.Text(top, "GameFontHighlightSmall")
+end
+
+function G.Bind(rec)
+	local number, always = rec.number, L.Opt("count") ~= false
+	if not number or rec.always == always or rec.countRefused then
+		return
+	end
+	local formatter = G.Formatter(always)
+	if formatter and pcall(rec.button.SetApplicationCount, rec.button, number, { formatter = formatter }) then
+		rec.always = always
+		pcall(number.Show, number)
+	else
+		rec.countRefused = true
 		number:Hide()
 	end
 end
@@ -85,17 +96,21 @@ end
 function G.InitIcon(rec, button)
 	local d = rec.d
 	G.Quiet(button)
+	rec.button = button
 	local face = Own(CreateFrame("Frame", nil, button))
 	face:SetAllPoints(d.frame)
 	rec.face = L.Face(d, face)
 	rec.iconOk = pcall(button.SetIcon, button, rec.face.icon)
 	rec.ghosts = {}
 	for index = 1, L.MOST do
-		local ghost = Own(face:CreateTexture(nil, "BORDER", nil, 0))
-		ghost:SetTexture(L.RING)
-		pcall(ghost.SetBlendMode, ghost, "ADD")
-		ghost:SetPoint("CENTER", L.Spot(d, index), "CENTER", 0, 0)
-		rec.ghosts[index] = ghost
+		local list = {}
+		for layer = 0, 2 do
+			local ghost = Own(face:CreateTexture(nil, "BORDER", nil, layer))
+			ghost:SetPoint("CENTER", L.Spot(d, index), "CENTER", 0, 0)
+			ghost:Hide()
+			list[#list + 1] = ghost
+		end
+		rec.ghosts[index] = list
 	end
 	local top = Own(CreateFrame("Frame", nil, face))
 	top:SetAllPoints(face)
@@ -183,30 +198,46 @@ function G.Paint(d)
 	end
 	rec.dirty = nil
 	local r, g, b = d.r or 1, d.g or 1, d.b or 1
-	pcall(L.PaintFace, rec.face, d.size, r, g, b)
-	local ghosts = L.Opt("ghosts") ~= false
-	local glow = d.orb * ORB_SIZE
+	pcall(L.PaintFace, rec.face, d.size, r, g, b, d.faceShown)
+	pcall(G.Bind, rec)
 	for index = 1, L.MOST do
-		local ghost = rec.ghosts[index]
-		Call(ghost, "SetSize", d.orb * L.GHOST, d.orb * L.GHOST)
-		Call(ghost, "SetVertexColor", r, g, b, 0.32)
-		Call(ghost, "SetShown", ghosts and index <= d.n)
-		local orb = rec.orbs[index]
-		if orb then
-			Call(orb.bar, "SetSize", glow, glow)
-			Call(orb.bar, "SetStatusBarColor", r, g, b, 1)
-			Call(orb.bar, "SetAlpha", index <= d.n and 1 or 0)
-		end
+		pcall(G.PaintSlot, d, rec, index, r, g, b)
 	end
-	local percent = math.max(80, math.min(150, d.size / 40 * 100))
+	pcall(L.TextLook, d, rec)
 	if rec.time then
-		pcall(ns.TextStyle, rec.time, { percent = percent, flags = "OUTLINE" })
-		Call(rec.time, "ClearAllPoints")
-		Call(rec.time, "SetPoint", "TOP", d.frame, "BOTTOM", 0, d.style == "row" and 2 or d.orb * 0.4)
 		Call(rec.time, "SetShown", L.Opt("time") ~= false)
 	end
-	if rec.number then
-		pcall(ns.TextStyle, rec.number, { percent = percent * 1.2, flags = "OUTLINE" })
+end
+
+function G.PaintSlot(d, rec, index, r, g, b)
+	local B = ns.ChargesBar
+	local on = index <= d.n
+	local used = on and L.Opt("ghosts") ~= false
+	local ghosts, orb, spot = rec.ghosts[index], rec.orbs[index], L.Spot(d, index)
+	local bar = orb and orb.bar
+	local tint
+	if d.kind == "pip" then
+		local look = d.look
+		local s, stretch = B.Sizes(d)
+		B.Region(ghosts[1], look.shadow, s, stretch, spot, r, g, b, used)
+		B.Region(ghosts[2], look.socket, s, stretch, spot, r, g, b, used)
+		B.Region(ghosts[3], look.rim, s, stretch, spot, r, g, b, used)
+		local gem = look.gem
+		tint = bar and B.PaintBar(bar, gem, gem.w * s, gem.h * s, gem.y * s, spot, r, g, b, on)
+	elseif d.kind == "art" then
+		B.ArtGhost(ghosts[1], d, spot, used and index == 1)
+		ghosts[2]:Hide()
+		ghosts[3]:Hide()
+		tint = bar and B.ArtBar(bar, d, spot, on)
+	else
+		B.Region(ghosts[1], B.ORB_GHOST, d.orb, 0, spot, r, g, b, used)
+		ghosts[2]:Hide()
+		ghosts[3]:Hide()
+		local fill = B.ORB_FILL
+		tint = bar and B.PaintBar(bar, fill, d.orb * fill.w, d.orb * fill.h, 0, spot, r, g, b, on)
+	end
+	if tint then
+		bar:SetStatusBarColor(tint[1], tint[2], tint[3], tint[4])
 	end
 end
 
