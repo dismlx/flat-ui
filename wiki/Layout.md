@@ -51,6 +51,7 @@ With two or more selected, the inspector reads, for example, "3 frames selected"
 - **Centre horizontally** and **Centre vertically**, on the middle of the space they cover together.
 - **Distribute across** and **Distribute down**. The outer two stay put and the gaps between them all become the same. These need three or more frames.
 - **Reset these**, which puts each selected frame you moved back where the game has it.
+- **Hide these**, beside it, which hides every selected frame that has a row on the **Hidden frames** page, as a tick there does. It reads **Show these** when all of them are hidden already, and shows them again. It is dimmed when no selected frame has such a row, and chat names once any selected frame that has none, as "Flat UI: Chat has no row on the Hidden frames page, so it stays."
 
 A frame that is hidden, not on screen now or placed by the game stays put in these group moves, and the inspector says how many stay put.
 
