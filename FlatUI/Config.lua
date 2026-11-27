@@ -1898,7 +1898,7 @@ ns.PAGES = {
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 		{ section = "Enemies" },
 		{ key = "slipAt", kind = "number", default = 80, min = 50, max = 100, step = 5, unit = "%", label = "Slipping at", needs = "view", needsIn = { "both", "mobs" },
-			tip = "In the enemies under your target and in Enemies you fight, an enemy you hold turns amber and pulses slowly once another member's threat passes this share of yours, with their name and share; it turns red and pulses fast once someone else holds it, and flashes once in a light shade of Threat you want as you take it back." },
+			tip = "In the enemies under your target and in Enemies you fight, an enemy you hold turns amber and pulses slowly once another member's threat passes this share of yours, with their name and share; it turns red and pulses fast once someone else holds it, and flashes once in a light shade of Threat you want as you take it back. Under your target, where only lost and slipping enemies are listed, the flash shows while it is still slipping, as it is right after a taunt." },
 		{ key = "lostSound", kind = "choice", default = "warning", label = "Sound when you lose an enemy", needs = "view", needsIn = { "both", "mobs" },
 			tip = "Plays once as an enemy you held turns to someone else, as its row flashes: any enemy in Enemies you fight, or one of the enemies under your target, where your target itself has Warn when you lose aggro. Warning sound, the default, plays the sound of Warning sound while Warn when you lose aggro is on. Picking one plays it.",
 			choices = { { "warning", "Warning sound" }, { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },

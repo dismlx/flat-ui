@@ -813,7 +813,7 @@ end
 function T.Fill(row, entry)
 	row.mine:SetShown(entry.me == true and Opt("mine") ~= false)
 	row.near:SetShown(T.Others(entry))
-	T.Pulse(row, T.Near(entry) or T.Losing(entry) or T.Took(entry), T.Holding(entry) or T.Fallen(entry))
+	T.Pulse(row, T.Near(entry) or T.Losing(entry) or T.Took(entry), T.Holding(entry) or (T.Fallen(entry) and not T.Took(entry)))
 	local who = entry.sample or entry.member.unit
 	local jump = row.who ~= who or not T.frame:IsShown()
 	row.who = who

@@ -571,16 +571,19 @@ function H.RestTip(holder, owner)
 		local entry = list[index]
 		local unit, sample = not phase and entry or nil, phase and entry or nil
 		local r, g, b = H.Colour(unit, sample)
-		local right, name
+		local right, name, named
 		if sample then
 			right, name = ("%d%%"):format(H.SampleShare(sample, phase)), sample[1]
+			named = type(name) == "string"
 		else
 			local share, word = H.State(unit)
 			right = word or (share and ("%d%%"):format(math.floor(share + 0.5))) or "hidden in a fight"
 			local ok, said = pcall(UnitName, unit)
-			name = ok and Named(said) and said or nil
+			if ok and Named(said) then
+				name, named = said, true
+			end
 		end
-		if not (name and pcall(tip.AddDoubleLine, tip, name, right, r, g, b, 1, 1, 1)) then
+		if not (named and pcall(tip.AddDoubleLine, tip, name, right, r, g, b, 1, 1, 1)) then
 			tip:AddDoubleLine("Healer", right, r, g, b, 1, 1, 1)
 		end
 	end

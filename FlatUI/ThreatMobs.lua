@@ -460,7 +460,7 @@ function M.Rank(list)
 		end
 		mob.seq = rec.seq
 		mob.turned = mob.state == "lost" and (rec.state == "held" or rec.state == "slipping")
-		mob.back = mob.state == "held" and rec.state == "lost"
+		mob.back = rec.state == "lost" and (mob.state == "held" or mob.state == "slipping")
 		rec.state = mob.state
 		mob.close = mob.state == "slipping" and ns.Finite(mob.share) and math.floor(mob.share / BUCKET) or 0
 		if mob.state == "lost" then

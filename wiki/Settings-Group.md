@@ -52,7 +52,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Share cooldowns with the party** | On | Sends your cooldowns to party members. |
+| **Share cooldowns with the party** | On | Sends your cooldowns to party members, and in a raid to your subgroup. |
 
 ## Threat list
 
@@ -65,7 +65,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | **Show** | In a group | Only in a fight, while your target, the target of your target or, with Follow your tank's target, your tank's target is an enemy, or while you are a tank, an enemy you are losing. Choices: In a group, In a dungeon or raid, In a group or alone. |
-| **List** | Your target, then enemies you are losing | Your target, then enemies you are losing, the default, shows your group on your target, and while you are a tank (your group role, else your stance or form, or Your role of nameplate threat) adds under a thin line up to 4 small rows for the other enemies that are Lost or Slipping, the lost ones first; nothing more while none is. With no enemy as your target, your target's target or your tank's target, a tank's list shows the group on the enemy you are losing most, the others still under it. Enemies you fight has a row for each enemy with a nameplate that fights you or your group instead, the ones you are losing first, in every role. Your group on your target shows the group alone. Choices: Your target, then enemies you are losing, Enemies you fight, Your group on your target. |
+| **List** | Your target, then enemies you are losing | Your target, then enemies you are losing, the default, shows your group on your target, and while you are a tank (your group role, else your stance or form, or Your role of nameplate threat) adds under a thin line up to 4 small rows for the other enemies that are Lost or Slipping, the lost ones first; nothing more while none is. With no enemy as your target, your target's target or your tank's target, a tank's list shows the group on the enemy you are losing most, the title naming who holds a Lost one, the others still under it. Enemies you fight has a row for each enemy with a nameplate that fights you or your group instead, the ones you are losing first, in every role. Your group on your target shows the group alone. Choices: Your target, then enemies you are losing, Enemies you fight, Your group on your target. |
 | **Follow your tank's target** | On | With no enemy as your target or your target's target, the list shows the enemy your group's tank fights (their tank role, the raid's main tank, or in a party their tank stance, form or aura), and the title names the tank: for a healer who heals without a target. |
 
 **Bars**
@@ -88,7 +88,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | --- | --- | --- |
 | **Warn near aggro** | On | For damage dealers and healers: your bar pulses red while you are not tanking and your share passes Warn at, and keeps it red while you hold the enemy's aggro. Not on bosses, where the game hides threat. |
 | **Warn at** | 90% | The share of Warn near aggro, and for a tank of Show who is near your aggro. |
-| **Warn when you lose aggro** | On | While you are a tank (your group role, else your stance or form): your bar pulses red for up to 2 seconds, until you take it back, and Warning sound plays once when an enemy you held turns to someone else, and the bar of whoever took it pulses red with yours while the title names them in red; once another tank holds it, with Calm when another tank takes it, the red stops at once. Not on bosses, where the game hides threat. |
+| **Warn when you lose aggro** | On | While you are a tank (your group role, else your stance or form): your bar pulses red for up to 2 seconds, until you take it back, and Warning sound plays once when an enemy you held turns to someone else, and the bar of whoever took it pulses red with yours while the title names them in red; once another tank holds it, with Calm when another tank takes it, the red stops at once. As your taunt lands, your bar flashes once in a light shade of Threat you want. Not on bosses, where the game hides threat. |
 | **Show who is near your aggro** | On | While you are a tank: the bar of a member at Warn at or above who is not tanking turns amber, with no sound, so you see who is about to pull. Not on bosses, where the game hides threat. |
 | **Calm when another tank takes it** | On | While you are a tank: an enemy another tank of the group takes (their tank role, the raid's main tank, or in a party their tank stance, form or aura) plays no warning, and their bar never turns amber. |
 | **Warning sound** | Raid warning | Plays once for each enemy as Warn near aggro starts, and once each time you lose aggro. Picking one plays it. Choices: None, Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. |
@@ -97,7 +97,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Slipping at** | 80% | In the enemies under your target and in Enemies you fight, an enemy you hold turns amber and pulses slowly once another member's threat passes this share of yours, with their name and share; it turns red and pulses fast once someone else holds it. Needs **List** at Your target, then enemies you are losing or Enemies you fight. |
+| **Slipping at** | 80% | In the enemies under your target and in Enemies you fight, an enemy you hold turns amber and pulses slowly once another member's threat passes this share of yours, with their name and share; it turns red and pulses fast once someone else holds it, and flashes once in a light shade of Threat you want as you take it back. Under your target, where only lost and slipping enemies are listed, the flash shows while it is still slipping, as it is right after a taunt. Needs **List** at Your target, then enemies you are losing or Enemies you fight. |
 | **Sound when you lose an enemy** | Warning sound | Plays once as an enemy you held turns to someone else, as its row flashes: any enemy in Enemies you fight, or one of the enemies under your target, where your target itself has Warn when you lose aggro. Warning sound, the default, plays the sound of Warning sound while Warn when you lose aggro is on. Picking one plays it. Choices: Warning sound, None, Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. Needs **List** at Your target, then enemies you are losing or Enemies you fight. |
 
 ## Healer mana
