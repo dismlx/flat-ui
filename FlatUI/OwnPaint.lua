@@ -31,6 +31,8 @@ local P = {
 	numbersHidden = setmetatable({}, WEAK),
 	pressed = setmetatable({}, WEAK),
 	alpha = setmetatable({}, WEAK),
+	easing = setmetatable({}, WEAK),
+	easeUp = 0.12, easeDown = 0.2, snap = true,
 	marked = setmetatable({}, WEAK),
 	flashing = setmetatable({}, WEAK),
 	flashClock = 0,
@@ -539,15 +541,26 @@ function STEP.empty(button, st)
 			want = r
 		end
 	end
-	if P.alpha[button] ~= want then
-		P.alpha[button] = want
-		button:SetAlpha(want)
+	local now, ease = P.alpha[button], P.easing[button]
+	if now == nil or P.snap then
+		P.easing[button] = nil
+		if now ~= want then
+			P.alpha[button] = want
+			button:SetAlpha(want)
+		end
+	elseif ease and ease[1] == want then
+		return
+	elseif now == want then
+		P.easing[button] = nil
+	else
+		P.easing[button] = { want, math.abs(want - now) / (want > now and P.easeUp or P.easeDown) }
 	end
 end
 
 local function Refresh(button, set)
 	local st = StateFor(button)
 	local colour, hotkey = false, false
+	P.snap = set == nil
 	for _, name in ipairs(ORDER) do
 		if name == "slot" or set == nil or set[name] then
 			local ok, err = pcall(STEP[name], button, st)
@@ -949,6 +962,27 @@ local function Blink(elapsed)
 	end
 end
 
+local function Ease(elapsed)
+	if next(P.easing) == nil then
+		return
+	end
+	for button, ease in pairs(P.easing) do
+		local want = ease[1]
+		local now = P.alpha[button] or want
+		local step = ease[2] * elapsed
+		if ease[2] <= 0 or math.abs(want - now) <= step then
+			now = want
+			P.easing[button] = nil
+		elseif want > now then
+			now = now + step
+		else
+			now = now - step
+		end
+		P.alpha[button] = now
+		button:SetAlpha(now)
+	end
+end
+
 local function OnUpdate(_, elapsed)
 	if not On() then
 		return
@@ -960,6 +994,7 @@ local function OnUpdate(_, elapsed)
 		Sync()
 	end
 	Blink(elapsed)
+	Ease(elapsed)
 	TipTick(elapsed)
 	if P.pending then
 		P.pending = false

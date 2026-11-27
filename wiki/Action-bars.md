@@ -49,7 +49,7 @@ This holds while Edit Mode's **Always show buttons** is on, as it is at first. W
 
 An empty button shows no key, so a bar that is half full is not a row of key names. **Hotkeys on empty buttons**, on the **Button text** tab, shows them again.
 
-While a spell or item is on the cursor, every empty button is at full and shows its key. You can see where the spell can go and which key that slot has.
+While a spell or item is on the cursor, every empty button is at full and shows its key. You can see where the spell can go and which key that slot has. Faint empty buttons rise to full over about a tenth of a second as you pick a spell up, and settle back over a fifth of a second as you drop it, so the bars do not flicker.
 
 **Hide empty bars** (on, under **Buttons**) hides bars 2 to 8 while none of their buttons holds anything. They show again:
 
