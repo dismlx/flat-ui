@@ -34,6 +34,7 @@ local LATER_CHARACTER = "Flat UI: the character window opens when the fight ends
 local LATER_MAP = "Flat UI: the world map opens when the fight ends."
 
 local S = { text = {}, button = {}, shown = {}, colour = {}, size = {}, why = {}, below = 0, above = 0 }
+local P = { hold = 3, out = 0.5, gap = 6, inset = 4, sample = "Bex" }
 
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
@@ -698,6 +699,9 @@ local function HideAll()
 	if S.frame then
 		S.frame:Hide()
 	end
+	if P.frame and not P.Wanted() then
+		P.frame:Hide()
+	end
 	StopTicker()
 	S.sig = nil
 	SetBelow(0)
@@ -951,8 +955,160 @@ function W.Draw()
 	end
 end
 
+function P.Wanted()
+	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and Opt("mapPingName") == true
+end
+
+function P.Step(frame, elapsed)
+	P.at = (P.at or 0) + (ns.Finite(elapsed) and elapsed or 0)
+	if not P.Wanted() or ns.IsStopped(KEY) then
+		frame:Hide()
+		return
+	end
+	if P.at <= P.hold then
+		return
+	end
+	local fade = (P.at - P.hold) / P.out
+	if fade >= 1 then
+		frame:Hide()
+	else
+		frame:SetAlpha(1 - fade)
+	end
+end
+
+function P.Make(map)
+	if P.frame then
+		return true
+	end
+	if P.broken or (InCombatLockdown() and (ns.MaybeProtected == nil or ns.MaybeProtected(map))) then
+		return false
+	end
+	local ok, frame = pcall(CreateFrame, "Frame", nil, map)
+	if not ok or type(frame) ~= "table" then
+		return false
+	end
+	ns.Own[frame] = true
+	frame:SetAllPoints(map)
+	frame:EnableMouse(false)
+	local level = Ask(map.GetFrameLevel, map)
+	if ns.Finite(level) then
+		frame:SetFrameLevel(level + RAISE + 1)
+	end
+	frame:Hide()
+	local text = ns.OwnText(frame, "OVERLAY", "GameFontHighlightSmall")
+	if not text then
+		P.broken = true
+		return false
+	end
+	text:SetJustifyH("CENTER")
+	P.frame, P.text = frame, text
+	frame:SetScript("OnUpdate", P.Step)
+	frame:SetScript("OnHide", function(self)
+		self:Hide()
+	end)
+	return true
+end
+
+function P.Place(map, x, y)
+	local text = P.text
+	text:ClearAllPoints()
+	local width, height = Ask(map.GetWidth, map), Ask(map.GetHeight, map)
+	if not (ns.Finite(x) and ns.Finite(y) and ns.Finite(width) and ns.Finite(height) and width > 0 and height > 0) then
+		text:SetPoint("TOP", map, "TOP", 0, -P.gap)
+		return
+	end
+	if math.abs(x) <= 1 and math.abs(y) <= 1 then
+		x, y = x * width, y * height
+	end
+	local wide, tall = Ask(text.GetStringWidth, text), Ask(text.GetStringHeight, text)
+	wide = ns.Finite(wide) and wide or 40
+	tall = ns.Finite(tall) and tall or LINE
+	local side = math.max(0, width / 2 - wide / 2 - P.inset)
+	local low, high = -height / 2 + P.inset, height / 2 - tall - P.inset
+	x = math.max(-side, math.min(side, x))
+	y = math.max(low, math.min(math.max(low, high), y + P.gap))
+	text:SetPoint("BOTTOM", map, "CENTER", x, y)
+end
+
+function P.Show(name, r, g, b, x, y)
+	local map = _G.Minimap
+	if map == nil or ns.Forbidden(map) or not P.Wanted() or not P.Make(map) then
+		return false
+	end
+	local size = tonumber(Opt("mapTextSize")) or 100
+	if P.size ~= size and ns.TextStyle(P.text, { percent = size, flags = "OUTLINE" }) then
+		P.size = size
+	end
+	P.text:SetText(name)
+	P.text:SetTextColor(r or 1, g or 1, b or 1)
+	P.Place(map, x, y)
+	P.at = 0
+	P.frame:SetAlpha(1)
+	P.frame:Show()
+	return true
+end
+
+function P.Ping(_, unit, y, x)
+	if not P.Wanted() then
+		return
+	end
+	if ns.IsSecret(unit) then
+		P.secret = true
+		return
+	end
+	if type(unit) ~= "string" or unit == "" then
+		return
+	end
+	local okSelf, mine = pcall(UnitIsUnit, unit, "player")
+	if not okSelf or ns.IsSecret(mine) then
+		mine = unit == "player"
+	end
+	if mine == true then
+		return
+	end
+	local okName, name = pcall(UnitName, unit)
+	if okName and ns.IsSecret(name) then
+		P.secret = true
+		return
+	end
+	if not okName or type(name) ~= "string" or name == "" then
+		return
+	end
+	local r, g, b = ns.ClassColourOf(unit)
+	P.Show(name, r, g, b, x, y)
+end
+
+function P.Sample()
+	local map = _G.Minimap
+	local width, height = map and Ask(map.GetWidth, map), map and Ask(map.GetHeight, map)
+	local x, y
+	if ns.Finite(width) and ns.Finite(height) then
+		x, y = (math.random() - 0.5) * width * 0.6, (math.random() - 0.5) * height * 0.6
+	end
+	local priest = Field(_G.RAID_CLASS_COLORS, "PRIEST")
+	local r, g, b = Field(priest, "r"), Field(priest, "g"), Field(priest, "b")
+	if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		r, g, b = 1, 1, 1
+	end
+	P.Show(P.sample, r, g, b, x, y)
+end
+
+function P.Refresh()
+	if not P.Wanted() then
+		if P.frame then
+			P.frame:Hide()
+		end
+		return
+	end
+	local map = _G.Minimap
+	if map ~= nil and not ns.Forbidden(map) then
+		P.Make(map)
+	end
+end
+
 local function Draw()
 	W.Refresh()
+	ns.EachPart(KEY, PART, P.Refresh, {})
 	if not ns.PartStopped(KEY, PART) and ns.EachPart(KEY, PART, Update, {}) then
 		return
 	end
@@ -1008,12 +1164,34 @@ ns.AddEvent(KEY, "ADDON_LOADED", function()
 end, function(name)
 	return not ns.IsSecret(name) and name == "Blizzard_WorldMap"
 end)
+ns.AddEvent(KEY, "MINIMAP_PING", function(...)
+	ns.EachPart(KEY, PART, P.Ping, P, ...)
+end)
+
+if ns.TestMode then
+	ns.TestMode.Register("mapping", { module = KEY, label = "Minimap ping name", every = 5, Start = function()
+		ns.EachPart(KEY, PART, P.Sample, {})
+	end, Tick = function()
+		ns.EachPart(KEY, PART, P.Sample, {})
+	end })
+end
 
 ns.AddStatus(KEY, function()
 	local lines = {}
 	for _, line in ipairs(LINES) do
 		if S.why[line.id] and Wanted(line) then
 			lines[#lines + 1] = ("%s: %s."):format(line.label, S.why[line.id])
+		end
+	end
+	if P.Wanted() then
+		local events = _G.C_EventUtils
+		local valid = type(events) == "table" and not ns.IsSecret(events) and Ask(events.IsEventValid, "MINIMAP_PING")
+		if valid == false then
+			lines[#lines + 1] = "Ping names: the game gives no minimap pings to addons here."
+		elseif P.secret then
+			lines[#lines + 1] = "Ping names: the game withholds who pinged here."
+		elseif P.broken then
+			lines[#lines + 1] = "Ping names: the game refused the name's text, so none shows."
 		end
 	end
 	return lines

@@ -6,11 +6,13 @@ local STEP, MAX_MARKS = 10, 400
 local RESUME_GAP = 300
 local KILLS, MIN_KILLS, QUESTS, MIN_QUESTS = 10, 3, 10, 2
 local MAX_ENTRIES = 100
+local LOAD_WAIT = 2
 local VERSION, SAVED = 1, "xpSession"
 
 local s
 local quest
 local queued = false
+local entered
 local pattern, numberAt, patternFrom
 
 local Finite, IsSecret = ns.Finite, ns.IsSecret
@@ -132,6 +134,9 @@ local function Kept(saved, now)
 	end
 	if not Finite(saved.saidLevel) then
 		saved.saidLevel = nil
+	end
+	if not Finite(saved.saidEnough) then
+		saved.saidEnough = nil
 	end
 	local played = saved.played
 	if not (type(played) == "table" and Finite(played.level) and Finite(played.at) and Finite(played.seconds)) then
@@ -401,6 +406,15 @@ local function Scan()
 		end
 	end
 	quest = found
+	local last = s and s.last
+	if Opt("xpQuestEnough") == true and Opt("xpQuest") == true and last and found.ready > 0 and found.readyXP > 0 and s.saidEnough ~= last[1] then
+		local left = math.max(last[3] - last[2], 0)
+		if left > 0 and left <= found.readyXP then
+			s.saidEnough = last[1]
+			local whose = found.ready == 1 and "your finished quest is" or ("your %d finished quests are"):format(found.ready)
+			print(("Flat UI: %s enough to reach level %d."):format(whose, last[1] + 1))
+		end
+	end
 end
 
 local function Redraw()
@@ -793,6 +807,17 @@ function ns.XpQuestReady()
 	end) or 0
 end
 
+function ns.XpQuestState()
+	return Safe(function()
+		local known = quest ~= nil and not quest.missing
+		local now = Now()
+		if known and quest.all == 0 and entered and now and now - entered < LOAD_WAIT then
+			known = false
+		end
+		return { xp = known and quest.readyXP or 0, count = known and quest.ready or 0, known = known }
+	end) or { xp = 0, count = 0, known = false }
+end
+
 function ns.XpStatsRefresh()
 	Safe(Queue)
 end
@@ -808,6 +833,7 @@ local function Listen(event, fn, filter)
 end
 
 Listen("PLAYER_ENTERING_WORLD", function()
+	entered = Now()
 	if Ask(UnitIsAFK, "player") ~= nil then
 		Away()
 	end
@@ -871,7 +897,7 @@ local function Reset()
 		return false
 	end
 	local kept = { last = s.last, levelSince = s.levelSince, played = s.played, kills = s.kills, quests = s.quests, pool = s.pool,
-		saidLevel = s.saidLevel }
+		saidLevel = s.saidLevel, saidEnough = s.saidEnough }
 	s = Fresh(now)
 	for key, value in pairs(kept) do
 		s[key] = value

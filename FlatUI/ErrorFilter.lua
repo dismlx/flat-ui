@@ -3,6 +3,8 @@ local _, ns = ...
 local KEY, PART, ROW = "hud", "error messages", "hud.errors"
 local EVENT = "UI_ERROR_MESSAGE"
 local RED = { 1, 0.1, 0.1 }
+local YELLOW = { 1, 0.82, 0 }
+local SAMPLE_QUEST, SAMPLE_MANA, SAMPLE_EVERY, SAMPLE_WIDTH = "Kobold Vermin slain: 3/8", "Not enough mana", 1, 512
 local KINDS = {
 	{ row = "errorMana", types = { "ERR_OUT_OF_MANA" } },
 	{ row = "errorPower", types = { "ERR_OUT_OF_RAGE", "ERR_OUT_OF_ENERGY", "ERR_OUT_OF_FOCUS", "ERR_OUT_OF_COMBO_POINTS" },
@@ -309,7 +311,18 @@ local function FollowCommands()
 	end
 end
 
+local function Size()
+	local errors = GameFrame()
+	if errors == nil or type(errors.SetFont) ~= "function" then
+		return
+	end
+	local size = ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and tonumber(ns.Get(KEY .. ".errorTextSize")) or 100
+	size = math.max(50, math.min(150, size))
+	S.sizeRefused = ns.TextStyle(errors, { percent = size }) == false and size ~= 100 or nil
+end
+
 function Apply()
+	Size()
 	local errors = GameFrame()
 	if errors == nil then
 		S.missing = Wanted() or nil
@@ -373,7 +386,7 @@ function Apply()
 	Listen(false)
 end
 
-ns.AddStatus(KEY, function()
+local function Status()
 	if S.withheld then
 		return { "Error messages: the game withheld a message, so its error text is its own again until /reload." }
 	elseif S.stuck then
@@ -404,7 +417,93 @@ ns.AddStatus(KEY, function()
 		return { "Error messages: no kind is on, so nothing is hidden." }
 	end
 	return { "Error messages: this client names none of these kinds, so nothing is hidden." }
+end
+
+ns.AddStatus(KEY, function()
+	local lines = Status()
+	if S.sizeRefused then
+		lines[#lines + 1] = "Error text size: the game refused a size, so the error text keeps the game's."
+	end
+	return lines
 end)
+
+local function Yellow()
+	local colour = Global("YELLOW_FONT_COLOR")
+	local r, g, b = Field(colour, "r"), Field(colour, "g"), Field(colour, "b")
+	if ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
+		return r, g, b
+	end
+	return YELLOW[1], YELLOW[2], YELLOW[3]
+end
+
+local function ManaWords()
+	local text = Global("ERR_OUT_OF_MANA")
+	return type(text) == "string" and text ~= "" and text or SAMPLE_MANA
+end
+
+local function CopyFont(text, errors)
+	local ok, file, size, flags = pcall(errors.GetFont, errors)
+	if ok and not (ns.IsSecret(file) or ns.IsSecret(flags)) and type(file) == "string" and ns.Finite(size) and size > 0 then
+		pcall(text.SetFont, text, file, size, type(flags) == "string" and flags or "")
+	end
+	local okOffset, x, y = pcall(errors.GetShadowOffset, errors)
+	if okOffset and ns.Finite(x) and ns.Finite(y) then
+		pcall(text.SetShadowOffset, text, x, y)
+	end
+end
+
+local function SampleHeight(text)
+	local ok, height = pcall(text.GetStringHeight, text)
+	return ok and ns.Finite(height) and height > 0 and height or 0
+end
+
+if ns.TestMode and ns.TestMode.StandIn then
+	ns.TestMode.StandIn({ id = "errortext", module = KEY, game = "UIErrorsFrame", label = "Error text", corner = "TOP",
+		real = function()
+			return false
+		end,
+		Build = function(holder)
+			holder.mana = ns.OwnText(holder, "OVERLAY", "GameFontNormalLarge")
+			holder.quest = ns.OwnText(holder, "OVERLAY", "GameFontNormalLarge")
+			if not (holder.mana and holder.quest) then
+				error("no text for the error sample", 0)
+			end
+			for _, text in ipairs({ holder.mana, holder.quest }) do
+				text:SetWidth(SAMPLE_WIDTH)
+				text:SetJustifyH("CENTER")
+			end
+			holder.mana:SetPoint("TOP", holder, "TOP", 0, 0)
+			holder.quest:SetPoint("TOP", holder.mana, "BOTTOM", 0, 0)
+		end,
+		Paint = function(holder)
+			local errors = GameFrame()
+			for _, text in ipairs({ holder.mana, holder.quest }) do
+				if errors ~= nil then
+					CopyFont(text, errors)
+				end
+			end
+			holder.mana:SetText(ManaWords())
+			holder.mana:SetTextColor(Red())
+			holder.quest:SetText(SAMPLE_QUEST)
+			holder.quest:SetTextColor(Yellow())
+			return SAMPLE_WIDTH, math.max(1, SampleHeight(holder.mana) + SampleHeight(holder.quest))
+		end })
+end
+
+function ns.ErrorTextSized()
+	pcall(Size)
+	local errors = GameFrame()
+	if errors == nil or not (ns.PanelShown ~= nil and ns.PanelShown()) or (ns.TestMode ~= nil and ns.TestMode.IsOn()) then
+		return
+	end
+	local now = GetTime()
+	if S.sampleAt ~= nil and now - S.sampleAt < SAMPLE_EVERY then
+		return
+	end
+	S.sampleAt = now
+	local r, g, b = Red()
+	pcall(errors.AddMessage, errors, ManaWords(), r, g, b, 1)
+end
 
 function ns.ErrorFilterRefresh()
 	Apply()

@@ -12,6 +12,8 @@ local refused, missing = {}, {}
 local followed = false
 local sizeRefused = false
 local T = {}
+local Z = { hold = 3, out = 0.5, width = 512, box = 128, zone = "Elwynn Forest", sub = "Goldshire", pvp = "(Contested Territory)",
+	colour = { 1, 0.93, 0.76 }, pvpColour = { 1, 0.7, 0 } }
 local Talk
 
 local function Global(name)
@@ -206,13 +208,150 @@ local function Sizes()
 			end
 		end
 	end
+	return size
+end
+
+function Z.Copy(text, name)
+	local source = Global(name)
+	if source == nil or ns.Forbidden(source) then
+		return
+	end
+	local ok, file, size, flags = pcall(source.GetFont, source)
+	if ok and not (ns.IsSecret(file) or ns.IsSecret(flags)) and type(file) == "string" and ns.Finite(size) and size > 0 then
+		pcall(text.SetFont, text, file, size, type(flags) == "string" and flags or "")
+	end
+	local okOffset, x, y = pcall(source.GetShadowOffset, source)
+	if okOffset and ns.Finite(x) and ns.Finite(y) then
+		pcall(text.SetShadowOffset, text, x, y)
+	end
+	local okShadow, r, g, b, a = pcall(source.GetShadowColor, source)
+	if okShadow and ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
+		pcall(text.SetShadowColor, text, r, g, b, ns.Finite(a) and a or 1)
+	end
+end
+
+function Z.Build(holder)
+	holder.lines = {}
+	for index, name in ipairs({ "ZoneTextString", "PVPInfoTextString", "SubZoneTextString" }) do
+		local text = ns.OwnText(holder, "ARTWORK", "GameFontNormalLarge")
+		if not text then
+			error("no text for the zone sample", 0)
+		end
+		text:SetWidth(Z.width)
+		text:SetJustifyH("CENTER")
+		holder.lines[index] = { text = text, from = name }
+	end
+end
+
+local function Tall(text)
+	local ok, height = pcall(text.GetStringHeight, text)
+	return ok and ns.Finite(height) and height > 0 and height or 0
+end
+
+function Z.Paint(holder)
+	local zone, pvp, sub = holder.lines[1], holder.lines[2], holder.lines[3]
+	local pvpText = Global("CONTESTED_TERRITORY")
+	local words = { Z.zone, type(pvpText) == "string" and pvpText ~= "" and pvpText or Z.pvp, Z.sub }
+	for index, line in ipairs(holder.lines) do
+		Z.Copy(line.text, line.from)
+		line.text:SetText(words[index])
+		local colour = index == 2 and Z.pvpColour or Z.colour
+		line.text:SetTextColor(colour[1], colour[2], colour[3])
+	end
+	zone.text:ClearAllPoints()
+	zone.text:SetPoint("CENTER", holder, "TOP", 0, -Z.box / 2)
+	pvp.text:ClearAllPoints()
+	pvp.text:SetPoint("TOP", zone.text, "BOTTOM", 0, 0)
+	sub.text:ClearAllPoints()
+	sub.text:SetPoint("TOP", pvp.text, "BOTTOM", 0, 0)
+	local hideZone, hideSub = Wanted("zoneTitle"), Wanted("subzoneTitle")
+	zone.text:SetShown(not hideZone)
+	pvp.text:SetShown(not hideZone)
+	sub.text:SetShown(not hideSub)
+	return Z.width, math.max(Z.box, Z.box / 2 + Tall(zone.text) / 2 + Tall(pvp.text) + Tall(sub.text))
+end
+
+function Z.Showing(name)
+	local frame = Global(name)
+	if frame == nil or ns.Forbidden(frame) then
+		return false
+	end
+	local ok, shown = pcall(frame.IsVisible, frame)
+	local okAlpha, alpha = pcall(frame.GetAlpha, frame)
+	return ok and not ns.IsSecret(shown) and shown == true and okAlpha and ns.Finite(alpha) and alpha > 0.01
+end
+
+function Z.Real()
+	return Z.Showing("ZoneTextFrame") or Z.Showing("SubZoneTextFrame")
+end
+
+function Z.Gate()
+	return not (Wanted("zoneTitle") and Wanted("subzoneTitle"))
+end
+
+function Z.Step(holder, elapsed)
+	Z.at = (Z.at or 0) + (ns.Finite(elapsed) and elapsed or 0)
+	if Z.at <= Z.hold then
+		return
+	end
+	local fade = (Z.at - Z.hold) / Z.out
+	if fade >= 1 then
+		holder:Hide()
+	else
+		holder:SetAlpha(1 - fade)
+	end
+end
+
+function Z.Preview()
+	local game = Global("ZoneTextFrame")
+	if Z.broken or game == nil or ns.Forbidden(game) or type(ns.MoverRect) ~= "function" or not Z.Gate() then
+		return
+	end
+	local left, bottom, width, height = ns.MoverRect(game)
+	if not (ns.Finite(left) and ns.Finite(bottom) and ns.Finite(width) and ns.Finite(height)) then
+		return
+	end
+	if not Z.holder then
+		local ok, holder = pcall(CreateFrame, "Frame", nil, UIParent)
+		if not ok or type(holder) ~= "table" then
+			return
+		end
+		ns.Own[holder] = true
+		holder:EnableMouse(false)
+		holder:SetFrameStrata("DIALOG")
+		holder:Hide()
+		if not pcall(Z.Build, holder) then
+			Z.broken = true
+			return
+		end
+		holder:SetScript("OnUpdate", Z.Step)
+		Z.holder = holder
+	end
+	local holder = Z.holder
+	local okMine, mine = pcall(game.GetEffectiveScale, game)
+	local okBase, base = pcall(UIParent.GetEffectiveScale, UIParent)
+	local k = okMine and okBase and ns.Finite(mine) and ns.Finite(base) and mine > 0 and base > 0 and mine / base or 1
+	holder:SetScale(k)
+	holder:ClearAllPoints()
+	holder:SetPoint("TOP", UIParent, "BOTTOMLEFT", (left + width / 2) / k, (bottom + height) / k)
+	local wide, tall = Z.Paint(holder)
+	holder:SetSize(wide, tall)
+	Z.at = 0
+	holder:SetAlpha(1)
+	holder:Show()
 end
 
 local function Apply()
 	for _, row in ipairs(ROWS) do
 		Strings(row)
 	end
-	Sizes()
+	local size = Sizes()
+	local testing = ns.TestMode ~= nil and ns.TestMode.IsOn()
+	if Z.last ~= nil and Z.last ~= size and ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and not testing and ns.PanelShown ~= nil
+		and ns.PanelShown() then
+		Z.Preview()
+	end
+	Z.last = size
 	Talk()
 end
 
@@ -245,6 +384,11 @@ ns.AddStatus(KEY, function()
 	end
 	return lines
 end)
+
+if ns.TestMode and ns.TestMode.StandIn then
+	ns.TestMode.StandIn({ id = "zonetext", module = KEY, game = "ZoneTextFrame", label = "Zone text", corner = "TOP", gate = Z.Gate, real = Z.Real,
+		Build = Z.Build, Paint = Z.Paint })
+end
 
 function ns.ScreenTextRefresh()
 	if not ns.PartStopped(KEY, PART) then
