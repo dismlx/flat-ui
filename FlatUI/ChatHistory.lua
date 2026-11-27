@@ -23,6 +23,8 @@ local COPY = { LINES = { { 50, "The last 50 lines" }, { 200, "The last 200 lines
 	SAY = "The last %d %s heard: press %s to copy %s, or select a part first. Escape closes this.",
 	COPIED = "Copied %d %s. Paste %s where you like; Escape closes this.",
 	COPIED_PART = "Copied what you selected. Paste it where you like; Escape closes this.",
+	PART_HELP = "Select with the mouse or Shift and the arrows; %s selects every line. Escape closes this.",
+	KEY_NAME = "FlatUICopyKey", KEY_LABEL = "Copy recent chat",
 	NONE = "Flat UI: no chat heard yet to copy. Lines are heard while Chat and tooltips is on.",
 	FIGHT = "Flat UI: chat is copied out of a fight.",
 	OFF = "Flat UI: Chat and tooltips is off, so no chat is heard to copy.",
@@ -327,6 +329,28 @@ local function CloseCopy()
 	S.closing = false
 end
 
+local function Mac()
+	if type(IsMacClient) ~= "function" then
+		return false
+	end
+	local ok, answer = pcall(IsMacClient)
+	return ok and not ns.IsSecret(answer) and answer == true
+end
+
+local function Said(box)
+	local lines = box.lines or 0
+	return COPY.SAY:format(lines, lines == 1 and "line" or "lines", Mac() and "Cmd+C" or "Ctrl+C", lines == 1 and "it" or "them")
+end
+
+local function Held(name)
+	local fn = _G[name]
+	if type(fn) ~= "function" then
+		return false
+	end
+	local ok, held = pcall(fn)
+	return ok and not ns.IsSecret(held) and held == true
+end
+
 local function Scroll(box, to)
 	local scroll = box.scroll
 	pcall(scroll.UpdateScrollChildRect, scroll)
@@ -406,6 +430,9 @@ local function BuildCopy()
 	end)
 	edit:SetScript("OnMouseDown", function()
 		box.part = true
+		if box.help then
+			box.help:SetText(COPY.PART_HELP:format(Mac() and "Cmd+A" or "Ctrl+A"))
+		end
 	end)
 	edit:SetScript("OnKeyDown", function(_, key)
 		if ns.IsSecret(key) or type(key) ~= "string" or box.text == nil or box.text == "" then
@@ -417,14 +444,11 @@ local function BuildCopy()
 				box.help:SetText(box.part and COPY.COPIED_PART or COPY.COPIED:format(count, count == 1 and "line" or "lines", count == 1 and "it" or "them"))
 			end
 		elseif key == "A" then
-			for _, name in ipairs({ "IsControlKeyDown", "IsMetaKeyDown" }) do
-				local fn = _G[name]
-				local ok, held = false, nil
-				if type(fn) == "function" then
-					ok, held = pcall(fn)
-				end
-				if ok and not ns.IsSecret(held) and held == true then
-					box.part = nil
+			if Held("IsControlKeyDown") or Held("IsMetaKeyDown") then
+				pcall(edit.HighlightText, edit)
+				box.part = nil
+				if box.help then
+					box.help:SetText(Said(box))
 				end
 			end
 		elseif COPY.MOVES[key] then
@@ -452,13 +476,8 @@ local function OpenCopy(count)
 	box.text, box.lines, box.part = nil, lines, nil
 	box.edit:SetText(text)
 	box.text = text
-	local mac = false
-	if type(IsMacClient) == "function" then
-		local ok, answer = pcall(IsMacClient)
-		mac = ok and not ns.IsSecret(answer) and answer == true
-	end
 	if box.help then
-		box.help:SetText(COPY.SAY:format(lines, lines == 1 and "line" or "lines", mac and "Cmd+C" or "Ctrl+C", lines == 1 and "it" or "them"))
+		box.help:SetText(Said(box))
 	end
 	box.frame:ClearAllPoints()
 	box.frame:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
@@ -620,3 +639,34 @@ ns.AddStatus(KEY, function()
 	end
 	return { line .. "." }
 end)
+
+do
+	_G["BINDING_NAME_CLICK " .. COPY.KEY_NAME .. ":LeftButton"] = COPY.KEY_LABEL
+	local ok, button = pcall(CreateFrame, "Button", COPY.KEY_NAME, UIParent)
+	if ok and type(button) == "table" then
+		ns.Own[button] = true
+		pcall(button.RegisterForClicks, button, "LeftButtonUp")
+		button:SetScript("OnClick", function()
+			local okRun, err = pcall(function()
+				local box = S.box
+				local okShown, shown = false, nil
+				if box then
+					okShown, shown = pcall(box.frame.IsShown, box.frame)
+				end
+				if okShown and not ns.IsSecret(shown) and shown == true then
+					CloseCopy()
+					return
+				end
+				local refusal = CopyRefusal()
+				if refusal then
+					print(refusal)
+				else
+					CopyLater(COPY.FIRST)
+				end
+			end)
+			if not okRun then
+				geterrorhandler()(err)
+			end
+		end)
+	end
+end

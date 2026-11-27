@@ -5,6 +5,7 @@ local B = ns.Bags
 local Custom = B.Custom
 
 local PART, PREFIX, MOST, LONGEST = "custom", "custom", 20, 24
+local RULE_LETTERS, RULE_SHOWN = 80, 40
 local SLOT, PLUS_LONG, PLUS_THICK = 37, 13, 2
 local LIT, LIT_HOVER, HOVER = 0.14, 0.3, 0.12
 local DIM = { 0.66, 0.68, 0.62 }
@@ -78,7 +79,7 @@ local TIPS = {
 	addFull = " You have 20, the most Flat UI keeps.",
 }
 local FLASH = { junk = "On your sell list", keep = "Pinned", moved = "Moved in: %s", kept = "Kept: %s", made = "Made", renamed = "Renamed",
-	bought = "Bought: %s", back = "Back" }
+	bought = "Bought: %s", back = "Back", rule = "Search kept" }
 local COLOURS = {
 	{ "plain", "Plain" },
 	{ "red", "Red", 0.93, 0.38, 0.33 },
@@ -258,9 +259,21 @@ local function KeyNumber(key)
 end
 
 local revision, cache = 0, nil
+local NO_RULES = {}
 
 local function Changed()
 	revision = revision + 1
+end
+
+local function CleanRule(text)
+	if type(text) ~= "string" or ns.IsSecret(text) then
+		return nil
+	end
+	text = text:match("^%s*(.-)%s*$") or ""
+	if text == "" or #text > RULE_LETTERS then
+		return nil
+	end
+	return text
 end
 
 local function Read()
@@ -273,7 +286,7 @@ local function Read()
 	if cache and cache.revision == revision and cache.list == list and cache.size == size then
 		return cache
 	end
-	local keys, names, entries = {}, {}, {}
+	local keys, names, entries, rules = {}, {}, {}, {}
 	for _, entry in ipairs(list or {}) do
 		if type(entry) == "table" then
 			local key, name = entry.key, entry.name
@@ -281,10 +294,12 @@ local function Read()
 				keys[#keys + 1] = key
 				names[key] = name
 				entries[key] = entry
+				rules[key] = CleanRule(entry.rule)
 			end
 		end
 	end
-	cache = { revision = revision, list = list, size = size, keys = keys, names = names, entries = entries }
+	cache = { revision = revision, list = list, size = size, keys = keys, names = names, entries = entries, rules = rules,
+		ruled = next(rules) ~= nil }
 	return cache
 end
 
@@ -305,6 +320,13 @@ function Custom.Name(key)
 		return nil
 	end
 	return Read().names[key]
+end
+
+function Custom.Rule(key)
+	if type(key) ~= "string" then
+		return nil
+	end
+	return Read().rules[key]
 end
 
 local function Counts()
@@ -345,6 +367,41 @@ local function Sorted()
 		return a < b
 	end)
 	return keys, names
+end
+
+local ruleKeys = { at = nil, revision = nil, keys = NO_RULES }
+
+function Custom.RuleKeys()
+	local data = Read()
+	if not data.ruled then
+		return NO_RULES
+	end
+	local now = Now()
+	if ruleKeys.revision == revision and ruleKeys.data == data and ruleKeys.at == now then
+		return ruleKeys.keys
+	end
+	local keys = {}
+	for _, key in ipairs((Sorted())) do
+		if data.rules[key] then
+			keys[#keys + 1] = key
+		end
+	end
+	ruleKeys.at, ruleKeys.revision, ruleKeys.data, ruleKeys.keys = now, revision, data, keys
+	return keys
+end
+
+local function SetRule(key, text)
+	local entry = type(key) == "string" and Read().entries[key] or nil
+	if not entry then
+		return false
+	end
+	text = CleanRule(text)
+	if entry.rule ~= text then
+		entry.rule = text
+		Changed()
+		Request("layout")
+	end
+	return true
 end
 
 local function BuiltIn(lower)
@@ -493,6 +550,7 @@ local function Remember(bags, key, name)
 		if type(entry) == "table" and entry.key == key then
 			gone.index = gone.index or index
 			gone.colour = gone.colour or (type(entry.colour) == "string" and COLOUR_OF[entry.colour] and entry.colour or nil)
+			gone.rule = gone.rule or CleanRule(entry.rule)
 		end
 	end
 	for id, placedKey in pairs(type(bags.placed) == "table" and bags.placed or {}) do
@@ -577,7 +635,7 @@ function Custom.Restore(which)
 		bags.custom = {}
 	end
 	local list = bags.custom
-	table.insert(list, math.min(gone.index or (#list + 1), #list + 1), { key = gone.key, name = clean, colour = gone.colour })
+	table.insert(list, math.min(gone.index or (#list + 1), #list + 1), { key = gone.key, name = clean, colour = gone.colour, rule = gone.rule })
 	local number = KeyNumber(gone.key)
 	if number and (Whole(bags.customNext) or 1) <= number then
 		bags.customNext = number + 1
@@ -1011,6 +1069,36 @@ local function RestoreText()
 	return "Bring back " .. Plain(name)
 end
 
+local function Shorten(text, most)
+	if #text > most then
+		return (text:sub(1, most - 3):gsub("|+$", "")) .. "..."
+	end
+	return text
+end
+
+local function RuleLines(items, which, key)
+	local rule = Custom.Rule(key)
+	local typed = Call(B.Search, "Active") == true and CleanRule(Call(B.Search, "Text")) or nil
+	if typed and typed ~= rule then
+		items[#items + 1] = { text = "Keep what the search finds here", part = PART, pick = function()
+			if SetRule(key, typed) then
+				Say(("%s keeps what %s finds."):format(Plain(Custom.Name(key) or key), typed))
+				Custom.Took(which, key, nil, nil, FLASH.rule)
+			end
+		end }
+	end
+	if rule then
+		items[#items + 1] = { text = ("Stop keeping what \"%s\" finds"):format(Shorten(rule, RULE_SHOWN)), part = PART, pick = function()
+			if SetRule(key, nil) then
+				Say(("%s no longer keeps what %s finds."):format(Plain(Custom.Name(key) or key), rule))
+			end
+		end }
+		items[#items + 1] = { text = "Search for it", part = PART, pick = function()
+			Call(B.Search, "SetText", rule)
+		end }
+	end
+end
+
 function Custom.MenuLines(st, sec, anchor)
 	local items = {}
 	if type(st) ~= "table" or type(sec) ~= "table" then
@@ -1024,8 +1112,8 @@ function Custom.MenuLines(st, sec, anchor)
 		end }
 	end
 	if mine or OwnKey(key) then
-		items[#items + 1] = { text = "Colour", header = true }
 		local current = ColourId(key)
+		local lines, shown = {}, COLOUR_OF[current][2]
 		for _, colour in ipairs(COLOURS) do
 			local id = colour[1]
 			local text = colour[2]
@@ -1033,12 +1121,20 @@ function Custom.MenuLines(st, sec, anchor)
 				text = ("|cff%02x%02x%02x%s|r"):format(math.floor(colour[3] * 255 + 0.5), math.floor(colour[4] * 255 + 0.5),
 					math.floor(colour[5] * 255 + 0.5), text)
 			end
-			items[#items + 1] = { text = text, tick = current == id, part = PART, pick = function()
+			if id == current then
+				shown = text
+			end
+			lines[#lines + 1] = { text = text, tick = current == id, part = PART, pick = function()
 				SetColour(key, id)
 			end }
 		end
+		local title = ("Colour of %s"):format(Plain(sec.label or Custom.Name(key) or key))
+		items[#items + 1] = { text = "Colour: " .. shown, part = PART, pick = function()
+			Call(B.Layout, "Menu", anchor, title, lines, which)
+		end }
 	end
 	if mine then
+		RuleLines(items, which, key)
 		items[#items + 1] = { text = DeleteText("Delete this section", Custom.Count(key)), part = PART, pick = function()
 			Announce(Custom.Delete(key))
 		end }

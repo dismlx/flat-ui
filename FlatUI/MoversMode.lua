@@ -308,6 +308,8 @@ local function Button(parent, text, width, onClick, primary, tip)
 	return button, label
 end
 
+MM.Button, MM.Surface, MM.Text = Button, Surface, Text
+
 local function Field(parent, width, onEnter)
 	local box = Make("EditBox", parent)
 	box:SetSize(width, 24)

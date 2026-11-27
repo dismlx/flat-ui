@@ -262,6 +262,9 @@ local function NewCastBar(inst, parent, spec)
 	if spec.opt == "player" then
 		row.latency = NewTexture(bar, "ARTWORK", 2)
 		row.latency:SetColorTexture(1, 0, 0, 0.6)
+		row.queue = NewTexture(bar, "OVERLAY", 3)
+		row.queue:SetColorTexture(1, 1, 1, 1)
+		row.queue:Hide()
 	end
 	if spec.ticks then
 		row.ticks = {}
@@ -365,6 +368,7 @@ local function BuildCast(stage)
 	p["castbars.shield"] = shielded and shielded.shield or player.spark
 	p["castbars.stateBorder"] = player.bar
 	p["castbars.latency"], p["castbars.latencyColour"] = player.latency, player.latency
+	p["castbars.queue"], p["castbars.queueColour"] = player.queue, player.queue
 	for _, row in ipairs(rows) do
 		if row.ticks then
 			p["castbars.ticks"] = p["castbars.ticks"] or row.bar
@@ -553,6 +557,25 @@ local function PlaceLatency(row, look, state, w)
 	latency:SetShown(look.enabled and G("castbars.latency") == true and state ~= "interrupted")
 end
 
+local QUEUE_SAMPLE, QUEUE_CAST = 0.4, 2.5
+local function PlaceQueue(row, look, state, w)
+	local queue = row.queue
+	if not queue then
+		return
+	end
+	local ok, r, g, b = pcall(ns.Colour, "castbars.queueColour")
+	if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		r, g, b = 1, 1, 1
+	end
+	queue:SetColorTexture(r, g, b, 1)
+	local x = w * (1 - QUEUE_SAMPLE / QUEUE_CAST)
+	queue:ClearAllPoints()
+	queue:SetPoint("TOP", row.bar, "TOPLEFT", x, 0)
+	queue:SetPoint("BOTTOM", row.bar, "BOTTOMLEFT", x, 0)
+	queue:SetWidth(ns.Pixels(row.bar, 1))
+	queue:SetShown(look.enabled and G("castbars.queue") == true and state == "cast")
+end
+
 local function ShowTime(row, look, opt, state)
 	if row.time then
 		local timeRow = (opt == "player" or opt == "pet") and "castbars.playerTime" or "castbars.ownTime"
@@ -575,6 +598,20 @@ local function AimRGB(spec)
 		return SAMPLE_CLASS[1], SAMPLE_CLASS[2], SAMPLE_CLASS[3]
 	end
 	return ClassRGB()
+end
+
+local function KickLook(row, look)
+	local r, g, b
+	if look.flat then
+		if look.r then
+			r, g, b = look.r, look.g, look.b
+		else
+			r, g, b = 1, 1, 1
+		end
+	else
+		r, g, b = ns.Colour("castbars.interruptCooling")
+	end
+	Look(row.kickTime, look.percent, r, g, b, (look.outline == "thin" or look.outline == "thick") and look.outline or "thin")
 end
 
 local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
@@ -603,6 +640,7 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	row.spark:SetShown(not (enabled and not G("castbars.spark")))
 	GameTexture(inst, row.spark, GAME_PIP, { 0.9, 0.9, 0.9, 0.9 })
 	PlaceLatency(row, look, state, w)
+	PlaceQueue(row, look, state, w)
 	if spec.small then
 		local place = enabled and G("castbars.iconPos") or "game"
 		row.icon:SetSize(20, 20)
@@ -632,8 +670,7 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	if row.kickTime then
 		row.kickTime:SetShown(enabled and kick == "cooling" and G("castbars.kickTime") == true and G("castbars.interrupt") == true
 			and (state == "cast" or state == "channel"))
-		local kr, kg, kb = ns.Colour("castbars.interruptCooling")
-		Look(row.kickTime, look.percent, kr, kg, kb, look.outline)
+		KickLook(row, look)
 	end
 	if row.text then
 		local mode = "top10"
@@ -729,6 +766,22 @@ function DC.PaintCast(row, opt, state, part, w, h, name, kick)
 	return w, h
 end
 
+function DC.CastKick(row, kick, left, state)
+	if not row.look then
+		return
+	end
+	row.kick = kick
+	local fs = row.kickTime
+	if fs then
+		local on = row.look.enabled and kick == "cooling" and G("castbars.kickTime") == true and G("castbars.interrupt") == true
+			and (state == "cast" or state == "channel") and ns.Finite(left) and left > 0
+		if on then
+			fs:SetText(("%d"):format(math.ceil(left)))
+		end
+		fs:SetShown(on)
+	end
+end
+
 function DC.CastProgress(row, state, part, left, name, total)
 	if not row.look then
 		return
@@ -740,6 +793,7 @@ function DC.CastProgress(row, state, part, left, name, total)
 	if state ~= row.state then
 		PaintTicks(row, row.look, state, row.w, part)
 		PlaceLatency(row, row.look, state, row.w)
+		PlaceQueue(row, row.look, state, row.w)
 		ShowTime(row, row.look, row.opt, state)
 		ShowAim(row, row.look)
 	elseif state == "channel" then

@@ -218,6 +218,9 @@ local function Find(data, tooltip)
 	local entry, index = M.Find(id)
 	if waiting then
 		pick.hint = type(entry) == "table" and SL.HINT_KEYS[Opt("spellWhen")] and id or nil
+		if pick.hint then
+			pick.entry, pick.index, pick.rank, pick.trait = entry, index, rank, trait
+		end
 		return
 	end
 	if type(entry) ~= "table" then
@@ -488,7 +491,7 @@ local function Work(id, tooltip, data, entry, index, rank, trait)
 	record.data, record.lines, record.trait, record.rank, record.notes = data, shown, trait, rank, notes
 end
 
-local function Hint(_, tooltip, data)
+local function Hint(id, tooltip, data, entry, index, rank, trait)
 	local key = SL.HINT_KEYS[Opt("spellWhen")]
 	local ok, shown = pcall(tooltip.NumLines, tooltip)
 	if not key or not ok or not ns.Finite(shown) then
@@ -496,6 +499,10 @@ local function Hint(_, tooltip, data)
 	end
 	local record = hinted[tooltip]
 	if record and rawequal(record.data, data) and shown >= record.lines then
+		return
+	end
+	local M = Model()
+	if not M or (#LinesOf(M, id, entry, index, rank) == 0 and NextRank(entry, index, rank, trait) == nil) then
 		return
 	end
 	local colour = SL.HINT_COLOUR
@@ -556,7 +563,7 @@ function ns.SpellTipLines(tooltip, data)
 	local id, entry, index, rank, trait, hint = pick.id, pick.entry, pick.index, pick.rank, pick.trait, pick.hint
 	pick.id, pick.entry, pick.index, pick.rank, pick.trait, pick.hint = nil, nil, nil, nil, nil, nil
 	if ok and hint then
-		Report(ns.EachPart(KEY, PART, Hint, hint, tooltip, data))
+		Report(ns.EachPart(KEY, PART, Hint, hint, tooltip, data, entry, index, rank, trait))
 	elseif ok and id then
 		Report(ns.EachPart(KEY, PART, Work, id, tooltip, data, entry, index, rank, trait))
 	end

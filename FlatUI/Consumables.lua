@@ -492,7 +492,7 @@ local function Keep(kind)
 		store = (Index(name) or 0) > 0 and Store(true)
 		if store then
 			store[kind] = name
-			print(("Flat UI: %s is in your macro list. Open it with /macro and drag it onto a bar."):format(name))
+			print(("Flat UI: %s is in your macro list. Put a macro on your cursor, on the Drink and health macros page, hands it to you for a bar."):format(name))
 		end
 		return
 	end
@@ -709,6 +709,46 @@ local function Status()
 		end
 	end
 	return lines
+end
+
+local function Made(kind)
+	if not ns.Enabled(KEY) or Opt(kind) ~= true or not MacroCalls() then
+		return nil
+	end
+	local store, name = Store(), NAMES[kind]
+	if not (store and store[kind] == name) then
+		return nil
+	end
+	local index = Index(name)
+	return index ~= nil and index > 0 and index or nil
+end
+
+function ns.ConsumablesPickupLines()
+	local lines = {}
+	for number, kind in ipairs(KINDS) do
+		if Made(kind) then
+			lines[#lines + 1] = { number, NAMES[kind] }
+		end
+	end
+	if #lines == 0 then
+		return { { 3, "No macro made yet" } }
+	end
+	return lines
+end
+
+function ns.ConsumablesPickup(id)
+	local kind = KINDS[id]
+	if not kind then
+		return false, id == 3 and "Flat UI: no Flat UI macro is in your macro list yet. They are made out of combat while Keep drink and health macros is on." or nil
+	end
+	if Ask(InCombatLockdown) == true then
+		return false, "Flat UI: not in a fight. Pick it again after the fight."
+	end
+	local index = Made(kind)
+	if not index or type(PickupMacro) ~= "function" or not pcall(PickupMacro, index) then
+		return false, ("Flat UI: %s is not in your macro list now."):format(NAMES[kind])
+	end
+	return true, ("Flat UI: %s is on your cursor: click an action button to put it there."):format(NAMES[kind])
 end
 
 ns.ClickPathReporter(function()

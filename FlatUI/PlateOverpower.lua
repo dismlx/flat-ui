@@ -14,7 +14,7 @@ local K = {
 	NAMES = { WARRIOR = "Overpower", HUNTER = "Mongoose Bite", ROGUE = "Riposte" },
 	WINDOW = 5, MATCH = 0.5, LOOK = 0.1, GAP = 2, LEVEL = 20, DIM = 0.45, PULSE_LOW = 0.55, PULSE_SECONDS = 1.2, CROP = 0.08,
 	AUTO_ATTACK = 6603, SIZE = 26, POP_FROM = 1.3, POP_IN = 0.12, POP_SCALE = 0.15, FADE_OUT = 0.25,
-	RENEW_FROM = 1.15, RENEW_SECONDS = 0.15,
+	RENEW_FROM = 1.15, RENEW_SECONDS = 0.15, SECONDS = 0.45,
 	ACTIVE = { "UNIT_COMBAT", "SPELL_UPDATE_USABLE", "ACTION_USABLE_CHANGED", "SPELL_UPDATE_COOLDOWN", "PLAYER_ENTER_COMBAT", "PLAYER_LEAVE_COMBAT",
 		"NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED" },
 	ON_USABLE = { HUNTER = true, ROGUE = true },
@@ -359,6 +359,67 @@ local function ClearSwipe(rec)
 	end
 end
 
+local function SecondsFont(rec)
+	local text = rec.secs
+	local face = Opt("textFace")
+	local file = face ~= "default" and type(ns.FontFile) == "function" and ns.FontFile(face) or nil
+	if not Plain(file, "string") then
+		file = rec.secsBase
+	end
+	if not (text and Plain(file, "string")) then
+		return
+	end
+	local px = math.max(6, math.floor((rec.size or K.SIZE) * K.SECONDS + 0.5))
+	local key = file .. "|" .. px
+	if rec.secsFont ~= key and pcall(text.SetFont, text, file, px, "OUTLINE") then
+		rec.secsFont = key
+	end
+end
+
+local function MakeSeconds(rec)
+	local ok, frame = pcall(CreateFrame, "Frame", nil, rec.holder)
+	if not ok or type(frame) ~= "table" then
+		return
+	end
+	ns.Own[frame] = true
+	frame:SetAllPoints(rec.holder)
+	local level = Ask(rec.holder.GetFrameLevel, rec.holder)
+	if type(level) == "number" then
+		pcall(frame.SetFrameLevel, frame, level + 3)
+	end
+	local text = type(ns.OwnText) == "function" and ns.OwnText(frame, "OVERLAY", "SystemFont_NamePlate") or nil
+	if not text then
+		return
+	end
+	local got, file = pcall(text.GetFont, text)
+	rec.secsBase = got and Plain(file, "string") and file or nil
+	text:SetPoint("CENTER", frame, "CENTER", 0, 0)
+	text:SetTextColor(1, 1, 1, 1)
+	text:SetText("")
+	rec.secs, rec.secsShown = text, ""
+end
+
+local function Seconds(rec)
+	local text = rec.secs
+	if not text then
+		return
+	end
+	local shown = ""
+	if lit and Opt("overpowerSeconds") == true then
+		local left = lit.expires - Now()
+		if left > 0 then
+			shown = tostring(math.ceil(left))
+		end
+	end
+	if shown ~= rec.secsShown then
+		rec.secsShown = shown
+		if shown ~= "" then
+			SecondsFont(rec)
+		end
+		text:SetText(shown)
+	end
+end
+
 local function Make(unitFrame)
 	local rec = recs[unitFrame]
 	if rec and rec.holder then
@@ -387,6 +448,7 @@ local function Make(unitFrame)
 	if rec.swipe and type(edges) == "table" and type(level) == "number" then
 		pcall(edges.SetFrameLevel, edges, level + 2)
 	end
+	MakeSeconds(rec)
 	MakeGlow(rec)
 	MakeMotion(rec)
 	return rec
@@ -428,6 +490,9 @@ local function Place(unitFrame, rec)
 		pcall(holder.SetFrameLevel, holder, level + K.LEVEL)
 	end
 	rec.to, rec.size, rec.ox, rec.oy = to, size, ox, oy
+	if rec.secs then
+		SecondsFont(rec)
+	end
 end
 
 function Prepare(unitFrame)
@@ -492,6 +557,10 @@ local function Hide(rec, fade)
 		holder:SetAlpha(0)
 	end
 	ClearSwipe(rec)
+	if rec.secs and rec.secsShown ~= "" then
+		rec.secsShown = ""
+		rec.secs:SetText("")
+	end
 	if gone then
 		QuestPlace(rec.owner)
 	end
@@ -523,6 +592,7 @@ function Draw()
 		rec.at = lit.at
 		pcall(rec.swipe.SetCooldown, rec.swipe, lit.at, lit.expires - lit.at)
 	end
+	Seconds(rec)
 	local usable = UsableState() == "usable" and S.ready ~= false
 	if rec.shown and rec.usable == usable then
 		return
@@ -718,8 +788,9 @@ end
 
 function OnOwnRenew()
 	S.dodges = S.dodges + 1
-	if S.since ~= nil and (S.state == "usable" or S.state == "power") then
-		S.since = Now()
+	S.ownAt = Now()
+	if (S.since ~= nil or S.state == "power") and (S.state == "usable" or S.state == "power") then
+		S.since = S.ownAt
 		LightTarget()
 	end
 end
@@ -738,11 +809,15 @@ local function OnUsable()
 	local before = S.state
 	S.state = state
 	if K.ON_USABLE[S.class] then
+		local now, own = Now(), S.ownAt
 		if state == "usable" and before ~= nil and before ~= "usable" and (before ~= "power" or S.since == nil) then
-			S.since = Now()
+			S.since = (own and now - own >= 0 and now - own < Window()) and own or now
+			LightTarget()
+		elseif state == "power" and before == "blocked" and own and now - own >= 0 and now - own <= K.MATCH then
+			S.since = own
 			LightTarget()
 		elseif state == "blocked" and before ~= nil and before ~= "blocked" then
-			S.since = nil
+			S.since, S.ownAt = nil, nil
 			if lit then
 				Unlight(true)
 			end
@@ -778,7 +853,7 @@ end
 
 local function OnCast(unit, _, spellID)
 	if Plain(unit, "string") and unit == "player" and Plain(spellID, "number") and RANK[spellID] then
-		pending, S.turned, S.since = {}, -math.huge, nil
+		pending, S.turned, S.since, S.ownAt = {}, -math.huge, nil, nil
 		Unlight()
 	end
 end
@@ -823,7 +898,7 @@ local function Heard(event, ...)
 end
 
 local function StandDown()
-	lit, pending, S.since = nil, {}, nil
+	lit, pending, S.since, S.ownAt = nil, {}, nil, nil
 	Ticking(false)
 	for _, rec in pairs(recs) do
 		pcall(Hide, rec)

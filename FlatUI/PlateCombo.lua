@@ -9,6 +9,7 @@ end
 
 local K = {
 	MAX = 5, SIZE = 7, SPACE = 3, DROP = 2, DIM = 0.25, POP_FROM = 1.4, POP_SECONDS = 0.15, LEVEL = 15, FADE_IN = 0.15, FADE_OUT = 0.2,
+	BREATHE_LOW = 0.55, BREATHE_SECONDS = 0.9,
 	COLOUR = { 1, 0.3, 0.2 }, FULL = { 1, 0.82, 0 },
 	CLASSES = { ROGUE = true, DRUID = true },
 	EVENTS = { "PLAYER_TARGET_CHANGED", "UPDATE_SHAPESHIFT_FORM" },
@@ -76,7 +77,8 @@ local function Look(count, most)
 	local full = Opt("comboFull") == true and count >= most
 	local row = full and "comboFullColour" or "comboColour"
 	local hex = Opt(row)
-	return row, (type(hex) == "string" and hex or "") .. (full and "+" or ""), full
+	local breathe = full and Opt("comboBreathe") == true
+	return row, (type(hex) == "string" and hex or "") .. (full and "+" or "") .. (breathe and "~" or ""), full, breathe
 end
 
 local function Playing(group)
@@ -165,6 +167,39 @@ local function MakeFades(rec)
 	end
 end
 
+local function MakeBreathe(rec)
+	local row = rec.row
+	local ok, group = pcall(function()
+		local made = row:CreateAnimationGroup()
+		ns.Own[made] = true
+		local fade = made:CreateAnimation("Alpha")
+		ns.Own[fade] = true
+		fade:SetFromAlpha(1)
+		fade:SetToAlpha(K.BREATHE_LOW)
+		fade:SetDuration(K.BREATHE_SECONDS)
+		pcall(fade.SetSmoothing, fade, "IN_OUT")
+		made:SetLooping("BOUNCE")
+		return made
+	end)
+	rec.breathe = ok and type(group) == "table" and group or nil
+end
+
+local function Breathe(rec, on)
+	local group = rec.breathe
+	if not group then
+		return
+	end
+	local playing = Playing(group)
+	if on and not playing then
+		pcall(group.Play, group)
+	elseif not on and playing then
+		pcall(group.Stop, group)
+	end
+	if not on then
+		rec.row:SetAlpha(1)
+	end
+end
+
 local function Make(unitFrame)
 	local rec = recs[unitFrame]
 	if rec and rec.holder then
@@ -181,18 +216,22 @@ local function Make(unitFrame)
 	local size, space = Size()
 	holder:SetSize(K.MAX * size + (K.MAX - 1) * space, size)
 	holder:SetAlpha(0)
+	local row = CreateFrame("Frame", nil, holder)
+	ns.Own[row] = true
+	row:SetAllPoints(holder)
 	local squares = {}
 	for index = 1, K.MAX do
-		local texture = holder:CreateTexture(nil, "ARTWORK")
+		local texture = row:CreateTexture(nil, "ARTWORK")
 		ns.Own[texture] = true
 		texture:SetSize(size, size)
 		texture:SetColorTexture(1, 1, 1, 1)
-		local outline = ns.SetOutlineArea(ns.Outline(holder, texture), KEY)
+		local outline = ns.SetOutlineArea(ns.Outline(row, texture), KEY)
 		ns.SetOutline(outline, false, false)
 		squares[index] = { texture = texture, outline = outline, pop = MakePop(texture) }
 	end
-	rec.holder, rec.squares = holder, squares
+	rec.holder, rec.row, rec.squares = holder, row, squares
 	MakeFades(rec)
+	MakeBreathe(rec)
 	return rec
 end
 
@@ -274,6 +313,7 @@ local function Hide(unitFrame, soft)
 		return
 	end
 	rec.shown, rec.lit = nil, nil
+	Breathe(rec, false)
 	if rec.appear then
 		pcall(rec.appear.Stop, rec.appear)
 	end
@@ -295,7 +335,8 @@ end
 
 local function Paint(rec, count, pop)
 	local most = rec.max or K.MAX
-	local row, key, full = Look(count, most)
+	local row, key, full, breathe = Look(count, most)
+	Breathe(rec, breathe)
 	local base = full and K.FULL or K.COLOUR
 	local r, g, b = base[1], base[2], base[3]
 	if type(Opt(row)) == "string" then

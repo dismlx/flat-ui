@@ -52,16 +52,16 @@ for index = 1, 7 do
 end
 local WINDOWS_ROW = { row = "bagWindows", label = "Bag windows", frames = {}, opens = true }
 local ENTRIES = {
-	{ bar = true, row = "main", label = "Main action bar", frames = { "MainActionBar" }, beside = { "FlatUIBar1PageUp", "FlatUIBar1PageDown", "FlatUIBar1PageNumber" } },
-	{ bar = true, row = "bar2", label = "Action bar 2", frames = { "MultiBarBottomLeft" } },
-	{ bar = true, row = "bar3", label = "Action bar 3", frames = { "MultiBarBottomRight" } },
-	{ bar = true, row = "bar4", label = "Action bar 4", frames = { "MultiBarRight" } },
-	{ bar = true, row = "bar5", label = "Action bar 5", frames = { "MultiBarLeft" } },
-	{ bar = true, row = "bar6", label = "Action bar 6", frames = { "MultiBar5" } },
-	{ bar = true, row = "bar7", label = "Action bar 7", frames = { "MultiBar6" } },
-	{ bar = true, row = "bar8", label = "Action bar 8", frames = { "MultiBar7" } },
-	{ bar = true, row = "stance", label = "Stance bar", frames = { "StanceBar" } },
-	{ bar = true, row = "pet", label = "Pet bar", frames = { "PetActionBar" } },
+	{ bar = true, row = "main", label = "Main action bar", frames = { "MainActionBar" }, beside = { "FlatUIBar1PageUp", "FlatUIBar1PageDown", "FlatUIBar1PageNumber" }, alpha = "barsAlpha" },
+	{ bar = true, row = "bar2", label = "Action bar 2", frames = { "MultiBarBottomLeft" }, alpha = "barsAlpha" },
+	{ bar = true, row = "bar3", label = "Action bar 3", frames = { "MultiBarBottomRight" }, alpha = "barsAlpha" },
+	{ bar = true, row = "bar4", label = "Action bar 4", frames = { "MultiBarRight" }, alpha = "barsAlpha" },
+	{ bar = true, row = "bar5", label = "Action bar 5", frames = { "MultiBarLeft" }, alpha = "barsAlpha" },
+	{ bar = true, row = "bar6", label = "Action bar 6", frames = { "MultiBar5" }, alpha = "barsAlpha" },
+	{ bar = true, row = "bar7", label = "Action bar 7", frames = { "MultiBar6" }, alpha = "barsAlpha" },
+	{ bar = true, row = "bar8", label = "Action bar 8", frames = { "MultiBar7" }, alpha = "barsAlpha" },
+	{ bar = true, row = "stance", label = "Stance bar", frames = { "StanceBar" }, alpha = "barsAlpha" },
+	{ bar = true, row = "pet", label = "Pet bar", frames = { "PetActionBar" }, alpha = "barsAlpha" },
 	{ row = "micro", label = "Micro menu", frames = { "MicroMenuContainer" }, beside = MICRO_BUTTONS, alpha = "microAlpha" },
 	{ row = "bags", label = "Bag bar", frames = { "BagsBar" }, beside = BAG_BUTTONS, alpha = "bagsAlpha" },
 	WINDOWS_ROW,
@@ -194,6 +194,25 @@ local function Casting()
 	return false
 end
 
+local function Below(value, most)
+	return ns.Finite(value) and ns.Finite(most) and most > 0 and value < most
+end
+
+local function Hurt()
+	local okDead, dead = pcall(UnitIsDeadOrGhost, "player")
+	if not okDead or ns.IsSecret(dead) or dead == true then
+		return false
+	end
+	local okHealth, health = pcall(UnitHealth, "player")
+	local okMost, most = pcall(UnitHealthMax, "player")
+	if okHealth and okMost and Below(health, most) then
+		return true
+	end
+	local okMana, mana = pcall(UnitPower, "player", 0)
+	local okPool, pool = pcall(UnitPowerMax, "player", 0)
+	return okMana and okPool and Below(mana, pool)
+end
+
 local function MoversOpen()
 	local kit = ns.MoverKit
 	return type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
@@ -212,7 +231,7 @@ end
 
 local function Wanted()
 	return (Opt("combat") and Fighting()) or Holding() or FlyoutOpen() or ns.EditModeOpen() or MoversOpen()
-		or (Opt("cast") == true and Casting())
+		or (Opt("cast") == true and Casting()) or (Opt("hurt") == true and Hurt())
 end
 
 local function Grouped()

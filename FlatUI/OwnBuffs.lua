@@ -665,6 +665,132 @@ function ns.OwnBuffsTrackers()
 	if B.container and B.on then
 		B.Lists()
 	end
+	B.QueueSounds()
+end
+
+B.sounds, B.KITS = {}, { raid = 8959, alarm = 12889, whisper = 37666 }
+B.NOTE_SOUND = "Your buffs: the game refused its sound for a buff ending, so Sound when one ends is silent for some of them."
+
+function B.Withheld()
+	local call = type(C_Secrets) == "table" and C_Secrets.ShouldAurasBeSecret or nil
+	if type(call) ~= "function" then
+		return false
+	end
+	local ok, answer = pcall(call)
+	return ok and not IsSecret(answer) and answer == true
+end
+
+function B.QueueSounds()
+	if B.soundQueued then
+		return
+	end
+	B.soundQueued = true
+	ns.OutOfCombat(function()
+		B.soundQueued = false
+		ns.Try(KEY, B.SyncSounds)
+	end)
+end
+
+function B.SoundsWait(on)
+	if on == (B.soundWaiting == true) then
+		return
+	end
+	B.soundWaiting = on
+	if on and not B.soundFrame then
+		local frame = Own(CreateFrame("Frame"))
+		frame:SetScript("OnEvent", function()
+			if B.soundWaiting then
+				B.QueueSounds()
+			end
+		end)
+		B.soundFrame = frame
+	end
+	local frame = B.soundFrame
+	for _, event in ipairs(frame and { "PLAYER_REGEN_ENABLED", "ADDON_RESTRICTION_STATE_CHANGED", "PLAYER_ENTERING_WORLD" } or {}) do
+		pcall(on and frame.RegisterEvent or frame.UnregisterEvent, frame, event)
+	end
+end
+
+function B.SoundsWanted()
+	local triggers = type(Enum) == "table" and Enum.UnitAuraSoundTrigger or nil
+	local trigger = type(triggers) == "table" and triggers.Removed or nil
+	local file = type(ns.TrackerSoundFile) == "function" and ns.TrackerSoundFile(Opt("endSound")) or nil
+	local wanted = {}
+	if not (file and trigger ~= nil and B.Capable() and ns.Enabled(KEY)) then
+		return wanted, trigger
+	end
+	local left = B.Left()
+	if ns.Enabled("trackers") and type(ns.TrackerSpellIDs) == "function" then
+		Merge(left, ns.TrackerSpellIDs())
+	end
+	for id in pairs(B.ClassMap()) do
+		if Whole(id) and not left[id] then
+			wanted[id] = file
+		end
+	end
+	return wanted, trigger
+end
+
+function B.SyncSounds()
+	local auras = type(C_UnitAuras) == "table" and C_UnitAuras or {}
+	local add, remove = auras.AddAuraSound, auras.RemoveAuraSound
+	if type(add) ~= "function" then
+		return
+	end
+	if InCombatLockdown() or B.Withheld() then
+		B.SoundsWait(true)
+		return
+	end
+	B.SoundsWait(false)
+	local wanted, trigger = B.SoundsWanted()
+	for id, made in pairs(B.sounds) do
+		if wanted[id] ~= made.file then
+			B.sounds[id] = nil
+			if type(remove) == "function" then
+				pcall(remove, made.id)
+			end
+		end
+	end
+	B.refused.sound = nil
+	for id, file in pairs(wanted) do
+		if not B.sounds[id] then
+			local ok, handle = pcall(add, trigger, { unitToken = "player", spellID = id, soundFileID = file, outputChannel = "Master", throttleSeconds = 1 })
+			if ok and Plain(handle, "number") then
+				B.sounds[id] = { id = handle, file = file }
+			else
+				B.refused.sound = true
+			end
+		end
+	end
+end
+
+function B.SamplePicture(index)
+	local pictures = B.samplePictures
+	if not pictures then
+		local class = B.class or T.Ask(UnitClassBase, "player")
+		pictures = {}
+		local list = type(ns.ClassShortBuffs) == "table" and Plain(class, "string") and ns.ClassShortBuffs[class] or nil
+		local book = type(C_SpellBook) == "table" and C_SpellBook.IsSpellKnown or nil
+		local texture = type(C_Spell) == "table" and C_Spell.GetSpellTexture or nil
+		for _, entry in ipairs(type(list) == "table" and list or {}) do
+			if #pictures >= 3 then
+				break
+			end
+			for _, id in ipairs(type(entry.ids) == "table" and entry.ids or {}) do
+				if T.Ask(IsPlayerSpell, id) == true or T.Ask(book, id) == true then
+					local file = T.Ask(texture, id)
+					if Plain(file, "number") or Plain(file, "string") then
+						pictures[#pictures + 1] = file
+					end
+					break
+				end
+			end
+		end
+		if Plain(class, "string") then
+			B.samplePictures = pictures
+		end
+	end
+	return pictures[index] or ns.IconSamplePicture(index)
 end
 
 function B.Read()
@@ -805,6 +931,7 @@ end
 
 function B.Sync()
 	B.on = B.Capable() and ns.Enabled(KEY)
+	B.QueueSounds()
 	if not B.on then
 		B.Held()
 		if B.holder and not B.testing then
@@ -1031,7 +1158,7 @@ function ns.OwnBuffsTest(quiet, path)
 		end
 		B.sample[index] = icon
 		list[index] = icon
-		ns.IconSet(icon, ({ 135940, 135964, 136089 })[index], now, 2 * index + 2, { numbers = Opt("time") == "on", border = Opt("iconBorder") })
+		ns.IconSet(icon, B.SamplePicture(index), now, 2 * index + 2, { numbers = Opt("time") == "on", border = Opt("iconBorder") })
 		ns.IconCountdownHeight(icon, Opt("size"), B.BASE)
 		B.SampleTime(icon, now, 2 * index + 2)
 		if flash then
@@ -1053,6 +1180,9 @@ end
 
 function ns.OwnBuffsLookChanged(path)
 	ns.Try(KEY, B.Refresh)
+	if path == KEY .. ".endSound" and not InCombatLockdown() and B.KITS[Opt("endSound")] and type(ns.PlayKit) == "function" then
+		ns.PlayKit(B.KITS[Opt("endSound")], KEY)
+	end
 	if InCombatLockdown() or TM.IsOn() or not (B.Capable() and B.on and ns.Enabled(KEY)) then
 		return
 	end
@@ -1091,7 +1221,7 @@ function B.Held()
 	local flash = Opt("flash") ~= false
 	for index, icon in ipairs(list) do
 		local fresh = not (icon.held and icon.frame:IsShown())
-		ns.IconSampleHeld(icon, index, KEY, look)
+		ns.IconSampleHeld(icon, index, KEY, look, B.SamplePicture(index))
 		ns.IconCountdownHeight(icon, Opt("size"), B.BASE)
 		B.SampleTime(icon)
 		if fresh and icon.held and flash then
@@ -1130,6 +1260,9 @@ function B.Status()
 	if B.refused.size then
 		lines[#lines + 1] = NOTE_SIZE
 	end
+	if B.refused.sound then
+		lines[#lines + 1] = B.NOTE_SOUND
+	end
 	if B.path == "reading" then
 		lines[#lines + 1] = NOTE_READING
 	end
@@ -1153,12 +1286,18 @@ ns.Register(KEY, {
 			end
 		end,
 		PLAYER_REGEN_DISABLED = function()
+			if B.testing then
+				ns.Try(KEY, B.EndTest)
+			end
 			if B.path == "reading" then
 				B.Queue()
 			end
 		end,
 		EDIT_MODE_LAYOUTS_UPDATED = function()
 			B.Refresh()
+		end,
+		SPELLS_CHANGED = function()
+			B.samplePictures = nil
 		end,
 	},
 	slash = { buffs = B.Slash },

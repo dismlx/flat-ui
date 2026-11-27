@@ -459,11 +459,13 @@ end
 
 local function PlateSync(state, bar)
 	local ok, visible = pcall(bar.IsVisible, bar)
-	if ok and not ns.IsSecret(visible) and type(visible) == "boolean" then
+	if ok and not ns.IsSecret(visible) and type(visible) == "boolean" and state.shown ~= visible then
+		state.shown = visible
 		state.frame:SetShown(visible)
 	end
 	local fine, alpha = pcall(bar.GetAlpha, bar)
-	if fine and not ns.IsSecret(alpha) and type(alpha) == "number" then
+	if fine and not ns.IsSecret(alpha) and type(alpha) == "number" and state.alpha ~= alpha then
+		state.alpha = alpha
 		state.frame:SetAlpha(alpha)
 	end
 end
@@ -536,6 +538,7 @@ function Plates()
 			any = true
 			ns.Each(KEY, Plate, entry)
 		elseif state then
+			state.shown = false
 			state.frame:Hide()
 		end
 	end
@@ -543,14 +546,20 @@ function Plates()
 end
 
 local function PlateStep(_, elapsed)
+	if not plateWatch.on or ns.IsStopped(KEY) then
+		return
+	end
+	for _, entry in ipairs(PLATES) do
+		local state = plates[entry[1]]
+		if state and state.outline and plateWatch.wanted[entry[1]] and state.anchor then
+			PlateSync(state, state.anchor)
+		end
+	end
 	plateWatch.clock = plateWatch.clock + elapsed
 	if plateWatch.clock < PLATE_EVERY then
 		return
 	end
 	plateWatch.clock = 0
-	if not plateWatch.on or ns.IsStopped(KEY) then
-		return
-	end
 	for _, entry in ipairs(PLATES) do
 		local name = entry[1]
 		if PlateWanted(entry) ~= (plateWatch.wanted[name] == true) then
@@ -564,7 +573,6 @@ local function PlateStep(_, elapsed)
 				Plates()
 				return
 			end
-			PlateSync(state, bar)
 		end
 	end
 end

@@ -1,6 +1,7 @@
 local _, ns = ...
 
 local FORMAT, COLOUR, TOTEM_SIZE, WARN_AT = "hud.durationFormat", "hud.durationColour", "unitframes.totemTimeSize", "hud.durationWarn"
+local TENTHS_AT = "hud.durationTenths"
 local FRAMES = { "BuffFrame", "DebuffFrame", "ExternalDefensivesFrame" }
 local NOTE = "Unit frames: Duration format: the game withholds totem times in fights, and they keep the game's format."
 local WARN, RED = 10, { 1, 0.3, 0.3 }
@@ -32,6 +33,14 @@ function ns.AuraWarnAt()
 		return warn
 	end
 	return WARN
+end
+
+function ns.AuraTenthsAt()
+	local under = ns.Get(TENTHS_AT)
+	if ns.Finite(under) then
+		return under
+	end
+	return 0
 end
 
 local function IsTotem(button)
@@ -73,6 +82,9 @@ local function After(button, timeLeft)
 				text:SetFormattedText(tight[game], number)
 			end
 		end
+	end
+	if not totem and not ns.IsSecret(timeLeft) and type(timeLeft) == "number" and timeLeft > 0 and timeLeft < ns.AuraTenthsAt() then
+		text:SetFormattedText("%.1f", timeLeft)
 	end
 	local mode = ns.Get(COLOUR)
 	if (mode == "white" or mode == "warn")

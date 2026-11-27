@@ -11,7 +11,7 @@ local CASTS = {
 	{ id = "castTarget", game = "TargetFrameSpellBar", module = "castbars", opt = "target", label = "Target cast bar", unit = "target", offset = 0.8,
 		small = true, kick = "ready", aim = "> You", names = { cast = "Fireball", shield = "Polymorph" } },
 	{ id = "castFocus", game = "FocusFrameSpellBar", module = "castbars", opt = "focus", label = "Focus cast bar", unit = "focus", offset = 1.6,
-		small = true, kick = "far", aim = "> You", names = { cast = "Frostbolt", shield = "Fear" } },
+		small = true, kick = "far", cool = 1.5, aim = "> You", names = { cast = "Frostbolt", shield = "Fear" } },
 	{ id = "castPet", game = "PetCastingBarFrame", module = "castbars", opt = "pet", label = "Pet cast bar", unit = "pet", offset = 2.4,
 		round = "pet", names = { cast = "Firebolt" } },
 	{ id = "castBoss", game = "Boss1TargetFrameSpellBar", module = "unitframes", opt = "boss", label = "Boss cast bar", unit = "boss", offset = 1.2,
@@ -37,7 +37,7 @@ local DEBUFFS = {
 local BUFFS = { { kind = nil, seconds = 25 }, { kind = nil, seconds = 290 }, { kind = nil, seconds = 1700 } }
 local AURA_GOLD = { 1, 0.82, 0 }
 local AURA_WARN, AURA_RED, AURA_GAME_WHITE = 10, { 1, 0.3, 0.3 }, 90
-local ROLL_BOX, ROLL_STEP, ROLL_W, ROLL_TIME = "FlatUILootRolls", 100, 277, 10
+local ROLL_BOX, ROLL_STEP, ROLL_W, ROLL_TIME, ROLL_WARN = "FlatUILootRolls", 100, 277, 10, 5
 local ROLL_ITEMS = { { icon = 2, name = "Sturdy Shield", quality = 2 }, { icon = 3, name = "Royal Crown", quality = 3 } }
 local MIRROR_TIME = 30
 local PLATE_UP, PLATE_ROUND, PLATE_CAST, THREAT_EVERY = 160, 3, 2.5, 3
@@ -94,11 +94,21 @@ local function CastName(spec, state)
 	return spec.names[state]
 end
 
+local function KickOf(spec, state, into)
+	if spec.cool and state == "cast" and ns.Finite(into) and into < spec.cool then
+		return "cooling"
+	end
+	return spec.kick
+end
+
 local function CastStandIn(spec)
 	local round = ROUNDS[spec.round or (spec.opt == "player" and "player" or "enemy")]
 	local function Shows(holder, state, part, left, into, total)
 		if spec.opt == "player" and state == "interrupted" and holder.row.state ~= "interrupted" and type(ns.CastKickedSample) == "function" then
 			pcall(ns.CastKickedSample)
+		end
+		if spec.cool then
+			ns.DrawCasts.CastKick(holder.row, KickOf(spec, state, into), spec.cool - (into or 0), state)
 		end
 		ns.DrawCasts.CastProgress(holder.row, state, part, left, holder.row.state ~= state and CastName(spec, state) or nil, total)
 		holder.row.bar:SetAlpha(state == "interrupted" and (0.45 + 0.55 * math.abs(math.cos(into * 6))) or 1)
@@ -115,12 +125,12 @@ local function CastStandIn(spec)
 		Build = function(holder)
 			holder.row = ns.DrawCasts.Cast(holder, { opt = spec.opt, small = spec.small, shield = true, time = "",
 				name = spec.opt == "player" and "Shadow Bolt" or spec.names.cast, rank = spec.opt == "player" and "Rank 3" or nil,
-				ticks = spec.ticks, aim = spec.aim })
+				ticks = spec.ticks, aim = spec.aim, kick = spec.cool and "cooling" or nil })
 			holder.row.bar:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
 		end,
 		Paint = function(holder, w, h)
 			local state, part, left, into, total = Phase(round, spec.offset, Now())
-			ns.DrawCasts.PaintCast(holder.row, spec.opt, state, part, w, h, CastName(spec, state), spec.kick)
+			ns.DrawCasts.PaintCast(holder.row, spec.opt, state, part, w, h, CastName(spec, state), KickOf(spec, state, into))
 			Shows(holder, state, part, left, into, total)
 		end,
 		Animate = function(holder, _, now)
@@ -231,12 +241,18 @@ end
 local function AuraStandIn(id, game, label, list, filter)
 	local function Times(holder, now)
 		for index, aura in ipairs(list) do
-			local left = math.ceil(aura.seconds - (now % aura.seconds))
+			local exact = aura.seconds - (now % aura.seconds)
+			local left = math.ceil(exact)
+			local words
+			if exact > 0 and exact < (holder.tenths or 0) then
+				words = ("%.1f"):format(exact)
+			end
 			local cell = holder.cells[index]
-			if cell.left ~= left then
-				cell.left = left
-				cell.time:SetText(AuraTime(left))
-				AuraColour(holder, cell, left)
+			local shown = words or left
+			if cell.left ~= shown then
+				cell.left = shown
+				cell.time:SetText(words or AuraTime(left))
+				AuraColour(holder, cell, words and exact or left)
 			end
 		end
 	end
@@ -267,6 +283,7 @@ local function AuraStandIn(id, game, label, list, filter)
 			local on = ns.Get("hud.enabled") == true
 			holder.mode = on and (colour == "warn" or colour == "white") and colour or "game"
 			holder.under = type(ns.AuraWarnAt) == "function" and ns.AuraWarnAt() or AURA_WARN
+			holder.tenths = on and type(ns.AuraTenthsAt) == "function" and ns.AuraTenthsAt() or 0
 			for index, aura in ipairs(list) do
 				local cell = holder.cells[index]
 				ns.DrawHud.PaintAura(cell, aura.kind)
@@ -292,10 +309,17 @@ local function RollShown()
 end
 
 local function RollTimers(holder, now)
+	local sound = ns.Get("hud.lootRolls") == true and ns.Get("hud.lootRollTime") == true and ns.Get("hud.lootRollSound") ~= "none"
+		and type(ns.LootRollSound) == "function"
 	for index, roll in ipairs(holder.rolls) do
 		local run = ((now + (index - 1) * 3) % ROLL_TIME) / ROLL_TIME
+		local secs = math.max(1, math.ceil(60 * (1 - run)))
 		roll.timer:SetValue(100 * (1 - run))
-		ns.DrawHud.RollTime(roll, math.max(1, math.ceil(60 * (1 - run))))
+		ns.DrawHud.RollTime(roll, secs)
+		if sound and secs <= ROLL_WARN and ns.Finite(roll.lastSecs) and roll.lastSecs > ROLL_WARN and TM.Sound("hud.lootRoll") then
+			ns.LootRollSound()
+		end
+		roll.lastSecs = secs
 	end
 end
 
@@ -439,6 +463,9 @@ TM.StandIn({
 		local box = P.Plate(p, spec, P.Sets())
 		p.f:ClearAllPoints()
 		p.f:SetPoint("BOTTOM", holder, "CENTER", 0, PLATE_UP)
+		if type(ns.PlateSlipPlaced) == "function" then
+			pcall(ns.PlateSlipPlaced, p)
+		end
 		if holder.caption then
 			holder.caption:ClearAllPoints()
 			holder.caption:SetPoint("TOP", p.f, "BOTTOM", 0, (box and ns.Finite(box.b) and box.b or 0) - 4)

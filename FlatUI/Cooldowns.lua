@@ -2165,6 +2165,36 @@ function ns.CooldownRemove(spellID)
 	return false, ("%s is not picked."):format(Name(spellID))
 end
 
+function R.Move(spellID, step)
+	local list = List()
+	local at
+	for index, id in ipairs(list) do
+		if id == spellID then
+			at = index
+		end
+	end
+	if not at then
+		return false, ("%s is not picked."):format(Whole(spellID) and Name(spellID) or tostring(spellID))
+	end
+	local to = at + step
+	if to < 1 then
+		return false, ("%s is first already."):format(Name(spellID))
+	elseif to > #list then
+		return false, ("%s is last already."):format(Name(spellID))
+	end
+	list[at], list[to] = list[to], list[at]
+	QueueLayout()
+	return true, ("%s is now number %d of the row."):format(Name(spellID), to)
+end
+
+function ns.CooldownMoveLeft(spellID)
+	return R.Move(spellID, -1)
+end
+
+function ns.CooldownMoveRight(spellID)
+	return R.Move(spellID, 1)
+end
+
 function ns.CooldownItemCandidates()
 	local rows, picked = {}, {}
 	for _, key in ipairs(Kinds()) do

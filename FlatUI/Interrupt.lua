@@ -449,6 +449,14 @@ local function AbilityOf(spell)
 	return nil
 end
 
+function ns.InterruptSpell(id)
+	if IsSecret(id) or type(id) ~= "number" then
+		return false
+	end
+	local ok, ab = pcall(AbilityOf, id)
+	return ok and ab ~= nil
+end
+
 local Sync
 
 local function Own(event)

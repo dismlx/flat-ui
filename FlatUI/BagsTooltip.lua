@@ -147,7 +147,16 @@ local function Lines(id)
 			end
 		end
 	end
-	if #list == 0 then
+	local own = nil
+	local mine = B.Data.Mine
+	if type(me) == "string" and type(mine) == "function" then
+		local ok, bags, bank, worn = pcall(mine, id)
+		bags, bank, worn = ok and Whole(bags) or 0, ok and Whole(bank) or 0, ok and Whole(worn) or 0
+		if bank > 0 or worn > 0 then
+			own = { bags = bags, bank = bank, worn = worn, total = bags + bank + worn }
+		end
+	end
+	if #list == 0 and not own then
 		return nil
 	end
 	table.sort(list, function(a, b)
@@ -157,6 +166,11 @@ local function Lines(id)
 		return a.key < b.key
 	end)
 	local lines, sum, rest, others = {}, 0, 0, 0
+	if own then
+		local okClass, class = pcall(UnitClassBase, "player")
+		local name = Name(me, okClass and class or nil, realm)
+		lines[1] = { name.text, Where(own.bags, own.bank, own.worn), name.r, name.g, name.b }
+	end
 	for index, entry in ipairs(list) do
 		sum = sum + entry.total
 		if index <= MOST then
@@ -169,7 +183,9 @@ local function Lines(id)
 	if others > 0 then
 		lines[#lines + 1] = { ("and %d more"):format(others), ("%d"):format(rest), DIM[1], DIM[2], DIM[3] }
 	end
-	if #list > 1 then
+	if own and #list > 0 then
+		lines[#lines + 1] = { "In all", ("%d"):format(sum + own.total), PLAIN[1], PLAIN[2], PLAIN[3] }
+	elseif #list > 1 then
 		lines[#lines + 1] = { "On your other characters", ("%d"):format(sum), PLAIN[1], PLAIN[2], PLAIN[3] }
 	end
 	return lines

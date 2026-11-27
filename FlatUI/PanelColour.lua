@@ -98,6 +98,7 @@ local function Remember(value)
 	end
 	store.recent = list
 end
+Colour.Remember = Remember
 
 local function Value()
 	return ("%02x%02x%02x%02x"):format(state.a, state.r, state.g, state.b)

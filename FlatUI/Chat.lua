@@ -343,8 +343,59 @@ end
 
 local typing = setmetatable({}, { __mode = "k" })
 local Watch
+local LEFT = { SHOW = 50, AMBER = 20, LIMIT = 255, FONT = "GameFontDisableSmall", X = -8,
+	AMBER_COLOUR = { 1, 0.7, 0.2 }, RED_COLOUR = { 1, 0.3, 0.3 } }
+
+function LEFT.Hide(box)
+	local record = boxes[box]
+	local text = record and record.left
+	if text then
+		pcall(text.Hide, text)
+	end
+end
+
+function LEFT.Count(box, record)
+	local text = record.left
+	local okText, typed = false, nil
+	if On("editbox") and Opt("inputLeft") == true and Typing(box) then
+		okText, typed = pcall(box.GetText, box)
+	end
+	if not okText or ns.IsSecret(typed) or type(typed) ~= "string" then
+		LEFT.Hide(box)
+		return
+	end
+	local okLimit, limit = pcall(box.GetVisibleTextByteLimit, box)
+	if not okLimit or not ns.Finite(limit) or limit <= 0 then
+		limit = LEFT.LIMIT
+	end
+	local visible = typed:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h", ""):gsub("|h", "")
+	local left = limit - #visible
+	if left > LEFT.SHOW then
+		LEFT.Hide(box)
+		return
+	end
+	if not text then
+		text = ns.OwnText(box, "OVERLAY", LEFT.FONT)
+		if not text then
+			return
+		end
+		pcall(text.SetPoint, text, "RIGHT", box, "RIGHT", LEFT.X, 0)
+		pcall(text.SetJustifyH, text, "RIGHT")
+		local ok, r, g, b = pcall(text.GetTextColor, text)
+		record.leftDim = ok and IsNumber(r) and IsNumber(g) and IsNumber(b) and { r, g, b } or { 0.5, 0.5, 0.5 }
+		record.left = text
+	end
+	local colour = left <= 0 and LEFT.RED_COLOUR or left <= LEFT.AMBER and LEFT.AMBER_COLOUR or record.leftDim
+	pcall(text.SetTextColor, text, colour[1], colour[2], colour[3])
+	pcall(text.SetText, text, tostring(math.max(0, left)))
+	pcall(text.Show, text)
+end
+
 local function ReadFocus(box)
 	local record, art = boxes[box], box.focusLeft
+	if record then
+		LEFT.Count(box, record)
+	end
 	if not record or not Usable(art) then
 		return
 	end
@@ -550,6 +601,7 @@ function Watch(box, on)
 						end
 					else
 						typing[held] = nil
+						LEFT.Hide(held)
 					end
 				end
 				if next(typing) == nil then
@@ -568,6 +620,9 @@ local function BoxMoment(gained)
 		if Usable(box) and (boxes[box] or X.seats[box]) then
 			if gained ~= nil then
 				Watch(box, gained)
+			end
+			if gained ~= true then
+				LEFT.Hide(box)
 			end
 			Settle(box)
 		end

@@ -347,6 +347,8 @@ local FROM = {
 		pct = function(unit) return UnitPowerPercent(unit, nil, false, CurveConstants.ScaleTo100) end, miss = function(unit) return UnitPowerMissing(unit) end },
 }
 local live, todo, ticker = {}, {}, { waited = 0 }
+local HOVER_IN, HOVER_OUT = 0.1, 0.15
+local full = {}
 
 local function Mode(rec, entry, on)
 	local keys = entry.role == "health" and HEALTH_KEY or POWER_KEY
@@ -397,11 +399,121 @@ local function Blank(own)
 	end
 end
 
+local function FullCurve()
+	if full.curve == nil and not full.failed then
+		local ok, curve = pcall(function()
+			local made = C_CurveUtil.CreateCurve()
+			made:SetType(Enum.LuaCurveType.Step)
+			made:AddPoint(0, 1)
+			made:AddPoint(1, 0)
+			return made
+		end)
+		full.curve, full.failed = ok and curve or nil, not ok
+	end
+	return full.curve
+end
+
+local function Shade(own, unit, role)
+	if Opt("ownTextWhen") == "notfull" and unit ~= nil then
+		local curve = FullCurve()
+		if curve ~= nil then
+			local ok, value
+			if role == "health" then
+				ok, value = pcall(UnitHealthPercent, unit, true, curve)
+			else
+				ok, value = pcall(UnitPowerPercent, unit, nil, false, curve)
+			end
+			if ok and pcall(own.frame.SetAlpha, own.frame, value) then
+				return
+			end
+		end
+	end
+	pcall(own.frame.SetAlpha, own.frame, 1)
+end
+
+local function HoverFades(own)
+	if own.fades == nil then
+		local text = own.text
+		local ok, come, go = pcall(function()
+			local rise = text:CreateAnimationGroup()
+			local up = rise:CreateAnimation("Alpha")
+			up:SetFromAlpha(0)
+			up:SetToAlpha(1)
+			up:SetDuration(HOVER_IN)
+			local fall = text:CreateAnimationGroup()
+			local down = fall:CreateAnimation("Alpha")
+			down:SetFromAlpha(1)
+			down:SetToAlpha(0)
+			down:SetDuration(HOVER_OUT)
+			pcall(fall.SetToFinalAlpha, fall, true)
+			fall:SetScript("OnFinished", function()
+				Blank(own)
+				pcall(text.SetAlpha, text, 1)
+			end)
+			return rise, fall
+		end)
+		own.fades = ok and { come = come, go = go } or false
+	end
+	return own.fades or nil
+end
+
+local function StopFade(group)
+	if group ~= nil and group:IsPlaying() then
+		pcall(group.Stop, group)
+	end
+end
+
+local function Steady(own)
+	own.hoverOn = nil
+	local fades = own.fades
+	if fades then
+		StopFade(fades.come)
+		StopFade(fades.go)
+		pcall(own.text.SetAlpha, own.text, 1)
+	end
+end
+
+local function Quiet(own)
+	Steady(own)
+	Blank(own)
+end
+
+local function Enter(own)
+	if own.hoverOn == true then
+		return
+	end
+	own.hoverOn = true
+	local fades = HoverFades(own)
+	if fades then
+		StopFade(fades.go)
+		pcall(own.text.SetAlpha, own.text, 1)
+		if own.blank then
+			pcall(fades.come.Play, fades.come)
+		end
+	end
+end
+
+local function Leave(own)
+	local fades = own.fades
+	if own.hoverOn == true then
+		own.hoverOn = false
+		if fades then
+			StopFade(fades.come)
+			if not own.blank and pcall(fades.go.Play, fades.go) then
+				return
+			end
+		end
+	elseif fades and fades.go:IsPlaying() then
+		return
+	end
+	Blank(own)
+end
+
 local function Release(rec, entry)
 	live[entry] = nil
 	local own = entry.own
 	if own ~= nil then
-		Blank(own)
+		Quiet(own)
 		pcall(own.frame.Hide, own.frame)
 	end
 	if entry.ownFaded then
@@ -452,6 +564,8 @@ end
 
 local function Say(entry, word)
 	local own = entry.own
+	Steady(own)
+	pcall(own.frame.SetAlpha, own.frame, 1)
 	if own.pos ~= "word" then
 		own.pos = "word"
 		own.text:ClearAllPoints()
@@ -475,29 +589,36 @@ local function Fill(job)
 	end
 	local unit = X.unitOf(rec)
 	if unit == nil or not Yes(pcall(UnitExists, unit)) then
-		Blank(own)
+		Quiet(own)
 		return
 	end
 	if entry.role == "health" then
 		local word = Status(rec, unit)
 		if word == "" then
-			Blank(own)
+			Quiet(own)
 			return
 		elseif word ~= nil then
 			Say(entry, word)
 			return
 		end
 	elseif Yes(pcall(UnitIsDeadOrGhost, unit)) then
-		Blank(own)
+		Quiet(own)
 		return
 	end
-	if Opt("ownTextWhen") == "hover" and not Yes(pcall(rec.frame.IsMouseOver, rec.frame)) then
-		Blank(own)
+	local hover = Opt("ownTextWhen") == "hover"
+	if hover and not Yes(pcall(rec.frame.IsMouseOver, rec.frame)) then
+		Leave(own)
 		return
 	end
 	Place(entry)
+	if hover then
+		Enter(own)
+	else
+		Steady(own)
+	end
 	own.blank = false
 	pcall(own.frame.Show, own.frame)
+	Shade(own, unit, entry.role)
 	Write(own.text, mode, unit, entry.role)
 end
 
@@ -565,7 +686,7 @@ local function Settle(rec, entry, on)
 	if mode == "hide" then
 		live[entry] = nil
 		if entry.own ~= nil then
-			Blank(entry.own)
+			Quiet(entry.own)
 			pcall(entry.own.frame.Hide, entry.own.frame)
 		end
 	else

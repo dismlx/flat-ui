@@ -407,7 +407,7 @@ local function Decorate(record, size)
 	level = Plain(level, "number") and level or 0
 	local wantCool = R.ShowOf(record) == "border"
 	local wantReady = Opt("readyGlow") == true
-	local wantProc = Opt("procGlow") == true and record.spell ~= nil
+	local wantProc = Opt("procGlow") == true and (record.spell ~= nil or record.sample == 3)
 	if (wantCool or wantReady or wantProc) and not record.deco then
 		record.deco = Layer(record.frame)
 	end
@@ -440,7 +440,7 @@ end
 local function DecorateAura(record)
 	local level = Ask(record.top.GetFrameLevel, record.top)
 	level = Plain(level, "number") and level or 0
-	if Opt("auraTime") == true and not record.aura and AuraSpell(record) then
+	if Opt("auraTime") == true and not record.aura and (record.sample == 2 or AuraSpell(record)) then
 		record.aura = MakeAura(record)
 	end
 	local aura = record.aura
@@ -507,7 +507,8 @@ local function Proc(record)
 	if not proc then
 		return
 	end
-	local on = Opt("procGlow") == true and ns.Enabled(KEY) and record.spell ~= nil and ProcUp(record.spell)
+	local on = Opt("procGlow") == true and ns.Enabled(KEY)
+		and ((record.held ~= nil and record.sample == 3) or (record.spell ~= nil and ProcUp(record.spell)))
 	local look = on and ProcLook(proc) or false
 	if proc.look == look then
 		return
@@ -672,7 +673,7 @@ end
 
 local function Aura(record)
 	local aura = record.aura
-	if not aura then
+	if not aura or (record.sample and record.held) then
 		return
 	end
 	local expires, length, rate
@@ -781,7 +782,41 @@ function R.AfterLayout()
 	AuraAll()
 end
 
-local H = { READY = 1.5, PX = 2, PREVIEW = 4, interrupts = nil, preview = nil, token = 0 }
+local H = { READY = 1.5, PX = 2, PREVIEW = 4, AURA = 12, AURA_LEFT = 8, interrupts = nil, preview = nil, token = 0 }
+
+function H.Aura(record, held, now)
+	local aura = record.aura
+	if not aura then
+		return
+	end
+	if record.sample ~= 2 or Opt("auraTime") ~= true or ns.PartStopped(KEY, L.AURA_PART) then
+		held.aura = nil
+		if aura.key ~= nil or aura.frame:IsShown() then
+			aura.key = nil
+			aura.cooldown:Clear()
+			aura.frame:Hide()
+		end
+		return
+	end
+	if not held.aura or now >= held.aura then
+		held.aura = now + H.AURA_LEFT
+	end
+	local key = "sample:" .. held.aura
+	if aura.key == key then
+		return
+	end
+	aura.key = key
+	aura.texture:SetTexture(record.picture or L.UNKNOWN_ICON)
+	aura.cooldown:SetCooldown(held.aura - H.AURA, H.AURA)
+	aura.frame:Show()
+	aura.cooldown:Show()
+end
+
+function H.Proc(record)
+	if record.proc and not ns.PartStopped(KEY, L.GLOW_PART) then
+		ns.EachPart(KEY, L.GLOW_PART, Proc, record)
+	end
+end
 
 local function TestOn()
 	local test = ns.TestMode
@@ -913,6 +948,9 @@ function R.Held(record)
 		if record.held then
 			record.held = nil
 			Border(record, false)
+			if record.sample then
+				H.Proc(record)
+			end
 		end
 		return false
 	end
@@ -941,6 +979,8 @@ function R.Held(record)
 	end
 	if record.sample then
 		record.count:SetText(record.sample == 3 and Opt("useCount") == true and "5" or "")
+		H.Aura(record, held, now)
+		H.Proc(record)
 	end
 	R.Look(record, cooling, false, nil)
 	Border(record, IsInterrupt(record.spell))
@@ -954,6 +994,9 @@ function H.Tick(now)
 	local due = false
 	for _, record in ipairs(R.Shown()) do
 		local held = record.held
+		if held and held.aura and now >= held.aura then
+			due = true
+		end
 		if held and not held.ready then
 			local ends = held.start + held.seconds
 			if now >= ends + H.READY then

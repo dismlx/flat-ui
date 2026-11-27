@@ -15,6 +15,12 @@
 	</Binding>
 	<Binding name="CLICK FlatUIPingThreat:LeftButton" category="Flat UI">
 	</Binding>
+	<Binding name="CLICK FlatUIGroupReady:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIGroupPull:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIGroupPull:RightButton" category="Flat UI">
+	</Binding>
 	<Binding name="CLICK FlatUIConsumeButton1:LeftButton" category="Flat UI">
 	</Binding>
 	<Binding name="CLICK FlatUIConsumeButton2:LeftButton" category="Flat UI">
@@ -34,5 +40,11 @@
 	<Binding name="CLICK FlatUIBagSortButton:LeftButton" category="Flat UI">
 	</Binding>
 	<Binding name="CLICK FlatUITestButton:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIGearKey:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUITrinketKey:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUICopyKey:LeftButton" category="Flat UI">
 	</Binding>
 </Bindings>

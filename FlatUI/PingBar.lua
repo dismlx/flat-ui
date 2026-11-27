@@ -41,6 +41,7 @@ local ONLY_LEAD = "Your group lets only its leader ping."
 local ONLY_ASSIST = "Your group lets only its leader and assistants ping."
 local ONLY_ROLES = "Your group lets only tanks and healers ping."
 local LINE_WAITING = "Ping bar: the buttons change when the fight ends."
+local WAIT_LINE = "Flat UI: the ping bar changes when the fight ends."
 local LINE_BROKEN = "Ping bar: the game made no secure button, so the bar and its keys do nothing until /reload."
 local LINE_HIDDEN = "Ping bar: hidden. %s"
 local LINE_NEVER = "Ping bar: Show is Never, so only its keys ping."
@@ -645,6 +646,13 @@ function P.Hint(panel, hint)
 	end
 end
 
+function P.LayKey(list)
+	if #list == 0 then
+		return tostring(ns.Enabled(KEY)) .. "|hidden"
+	end
+	return ("%s|%s|%s|%s|%s"):format(tostring(ns.Enabled(KEY)), table.concat(list, ","), Number("size", BOX_H), Number("spacing", 3), tostring(Opt("layout")))
+end
+
 function P.Lay()
 	local on = ns.Enabled(KEY)
 	if not on then
@@ -652,6 +660,7 @@ function P.Lay()
 			P.panel:Hide()
 			P.Equip(false)
 		end
+		P.shownKey = P.LayKey({})
 		return
 	end
 	if not P.Build() then
@@ -660,6 +669,7 @@ function P.Lay()
 	P.Equip(true)
 	P.KeyLabels()
 	local wanted = P.Wanted()
+	P.shownKey = P.LayKey(wanted)
 	if #wanted == 0 then
 		P.panel:Hide()
 		P.Cancel()
@@ -1038,11 +1048,16 @@ function P.Refresh()
 	if not ns.Enabled(KEY) and P.panel then
 		P.Swipe(nil)
 	end
+	if not P.told and Fighting() and ns.PanelShown() and (P.shownKey or "false|hidden") ~= P.LayKey(P.Wanted()) then
+		P.told = true
+		print(WAIT_LINE)
+	end
 	P.Apply()
 	P.KeyLabels()
 end
 
 function P.AfterFight()
+	P.told = false
 	if P.stale then
 		P.Cancel()
 	end

@@ -2020,6 +2020,10 @@ function ROLL.Sound(choice)
 	end
 end
 
+function ns.LootRollSound()
+	ROLL.Sound(ns.Get(KEY .. ".lootRollSound"))
+end
+
 function ns.LootRollSoundPicked(path)
 	if type(path) ~= "string" or InCombatLockdown() or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
 		return

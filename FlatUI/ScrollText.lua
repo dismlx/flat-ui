@@ -220,20 +220,37 @@ local function Spot(area)
 	return nil
 end
 
-function ns.ScrollLane(newest, height, now, count)
+local function Busy(last, height, now)
+	local free = last.start + (last.height + height) / 2 * SHAPE.line * last.life / last.length
+	if free <= now then
+		return nil
+	end
+	return math.min(free, math.max(now, last.start) + SHAPE.wait, now + SHAPE.most)
+end
+
+function ns.ScrollLane(newest, height, now, count, unit, half)
 	local pick, at, first, age
 	for lane = 1, count or #SHAPE.lanes do
 		local last = newest[lane]
-		if not last then
+		local free = last and Busy(last, height, now)
+		local by = free and last or nil
+		if unit and half then
+			local x = SHAPE.lanes[lane] * unit
+			for other = 1, #SHAPE.lanes do
+				local item = newest[other]
+				if other ~= lane and item and item.on and ns.Finite(item.rx) and math.abs(x - item.rx) < half + (item.half or 0) + GAP then
+					local busy = Busy(item, height, now)
+					if busy and (not free or busy > free) then
+						free, by = busy, item
+					end
+				end
+			end
+		end
+		if not free then
 			return lane, now
 		end
-		local free = last.start + (last.height + height) / 2 * SHAPE.line * last.life / last.length
-		if free <= now then
-			return lane, now
-		end
-		free = math.min(free, math.max(now, last.start) + SHAPE.wait, now + SHAPE.most)
-		if not pick or free < at or (free == at and (last.start < first or (last.start == first and last.serial < age))) then
-			pick, at, first, age = lane, free, last.start, last.serial
+		if not pick or free < at or (free == at and (by.start < first or (by.start == first and by.serial < age))) then
+			pick, at, first, age = lane, free, by.start, by.serial
 		end
 	end
 	return pick, at
@@ -365,6 +382,43 @@ local function Fill(item, height, kind, value, format, r, g, b, flag, icon, valu
 	end
 end
 
+local function Chars(text)
+	local count = _G.strlenutf8
+	if type(count) == "function" then
+		local ok, length = pcall(count, text)
+		if ok and ns.Finite(length) then
+			return length
+		end
+	end
+	return #text
+end
+
+local function Width(region)
+	local ok, width = pcall(region.GetStringWidth, region)
+	if ok and ns.Finite(width) and width > 0 then
+		return width
+	end
+	return nil
+end
+
+local function Half(item, height, value, named)
+	local width = Width(item.text)
+	if not width then
+		local digits = 5
+		if Plain(value, "number") then
+			digits = #tostring(math.floor(math.abs(value)))
+			digits = digits + math.floor((digits - 1) / 3)
+		elseif Plain(value, "string") then
+			digits = Chars(value)
+		end
+		width = 0.5 * height * (digits + named)
+	end
+	if item.hasWord then
+		width = width + GAP + (Width(item.word) or 0.5 * height * WORD * 6)
+	end
+	return width / 2 + item.shift
+end
+
 local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, value2, sample)
 	if type(GetTime) ~= "function" then
 		return false
@@ -392,13 +446,19 @@ local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, 
 	item.hold = style == "static" and SHAPE.stillHold or SHAPE.hold
 	local start, lane, named = now, nil, 0
 	if area.key == "out" and kind == "amount" and type(format) == "string" and not ns.IsSecret(format) and format ~= "%s" then
-		named = math.max(0, #format - 3)
+		named = math.max(0, Chars(format) - 3)
 	end
+	local unit = area.side * (SHAPE.lane + 0.5 * named) * Height(area)
+	item.half = area.key == "out" and Half(item, height, value, named) or nil
 	if PATH[style] then
-		lane, start = ns.ScrollLane(area.lanes, height, now, named > 0 and 2 or nil)
+		if item.half then
+			lane, start = ns.ScrollLane(area.lanes, height, now, named > 0 and 2 or nil, unit, item.half)
+		else
+			lane, start = ns.ScrollLane(area.lanes, height, now, named > 0 and 2 or nil)
+		end
 	end
 	item.start, item.lane, item.x0, item.y0 = start, lane, x, y
-	item.rx = lane and area.side * SHAPE.lanes[lane] * (SHAPE.lane + 0.5 * named) * Height(area) or 0
+	item.rx = lane and SHAPE.lanes[lane] * unit or 0
 	item.ry = lane and 0 or Row(area, item, now)
 	Place(item, now)
 	item.text:Show()

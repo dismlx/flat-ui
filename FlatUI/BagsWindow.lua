@@ -25,6 +25,10 @@ local PITCH, SLOT = 40, 37
 local SELL_W, MOVE_W, FOOT_BUTTON = 108, 96, 18
 local GOLD_ROOM, FREE_ROOM, FOOT_GAP = 96, 40, 12
 local POLL, BUSY_MOST, BUSY_LEAST, MOST_GOLD = 0.5, 6.5, 0.35, 15
+local HOURLY_AFTER = 600
+local GRIP = { size = 10, level = 5, alpha = 0.6, corners = { bags = "BOTTOMLEFT", bank = "BOTTOMRIGHT" },
+	lines = { bags = { { 1, 2, 8, 9 }, { 1, 5.5, 4.5, 9 } }, bank = { { 2, 9, 9, 2 }, { 5.5, 9, 9, 5.5 } } },
+	paths = { bags = "bags.columns", bank = "bags.bankColumns" } }
 local KEYRING = -1
 local DIM = { 0.66, 0.68, 0.62 }
 local SESSION_GAIN, SESSION_LOSS = { 0.3, 0.85, 0.3 }, { 1, 0.35, 0.24 }
@@ -50,6 +54,7 @@ local function Finite(value)
 end
 
 local windows = {}
+local Grip = {}
 local played, watching = {}, false
 local watcher = nil
 
@@ -397,6 +402,21 @@ local function PaintPlate(plate)
 	plate.label:SetAlpha(plate.usable and 1 or 0.45)
 end
 
+function Grip.Paint(w)
+	local grip = w.grip
+	if not grip then
+		return
+	end
+	local r, g, b, a = DIM[1], DIM[2], DIM[3], GRIP.alpha
+	if grip.over or w.sizing then
+		r, g, b = LookRGB("accent", 0.85, 0.85, 0.85)
+		a = 1
+	end
+	for _, line in ipairs(grip.lines) do
+		line:SetColorTexture(r, g, b, a)
+	end
+end
+
 local function PaintWindow(w)
 	local r, g, b = ns.Colour("general.backdrop")
 	ns.SetOutlineFill(w.outline, r, g, b, Opacity())
@@ -424,6 +444,7 @@ local function PaintWindow(w)
 	for _, plate in ipairs(w.plates) do
 		PaintPlate(plate)
 	end
+	Grip.Paint(w)
 end
 
 local Showing, Hiding, Missed, Footer, TitleLine, Resize, ArrangeBar, ArrangeFoot, SetOffset
@@ -537,13 +558,31 @@ local function Icon(w, kind, glyphs)
 	for _, name in ipairs(glyphs) do
 		icon.glyphs[name] = Glyph(button, GLYPHS[name])
 	end
+	local function Release()
+		if icon.pressed then
+			icon.pressed = nil
+			icon.hover:SetAlpha(1)
+			PaintIcon(icon)
+		end
+	end
 	button:SetScript("OnClick", function()
 		Run("window", Clicks[kind], w)
+	end)
+	button:SetScript("OnMouseDown", function(_, mouse)
+		if mouse == "LeftButton" then
+			icon.pressed = true
+			PaintIcon(icon, 0.6)
+			icon.hover:SetAlpha(0)
+		end
+	end)
+	button:SetScript("OnMouseUp", function()
+		Release()
 	end)
 	button:SetScript("OnEnter", function()
 		Run("window", Tips[kind], w, button)
 	end)
 	button:SetScript("OnLeave", function()
+		Release()
 		Untip(button)
 	end)
 	w.icons[kind] = icon
@@ -885,7 +924,7 @@ local function ThumbDrag(w)
 	end
 end
 
-local function FootLabel(w, tip)
+local function FootLabel(w, tip, onClick)
 	local holder = Own(CreateFrame("Frame", nil, w.foot))
 	holder:SetHeight(FOOT)
 	holder:EnableMouse(true)
@@ -898,6 +937,11 @@ local function FootLabel(w, tip)
 	holder:SetScript("OnLeave", function()
 		Untip(holder)
 	end)
+	if onClick then
+		holder:SetScript("OnMouseUp", function(_, mouse)
+			Run("window", onClick, w, holder, mouse)
+		end)
+	end
 	return { frame = holder, text = text }
 end
 
@@ -942,16 +986,48 @@ local function GoldTip(w, owner)
 		tip:AddLine("Flat UI keeps the gold of each character that logs in with Flat UI bags on.", DIM[1], DIM[2], DIM[3], true)
 	end
 	local _, mine = Layout.Viewed(w.which)
-	local okSession, session = pcall(Call, ns, "SessionMoney")
+	local okSession, session, seconds = pcall(Call, ns, "SessionMoney")
 	if mine and okSession and Finite(session) and session ~= 0 then
+		local hourly = ""
+		if Finite(seconds) and seconds >= HOURLY_AFTER then
+			hourly = (" (%s an hour)"):format(Money(math.abs(session) * 3600 / seconds))
+		end
 		tip:AddLine(" ")
 		if session > 0 then
-			tip:AddDoubleLine("This session", "+" .. Money(session), DIM[1], DIM[2], DIM[3], SESSION_GAIN[1], SESSION_GAIN[2], SESSION_GAIN[3])
+			tip:AddDoubleLine("This session", "+" .. Money(session) .. hourly, DIM[1], DIM[2], DIM[3], SESSION_GAIN[1], SESSION_GAIN[2],
+				SESSION_GAIN[3])
 		else
-			tip:AddDoubleLine("This session", "-" .. Money(-session), DIM[1], DIM[2], DIM[3], SESSION_LOSS[1], SESSION_LOSS[2], SESSION_LOSS[3])
+			tip:AddDoubleLine("This session", "-" .. Money(-session) .. hourly, DIM[1], DIM[2], DIM[3], SESSION_LOSS[1], SESSION_LOSS[2],
+				SESSION_LOSS[3])
 		end
 	end
+	if mine and type(ns.SessionRestart) == "function" then
+		tip:AddLine("Ctrl-click: count this session from now.", DIM[1], DIM[2], DIM[3], true)
+	end
 	tip:Show()
+end
+
+local function GoldClick(w, owner, mouse)
+	local okCtrl, ctrl = pcall(IsControlKeyDown)
+	if mouse ~= "LeftButton" or not (okCtrl and not IsSecret(ctrl) and ctrl == true) then
+		return
+	end
+	local _, mine = Layout.Viewed(w.which)
+	if not mine then
+		return
+	end
+	local ok, done = pcall(Call, ns, "SessionRestart")
+	if not (ok and done == true) then
+		return
+	end
+	local tip = GameTooltip
+	if type(tip) == "table" and not ns.Forbidden(tip) then
+		local okOwned, owned = pcall(tip.IsOwned, tip, owner)
+		if okOwned and owned == true then
+			GoldTip(w, owner)
+		end
+	end
+	Request("footer", w.which)
 end
 
 local function Kinds(w)
@@ -1037,16 +1113,41 @@ local function Plural(n, one, many)
 	return n == 1 and one or many
 end
 
+local function SellTest(record)
+	return Call(B.Categories, "IsJunk", record) == true
+end
+
 local function SellTip(w, owner)
+	local tip = Tip(owner)
+	if not tip then
+		return
+	end
 	local n, waits, value = w.sellCount or 0, w.sellWaits or 0, w.sellValue or 0
 	local worth = ""
 	if value > 0 then
 		worth = (w.sellUnknown and " for at least %s" or " for %s"):format(Money(value))
 	end
-	Say(owner, "Sell junk",
-		("Sells %d %s%s, as Errands sells: grey items with a price and the items of your sell list, one at a time."):format(n, Plural(n, "item",
-			"items"), worth),
-		waits > 0 and ("%d more of your sell list %s for the next click."):format(waits, Plural(waits, "waits", "wait")) or nil)
+	tip:SetText("Sell junk", 1, 1, 1)
+	tip:AddLine(("Sells %d %s%s, as Errands sells: grey items with a price and the items of your sell list, one at a time."):format(n,
+		Plural(n, "item", "items"), worth), DIM[1], DIM[2], DIM[3], true)
+	if waits > 0 then
+		tip:AddLine(("%d more of your sell list %s for the next click."):format(waits, Plural(waits, "waits", "wait")), DIM[1], DIM[2], DIM[3],
+			true)
+	end
+	local list = {}
+	local okEntries, entries = pcall(Call, Layout, "Entries", "bags")
+	for _, entry in ipairs(okEntries and type(entries) == "table" and entries or {}) do
+		local ok, junk = pcall(SellTest, entry.record)
+		if ok and junk == true then
+			list[#list + 1] = entry
+		end
+	end
+	if #list > 0 and Fn(Layout, "ListTip") then
+		tip:AddLine(" ")
+		pcall(Layout.ListTip, tip, list, { worth = true })
+	end
+	tip:Show()
+	Call(Layout, "LightWith", "bags", SellTest)
 end
 
 local function SellClick(w)
@@ -1095,7 +1196,7 @@ local function MoveClick(w, kind)
 	Request("footer", "bank")
 end
 
-local function FootButton(w, text, width, onClick, onEnter)
+local function FootButton(w, text, width, onClick, onEnter, onLeave)
 	local button = Own(CreateFrame("Button", nil, w.foot))
 	button:SetSize(width, FOOT_BUTTON)
 	button:RegisterForClicks("LeftButtonUp")
@@ -1107,21 +1208,51 @@ local function FootButton(w, text, width, onClick, onEnter)
 	plate.label:SetPoint("CENTER", button, "CENTER", 0, 0)
 	plate.label:SetWordWrap(false)
 	plate.label:SetText(text)
+	local function Press(on)
+		on = on == true and plate.usable
+		if on == (plate.pressed == true) then
+			return
+		end
+		plate.pressed = on or nil
+		plate.label:SetPoint("CENTER", button, "CENTER", 0, on and -1 or 0)
+		if on then
+			local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
+			plate.hover:SetColorTexture(ar, ag, ab, 0)
+		else
+			PaintPlate(plate)
+		end
+	end
+	local function Left()
+		Press(false)
+		if onLeave then
+			Run("window", onLeave, button)
+		end
+	end
 	button:SetScript("OnClick", function()
 		if plate.usable then
 			onClick(button)
 		end
 	end)
+	button:SetScript("OnMouseDown", function(_, mouse)
+		if mouse == "LeftButton" then
+			Press(true)
+		end
+	end)
+	button:SetScript("OnMouseUp", function()
+		Press(false)
+	end)
 	button:SetScript("OnEnter", function()
 		onEnter(button)
 	end)
 	button:SetScript("OnLeave", function()
+		Left()
 		Untip(button)
 	end)
 	button:SetScript("OnHide", function()
 		if not w.frame:IsVisible() then
 			Unsplit(w)
 		end
+		Left()
 		Untip(button)
 	end)
 	function button.Keep(wanted)
@@ -1134,6 +1265,9 @@ local function FootButton(w, text, width, onClick, onEnter)
 	end
 	function button.SetUsable(on)
 		plate.usable = on == true
+		if not plate.usable then
+			Press(false)
+		end
 		PaintPlate(plate)
 	end
 	function button.SetLabel(words)
@@ -1169,12 +1303,14 @@ local function MakeFoot(w)
 	stripRule:SetPoint("BOTTOMRIGHT", strip, "TOPRIGHT", 0, STRIP_GAP)
 	w.rules[#w.rules + 1] = stripRule
 	if w.which == "bags" then
-		w.gold = FootLabel(w, GoldTip)
+		w.gold = FootLabel(w, GoldTip, GoldClick)
 		w.gold.text:SetJustifyH("LEFT")
 		local sell = FootButton(w, "Sell junk", SELL_W, function()
 			Run("window", SellClick, w)
 		end, function(button)
 			Run("window", SellTip, w, button)
+		end, function()
+			Call(Layout, "LightWith", "bags", nil)
 		end)
 		sell:Hide()
 		sell.Keep(function()
@@ -1547,9 +1683,138 @@ local function Unslack(w)
 	end
 end
 
+do
+	local function CursorX(w)
+		local ok, x = pcall(GetCursorPosition)
+		local okScale, scale = pcall(w.frame.GetEffectiveScale, w.frame)
+		if ok and okScale and Finite(x) and Finite(scale) and scale > 0 then
+			return x / scale
+		end
+		return nil
+	end
+
+	local function Width(w)
+		local value = ns.Get(GRIP.paths[w.which])
+		return Finite(value) and math.floor(value + 0.5) or nil
+	end
+
+	local function Tell(w)
+		local grip, n = w.grip, w.sizing and w.sizing.now or Width(w)
+		if not (grip and n) then
+			return
+		end
+		Say(grip.button, w.which == "bank" and "Bank width in slots" or "Width in slots", ("Drag to change the width: %d slots."):format(n))
+	end
+
+	local function Down(w)
+		if w.moving or w.sizing then
+			return
+		end
+		local path = GRIP.paths[w.which]
+		local def = type(ns.Def) == "function" and ns.Def(path) or nil
+		local start, x = Width(w), CursorX(w)
+		if type(def) ~= "table" or not start or not x then
+			return
+		end
+		Layout.CloseMenu(w.which)
+		w.sizing = { x = x, start = start, before = ns.Get(path), now = start, path = path, def = def }
+		Grip.Paint(w)
+	end
+
+	local function Up(w)
+		local sizing = w.sizing
+		if not sizing then
+			return
+		end
+		w.sizing = nil
+		Grip.Paint(w)
+		local now = ns.Get(sizing.path)
+		if now ~= sizing.before then
+			local home = ns.PanelHome
+			if type(home) == "table" and type(home.Noted) == "function" then
+				pcall(home.Noted, sizing.def, sizing.before, now)
+			end
+			if type(ns.RefreshPanel) == "function" then
+				pcall(ns.RefreshPanel)
+			end
+		end
+	end
+
+	function Grip.Drag(w)
+		local sizing = w.sizing
+		local okDown, down = pcall(IsMouseButtonDown, "LeftButton")
+		if okDown and not IsSecret(down) and not down then
+			Up(w)
+			return
+		end
+		local x = CursorX(w)
+		if not x then
+			return
+		end
+		local def = sizing.def
+		local low = Finite(def.min) and def.min or 1
+		local high = Finite(def.max) and def.max or sizing.start
+		local delta = (x - sizing.x) * (w.which == "bags" and -1 or 1)
+		local n = math.max(low, math.min(high, sizing.start + math.floor(delta / RowHeight() + 0.5)))
+		if n == sizing.now then
+			return
+		end
+		sizing.now = n
+		ns.Set(sizing.path, n)
+		Request("layout", w.which)
+		local tip = GameTooltip
+		if type(tip) == "table" and not ns.Forbidden(tip) then
+			local ok, owned = pcall(tip.IsOwned, tip, w.grip.button)
+			if ok and owned == true then
+				Tell(w)
+			end
+		end
+	end
+
+	function Grip.Make(w)
+		local frame = w.frame
+		local button = Own(CreateFrame("Button", nil, frame))
+		button:SetSize(GRIP.size, GRIP.size)
+		local corner = GRIP.corners[w.which]
+		button:SetPoint(corner, frame, corner, 0, 0)
+		pcall(button.SetFrameLevel, button, w.foot:GetFrameLevel() + GRIP.level)
+		local grip = { button = button, lines = {} }
+		for _, spot in ipairs(GRIP.lines[w.which]) do
+			grip.lines[#grip.lines + 1] = Stroke(button, "OVERLAY", spot[1], spot[2], spot[3], spot[4])
+		end
+		w.grip = grip
+		button:SetScript("OnEnter", function()
+			grip.over = true
+			Grip.Paint(w)
+			Run("window", Tell, w)
+		end)
+		button:SetScript("OnLeave", function()
+			grip.over = nil
+			Grip.Paint(w)
+			Untip(button)
+		end)
+		button:SetScript("OnMouseDown", function(_, mouse)
+			if mouse == "LeftButton" then
+				Run("window", Down, w)
+			end
+		end)
+		button:SetScript("OnMouseUp", function()
+			Run("window", Up, w)
+		end)
+		button:SetScript("OnHide", function()
+			Run("window", Up, w)
+			Untip(button)
+		end)
+		Grip.Paint(w)
+	end
+end
+
 local function Tick(w, elapsed)
 	if w.warming then
 		return
+	end
+	if w.sizing then
+		Run("window", Grip.Drag, w)
 	end
 	if w.drag then
 		Run("window", ThumbDrag, w)
@@ -1596,6 +1861,7 @@ local function Make(which)
 	MakeBar(w)
 	MakeView(w)
 	MakeFoot(w)
+	Grip.Make(w)
 	frame:SetScript("OnShow", function()
 		Run("window", Showing, w)
 	end)

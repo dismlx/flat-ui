@@ -1249,52 +1249,9 @@ local function ApplyAllLater()
 	end)
 end
 
-local function Label(parent, font, width)
-	local text = parent:CreateFontString(nil, "OVERLAY", font)
-	if width then
-		text:SetWidth(width)
-	end
-	text:SetJustifyH("LEFT")
-	return text
-end
-
 local function Released(frame)
 	local ok, over = pcall(frame.IsMouseOver, frame)
 	return not ok or ns.IsSecret(over) or over ~= false
-end
-
-local function MakeButton(parent, text, width, onClick)
-	local button = CreateFrame("Frame", nil, parent)
-	ns.Own[button] = true
-	button:SetSize(width, 22)
-	button:EnableMouse(true)
-	local outline = ns.Outline(button, button, true)
-	ns.KeepOutline(outline)
-	ns.SetOutlineFill(outline, 0.18, 0.18, 0.18, 1)
-	local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	label:SetPoint("CENTER", button, "CENTER", 0, 0)
-	label:SetText(text)
-	button:SetScript("OnEnter", function()
-		ns.SetOutlineFill(outline, 0.3, 0.3, 0.3, 1)
-	end)
-	button:SetScript("OnLeave", function()
-		ns.SetOutlineFill(outline, 0.18, 0.18, 0.18, 1)
-	end)
-	local down = false
-	button:SetScript("OnMouseDown", function(_, mouseButton)
-		down = mouseButton == "LeftButton"
-	end)
-	button:SetScript("OnMouseUp", function(self, mouseButton)
-		local wanted = down and mouseButton == "LeftButton"
-		down = false
-		if wanted and Released(self) then
-			onClick(label)
-		end
-	end)
-	button:SetScript("OnHide", function()
-		down = false
-	end)
-	return button
 end
 
 local function RowBox(info)
@@ -1967,10 +1924,17 @@ local function ResetAll(was)
 		end
 	end
 	resettingAll, systemReset, barsLeft = true, false, false
+	if not was then
+		ns.MoversMode.Group(true)
+	end
 	for _, name in ipairs(names) do
 		ns.Each(KEY, ResetFrame, name, was and was[name])
 	end
 	resettingAll = false
+	if not was then
+		ns.MoversMode.Group(false)
+		ns.Try(KEY, ns.MoversMode.Refresh, true)
+	end
 	if barsLeft then
 		win.Say((was and "Bars " or "Moved frames are back where the game has them, but bars ") .. BARS_STAY)
 	elseif not was then
@@ -2144,13 +2108,16 @@ function centre.Everything()
 		return
 	end
 	local done = 0
+	ns.MoversMode.Group(true)
 	for _, name in ipairs(names) do
 		centre.ticked[name] = nil
-		if centre.Do(name) then
+		if ns.Try(KEY, centre.Do, name) == true then
 			done = done + 1
 		end
-		centre.Look(name)
+		ns.Try(KEY, centre.Look, name)
 	end
+	ns.MoversMode.Group(false)
+	ns.Try(KEY, ns.MoversMode.Refresh, true)
 	if done == 0 then
 		win.Say("Nothing was centred: the ticked handles are hidden or placed by the game.")
 	else
@@ -3836,50 +3803,64 @@ local function BuildBar()
 		self:StopMovingOrSizing()
 		barMoved = true
 	end)
-	ns.KeepOutline(ns.Outline(bar, bar, true))
-	local title = bar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	local MM = ns.MoversMode
+	MM.Surface(bar, "card")
+	local title = MM.Text(bar, "GameFontNormal", "text")
 	title:SetPoint("TOPLEFT", bar, "TOPLEFT", 12, -10)
 	title:SetText("Movers")
-	local hint = Label(bar, "GameFontHighlightSmall", 416)
+	local hint = MM.Text(bar, "GameFontHighlightSmall", "text-dim")
+	hint:SetWidth(416)
 	hint:SetPoint("TOPLEFT", bar, "TOPLEFT", 12, -30)
 	hint:SetText("Drag to move. Scroll or Shift and scroll to nudge. Ctrl and scroll to scale. Right-click to reset, Shift and right-click to hide a HUD frame.")
-	local edit = Label(bar, "GameFontDisableSmall", 416)
+	local edit = MM.Text(bar, "GameFontDisableSmall", "text-dim")
+	edit:SetWidth(416)
 	edit:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -8)
 	edit:SetText(EVERY_FRAME)
-	centre.how = Label(bar, "GameFontDisableSmall", 416)
+	centre.how = MM.Text(bar, "GameFontDisableSmall", "text-dim")
+	centre.how:SetWidth(416)
 	centre.how:SetPoint("TOPLEFT", edit, "BOTTOMLEFT", 0, -6)
-	local pickButton = MakeButton(bar, "Pick a frame", 110, function()
+	local pickButton = MM.Button(bar, "Pick a frame", 100, function()
 		if pick.on then
 			StopPick()
 		else
 			StartPick()
 		end
+	end, false, function()
+		return "Pick a frame", "Point at any frame on the screen and press Alt to give it a box of its own; Shift picks the frame around it. "
+			.. "Click again to stop."
 	end)
 	pickButton:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 12, 10)
-	local resetButton = MakeButton(bar, "Reset all", 130, function(label)
+	local resetButton, resetLabel
+	resetButton, resetLabel = MM.Button(bar, "Reset all", 132, function()
 		if resetPending or not (C_Timer and C_Timer.After) then
 			resetPending = nil
-			label:SetText("Reset all")
+			resetLabel:SetText("Reset all")
 			ns.Try(KEY, ResetAll)
 			return
 		end
 		local mine = {}
 		resetPending = mine
-		label:SetText("Click again to reset")
+		resetLabel:SetText("Click again to reset")
 		C_Timer.After(RESET_ASK, function()
 			if resetPending == mine then
 				resetPending = nil
-				label:SetText("Reset all")
+				resetLabel:SetText("Reset all")
 			end
 		end)
+	end, false, function()
+		return "Reset all", "Puts every moved frame back where the game has it. Click twice; Undo takes it back."
 	end)
-	resetButton:SetPoint("LEFT", pickButton, "RIGHT", 8, 0)
-	centre.button = MakeButton(bar, "Centre ticked", 82, function()
+	resetButton:SetPoint("LEFT", pickButton, "RIGHT", 6, 0)
+	centre.button = MM.Button(bar, "Centre ticked", 96, function()
 		ns.Try(KEY, centre.Everything)
+	end, false, function()
+		return "Centre ticked", "Centres each handle whose box is ticked across the screen, at its height. Undo takes them all back at once."
 	end)
-	centre.button:SetPoint("LEFT", resetButton, "RIGHT", 8, 0)
-	local doneButton = MakeButton(bar, "Done", 70, function()
+	centre.button:SetPoint("LEFT", resetButton, "RIGHT", 6, 0)
+	local doneButton = MM.Button(bar, "Done", 70, function()
 		ns.Try(KEY, Close)
+	end, true, function()
+		return "Done", "Ends the session and keeps the changes. Escape asks first."
 	end)
 	doneButton:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -12, 10)
 end

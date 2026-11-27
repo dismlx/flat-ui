@@ -12,11 +12,15 @@ local SLOT_WORDS = { "HEADSLOT", "NECKSLOT", "SHOULDERSLOT", "SHIRTSLOT", "CHEST
 	"HANDSSLOT", "FINGER0SLOT", "FINGER1SLOT", "TRINKET0SLOT", "TRINKET1SLOT", "BACKSLOT", "MAINHANDSLOT", "SECONDARYHANDSLOT", "RANGEDSLOT",
 	"TABARDSLOT" }
 local DIM = { 0.66, 0.68, 0.62 }
+local SLOTS = { [1] = "CharacterHeadSlot", [3] = "CharacterShoulderSlot", [5] = "CharacterChestSlot", [6] = "CharacterWaistSlot",
+	[7] = "CharacterLegsSlot", [8] = "CharacterFeetSlot", [9] = "CharacterWristSlot", [10] = "CharacterHandsSlot",
+	[16] = "CharacterMainHandSlot", [17] = "CharacterSecondaryHandSlot", [18] = "CharacterRangedSlot" }
+local SLOT_ROW, SLOT_FONT, SLOT_SIZE, SLOT_RED, SLOT_WORN = "windows.durabilitySlots", "NumberFontNormalSmall", 11, 20, 50
 
 local CharacterDurability = {}
 ns.CharacterDurability = CharacterDurability
 
-local state = { frame = nil, text = nil, broken = false, waiting = false }
+local state = { frame = nil, text = nil, broken = false, waiting = false, slots = {}, slotsWaiting = false }
 
 local function Wanted()
 	return ns.Enabled(KEY) and ns.Get(ROW) == true and not ns.PartStopped(KEY, PART)
@@ -120,6 +124,86 @@ local function LineColour(percent, items)
 	return colour
 end
 
+local Slots
+
+local function HideSlots()
+	for _, entry in pairs(state.slots) do
+		pcall(entry.text.Hide, entry.text)
+	end
+end
+
+local function SlotText(slot)
+	local entry = state.slots[slot]
+	if entry then
+		return entry
+	end
+	local button = _G[SLOTS[slot]]
+	if not Usable(button) or ns.Forbidden(button) then
+		return nil
+	end
+	if Blocked(button) then
+		if not state.slotsWaiting then
+			state.slotsWaiting = true
+			ns.OutOfCombat(function()
+				state.slotsWaiting = false
+				if state.frame and Wanted() then
+					ns.EachPart(KEY, PART, Slots)
+				end
+			end)
+		end
+		return nil
+	end
+	local text = ns.OwnText(button, "OVERLAY", SLOT_FONT)
+	if text == nil then
+		return nil
+	end
+	local ok, file = pcall(text.GetFont, text)
+	if ok and not ns.IsSecret(file) and type(file) == "string" and file ~= "" then
+		pcall(text.SetFont, text, file, SLOT_SIZE, "OUTLINE")
+	end
+	pcall(text.SetWordWrap, text, false)
+	entry = { text = text, button = button }
+	state.slots[slot] = entry
+	return entry
+end
+
+function Slots()
+	local choice = ns.Get(SLOT_ROW)
+	local items = (choice == "worn" or choice == "always") and Wanted() and not NoWear() and Items() or nil
+	if not items then
+		HideSlots()
+		return
+	end
+	local left = ns.Get("windows.ilvlCorner") == "topRight"
+	local point, x = left and "TOPLEFT" or "TOPRIGHT", left and 2 or -2
+	local shown = {}
+	for _, item in ipairs(items) do
+		local p = item.percent
+		local whole = math.floor(p + 0.5)
+		if SLOTS[item.slot] and ((choice == "always" and whole < 100) or p <= SLOT_WORN) then
+			local entry = SlotText(item.slot)
+			local text = entry and entry.text
+			if text then
+				local colour = p <= SLOT_RED and RED or YELLOW
+				if entry.corner ~= point then
+					pcall(text.ClearAllPoints, text)
+					pcall(text.SetPoint, text, point, entry.button, point, x, -2)
+					entry.corner = point
+				end
+				pcall(text.SetTextColor, text, colour[1], colour[2], colour[3], 1)
+				pcall(text.SetText, text, ("%d%%"):format(whole))
+				pcall(text.Show, text)
+				shown[item.slot] = true
+			end
+		end
+	end
+	for slot, entry in pairs(state.slots) do
+		if not shown[slot] then
+			pcall(entry.text.Hide, entry.text)
+		end
+	end
+end
+
 local function Update()
 	local text, frame = state.text, state.frame
 	if text == nil then
@@ -131,6 +215,7 @@ local function Update()
 		if frame then
 			pcall(frame.EnableMouse, frame, false)
 		end
+		HideSlots()
 		return
 	end
 	local colour = LineColour(percent, Items())
@@ -145,6 +230,7 @@ local function Update()
 	if ok and ns.Finite(width) and width > 0 and frame then
 		pcall(frame.SetWidth, frame, math.ceil(width))
 	end
+	Slots()
 end
 
 local function ItemName(slot)
@@ -297,6 +383,7 @@ local function Applied()
 		if state.frame then
 			pcall(state.frame.Hide, state.frame)
 		end
+		HideSlots()
 		return
 	end
 	if state.frame == nil then
@@ -325,6 +412,7 @@ end
 function CharacterDurability.Apply()
 	if ns.PartStopped(KEY, PART) and state.frame then
 		pcall(state.frame.Hide, state.frame)
+		HideSlots()
 	end
 	ns.EachPart(KEY, PART, Applied)
 end
