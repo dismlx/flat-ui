@@ -1133,7 +1133,7 @@ local function BuildInspector()
 	ui.sideNone:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -38)
 	ui.sideNone:SetWidth(SIDE_W - 24)
 	ui.sideNone:SetText("Select a frame. Drag across empty space to select every box it touches, Shift to add them, Ctrl to take them away. "
-		.. "Shift or Ctrl and click a box adds it or takes it away.")
+		.. "Shift or Ctrl and click a box adds it or takes it away. Ctrl-A selects every box that can move.")
 	local body = Make("Frame", panel)
 	body:SetAllPoints(panel)
 	ui.sideBody = body
@@ -1552,8 +1552,8 @@ local TIPS = {
 	end,
 	list = function()
 		return "Frame list", "Shows or hides the list of frames at the left. Click a name to choose its frame, Shift or Ctrl and click to add it or take it away. "
-			.. "Drag across empty space to select every box it touches, Shift to add them, Ctrl to take them away; Escape lets them go. "
-			.. "The arrow keys move what is selected, Shift ten at a time."
+			.. "Drag across empty space to select every box it touches, Shift to add them, Ctrl to take them away; Ctrl-A selects every box that can move, "
+			.. "and Escape lets them go. The arrow keys move what is selected, Shift ten at a time."
 	end,
 	undo = function()
 		local count, again = UndoSteps(), UndoSteps(S.redo)
@@ -1977,6 +1977,17 @@ local function BuildSweep()
 	ui.sweep = frame
 end
 
+local function SelectAll()
+	local kit, set = Kit(), {}
+	for name in pairs(kit.handles) do
+		local look = kit.looks[name]
+		if look and look.shown and not look.placedByGame and not S.hidden[name] then
+			set[name] = true
+		end
+	end
+	MM.Choose(set)
+end
+
 local function BuildKeys()
 	local keys = Make("Frame")
 	keys:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -2009,6 +2020,9 @@ local function BuildKeys()
 		elseif key == "Z" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and not (ui.ask and ui.ask:IsShown()) then
 			handled = true
 			Try(MM.Undo)
+		elseif key == "A" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and not (ui.ask and ui.ask:IsShown()) then
+			handled = true
+			Try(SelectAll)
 		elseif ARROWS[key] and next(S.chosen) and not (ui.ask and ui.ask:IsShown()) then
 			local step = type(IsShiftKeyDown) == "function" and IsShiftKeyDown() and SHIFT_STEP or 1
 			Try(function()

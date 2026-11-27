@@ -41,6 +41,7 @@ A grey box moves with the frame it hangs from. A hidden frame the game has not p
 
 - A click on a box selects it alone. Shift or Ctrl and click adds a box to the selection or takes it away, as on a name in the frame list.
 - Press on empty space and drag to draw a rectangle. Every box it touches is selected as you let go, except the boxes of frames the game places. Shift and drag adds them to the selection, Ctrl and drag takes them away.
+- Ctrl-A selects every box that can move: every shown box except those of frames the game places and those hidden with their eye in the frame list, including boxes behind the toolbar or the inspector. The arrow keys, the align buttons and **Reset these** then work on them all.
 - A click on empty space, or Escape, lets go of them all.
 - Drag any selected box and the others move with it, keeping their places to one another. With **Snap** on, the box under the mouse snaps and the others follow it.
 - The arrow keys move what is selected 1 unit, Shift and an arrow key 10.
