@@ -632,17 +632,19 @@ local function Colour(school)
 end
 
 local function KindSize(flag, name)
-	if Opt("partial") ~= "smaller" then
-		return nil
-	end
+	local smaller = Opt("partial") == "smaller"
 	if name == nil then
-		return flag == "GLANCING" and CLASSIC.kinds.glancing or nil
-	elseif name == "IMMUNE" then
+		return smaller and flag == "GLANCING" and CLASSIC.kinds.glancing or nil
+	elseif smaller and name == "IMMUNE" then
 		return CLASSIC.kinds.immune
-	elseif name == "BLOCK" or name == "ABSORB" or name == "RESIST" then
+	elseif smaller and (name == "BLOCK" or name == "ABSORB" or name == "RESIST") then
 		return CLASSIC.kinds.word
 	end
-	return nil
+	return Opt("missSize") ~= "same" and CLASSIC.kinds.word or nil
+end
+
+function ns.CombatWordSize()
+	return Opt("missSize") ~= "same" and CLASSIC.kinds.word or 1
 end
 
 local function DescribeOwn(level, event, flag, amount, none, school)
@@ -3179,9 +3181,9 @@ local OWN_SAMPLES = { { "WOUND", "", 412, 1 }, { "WOUND", "CRITICAL", 824, 4 }, 
 
 local function OwnSample(sample)
 	local kinds, amounts = stats.kind, stats.amount
-	local kind, value, format, crit, r, g, b = Describe(sample[1], sample[2], sample[3], sample[4], Opt("own"))
+	local kind, value, format, crit, r, g, b, _, scale = Describe(sample[1], sample[2], sample[3], sample[4], Opt("own"))
 	if kind then
-		ns.ScrollText.Show("inc", kind, value, format, crit, r, g, b, nil, sample[2], true)
+		ns.ScrollText.Show("inc", kind, value, format, crit, r, g, b, scale, sample[2], true)
 	end
 	stats.kind, stats.amount = kinds, amounts
 end

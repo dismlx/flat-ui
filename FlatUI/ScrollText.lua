@@ -3,7 +3,7 @@ local _, ns = ...
 local KEY = "combattext"
 
 local SHAPE = { length = 240, arc = 0.2, arcs = { narrow = 0.2, wide = 0.35 }, reach = 0.6, life = { fast = 1.6, normal = 2.2, slow = 3.0 }, still = 1.5, hold = 0.75, stillHold = 0.7,
-	fadeIn = 0.03, line = 1.04, rows = 5, clear = 2.5, lane = 3, lanes = { 0, 1, -1, 2 }, wait = 0.3, most = 1.2 }
+	fadeIn = 0.03, line = 1.04, rows = 5, clear = 2.5, lane = 1.5, lanes = { 0, 1, -1, 2 }, wait = 0.3, most = 1.2 }
 local PATH = { straight = true, arc = true }
 local POP = { peak = 1.15, up = 0.05, down = 0.10 }
 local CRIT, WORD, GAP = 1.25, 0.75, 4
@@ -18,7 +18,7 @@ local INLINE = "|T%d:0:0:0:0:64:64:5:59:5:59|t "
 local AREAS = {
 	out = { label = "Outgoing", mover = "FlatUICombatOut", style = "outStyle", size = "size", sizeRow = "outSize", dir = 1, dirRow = "outDir", side = 1,
 		max = 32, dx = 170, dy = -30 },
-	inc = { label = "Incoming", mover = "FlatUICombatSelf", style = "inStyle", size = "ownSize", dirRow = "inDir", dir = -1, side = -1, max = 32,
+	inc = { label = "Incoming", mover = "FlatUICombatSelf", style = "inStyle", size = "ownSize", sizeRow = "inSize", dirRow = "inDir", dir = -1, side = -1, max = 32,
 		dx = -170, dy = -30 },
 }
 local ORDER = { AREAS.out, AREAS.inc }
@@ -305,15 +305,19 @@ end
 
 function ns.ScrollSize(key)
 	local area = AREAS[key]
-	if area == AREAS.out then
-		local rule = Opt(area.sizeRow)
-		if rule == "own" then
-			return Opt("ownSize")
-		elseif rule == "smaller" then
-			return Opt(area.size) * SMALLER
-		end
+	local rule = Opt(area.sizeRow)
+	if rule == "own" then
+		return Opt("ownSize")
+	elseif rule == "enemy" then
+		return Opt("size")
+	elseif rule == "smaller" then
+		return Opt("size") * SMALLER
 	end
 	return Opt(area.size)
+end
+
+function ns.ScrollPitch(height, half)
+	return math.max(SHAPE.lane * height, 2 * (half or 0) + GAP)
 end
 
 local function Height(area, crit, scale)
@@ -444,18 +448,15 @@ local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, 
 	item.length = SHAPE.length * ns.CombatWorldScale()
 	item.life = style == "static" and SHAPE.still or SHAPE.life[Opt("speed")] or SHAPE.life.normal
 	item.hold = style == "static" and SHAPE.stillHold or SHAPE.hold
-	local start, lane, named = now, nil, 0
+	local start, lane, named, unit = now, nil, 0, 0
 	if area.key == "out" and kind == "amount" and type(format) == "string" and not ns.IsSecret(format) and format ~= "%s" then
 		named = math.max(0, Chars(format) - 3)
 	end
-	local unit = area.side * (SHAPE.lane + 0.5 * named) * Height(area)
-	item.half = area.key == "out" and Half(item, height, value, named) or nil
+	item.half = nil
 	if PATH[style] then
-		if item.half then
-			lane, start = ns.ScrollLane(area.lanes, height, now, named > 0 and 2 or nil, unit, item.half)
-		else
-			lane, start = ns.ScrollLane(area.lanes, height, now, named > 0 and 2 or nil)
-		end
+		item.half = Half(item, height, value, named)
+		unit = area.side * ns.ScrollPitch(Height(area), item.half)
+		lane, start = ns.ScrollLane(area.lanes, height, now, named > 0 and 2 or nil, unit, item.half)
 	end
 	item.start, item.lane, item.x0, item.y0 = start, lane, x, y
 	item.rx = lane and SHAPE.lanes[lane] * unit or 0
