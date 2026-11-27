@@ -10,7 +10,7 @@ Every one of them is on in a new profile. In **Flat UI setup**, the **Helpers** 
 
 - **Party icons** (**Right of each frame**) puts the row to the right of each party frame, to the left, or below it.
 - **Your own row** (off) adds a row for your own cooldowns while you are in a party, just above the first member's row.
-- **In a raid group** (**Own position**): in a raid, the game's party frames are gone, so Flat UI shows a stack of rows for the members of your own subgroup, each with their name in their class colour. The stack has its own box in `/flatui move`, named **Party cooldowns: raid group**. **Off** shows no rows in a raid.
+- **In a raid group** (**Own position**): in a raid, Flat UI shows a stack of rows for the members of your own subgroup instead, each with their name in their class colour, and your own row on top while **Your own row** is on. The stack has its own box in `/flatui move`, named **Party cooldowns: raid group**. **Off** shows no rows in a raid.
 - **Rows stack** (**Down**) sets which way the raid stack grows. **Up** keeps the bottom of the stack on the bottom of its box in `/flatui move`, with your own row still on top. Use it for a stack placed above your action bars, so new rows grow upward instead of down over the bars.
 
 ### What the icons show
@@ -59,7 +59,7 @@ A member whose Flat UI shares with you gets "Shared by Flat UI" in the icon tool
 
 ### Trying it out
 
-- In test mode, while you are in no group, sample rows show in the raid group stack: Mara, Eli, Ivo and Fay, and your own row while **Your own row** is on. The sample Ivo is dead, so that row fades to 35%, and the sample Fay is out of range, so that row fades to 45%. With the test mode bar's **Group** at **Solo**, only your own row shows. The sample sweep plays your **Sound** once. In a real group, test mode puts the sample icons on your real rows.
+- In test mode, while you are in no group, sample rows show in the raid group stack: Mara, Eli, Ivo and Fay, and your own row while **Your own row** is on. The sample Ivo is dead, so that row fades to 35%, and the sample Fay is out of range, so that row fades to 45%. With the test mode bar's **Group** at **Solo**, only your own row shows, while **Your own row** is on. The sample sweep plays your **Sound** once. In a real group, test mode puts the sample icons on your real rows.
 - `/flatui test icons` shows three sample icons for 8 seconds on each row, while your rows show and out of combat. They flash and sound at their end as **Flash when ready** and **Sound** say.
 
 ### When nothing shows
@@ -225,7 +225,7 @@ Only the leader or an assistant can start one. During a check, the tick shows ho
 The role poll asks everyone to pick a role. Only the leader or an assistant can start one, and not in a group the dungeon finder made or in a battleground.
 
 - Its tooltip lists who has which role, in class colours, as "Tank: Mara" and "Damage: Ivo, Fay". In a raid it gives the counts, as "Tanks 2 · Healers 8 · Damage 28".
-- In a party, it adds "No healer" or "No tank" in amber when nobody holds that role, and lists in amber who has no role.
+- It lists in amber who has no role. In a party, it also adds "No healer" or "No tank" in amber when nobody holds that role.
 - Once anyone in the group holds a tank, healer or damage role, a small amber number in the button's corner counts the members with no role. It is grey while you cannot start a poll, and goes at 0.
 - While nobody has picked a role, as in most groups on Forever, the number does not show and the tooltip says "Nobody has picked a role yet."
 
@@ -260,7 +260,7 @@ The sample tally and countdown hold still while the test mode bar's **Moving** i
 
 ## Ping bar
 
-The **Ping bar** gives you a button for each ping of the game's ping wheel, with the game's own icons: **Ping** (the game picks the kind), **Attack**, **Warning**, **On My Way** and **Assist**. The bar first sits near the top of the screen; `/flatui move` places it.
+The **Ping bar** gives you a button for each ping of the game's ping wheel, with the game's own icons: **Ping** (the game picks the kind), **Attack**, **Warning**, **On My Way** and **Assist**. `/flatui move` places the bar.
 
 ### When it shows
 
