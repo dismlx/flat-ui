@@ -42,8 +42,9 @@ To change the list:
 - For a spell that is not in the list, type `/flatui party add`, then its spell ID and its cooldown in seconds. You can also give a listed ability by name and change its cooldown, as `/flatui party add Pummel 12`.
 - `/flatui party hide` takes a name or a spell ID, as `/flatui party hide 6552`.
 - `/flatui party list` prints the abilities that show, by class, and says for each member whether they share cooldowns.
+- `/flatui party reset` puts the list back as Flat UI ships it and says what it undid, as "3 added, 2 hidden and 1 cooldown undone".
 
-You can add up to 30 abilities. What you add or hide is saved for your whole account, not for one profile.
+You can add up to 30 abilities. What you add or hide is saved for your whole account, not for one profile, so resetting a profile leaves it; `/flatui party reset` is the way back.
 
 ### Ready again
 
@@ -53,9 +54,9 @@ You can add up to 30 abilities. What you add or hide is saved for your whole acc
 
 ### Sharing
 
-**Share cooldowns with the party** (on) sends your cooldowns to party members who also run Flat UI. Their icons then show your cooldowns exactly, with the right time left, even where the game hides other players' casts. When you join a group or reload, the running cooldowns come across as far along as they are on the sender's screen.
+**Share cooldowns with the party** (on) sends your cooldowns to party members who also run Flat UI, and in a raid to the members of your subgroup who do. Their icons then show your cooldowns exactly, with the right time left, even where the game hides other players' casts. When you join a group or reload, the running cooldowns come across as far along as they are on the sender's screen.
 
-A member whose Flat UI shares with you gets "Shared by Flat UI" in the icon tooltip. Sharing works in a party; it does not run while the raid group stack shows.
+A member whose Flat UI shares with you gets "Shared by Flat UI" in the icon tooltip. Sharing works in a party, and in a raid with your subgroup: the members of your subgroup who run Flat UI share their cooldowns with you, and yours go to them. `/flatui party list` says who shares.
 
 ### Trying it out
 
@@ -85,7 +86,7 @@ It follows the first of these that is an enemy:
 
 **Follow your tank's target** is for a healer who heals by clicking party frames, with no target or another healer targeted. The tank is found by their tank role, the raid's main tank, or in a party their tank stance, form or aura. The title then names the tank after a dim dot, in a light shade of their class colour, as "Defias Pillager · Mara", and the list turns to the tank's next enemy within a second.
 
-The list is about enemies the game keeps threat on, not enemy players. It fades in and out instead of popping up.
+The list is about enemies the game keeps threat on, not enemy players. It fades in and out instead of popping up, the small enemy rows with it, so the window never snaps shorter before it goes.
 
 ### Reading the bars
 
@@ -101,12 +102,13 @@ The list is about enemies the game keeps threat on, not enemy players. It fades 
 
 - **Warn near aggro** (on): while you are not tanking, your bar pulses red once your share passes **Warn at** (90%), and **Warning sound** (**Raid warning**) plays once for that enemy. It plays again for that enemy only after your share falls 10 points under **Warn at**.
 - Once you hold the enemy's aggro, your bar keeps a steady red wash. If the sound has not played yet, it plays then, so a sudden pull is heard too.
+- The threat list's sounds never wait on another Flat UI sound, such as **Entering combat sound** at the pull or a party cooldown that ends: they always play, at most one every third of a second among themselves.
 
 ### Warnings for tanks
 
 Flat UI counts you as a tank by your group role. With no group role, you count as a tank in your tank stance, form or aura (such as Defensive Stance, Bear Form or Righteous Fury), as the raid's main tank, or with **Your role** at **Tank** on the **Threat** tab of **Nameplates** (see [Nameplates](Nameplates)). Failing those, Flat UI goes by the talent tree with the most points, such as Protection. It reads this as each fight starts. `/flatui role` says how nameplate threat reads you.
 
-- **Warn when you lose aggro** (on): when an enemy you held turns to someone else, your bar pulses red for up to 2 seconds and **Warning sound** plays once. The bar of whoever took it pulses red with yours, and the title names them in red, as "Thistlefur Avenger > Ivo", so you see whom to taunt it off. The red stops as soon as your taunt lands.
+- **Warn when you lose aggro** (on): when an enemy you held turns to someone else, your bar pulses red for up to 2 seconds and **Warning sound** plays once. The bar of whoever took it pulses red with yours, and the title names them in red, as "Thistlefur Avenger > Ivo", so you see whom to taunt it off. The red stops as soon as your taunt lands, and your bar flashes once in a light shade of **Threat you want**, with no sound.
 - **Show who is near your aggro** (on): the bar of any member at **Warn at** or above who is not tanking turns a steady amber, with no sound. You see the Mage at 96% before their next crit and can taunt or ask them to slow down.
 - **Calm when another tank takes it** (on), for groups with two tanks: when an enemy goes from you to another tank (their tank role, the raid's main tank, or in a party their tank stance, form or aura), no sound plays, neither bar pulses and their bar never turns amber as they build threat. Anyone else taking it still sets everything off. Once the other tank taunts an enemy back from whoever pulled it off you, the red stops at once and the title goes back to the enemy's name.
 
@@ -118,7 +120,7 @@ Flat UI counts you as a tank by your group role. With no group role, you count a
 - **Enemies you fight** shows the enemies instead of the group, in every role. Each enemy with a nameplate that fights you or your group gets a row, up to **Number of bars**, and a last line counts the rest, as "+3 more, 1 lost". The title reads "Threat: 3 enemies, 1 lost".
 - **Your group on your target** shows your group alone, never the enemies under it.
 
-With **Your target, then enemies you are losing**, while you tank with no enemy as your target, your target's target or your tank's target, the list shows your group on the enemy you are losing most: a **Lost** one first, else the closest **Slipping** one, with the other lost and slipping enemies under it. The window stays when your target dies mid-pack or is cleared, comes back within a second as an enemy turns Lost, and follows your next target as you Tab.
+With **Your target, then enemies you are losing**, while you tank with no enemy as your target, your target's target or your tank's target, the list shows your group on the enemy you are losing most: a **Lost** one first, else the closest **Slipping** one, with the other lost and slipping enemies under it. On a Lost one, the title names who holds it in red, as "Defias Pillager > Mage", and their bar keeps a steady red wash, so you see whom to taunt it off without targeting it. **Calm when another tank takes it** keeps another tank calm there too, and with **Warn when you lose aggro** off the title and bars stay plain. The window stays when your target dies mid-pack or is cleared, comes back within a second as an enemy turns Lost, and follows your next target as you Tab.
 
 #### Lost, Slipping and Held
 
@@ -130,9 +132,9 @@ In the enemy rows, each enemy has a bar of your hold on it: your threat against 
 
 The colours are those of **Threat you do not want**, **Threat changing hands** and **Threat you want** on the **Threat** tab of **Nameplates**, so the list and the plates agree. With **Calm when another tank takes it**, an enemy another tank holds stays calm, in **Another tank's colour**. **Slipping at** is also where the magnified plate of an enemy you are losing starts to grow on nameplates.
 
-Lost enemies come first, then Slipping ones (closest first), then Held ones, so the top row is the one to take back. Your target's row has a thin white outline. When an enemy you held turns Lost, its row flashes and **Sound when you lose an enemy** plays. Its default, **Warning sound**, plays the sound of **Warning sound** while **Warn when you lose aggro** is on. Your target itself keeps **Warn when you lose aggro**.
+Lost enemies come first, then Slipping ones (closest first), then Held ones, so the top row is the one to take back. Your target's row has a thin white outline. When an enemy you held turns Lost, its row flashes and **Sound when you lose an enemy** plays. Its default, **Warning sound**, plays the sound of **Warning sound** while **Warn when you lose aggro** is on. Your target itself keeps **Warn when you lose aggro**. When you take a Lost enemy back, as your taunt lands, its row flashes once in a light shade of **Threat you want**, with no sound. Under your target, where only Lost and Slipping enemies are listed, that shows while it is still Slipping, as it is right after a taunt; one that turns straight to Held leaves the rows.
 
-The enemy rows take no clicks. Pointing at one says who has it and to click the enemy's nameplate to target it. Flat UI reads the enemies at most five times a second, only in a fight, and nothing out of one.
+The enemy rows take no clicks. Pointing at one says who has it and to click the enemy's nameplate to target it; the words follow the row as the enemies change places under the mouse. Flat UI reads the enemies five times a second, twice in a raid, only in a fight, and nothing out of one, so a big pull in a raid keeps its frame rate.
 
 ### Bosses
 
@@ -147,7 +149,7 @@ On bosses, the game hides threat. The list then keeps the order of your group, w
 ### Trying it out
 
 - `/flatui threat` shows sample bars for 8 seconds, out of combat.
-- In test mode, the sample group's threat moves every 2 seconds. As damage or healer, your sample bar takes aggro now and then. As a tank, the sample Mage takes the enemy from you at their turn, so your bar and theirs pulse red and the title reads "Sample > Mage". The sample Rogue climbs to 94% and turns amber between the Mage's turns. The sample Tank takes the enemy from you for one step after the Rogue's: with **Calm when another tank takes it** on, nothing pulses and no sound plays, and with it off, both bars pulse red there.
+- In test mode, the sample group's threat moves every 2 seconds. As damage or healer, your sample bar takes aggro now and then. As a tank, the sample Mage takes the enemy from you at their turn, so your bar and theirs pulse red and the title reads "Sample > Mage". On the next step you take it back and your bar flashes. The sample Rogue climbs to 94% and turns amber between the Mage's turns. The sample Tank takes the enemy from you for one step after the Rogue's: with **Calm when another tank takes it** on, nothing pulses and no sound plays, and with it off, both bars pulse red there.
 - With **Your target, then enemies you are losing**, the samples show two Defias under the group, one lost and one slipping, in every role. With **Enemies you fight**, they show four Defias: one lost, one slipping and two held. In test mode their states turn every 6 seconds, so you can see the flash, the sound (once each time test mode comes on) and the rows moving.
 - With **Pets** off, the samples leave out the sample Wolf and Voidwalker.
 
@@ -175,6 +177,8 @@ This is read again as talents change and after each fight, so the list, its aver
 - A dead or offline healer's bar reads Dead or Offline.
 - Out of combat, while the game shows the numbers, the title reads the average mana of your living healers, as "Healer mana 64%", red while under **Low mana at**.
 - Past **Number of bars**, a dim last line counts the healers not shown, with the lowest mana among them, as "+3 more, lowest 22%", red while that is under **Low mana at**. The title's average and ready count them too, so a pull on ready never leaves the seventh healer drinking at 20%.
+- Pointing at a bar names the healer in their class colour and says "Mana 47%" (in a fight, where the game hides the number, "Mana hidden in a fight"), Dead or Offline, the seconds left on a drink, as "Drinking: 12 seconds left", and whether they are under **Low mana at** or **Ready at**. Pointing at the last line lists the healers not shown, up to 10, with their mana. The bars still take no clicks, so a click reaches the world.
+- Shift-click the title to put the healers' mana in the chat line, opening one if none is open, ready to send, as "Healer mana: Eli 82%, Mara 47% (drinking 12s), Fay Dead". It names every healer, also those past **Number of bars**. In a fight, where the game hides the numbers, chat says so instead.
 
 The window fades in and out, and its bars glide to each new value.
 
@@ -306,6 +310,7 @@ Under **Pings**, a row for each of the five, **Ping**, **Attack**, **Warning**, 
 | `/flatui party add Pummel 12` | Adds an ability to **Party cooldowns**, by name, spell ID or a shift-clicked spell, with its cooldown in seconds. |
 | `/flatui party hide 6552` | Hides an ability, by name or spell ID. |
 | `/flatui party list` | Lists the abilities shown and who shares cooldowns. |
+| `/flatui party reset` | Puts the abilities back as Flat UI ships them, undoing every add, hide and typed cooldown. |
 | `/flatui test icons` | Shows three sample icons for 8 seconds, on party cooldown rows among others. |
 | `/flatui role` | Says whether nameplate threat reads you as a tank, and why. |
 | `/flatui move` | Shows the boxes to place the threat list, healer mana, group tools, ping bar and the raid group stack of party cooldowns. |

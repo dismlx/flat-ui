@@ -573,6 +573,7 @@ The game hides enemy casts, and their buffs in a fight. Abilities that give a bu
 - **Interrupts**, **Defensives**, **Crowd control breaks**, **Wards and immunities** and **Offensive cooldowns** are on. **Mobility** is off.
 - **Add an ability** adds another one. For a spell that is not listed, type `/flatui enemy add`, the ability and its cooldown in seconds, as `/flatui enemy add Blink 15`.
 - **Hide an ability** hides one you do not want.
+- What you add or hide is saved for your whole account, not for one profile. `/flatui enemy reset` puts the list back as Flat UI ships it and says what it undid.
 - **Crowd control break in arenas** (off) shows an enemy's crowd control break on the target and focus bars in an arena, so it needs **Place** at **Both** or **Bars for target and focus**.
 
 ### Where the icons show
@@ -606,6 +607,7 @@ Test mode puts a Kick, an Ice Block and a Divine Shield on the target and focus 
 | `/flatui enemy hide 2139` | Hides an ability, by name or spell ID |
 | `/flatui enemy list` | The abilities shown, and whether their use can be seen here |
 | `/flatui enemy clear` | Forgets the running timers of enemies |
+| `/flatui enemy reset` | Puts the abilities back as Flat UI ships them, undoing every add, hide and typed cooldown |
 | `/flatui test icons` | Three sample icons on **Enemy cooldowns**, among other pages |
 
 ## Combat text

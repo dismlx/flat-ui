@@ -28,6 +28,7 @@ local HELP = {
 	"/flatui enemy hide 2139 - an ability or a spell ID",
 	"/flatui enemy list - the abilities shown and whether their use can be seen here",
 	"/flatui enemy clear - forgets the running timers of enemies",
+	"/flatui enemy reset - puts the abilities back as Flat UI ships them",
 }
 local PLATES = 40
 local SWITCHES = { { "interrupts", { 1 } }, { "wards", { 6 } }, { "breaks", { 5 } }, { "defensives", { 2 } }, { "mobility", { 7 } }, { "offensive", { 8 } } }
@@ -1572,6 +1573,33 @@ function E.Clear()
 	E.Render()
 end
 
+function E.Reset()
+	local saved = E.Saved()
+	if not saved then
+		print("Nothing can be saved yet.")
+		return
+	end
+	local added, hidden, seconds = 0, 0, 0
+	for key, value in pairs(saved.added) do
+		if type(key) == "string" and value ~= true then
+			seconds = seconds + 1
+		else
+			added = added + 1
+		end
+	end
+	for _ in pairs(saved.hidden) do
+		hidden = hidden + 1
+	end
+	saved.added, saved.hidden = {}, {}
+	E.Changed()
+	local Undone = ns.AbilitiesUndone
+	if type(Undone) == "function" then
+		print(Undone("Enemy cooldowns", added, hidden, seconds))
+	else
+		print("Enemy cooldowns: the abilities are back as shipped.")
+	end
+end
+
 function E.Slash(rest)
 	local word, text = (rest or ""):match("^(%S*)%s*(.-)%s*$")
 	word = word:lower()
@@ -1584,6 +1612,8 @@ function E.Slash(rest)
 	elseif word == "clear" then
 		E.Clear()
 		print("Enemy timers cleared.")
+	elseif word == "reset" then
+		E.Reset()
 	else
 		for _, line in ipairs(HELP) do
 			print(line)
