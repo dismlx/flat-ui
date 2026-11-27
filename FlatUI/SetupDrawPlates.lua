@@ -13,8 +13,8 @@ local _, ns = ...
 -- (Blizzard_NamePlates/Blizzard_NamePlateUnitFrame.lua:678-890) and of the cast bar (Blizzard_NamePlateCastingBar.lua:26-130). What each row changes is what
 -- Nameplates.lua, PlateText.lua, PlateColours.lua, HealthColour.lua, PlateQuest.lua (the quest mark and its kill count of a sample with quest),
 -- PlateOverpower.lua (the Overpower icon of a sample with overpower, a hunter's Mongoose Bite, moved by its offsets, whose swipe drains over its 5
--- seconds and starts again) and PlateCombo.lua (the row of combo points of a sample with combo, under the cast bar's room, in a rogue's or a druid's
--- drawing) do to a plate with the same row. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a
+-- seconds and starts again) and PlateCombo.lua (the row of combo points of a sample with combo, under the cast bar's room at Combo point size and
+-- moved by its vertical offset, in a rogue's or a druid's drawing) do to a plate with the same row. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a
 -- unit (UnitDocumentation.lua:1526-1529).
 -- A sample's threat (threatGood, threatTransition or threatBad) colours its health bar as PlateColours.lua orders it and, as PlateThreatLook.lua,
 -- PlateText.lua and PlateThreatText.lua draw it (P.Threat), gives it the threat ring at Threat ring thickness (flashing as it turns to threatBad), a
@@ -30,7 +30,8 @@ local _, ns = ...
 -- true while Moving is off) pauses the sample's Overpower swipe with it (P.SwipeStill), and a sample with questHave counts that many of 8 kills,
 -- pops its count as it goes up, turns it green at 8/8 and fades the mark and its count once that pop settles, as PlateQuest.lua does (P.QuestFade),
 -- fading them back in as the count starts again. On that stage the sample moves as a live plate does: its ring eases in and out
--- (ns.PlateRingEase), it eases to each round's opacity over P.EASE_SECONDS (P.Alpha), its newest combo point pops, and its Overpower icon pops in as
+-- (ns.PlateRingEase), it eases to each round's opacity over P.EASE_SECONDS (P.Alpha), its newest combo point pops (every square, in Full points
+-- colour, as the count reaches 5 with Full points stand out), and its Overpower icon pops in as
 -- each round after the first starts and fades over the round's last P.OP_FADE seconds, on its own round clock whatever Time left on the Overpower
 -- icon says (P.OverpowerClock); all of it holds still with Moving off, and setup's drawings snap.
 -- A threat value at Above stands over the sample's auras, and an Above quest mark and the Overpower icon over it (the mark over the icon too).
@@ -87,8 +88,9 @@ P.OP_CROP, P.OP_GAP, P.OP_WINDOW = 0.08, 2, 5
 P.OP_POP_FROM, P.OP_POP_IN, P.OP_POP_SCALE, P.OP_FADE = 1.3, 0.12, 0.15, 0.25
 -- Test mode's sample eases to a new opacity over P.EASE_SECONDS, as a live plate's fade (PlateThreatLook.lua's EASE_SECONDS).
 P.EASE_SECONDS = 0.2
--- The row of combo points of PlateCombo.lua: the squares, each square and the units between two, the units under the cast bar, the opacity of a
--- square not lit, and the pop of the newest point (from P.COMBO_POP_FROM of its size back to whole over P.COMBO_POP_SECONDS).
+-- The row of combo points of PlateCombo.lua: the squares, each square and the units between two when Combo point size cannot be read, the units
+-- under the cast bar, the opacity of a square not lit, and the pop of the newest point (from P.COMBO_POP_FROM of its size back to whole over
+-- P.COMBO_POP_SECONDS).
 P.COMBO_MAX, P.COMBO_SIZE, P.COMBO_SPACE, P.COMBO_DROP, P.COMBO_DIM = 5, 7, 3, 2, 0.25
 P.COMBO_POP_FROM, P.COMBO_POP_SECONDS = 1.4, 0.15
 P.SPACING = 2
@@ -559,8 +561,6 @@ function P.NewPlate(S, parent)
 	p.comboSquares = {}
 	for index = 1, P.COMBO_MAX do
 		local square = Tex(p.combo, "ARTWORK", 0)
-		square:SetSize(P.COMBO_SIZE, P.COMBO_SIZE)
-		square:SetPoint("LEFT", p.combo, "LEFT", (index - 1) * (P.COMBO_SIZE + P.COMBO_SPACE), 0)
 		p.comboSquares[index] = { texture = square, outline = P.Outline(S, p.combo, square), pop = P.ComboPop(square) }
 	end
 	p.combo:Hide()
@@ -1012,10 +1012,21 @@ function P.QuestMark(p, spec, o, m)
 	p.questHave = have
 end
 
+-- The size of a square and the units between two, from Combo point size as PlateCombo.lua's Size reads it (P.COMBO_SIZE when it cannot be read),
+-- and Combo points vertical offset.
+function P.ComboSize()
+	local size, oy = Get("comboSize"), Get("comboY")
+	size = ns.Finite(size) and size >= 1 and math.floor(size + 0.5) or P.COMBO_SIZE
+	oy = ns.Finite(oy) and math.floor(oy + 0.5) or 0
+	return size, math.max(2, math.floor(size * P.COMBO_SPACE / P.COMBO_SIZE + 0.5)), oy
+end
+
 -- The row of combo points of a sample on a rogue's or a druid's target (spec.combo, lit of P.COMBO_MAX), where PlateCombo.lua puts it while Combo
--- points on your target's nameplate is on: centred just under the cast bar (the bottom of the sample, where the game keeps the cast bar's room),
--- lit squares in Combo point colour and the rest in it at P.COMBO_DIM, each in its thin border. p.comboB is the row's bottom, which a threat value
--- at Below hangs under. Test mode's sample pops the newest point as its count goes up; setup's drawings and a still stage do not.
+-- points on your target's nameplate is on: centred just under the cast bar (the bottom of the sample, where the game keeps the cast bar's room) and
+-- moved by Combo points vertical offset, squares at Combo point size, lit squares in Combo point colour and the rest in it at P.COMBO_DIM, each in
+-- its thin border; at P.COMBO_MAX with Full points stand out every square takes Full points colour. p.comboB is the row's bottom, which a threat
+-- value at Below hangs under. Test mode's sample pops the newest point as its count goes up, and every lit one as it reaches P.COMBO_MAX with Full
+-- points stand out; setup's drawings and a still stage do not.
 function P.Combo(p, spec, o, m)
 	local count = spec.combo
 	p.comboB = nil
@@ -1030,21 +1041,29 @@ function P.Combo(p, spec, o, m)
 		return
 	end
 	count = math.min(P.COMBO_MAX, math.floor(count))
-	local width = P.COMBO_MAX * P.COMBO_SIZE + (P.COMBO_MAX - 1) * P.COMBO_SPACE
-	P.Put(p, p.combo, "TOP", m.BW / 2, -P.COMBO_DROP, width, P.COMBO_SIZE)
-	p.comboB = -P.COMBO_DROP - P.COMBO_SIZE
-	local r, g, b = ns.Colour(KEY .. ".comboColour")
+	local size, space, oy = P.ComboSize()
+	local width = P.COMBO_MAX * size + (P.COMBO_MAX - 1) * space
+	P.Put(p, p.combo, "TOP", m.BW / 2, -P.COMBO_DROP + oy, width, size)
+	p.comboB = -P.COMBO_DROP + oy - size
+	local full = count >= P.COMBO_MAX and Get("comboFull") == true
+	local r, g, b = ns.Colour(KEY .. (full and ".comboFullColour" or ".comboColour"))
 	for index, square in ipairs(p.comboSquares) do
+		square.texture:SetSize(size, size)
+		square.texture:ClearAllPoints()
+		square.texture:SetPoint("LEFT", p.combo, "LEFT", (index - 1) * (size + space), 0)
 		square.texture:SetColorTexture(r, g, b, 1)
 		square.texture:SetAlpha(index <= count and 1 or P.COMBO_DIM)
 		ns.SetOutline(square.outline, true, false)
 	end
 	p.combo:SetFrameLevel(p.f:GetFrameLevel() + 5)
 	p.combo:Show()
-	local newest = p.comboSquares[count]
-	if ns.Finite(p.comboHave) and count > p.comboHave and newest and newest.pop and not P.Snaps(p) then
-		pcall(newest.pop.Stop, newest.pop)
-		pcall(newest.pop.Play, newest.pop)
+	if ns.Finite(p.comboHave) and count > p.comboHave and not P.Snaps(p) then
+		for index, square in ipairs(p.comboSquares) do
+			if square.pop and (index == count or (full and index < count)) then
+				pcall(square.pop.Stop, square.pop)
+				pcall(square.pop.Play, square.pop)
+			end
+		end
 	end
 	p.comboHave = count
 end
@@ -2281,7 +2300,7 @@ function P.Parts(S)
 	local overpower = Live("overpower")
 	Set({ "overpower", "overpowerSize", "overpowerX", "overpowerY", "overpowerSwipe" }, overpower and overpower.opFrame or nil)
 	local combo = Live("combo")
-	Set({ "comboPoints", "comboColour" }, combo and combo.combo or nil)
+	Set({ "comboPoints", "comboColour", "comboFull", "comboFullColour", "comboSize", "comboY" }, combo and combo.combo or nil)
 	-- The threat drawing: each threat row on the sample it changes.
 	local good, changing, bad = Live("good"), Live("changing"), Live("bad")
 	if good and changing and bad then

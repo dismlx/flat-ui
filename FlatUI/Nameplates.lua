@@ -1251,6 +1251,10 @@ local function ClassIcon(unitFrame, own, on)
 	if was ~= own.classShown then
 		RunPart("level box", LevelBox, unitFrame, own, false)
 		RunPart("raid marker", Marker, unitFrame, own, false)
+		-- The row of combo points hangs under a Below class icon while it shows (PlateCombo.lua).
+		if type(ns.PlateComboPlace) == "function" then
+			pcall(ns.PlateComboPlace, unitFrame, own)
+		end
 	end
 end
 
