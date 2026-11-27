@@ -5,7 +5,8 @@ local _, ns = ...
 -- fields. It makes no frame and owns no event: BagsData.lua hears BAG_UPDATE_DELAYED and BAG_NEW_ITEMS_UPDATED and hands New.Seen the slots that
 -- changed, or whose new flag is set, before it asks for a redraw, and the window's layout (BagsLayout.lua) asks Of, Compare, Label, Hidden,
 -- HiddenKeys and HiddenSign when it lays a window out; BagsOrder.lua asks Hideable, Exists, GroupRow, SetHidden and ShowAll for a title's menu, the
--- Hidden button after the last section and the row Hidden sections.
+-- Hidden button after the last section and the row Hidden sections, and Placeable, PlacedCount, PutBack, LastPutBack, Unput and PlaceAll for the
+-- lines of a title's menu that put back, bring back and place items.
 --
 -- An item lands in the first section whose rule it meets: New items, then Junk, then Keep in place, then the section the player placed it in by
 -- hand, then Equipment sets, Quest items, Equipment, Consumables, Trade goods, Reagents, Recipes, Ammunition, Bags and quivers, Keys and Other.
@@ -97,7 +98,12 @@ local _, ns = ...
 -- that would refuse it stays unlit. Categories.Label names a section of the player's own by its name, so the windows, the rows and the search's
 -- section words use it. Categories.PlacedCount and PutBack count and take away the placements of one section as the windows show it (a section
 -- title's menu, BagsOrder.lua), and Categories.PlacedKey gives the section an item is placed in, which its tooltip in Flat UI's windows names
--- (BagsTooltip.lua).
+-- (BagsTooltip.lua) and the search's #placed finds (BagsSearch.lua). A put back asks nothing, so the placements the last one took away (PutBack, or
+-- the first line of the row while two or more are placed) are kept in this file (lastBack, never saved) until the next put back or a reload:
+-- Categories.Unput brings each back in the section it was saved in, but not one placed elsewhere since and none past MOST_PLACED, from the line
+-- of that section title's menu and the first line of the row; an item the row puts back on its own leaves that record. Categories.PlaceAll places
+-- many items at once, as many drops on a title would, with no cursor and no change to the sell or keep list: the line of a section title's menu
+-- that places there every item the search finds; it is refused in a fight, as a drop is, and stops at MOST_PLACED with one line.
 --
 -- Inside a section, equipment sorts by the place of its slot in the Character window (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:779-873),
 -- then by item level (ns.Items.LevelOf, Items.lua:425-438), quality and name; everything else by class, subclass, quality, name and count. An item
@@ -245,6 +251,11 @@ local function Placeable(key)
 	end
 	local is = Custom.Is
 	return type(key) == "string" and type(is) == "function" and is(key) == true
+end
+
+-- The same for BagsOrder.lua, which offers a title's menu line that places the items the search finds there only on such a section.
+function Categories.Placeable(key)
+	return Placeable(key) == true
 end
 
 local function Opt(key)
@@ -615,6 +626,8 @@ for index, section in ipairs(SECTIONS) do
 	Categories.LIST[index] = {
 		key = key,
 		label = section.label,
+		-- The label at Each kind (Potions), which BagsCustom.lua refuses as the name of a section of the player's own too.
+		each = section.each,
 		order = index,
 		test = function(record)
 			if type(record) ~= "table" then
@@ -873,18 +886,74 @@ function Categories.PlacedCount(key)
 	return #PlacedHere(key)
 end
 
--- Puts every item placed by hand in a section back in its own section, and asks for the layout once: how many went.
+-- The placements the last put back took away, for Unput: { key (the section as the windows showed it, nil for every section, from the row Items
+-- placed by hand), placed = { [itemID] = the section key that was saved }, count }. Never saved: it lasts until the next put back or a reload.
+local lastBack = nil
+
+-- What a put back takes, read before it.
+local function RememberBack(key, placed, ids)
+	local back = { key = key, placed = {}, count = 0 }
+	for _, id in ipairs(ids) do
+		local saved = Whole(id) and placed[id] or nil
+		if type(saved) == "string" and Placeable(saved) then
+			back.placed[id] = saved
+			back.count = back.count + 1
+		end
+	end
+	lastBack = back.count > 0 and back or nil
+end
+
+-- Puts every item placed by hand in a section back in its own section, and asks for the layout once: how many went. Unput brings them back.
 function Categories.PutBack(key)
 	local ids = PlacedHere(key)
 	local placed = Store(false)
 	if not placed or #ids == 0 then
 		return 0
 	end
+	RememberBack(key, placed, ids)
 	for _, id in ipairs(ids) do
 		placed[id] = nil
 	end
 	Request("layout")
 	return #ids
+end
+
+-- How many placements the last put back took away (0 when there is none to bring back), and the section it was of (nil for every section).
+function Categories.LastPutBack()
+	if not lastBack then
+		return 0, nil
+	end
+	return lastBack.count, lastBack.key
+end
+
+-- Brings back the placements the last put back took away, each in the section it was saved in, but not one placed elsewhere since (that keeps its
+-- new place) and none past MOST_PLACED (Categories.Place). Asks for the layout once. Returns how many came back, how many were taken, and the
+-- section key of the put back (nil for every section).
+function Categories.Unput()
+	local last = lastBack
+	if not last then
+		return 0, 0, nil
+	end
+	lastBack = nil
+	local back = 0
+	for id, saved in pairs(last.placed) do
+		local placed = Store(false)
+		if not placed or placed[id] == nil then
+			local done, why = Categories.Place(id, saved)
+			if done then
+				back = back + 1
+			elseif why == "full" then
+				Say(("%d items are placed by hand already. Take one off with Items placed by hand on the Bags page first."):format(MOST_PLACED))
+				break
+			elseif why == "saved" then
+				break
+			end
+		end
+	end
+	if back > 0 then
+		Request("layout")
+	end
+	return back, last.count, last.key
 end
 
 -- Keeps an item in a section, or takes its placement away with no key. Returns true, or false and why: "id", "key", "saved" (the saved
@@ -1148,6 +1217,44 @@ function Categories.Drop(id, key)
 	return taken
 end
 
+-- Places every item of records in section key at once, each as a drop on its title places one (a section an item reaches by itself takes its
+-- placement away instead), with no cursor and no change to the sell or keep list: the line of a title's menu that places there the items the search
+-- finds (BagsOrder.lua), which leaves out the items of New items, Junk and Keep in place. records: the records the window shows, or bare item IDs;
+-- each item ID counts once. Refused in a fight, as a drop is, and stops at MOST_PLACED, each with one line in chat. Asks for the layout once.
+-- Returns how many were placed.
+function Categories.PlaceAll(key, records)
+	if not Placeable(key) or type(records) ~= "table" then
+		return 0
+	end
+	if Errands.Fighting() then
+		Say(REFUSALS.fight[1])
+		return 0
+	end
+	local count, seen = 0, {}
+	for _, record in ipairs(records) do
+		if Whole(record) then
+			record = { id = record }
+		end
+		local id = type(record) == "table" and Whole(record.id) or nil
+		if id and id > 0 and not seen[id] then
+			seen[id] = true
+			local done, why = Categories.Place(id, key ~= Rules(record) and key or nil)
+			if done then
+				count = count + 1
+			elseif why == "full" then
+				Say(REFUSALS.full[1]:format(MOST_PLACED))
+				break
+			elseif why == "saved" then
+				break
+			end
+		end
+	end
+	if count > 0 then
+		Request("layout")
+	end
+	return count
+end
+
 -- Filing and order -----------------------------------------------------------------------------------------------------------------------
 
 -- The section a record is shown in: New items, then Junk, then Keep in place (a record in the slot pinned for it, B.Pins.Of), then its placement,
@@ -1309,17 +1416,28 @@ end
 
 local PLACED_ALL = "Put every item back in its own section"
 local PLACED_NONE = "No item is placed by hand. Drop an item from your bags on a section's title to keep it there."
+-- The line that brings back what the last put back took away (Categories.Unput), for every section and for one, and what it says.
+local PLACED_UNDO = {
+	all = "Bring back the %d placements you took off",
+	one = "Bring back the %d placements you took off %s",
+	single = "Bring back the placement you took off",
+	singleOne = "Bring back the placement you took off %s",
+}
+local UNDO_SAY = {
+	one = "Flat UI: 1 item is back in the section you placed it in.",
+	all = "Flat UI: %d items are back in the sections you placed them in.",
+	some = "Flat UI: %d of the %d items are back in the sections you placed them in; the others are placed in another section now.",
+	none = "Flat UI: nothing to bring back.",
+}
 
 -- Every placement, by the name of its item: { { itemID, "Name (ID): Section" }, ... }, "(hidden)" after a section the player hid, after a line that
--- takes them all off while two or more are placed, as Folded sections and Pinned slots have; with none, one line that says how to place one.
+-- takes them all off while two or more are placed, as Folded sections and Pinned slots have; with none, one line that says how to place one. While
+-- the last put back can be brought back (a section title's menu or the line that takes them all off here), its line comes first.
 function ns.BagsPlacedLines()
 	local lines = {}
 	for id, key in pairs(Categories.Placed()) do
 		local fitted = Fit(key, { id = id }, true)
 		lines[#lines + 1] = { id, ("%s: %s%s"):format(Named(id), Categories.Label(fitted), Hidden(fitted) and " (hidden)" or "") }
-	end
-	if #lines == 0 then
-		return { { "none", PLACED_NONE } }
 	end
 	table.sort(lines, function(a, b)
 		return a[2] < b[2]
@@ -1327,21 +1445,48 @@ function ns.BagsPlacedLines()
 	if #lines >= 2 then
 		table.insert(lines, 1, { "all", PLACED_ALL })
 	end
+	local count, key = Categories.LastPutBack()
+	if count > 0 then
+		local text
+		if key then
+			text = count == 1 and PLACED_UNDO.singleOne:format(Categories.Label(key)) or PLACED_UNDO.one:format(count, Categories.Label(key))
+		else
+			text = count == 1 and PLACED_UNDO.single or PLACED_UNDO.all:format(count)
+		end
+		table.insert(lines, 1, { "undo", text })
+	end
+	if #lines == 0 then
+		return { { "none", PLACED_NONE } }
+	end
 	return lines
 end
 
--- Takes one placement off, or every one ("all"), with the page on or off; a window that shows is laid out again.
+-- Takes one placement off, or every one ("all"), or brings back what the last put back took away ("undo"), with the page on or off; a window that
+-- shows is laid out again.
 function ns.BagsPlacedPick(id)
 	if id == "all" then
 		local placed = Store(false)
 		if not placed or next(placed) == nil then
 			return false, "Flat UI: no item is placed by hand."
 		end
+		local ids = {}
+		for placedId in pairs(placed) do
+			ids[#ids + 1] = placedId
+		end
+		RememberBack(nil, placed, ids)
 		for key in pairs(placed) do
 			placed[key] = nil
 		end
 		Request("layout")
-		return true, "Flat UI: every item placed by hand goes back to its own section."
+		return true, "Flat UI: every item placed by hand goes back to its own section. The first line of Items placed by hand brings them back."
+	elseif id == "undo" then
+		local back, total = Categories.Unput()
+		if back <= 0 then
+			return false, UNDO_SAY.none
+		elseif back < total then
+			return true, UNDO_SAY.some:format(back, total)
+		end
+		return true, back == 1 and UNDO_SAY.one or UNDO_SAY.all:format(back)
 	elseif id == "none" then
 		return false, "Flat UI: no item is placed by hand."
 	end
@@ -1351,6 +1496,14 @@ function ns.BagsPlacedPick(id)
 		return false, "That item is not placed by hand."
 	end
 	placed[id] = nil
+	-- Put back on its own, it is not brought back with the last put back.
+	if lastBack and lastBack.placed[id] ~= nil then
+		lastBack.placed[id] = nil
+		lastBack.count = lastBack.count - 1
+		if lastBack.count <= 0 then
+			lastBack = nil
+		end
+	end
 	Request("layout")
 	return true, ("Flat UI: %s goes back to its own section."):format(Named(id))
 end
