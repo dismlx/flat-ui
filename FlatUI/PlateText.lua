@@ -225,7 +225,18 @@ local function AnyShown(strings)
 	return false
 end
 
-local function HealthPart(unitFrame, st, on)
+local function Ease(unitFrame, region, to, ease)
+	if type(ns.PlateEase) == "function" then
+		local ok, done, running = pcall(ns.PlateEase, unitFrame, region, to, not ease)
+		if ok and done then
+			return running == true
+		end
+	end
+	ns.SetFaded(region, to == 0)
+	return false
+end
+
+local function HealthPart(unitFrame, st, on, ease)
 	local strings = Strings(HealthBarOf(unitFrame), HEALTH_TEXTS)
 	local r, g, b
 	if on then
@@ -245,8 +256,15 @@ local function HealthPart(unitFrame, st, on)
 	if mine or st.htFaded then
 		local shown = ns.PlateUnitFrame("target") == unitFrame or (when == "focus" and ns.PlateUnitFrame("focus") == unitFrame)
 		local fade = (ns.Enabled(KEY) and not Opt("healthText")) or format ~= "game" or (when ~= "always" and not shown)
+		local was = st.htSeen
+		if when ~= "always" then
+			st.htSeen = shown == true
+		else
+			st.htSeen = nil
+		end
+		local soft = when ~= "always" and (ease == true or (was ~= nil and was ~= st.htSeen))
 		for _, fontString in ipairs(strings) do
-			ns.SetFaded(fontString, fade)
+			Ease(unitFrame, fontString, fade and 0 or 1, soft)
 		end
 		st.htFaded = mine and fade or nil
 	end
@@ -270,7 +288,19 @@ local function SetHealthText(own, format, unit)
 	elseif format == "both" then
 		own:SetFormattedText(formats.both, Num(UnitHealth(unit)), UnitHealthPercent(unit, true, CurveConstants.ScaleTo100))
 	else
-		own:SetText(Num(UnitHealthMissing(unit)))
+		local miss = UnitHealthMissing(unit)
+		local strings = C_StringUtil
+		if ns.IsSecret(miss) then
+			if type(strings) == "table" and type(strings.TruncateWhenZero) == "function" then
+				own:SetText(strings.TruncateWhenZero(miss))
+			else
+				own:SetText(Num(miss))
+			end
+		elseif ns.Finite(miss) and miss >= 1 then
+			own:SetText(Num(miss))
+		else
+			own:SetText("")
+		end
 	end
 end
 
@@ -299,10 +329,11 @@ local function OwnHealthText(unitFrame, st, healthBar)
 	return own
 end
 
-local function FormatPart(unitFrame, st, on)
+local function FormatPart(unitFrame, st, on, ease)
 	local format = on and Opt("healthFormat") or "game"
 	if format == "game" then
 		if st.own then
+			Ease(unitFrame, st.own, 1, false)
 			st.own:SetText("")
 			st.own:Hide()
 		end
@@ -327,8 +358,17 @@ local function FormatPart(unitFrame, st, on)
 	local unit = unitFrame.unit
 	local when = Opt("healthTextWhen")
 	local seen = when == "always" or ns.PlateUnitFrame("target") == unitFrame or (when == "focus" and ns.PlateUnitFrame("focus") == unitFrame)
-	local shown = Opt("healthText") and seen and Plain(unit, "string")
-		and AnyShown(Strings(healthBar, HEALTH_TEXTS))
+	local wanted = Opt("healthText") and Plain(unit, "string") and AnyShown(Strings(healthBar, HEALTH_TEXTS))
+	local fading = false
+	if wanted and when ~= "always" then
+		local was = st.ownSeen
+		st.ownSeen = seen == true
+		fading = Ease(unitFrame, own, seen and 1 or 0, ease == true or (was ~= nil and was ~= st.ownSeen))
+	else
+		st.ownSeen = nil
+		Ease(unitFrame, own, 1, false)
+	end
+	local shown = (wanted and seen) or fading
 	own:SetShown(shown and true or false)
 	if shown then
 		SetHealthText(own, format, unit)
@@ -445,6 +485,9 @@ end
 
 local function Leave(unitFrame)
 	local st = state[unitFrame]
+	if st then
+		st.htSeen, st.ownSeen = nil, nil
+	end
 	if st and st.own then
 		pcall(st.own.SetText, st.own, "")
 	end
@@ -459,8 +502,8 @@ local function Retarget()
 	Soon(function()
 		retargetQueued = false
 		ns.EachPlate(function(unitFrame)
-			Run(HEALTH, HealthPart, unitFrame)
-			Run(FORMAT, FormatPart, unitFrame)
+			Run(HEALTH, HealthPart, unitFrame, true)
+			Run(FORMAT, FormatPart, unitFrame, true)
 		end)
 	end)
 end

@@ -44,10 +44,10 @@ local classQueue, classAll, classQueued = {}, false, false
 local layoutQueued, sizesQueued = false, false
 local TELL = { rows = { "enabled", "friendly", "healthHeight", "castHeight", "barWidth", "level", "levelShape", "levelGap", "levelSize", "raidMarker", "raidMarkerSize",
 	"raidMarkerX", "raidMarkerY", "classEnemy", "classFriendly", "classPosition", "classFit", "classSize", "classGap" }, last = nil, refreshing = false,
-	told = false }
+	told = false, gameTold = false }
 local layoutFresh, optionsPending = true, false
 local QueueAuras
-local EASE = { want = setmetatable({}, { __mode = "k" }), plates = {}, driver = nil, SECONDS = 0.15 }
+local EASE = { want = setmetatable({}, { __mode = "k" }), plates = {}, regions = {}, driver = nil, SECONDS = 0.15 }
 local kindsWaiting = false
 
 local function Opt(key)
@@ -418,25 +418,31 @@ local function StyleAura(item, on, look)
 	end
 end
 
-local function EaseStep()
-	local now = type(GetTime) == "function" and GetTime() or nil
+local function EaseList(list, now)
 	local left = false
-	for unitFrame, rec in pairs(EASE.plates) do
+	for key, rec in pairs(list) do
 		local share = ns.Finite(now) and math.min(1, math.max(0, (now - rec.start) / EASE.SECONDS)) or 1
 		local alpha = rec.from + (rec.to - rec.from) * share
 		rec.now = alpha
 		if ns.Forbidden(rec.frame) or not pcall(rec.frame.SetAlpha, rec.frame, alpha) or share >= 1 then
-			EASE.plates[unitFrame] = nil
+			list[key] = nil
 		else
 			left = true
 		end
 	end
+	return left
+end
+
+local function EaseStep()
+	local now = type(GetTime) == "function" and GetTime() or nil
+	local left = EaseList(EASE.plates, now)
+	left = EaseList(EASE.regions, now) or left
 	if not left and EASE.driver then
 		EASE.driver:SetScript("OnUpdate", nil)
 	end
 end
 
-local function EaseAuras(unitFrame, aurasFrame, from, to)
+local function EaseClock()
 	if EASE.driver == nil then
 		local ok, frame = pcall(CreateFrame, "Frame")
 		EASE.driver = ok and type(frame) == "table" and frame or false
@@ -446,6 +452,14 @@ local function EaseAuras(unitFrame, aurasFrame, from, to)
 	end
 	local now = type(GetTime) == "function" and GetTime() or nil
 	if not EASE.driver or not ns.Finite(now) then
+		return nil
+	end
+	return now
+end
+
+local function EaseAuras(unitFrame, aurasFrame, from, to)
+	local now = EaseClock()
+	if now == nil then
 		return false
 	end
 	local rec = EASE.plates[unitFrame]
@@ -466,11 +480,46 @@ local function EaseDone(unitFrame)
 			end
 		end
 	end
+	for region, rec in pairs(EASE.regions) do
+		if unitFrame == nil or rec.owner == unitFrame then
+			EASE.regions[region] = nil
+			if not ns.Forbidden(rec.frame) then
+				pcall(rec.frame.SetAlpha, rec.frame, rec.to)
+			end
+		end
+	end
 	if unitFrame == nil then
 		EASE.want = setmetatable({}, { __mode = "k" })
 	else
 		EASE.want[unitFrame] = nil
 	end
+end
+
+function ns.PlateEase(unitFrame, region, to, instant)
+	if region == nil or ns.IsSecret(region) or ns.Forbidden(region) or not ns.Finite(to) then
+		return false, false
+	end
+	local rec = EASE.regions[region]
+	if rec and rec.to == to then
+		return true, true
+	end
+	local now = not instant and EaseClock() or nil
+	if now == nil then
+		EASE.regions[region] = nil
+		return instant == true and pcall(region.SetAlpha, region, to), false
+	end
+	local from = rec and ns.Finite(rec.now) and rec.now or nil
+	if from == nil then
+		local ok, alpha = pcall(region.GetAlpha, region)
+		from = ok and ns.Finite(alpha) and alpha or 1 - to
+	end
+	if math.abs(from - to) < 0.01 then
+		EASE.regions[region] = nil
+		return pcall(region.SetAlpha, region, to), false
+	end
+	EASE.regions[region] = { owner = unitFrame, frame = region, from = from, to = to, start = now, now = from }
+	EASE.driver:SetScript("OnUpdate", EaseStep)
+	return true, true
 end
 
 local function AurasAlpha(unitFrame, aurasFrame, styled)
@@ -1647,6 +1696,74 @@ local function NameOnlyCompare()
 			if Plain(only, "boolean") and only ~= (own.nameOnly == true) then
 				QueueLayout()
 				return
+			end
+		end
+	end
+end
+
+local STACK = { cvar = "nameplateStackingTypes", kinds = { stackEnemies = { "Enemy", 1 }, stackFriends = { "Friendly", 2 } } }
+
+local function StackIndex(def)
+	local kind = type(def) == "table" and STACK.kinds[def.key]
+	if not kind then
+		return nil
+	end
+	local enum = type(Enum) == "table" and Enum.NamePlateStackType or nil
+	local index = Plain(enum, "table") and enum[kind[1]]
+	if Plain(index, "number") and index > 0 then
+		return index
+	end
+	return kind[2]
+end
+
+function ns.PlateStackGet(def)
+	local index, api = StackIndex(def), C_CVar
+	if not index or type(api) ~= "table" or type(api.GetCVarBitfield) ~= "function" then
+		return nil
+	end
+	local ok, on = pcall(api.GetCVarBitfield, STACK.cvar, index)
+	if ok and Plain(on, "boolean") then
+		return on
+	end
+	return nil
+end
+
+function ns.PlateStackSet(def, value)
+	local index, api = StackIndex(def), C_CVar
+	if not index or type(api) ~= "table" or type(api.SetCVarBitfield) ~= "function" then
+		return
+	end
+	local want = value == true
+	ns.OutOfCombat(function()
+		pcall(api.SetCVarBitfield, STACK.cvar, index, want)
+		local now = ns.PlateStackGet(def)
+		if now ~= nil and now ~= want then
+			print(("Flat UI: the game kept %s %s."):format(def.label or def.key, ns.CVarShown(def, now)))
+		end
+	end)
+end
+
+function ns.PlateGameChanged()
+	if TELL.gameTold or not InCombatLockdown() or type(ns.PanelShown) ~= "function" or ns.PanelShown() ~= true then
+		return
+	end
+	TELL.gameTold = true
+	print("Flat UI: nameplate game settings change when the fight ends.")
+	ns.OutOfCombat(function()
+		TELL.gameTold = false
+	end)
+end
+
+do
+	local api, ok, text = C_CVar, false, nil
+	if type(api) == "table" and type(api.GetCVar) == "function" and type(api.GetCVarBitfield) == "function" and type(api.SetCVarBitfield) == "function" then
+		ok, text = pcall(api.GetCVar, STACK.cvar)
+	end
+	if not ok or ns.IsSecret(text) or type(text) ~= "string" then
+		for key in pairs(STACK.kinds) do
+			local def = type(ns.Def) == "function" and ns.Def(KEY .. "." .. key)
+			if type(def) == "table" then
+				def.hidden = true
 			end
 		end
 	end
