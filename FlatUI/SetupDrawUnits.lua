@@ -31,7 +31,9 @@ local ADDON_NAME, ns = ...
 -- square with Picture None in Separate parts), or at the left end of her health bar with Picture None in One frame, with Resurrection icon on party
 -- frames (UnitGroupMarks.lua PlaceRez), and Dru, out of range, away with a grey AFK at the bottom of his picture (or its empty square), or at the left
 -- end of his health bar with Picture None in One frame, with AFK on party frames (UnitGroupMarks.lua PlaceAfk), in the Party frames step. Role icons for leaves out the icons of the
--- roles it leaves out on the party frames and the raid cells, as the live frames do (UnitParts.lua X.roleLeftOut). Its raid cells show the marks of
+-- roles it leaves out on the party frames and the raid cells, as the live frames do (UnitParts.lua X.roleLeftOut); its row is in the Party frames step,
+-- where Cole, Dru and Fay lose theirs with Tanks and healers and Mara hers with Healers only, and its bracket is on Bex's healer icon, which every
+-- choice keeps. Its raid cells show the marks of
 -- their rows: Aria's Skull (Raid marker on raid frames), her leader crown and Dru's
 -- assistant icon (Leader and assistant icons on raid frames), Eli away with a grey AFK where the status text sits (AFK on raid frames), and Cole as your target, with the border of Border for your target in the game's white or
 -- Target border colour (UnitFrames.lua Colour).
@@ -2653,7 +2655,7 @@ local MARK = {
 	bossPowerBar = { "boss", "power" },
 	raidRangeAlpha = { "raid", "cell" }, raidRoleIcon = { "raid", "role" }, raidName = { "raid", "name" }, raidStatusText = { "raid", "status" },
 	raidFrameMarker = { "raid", "marker" }, raidLeaderIcon = { "raid", "lead" }, targetBorder = { "raid", "target" }, targetColour = { "raid", "target" },
-	partyFrameMarker = { "party1", "marker" }, partyRezIcon = { "party5", "rez" }, roleIconRoles = { "party1", "role" }, raidAfk = { "raid", "afk" }, partyAfk = { "party4", "afk" },
+	partyFrameMarker = { "party1", "marker" }, partyRezIcon = { "party5", "rez" }, roleIconRoles = { "party2", "role" }, raidAfk = { "raid", "afk" }, partyAfk = { "party4", "afk" },
 }
 
 -- Builds a scene: the frames of a list of items on a root frame, with a caption under each. make: the function for an item that is not a unit frame.
