@@ -17,6 +17,7 @@ local ALARM, ALARM_LOW, ALARM_TIME = { 1, 0.12, 0.08, 0.55 }, 0.15, 0.45
 local NEAR = { 1, 0.65, 0.1, 0.4 }
 local REARM = 10
 local LOST_TIME = 2
+local TAKEN = { 1, 0.3, 0.3 }
 local FADE_IN, FADE_OUT = 0.15, 0.35
 local MARKERS, MARKER_GAP = "Interface\\TargetingFrame\\UI-RaidTargetingIcons", 3
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
@@ -104,8 +105,35 @@ function T.Mob()
 		return "target"
 	elseif T.Enemy("targettarget") then
 		return "targettarget"
+	elseif Opt("follow") ~= false then
+		return T.TankMob()
 	end
 	return nil
+end
+
+function T.Tanks()
+	local tanks = {}
+	for _, member in ipairs(T.Members()) do
+		local unit = member.unit
+		if not member.pet and Ask(UnitExists, unit) == true and Ask(UnitIsUnit, unit, "player") ~= true and T.OtherTank({ member = member }) then
+			tanks[#tanks + 1] = unit
+		end
+	end
+	return tanks
+end
+
+function T.TankMob()
+	for _, unit in ipairs(T.Tanks()) do
+		if T.Enemy(unit .. "target") then
+			return unit .. "target"
+		end
+	end
+	return nil
+end
+
+function T.Following()
+	return T.fighting == true and Opt("follow") ~= false and ns.Enabled(KEY) and type(UnitDetailedThreatSituation) == "function" and T.Allowed()
+		and #T.Tanks() > 0
 end
 
 function T.Members()
@@ -179,6 +207,7 @@ local TURN = 5
 function T.Sample()
 	local entries, step = {}, T.step or 0
 	local turn = step > 0 and step % TURN == 0
+	local calm = step > 0 and step % TURN == 3
 	local pets = Opt("pets") == true
 	for order, spec in ipairs(SAMPLE) do
 		local share, me, tanking = spec[3], spec[1] == false, order == 1
@@ -188,9 +217,9 @@ function T.Sample()
 		end
 		if T.tank then
 			if me then
-				share, tanking = turn and 97 or 100, not turn
+				share, tanking = (turn and 97) or (calm and 96) or 100, not (turn or calm)
 			elseif order == 1 then
-				share, tanking = 88, false
+				share, tanking = calm and 100 or 88, calm
 			elseif turn and spec[1] == "Mage" then
 				share, tanking = 100, true
 			elseif step > 0 and step % TURN == 2 and spec[1] == "Rogue" then
@@ -487,6 +516,9 @@ local function Assigned(assignment, unit)
 end
 
 function T.OtherTank(entry)
+	if entry and entry.sample then
+		return entry.sample[1] == "Tank"
+	end
 	local member = entry and entry.member
 	if not member or entry.me or member.pet or type(member.unit) ~= "string" then
 		return false
@@ -702,7 +734,7 @@ function T.Draw(mob, entries)
 		T.Showing(false)
 		T.Alarm(nil, nil)
 		T.Lost(nil, nil)
-		T.Tick(mob == "targettarget")
+		T.Tick(mob == "targettarget" or T.Following())
 		return
 	end
 	T.Frame()
@@ -732,15 +764,54 @@ function T.Draw(mob, entries)
 		T.rows[index].who = nil
 	end
 	T.Alarm(own, who)
-	if mob then
-		SetName(T.title, mob)
-	else
-		T.title:SetText("Sample")
-	end
+	T.Title(mob, entries)
 	T.Marker(mob)
 	T.Place()
 	T.Showing(true)
 	T.Tick(mob ~= nil)
+end
+
+function T.Taker(entries)
+	for _, entry in ipairs(entries or {}) do
+		if entry.tanking == true and not entry.me and not entry.withheld then
+			return entry
+		end
+	end
+	return nil
+end
+
+local function Named(name)
+	return IsSecret(name) or (type(name) == "string" and name ~= "")
+end
+
+function T.Title(mob, entries)
+	local title, taker = T.title, nil
+	local now = T.lostUntil and Ask(GetTime)
+	if ns.Finite(now) and now < T.lostUntil then
+		taker = T.Taker(entries)
+	end
+	if taker then
+		local done = false
+		if taker.sample then
+			done = type(taker.sample[1]) == "string" and pcall(title.SetFormattedText, title, "%s > %s", "Sample", taker.sample[1])
+		elseif mob and taker.member then
+			local okMob, mobName = pcall(UnitName, mob)
+			local okTaker, takerName = pcall(UnitName, taker.member.unit)
+			if okMob and okTaker and Named(mobName) and Named(takerName) then
+				done = pcall(title.SetFormattedText, title, "%s > %s", mobName, takerName)
+			end
+		end
+		if done then
+			title:SetTextColor(TAKEN[1], TAKEN[2], TAKEN[3], 1)
+			return
+		end
+	end
+	title:SetTextColor(DIM[1], DIM[2], DIM[3], 1)
+	if mob then
+		SetName(title, mob)
+	else
+		title:SetText("Sample")
+	end
 end
 
 function T.Shown(entries, n, own, at)

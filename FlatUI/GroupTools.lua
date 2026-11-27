@@ -45,6 +45,7 @@ local LFG = "Not in a group the dungeon finder made."
 local BATTLEGROUND = "Not in a battleground."
 local NO_POLL = "This client has no role poll."
 local LINE_WAITING = "Group tools: the buttons change when the fight ends."
+local WAIT_LINE = "Flat UI: the group tools change when the fight ends."
 local LINE_BROKEN = "Group tools: the game made no secure button, so the buttons stay hidden."
 
 local SPECS = {}
@@ -59,6 +60,10 @@ SPECS[#SPECS + 1] = { kind = "pull", row = "pull", group = 2 }
 local IsSecret = ns.IsSecret
 local G = { buttons = {}, queued = false, broken = false }
 ns.GroupTools = G
+
+_G["BINDING_NAME_CLICK FlatUIGroupReady:LeftButton"] = "Group tools: Ready check"
+_G["BINDING_NAME_CLICK FlatUIGroupPull:LeftButton"] = "Group tools: Pull countdown"
+_G["BINDING_NAME_CLICK FlatUIGroupPull:RightButton"] = "Group tools: Stop the countdown"
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -351,6 +356,50 @@ function G.Cover(panel, entry)
 	return cover
 end
 
+function G.Key(name)
+	local made, key = pcall(CreateFrame, "Button", name, UIParent, "SecureActionButtonTemplate")
+	if not made or type(key) ~= "table" or IsSecret(key) then
+		return nil
+	end
+	Own(key)
+	if not pcall(key.RegisterForClicks, key, "AnyDown", "AnyUp") then
+		return nil
+	end
+	return key
+end
+
+function G.Keys()
+	if Fighting() then
+		return
+	end
+	local on = ns.Enabled(KEY)
+	if not G.keys then
+		if not on or G.keysBroken then
+			return
+		end
+		local ready, pull = G.Key("FlatUIGroupReady"), G.Key("FlatUIGroupPull")
+		if not ready or not pull then
+			G.keysBroken = true
+			return
+		end
+		G.keys = { ready = ready, pull = pull }
+	end
+	local keys = G.keys
+	local seconds = on and Seconds() or nil
+	if keys.on == on and keys.seconds == seconds then
+		return
+	end
+	if pcall(function()
+		keys.ready:SetAttribute("type", on and "macro" or nil)
+		keys.ready:SetAttribute("macrotext", on and "/readycheck" or nil)
+		keys.pull:SetAttribute("type", on and "macro" or nil)
+		keys.pull:SetAttribute("macrotext", on and ("/countdown " .. seconds) or nil)
+		keys.pull:SetAttribute("*macrotext2", on and "/countdown 0" or nil)
+	end) then
+		keys.on, keys.seconds = on, seconds
+	end
+end
+
 function G.Build()
 	if G.panel then
 		return true
@@ -510,17 +559,27 @@ function G.Place()
 	end
 end
 
+function G.LayKey(list)
+	if #list == 0 then
+		return tostring(ns.Enabled(KEY)) .. "|hidden"
+	end
+	return ("%s|%s|%s|%s|%s|%s"):format(tostring(ns.Enabled(KEY)), table.concat(list, ","), Number("size", BOX_H), Number("spacing", 3),
+		tostring(Opt("layout")), Seconds())
+end
+
 function G.Lay()
 	local wanted = G.Wanted()
 	if #wanted == 0 then
 		if G.panel then
 			G.panel:Hide()
 		end
+		G.shownKey = G.LayKey(wanted)
 		return
 	end
 	if not G.Build() then
 		return
 	end
+	G.shownKey = G.LayKey(wanted)
 	G.Layout(wanted)
 	G.Countdown()
 	G.ShowTally()
@@ -543,6 +602,7 @@ function G.Queue()
 			if G.panel then
 				pcall(G.panel.Hide, G.panel)
 			end
+			pcall(G.Keys)
 		else
 			ns.Try(KEY, G.Apply)
 		end
@@ -553,6 +613,7 @@ function G.Apply()
 	if Fighting() then
 		G.Queue()
 	else
+		G.Keys()
 		G.Lay()
 	end
 	G.Paint()
@@ -703,13 +764,46 @@ function G.Lines(entry)
 				lines[#lines + 1] = "No answer: " .. table.concat(check.waiting, ", ")
 			end
 		end
+		local key = KeyText("CLICK FlatUIGroupReady:LeftButton")
+		if key then
+			lines[#lines + 1] = "Key: " .. key
+		end
 		return "Ready check", lines
 	elseif entry.kind == "roles" then
 		local lines, warm = G.Roles({ "Asks everyone in the group to pick a role." })
 		return "Role poll", lines, warm
 	end
-	return "Pull countdown", { ("Left-click counts down %d seconds for the group."):format(entry.seconds or Seconds()), "Right-click stops the countdown.",
+	local lines = { ("Left-click counts down %d seconds for the group."):format(entry.seconds or Seconds()), G.PullLine(),
 		"Mouse wheel: longer or shorter, out of combat." }
+	local start, stop = KeyText("CLICK FlatUIGroupPull:LeftButton"), KeyText("CLICK FlatUIGroupPull:RightButton")
+	if start and stop then
+		lines[#lines + 1] = ("Key: %s counts down, %s stops it"):format(start, stop)
+	elseif start or stop then
+		lines[#lines + 1] = ("Key: %s %s"):format(start or stop, start and "counts down" or "stops it")
+	end
+	return "Pull countdown", lines
+end
+
+function G.PullLine()
+	local now = Ask(GetTime)
+	if ns.Finite(now) and G.goUntil and now < G.goUntil then
+		return "Go!"
+	elseif ns.Finite(now) and G.ends then
+		local left = math.max(0, math.floor(G.ends - now + 0.5))
+		local words = left == 1 and "1 second left" or ("%d seconds left"):format(left)
+		if G.sampleCount then
+			return ("Sample: %s."):format(words)
+		end
+		return ("Counting down: %s. Right-click stops it."):format(words)
+	end
+	return "Right-click stops the countdown."
+end
+
+function G.PullTip()
+	local entry = G.Entry("pull")
+	if entry and entry.hover and G.Owned(entry) then
+		G.Tip(entry)
+	end
 end
 
 function G.Anchor()
@@ -956,6 +1050,7 @@ function G.CountdownOver()
 		pcall(ticker.Cancel, ticker)
 	end
 	G.PullText(G.Entry("pull"))
+	G.PullTip()
 	G.Faint()
 end
 
@@ -978,6 +1073,7 @@ function G.CountStep()
 		if G.sampleCount and now and Testing() then
 			G.ends, G.goUntil = now + Seconds() + COUNT_STEP, now + 0.9 * COUNT_STEP
 			G.PullText(G.Entry("pull"))
+			G.PullTip()
 			return
 		end
 		G.CountdownOver()
@@ -985,16 +1081,20 @@ function G.CountStep()
 			local mark = now + GO_TIME
 			G.goUntil = mark
 			G.PullText(entry)
+			G.PullTip()
 			After(GO_TIME, function()
 				if G.goUntil == mark then
 					G.goUntil = nil
 					ns.Try(KEY, G.PullText, G.Entry("pull"))
+					ns.Try(KEY, G.PullTip)
+					ns.Try(KEY, G.Faint)
 				end
 			end)
 		end
 		return
 	end
 	G.PullText(G.Entry("pull"))
+	G.PullTip()
 end
 
 function G.StartTicker()
@@ -1027,6 +1127,7 @@ function G.TimerStarted(kind, remaining)
 		end)
 	end
 	G.PullText(G.Entry("pull"))
+	G.PullTip()
 end
 
 function G.TimerStopped(kind)
@@ -1092,7 +1193,11 @@ function G.Held()
 		end
 	end
 	local check = G.check
-	return (check ~= nil and not check.sample and ns.Finite(check.total) and check.total > 0) or (G.ends ~= nil and not G.sampleCount)
+	if (check ~= nil and not check.sample and ns.Finite(check.total) and check.total > 0) or (G.ends ~= nil and not G.sampleCount) then
+		return true
+	end
+	local now = G.goUntil and not G.sampleCount and Ask(GetTime)
+	return ns.Finite(now) and now < G.goUntil
 end
 
 G.fader = ns.IconFader(function()
@@ -1109,10 +1214,15 @@ end
 
 function G.Refresh()
 	G.placed, G.laid = nil, nil
+	if not G.told and Fighting() and ns.PanelShown() and (G.shownKey or "false|hidden") ~= G.LayKey(G.Wanted()) then
+		G.told = true
+		print(WAIT_LINE)
+	end
 	G.Apply()
 end
 
 function G.AfterFight()
+	G.told = false
 	if G.queued and not Fighting() then
 		G.queued = false
 		G.Apply()

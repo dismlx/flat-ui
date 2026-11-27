@@ -15,6 +15,12 @@
 	</Binding>
 	<Binding name="CLICK FlatUIPingThreat:LeftButton" category="Flat UI">
 	</Binding>
+	<Binding name="CLICK FlatUIGroupReady:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIGroupPull:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIGroupPull:RightButton" category="Flat UI">
+	</Binding>
 	<Binding name="CLICK FlatUIConsumeButton1:LeftButton" category="Flat UI">
 	</Binding>
 	<Binding name="CLICK FlatUIConsumeButton2:LeftButton" category="Flat UI">
