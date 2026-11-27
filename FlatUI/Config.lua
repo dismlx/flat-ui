@@ -3182,7 +3182,7 @@ ns.PAGES = {
 		{ key = "backgroundAlpha", kind = "number", default = 75, min = 0, max = 100, step = 5, unit = "%", label = "Panel opacity", needs = "backgroundOwn",
 			tip = "The panel still fades with the block." },
 		{ section = "Fade" },
-		{ key = "fade", kind = "bool", default = false, label = "Fade the block", tip = "Faded bars still take clicks and are at full opacity while something is held on the cursor or a spell flyout is open." },
+		{ key = "fade", kind = "bool", default = false, label = "Fade the block", tip = "Faded bars still take clicks and are at full opacity while something is held on the cursor or a spell flyout is open, in Edit Mode and while /flatui move is open." },
 		{ key = "fadeTo", kind = "number", default = 30, min = 0, max = 90, step = 5, unit = "%", label = "Faded opacity", needs = "fade" },
 		{ key = "fadeDelay", kind = "number", default = 500, min = 0, max = 3000, step = 100, unit = " ms", label = "Wait before fading", needs = "fade",
 			tip = "How long the block stays at full opacity after the mouse leaves it or the fight ends, before it starts to fade. It comes back to full at once." },

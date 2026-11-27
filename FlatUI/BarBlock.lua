@@ -36,7 +36,8 @@ local _, ns = ...
 -- cast (Full opacity as you cast, off by default: while UnitCastingInfo or UnitChannelInfo of the player gives a plain name, and for a moment
 -- after each spell or item used, UNIT_SPELLCAST_START, CHANNEL_START and SUCCEEDED of the player heard on the fade's own frame, so an instant
 -- use holds the block for 1.5 s, a global cooldown, and Wait before fading after it),
--- with something on the cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a
+-- in Edit Mode and while /flatui move is open (ns.EditModeOpen, ns.MoverKit.IsOpen, as on the Fading page), so the tabs and the box sit over
+-- bars seen whole, with something on the cursor or with a flyout open: the spell flyout (attached to its button, Flyout.lua:218) or the totem bar's flyout, a
 -- child of the totem bar that opens up over the bar, out of the area under the mouse (MultiCastActionBarFrame.xml:106-107,
 -- MultiCastActionBarFrame.lua:637-641). The arrow that opens the totem flyout sticks out over the bar too, and counts as under the mouse while
 -- the game shows it. The alpha a frame had is read once and put back when the fade goes off or the block stops. With Flat UI's own buttons
@@ -586,7 +587,16 @@ local function Casting()
 	return false
 end
 
+-- While /flatui move is open (Movers.lua), as on the Fading page (Fade.lua, MoversOpen), so the block's tabs and box sit over bars seen whole.
+local function MoversOpen()
+	local kit = ns.MoverKit
+	return type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
+end
+
 local function Full(plan)
+	if ns.EditModeOpen() or MoversOpen() then
+		return true
+	end
 	if (Opt("fadeCombat") and InCombatLockdown()) or (Opt("fadeMouse") and Under(plan)) or Holding() or FlyoutOpen() then
 		return true
 	end
