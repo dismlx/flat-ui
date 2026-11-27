@@ -71,6 +71,9 @@ PingBar.lua
 OwnBuffs.lua
 Absorbs.lua
 ResourceBarrier.lua
+ChargesLook.lua
+ChargesGame.lua
+Charges.lua
 TrackerShapes.lua
 TrackerKinds.lua
 TrackerMarks.lua

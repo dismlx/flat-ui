@@ -1,6 +1,13 @@
 ## 0.5.48
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- New page **Charges**, under **Combat** after **Absorb shields**, on by default. Your buffs with charges, such as Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, show as a round spell icon with a ring of glowing orbs round it, one for each charge, that turns slowly. Lit orbs are the charges left, and faint rings the ones used.
+- Charges: as a charge goes, its orb flashes white, swells and fades. As you cast the buff again, the orbs light in turn with a small pop. On the last charge the last orb pulses amber, red in the buff's last 10 seconds, and as the buff leaves you the display fades out.
+- Charges: there are as many orbs as the most charges the buff has had since you cast it, at most 10. With more, the number shows on the icon. Two buffs at once sit side by side, centred.
+- Charges: new rows **Orb style** (**Ring round the icon**, **Arc over the icon** or **Row under the icon**), **Spin**, **Icon size**, **Orb size**, **Colour** (the spell's own colour, your class colour or one colour), **Show used charges**, **Burst as a charge goes**, **Time left**, **Only in combat**, **Hide while mounted** and **Sound when the last charge goes**.
+- Charges: **Add a spell** and `/flatui charges add` put any buff on you with more than one charge on the page, by name or spell ID. **Take a spell off** and `/flatui charges remove` take one off.
+- Charges: in a fight, while the game hides your buffs, the game itself lights the orbs and writes the time left. The bursts, pops and pulse come back once it shows your buffs again.
+- Charges: `/flatui move` places it (**Charges**). Test mode, a change of its look out of combat and `/flatui charges` show a sample: Lightning Shield with 3 charges, one used every 2 seconds, then cast again.
 
 ## 0.5.47
 
