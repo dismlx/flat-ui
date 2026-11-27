@@ -2,7 +2,7 @@ Every setting of the **Frames and bars** group of the options window, 532 in all
 
 Pages: [Unit frames](#unit-frames) · [Nameplates](#nameplates) · [Cast bars](#cast-bars) · [Personal resource display](#personal-resource-display) · [Swing timers](#swing-timers)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 ## Unit frames
 

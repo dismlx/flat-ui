@@ -2,7 +2,7 @@ Every setting of the **Look** group of the options window, 69 in all, with its d
 
 Pages: [Flat UI](#flat-ui) · [Fonts](#fonts)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 ## Flat UI
 

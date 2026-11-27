@@ -2,6 +2,10 @@ local _, ns = ...
 
 ns.WhatsNewData = {
 	{
+		version = "0.5.49",
+		lines = {},
+	},
+	{
 		version = "0.5.48",
 		lines = {
 			"New page \001Charges\002, under \001Combat\002 after \001Absorb shields\002, on by default. Your buffs with charges, such as Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, show as a round spell icon with a ring of glowing orbs round it, one for each charge, that turns slowly. Lit orbs are the charges left, and faint rings the ones used.",
@@ -165,24 +169,6 @@ ns.WhatsNewData = {
 			"\001Show health text\002 at \001Only on the target\002 or \001On the target and focus\002 now eases the health number out on the old target and in on the new one over 0.15 seconds, with the aura rows, instead of blinking on Tab. A nameplate that appears, and a change of the options, still set it at once.",
 			"Dragging a game setting of the nameplate pages in a fight now says so once a fight, while the options window shows: \"Flat UI: nameplate game settings change when the fight ends.\". This covers the rows under \001Which show\002, \001Size and stacking\002 and \001Scale and fade\002, \001Aura size\002 and the class colour rows. Before, the slider could jump back with no word, and the change still lands as the fight ends.",
 			"And 81 more changes in the full changelog on CurseForge.",
-		},
-	},
-	{
-		version = "0.5.43",
-		lines = {
-			"Threat list: a new List row. At Enemies while you tank (the default), a tank sees a row for each enemy with a nameplate that you or your group fight, instead of the group. Each row has the enemy's raid marker, its name and a bar of your hold on it, and the ones you are losing come first.",
-			"Threat list: in Enemies, an enemy someone else holds is Lost. It is red, pulses fast and names who holds it in their class colour with their share of your threat (\"Mage 112%\"). One where another member passes Slipping at (80% by default) turns amber and pulses slowly, naming who is closing in. Enemies you hold stay green, calm and a little dimmer.",
-			"Threat list: Enemies outlines your target's row, and the title reads \"Threat: 3 enemies, 1 lost\". A last line counts the enemies past Number of bars, and an enemy that turns to Lost flashes and plays Sound when you lose an enemy (by default Warning sound, while Warn when you lose aggro is on, as in the group list). An enemy another tank holds stays calm.",
-			"Threat list: Enemies reads five times a second in a fight and nothing out of one. Its rows take no clicks; pointing at one says who has the enemy and to click its nameplate. Enemies you fight shows it in every role, and Your group on your target keeps the list as it was.",
-			"Threat list: Animate bars (on by default). Bars slide to each new value, rows glide to their new place and flash as they overtake another, the top bar has a faint sheen, and your group's names take a light shade of their class colour.",
-			"Threat list: test mode and /flatui threat show four sample enemies in Enemies, one lost, one slipping and two held, and in test mode their states turn every 6 seconds.",
-			"Nameplates: Mark enemies you are losing (on by default). While you tank, an enemy changing hands or on someone else pulses with a soft glow in its threat colour, faster once it is lost, under a small arrow pointing down at it. The sample nameplates of test mode and Setup show it too.",
-			"New \001Absorb shields on the health bar\002 (Bright layer over the health), in a new \001Absorb shields\002 section of the \001Personal resource display\002 page. Your absorb shields now lie over the display's health bar as a silvery layer that starts where your health ends, with a thin bright edge where the shield ends. A shield bigger than your missing health runs on back over your health, so its full size still shows on the bar; at full health it runs in from the right end. \001Plain fill after the health\002 stops it at the end of the bar instead, and \001Off\002 takes it away.",
-			"The shield layer has a slow \001Sheen\002 (on) that sweeps across it every few seconds. It flashes as a new shield lands or grows and fades quickly as it breaks, though not while the game withholds the amount, and \001Shield outline\002 (on) frames the whole health bar in \001Shield colour\002 while a shield is up. \001Shield colour\002 (a light silver blue) and \001Shield opacity\002 (60%) set its look, and \001Shield amount\002 (off) adds the amount after the health text, as +1,234, in the shield colour.",
-			"The shield on the health bar works in a fight and uses the game's absorb total. On a client without one it shows the shields the \001Absorb shields\002 page tracks. Test mode lays a sample shield of about 35% of your health over the display, with its sheen, and setup's \001Personal resource display\002 step lists the new rows.",
-			"New \001What's new\002 window: from now on, the first login after Flat UI updates shows what changed in each version since the one you last played on this account, newest first, with setting names in the accent colour. This first time it shows 0.5.43, as older versions kept no note of the one you played. It has \001Open Flat UI's options\002 and \001Close\002, Escape closes it, and it can be dragged anywhere on screen. It waits for the end of a fight, and if a fight starts it steps aside (\"Flat UI: What's new comes back after the fight.\") and comes back after it. A new install shows nothing, as the welcome screen and setup walk you through Flat UI.",
-			"New \001What's new after an update\002, under \001Updates\002 on the \001Options and setup\002 tab of the \001Flat UI\002 page: \001Show the window\002 (the default), \001One line in chat\002 (\"Flat UI updated to 0.5.43. /flatui new shows what changed.\") or \001Nothing\002. A character the welcome screen greets gets the chat line instead of the window.",
-			"New /flatui new (or /flatui changes) opens \001What's new\002 at any time with this version's changes, and /flatui new 0.5.41 shows that version, one of the newest six. \001What's new in 0.5.43\002, at the bottom of \001Home\002 in the options window, opens it too.",
 		},
 	},
 }
