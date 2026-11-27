@@ -873,6 +873,7 @@ function P.QuestMark(p, spec, o, m)
 		p.questCount:Hide()
 		P.QuestRest(p)
 		p.questHave, p.questDone = nil, nil
+		p.questL, p.questR = nil, nil
 		return
 	end
 	local size, place, gap = Get("questMarkSize"), Get("questMarkPlace"), P.QUEST_GAP
@@ -911,6 +912,12 @@ function P.QuestMark(p, spec, o, m)
 	x, y = x + (ns.Finite(ox) and ox or 0), y + (ns.Finite(oy) and oy or 0)
 	P.Put(p, p.quest, point, x, y, size, size)
 	p.quest:Show()
+	p.questL, p.questR = nil, nil
+	if point == "RIGHT" then
+		p.questL = x - size
+	elseif point == "LEFT" then
+		p.questR = x + size
+	end
 	local have = spec.questHave
 	P.QuestFade(p, have)
 	local count = p.questCount
@@ -927,8 +934,12 @@ function P.QuestMark(p, spec, o, m)
 	local middle = y + size * (0.5 - P.AY[point])
 	if point == "RIGHT" then
 		P.Put(p, count, "RIGHT", x - size - P.QUEST_COUNT_GAP, middle, width, height)
+		p.questL = x - size - P.QUEST_COUNT_GAP - width
 	else
 		P.Put(p, count, "LEFT", x + size * (1 - P.AX[point]) + P.QUEST_COUNT_GAP, middle, width, height)
+		if point == "LEFT" then
+			p.questR = x + size + P.QUEST_COUNT_GAP + width
+		end
 	end
 	count:Show()
 	local pop = p.questPop

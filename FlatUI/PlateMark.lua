@@ -164,56 +164,115 @@ end
 local function Span(region)
 	local ok, l, b, w, h = Call(region, "GetRect")
 	local scale = Read(region, "GetEffectiveScale")
+	if scale == nil then
+		local parent = Read(region, "GetParent")
+		scale = parent and Read(parent, "GetEffectiveScale") or nil
+	end
 	if not (ok and ns.Finite(l) and ns.Finite(b) and ns.Finite(w) and ns.Finite(h) and ns.Finite(scale) and scale > 0) then
 		return nil
 	end
 	return l * scale, (l + w) * scale, b * scale, (b + h) * scale
 end
 
-local function Beside(region, low, high)
-	if region == nil or ns.Forbidden(region) or Read(region, "IsVisible") ~= true then
+local function Across(region, low, high, seen)
+	if type(region) ~= "table" or ns.Forbidden(region) or (seen and Read(region, "IsVisible") ~= true) then
 		return nil
 	end
 	local l, r, b, t = Span(region)
 	if l == nil or t <= low or b >= high then
 		return nil
 	end
-	return l, r
+	return l, r, (b + t) / 2
+end
+
+local function Ask(fn, ...)
+	if type(fn) ~= "function" then
+		return nil
+	end
+	local ok, a, b, c = pcall(fn, ...)
+	if not ok then
+		return nil
+	end
+	return type(a) == "table" and a or nil, b, type(c) == "table" and c or nil
+end
+
+local function Edges(unitFrame)
+	local value, side, target = Ask(ns.PlateThreatTexts, unitFrame)
+	local quest, place, count = Ask(ns.PlateQuestBeside, unitFrame)
+	local left, right = {}, {}
+	if quest then
+		local list = place == "left" and left or right
+		list[#list + 1] = count or false
+		list[#list + 1] = quest
+	end
+	if target then
+		right[#right + 1] = target
+	end
+	if value and (side == "left" or side == "right") then
+		local list = side == "left" and left or right
+		list[#list + 1] = value
+	end
+	return left, right
+end
+
+local function Edge(list, low, high, inside, outward)
+	for _, region in ipairs(list) do
+		local l, r, mid = Across(region, low, high, false)
+		if l and ((outward < 0 and r <= inside + 1) or (outward > 0 and l >= inside - 1)) then
+			return { edge = region, ed = outward < 0 and inside - l or r - inside, mid = mid }
+		end
+	end
+	return {}
 end
 
 local function Reach(unitFrame, own, bar, right)
 	local l, _, b, t = Span(bar)
 	local _, r = Span(right)
 	if not (l and r) then
-		return 0, 0
+		return nil
 	end
 	local lo, hi = l, r
-	local list = { Level(unitFrame) or false, Usable(unitFrame.RaidTargetFrame) or false }
+	local list = { Level(unitFrame) or false, Usable(unitFrame.RaidTargetFrame) or false, Usable(unitFrame.ClassificationFrame) or false }
 	if type(own) == "table" and own.classShown == true and type(own.icon) == "table" then
 		list[#list + 1] = own.icon
 	end
+	if type(own) == "table" and own.markShown == true and type(own.mark) == "table" then
+		list[#list + 1] = own.mark
+	end
+	list[#list + 1] = Ask(ns.PlateAuraRow, unitFrame, "left") or false
+	list[#list + 1] = Ask(ns.PlateAuraRow, unitFrame, "right") or false
 	for _, region in ipairs(list) do
-		if region then
-			local left, far = Beside(region, b, t)
-			if left then
-				lo, hi = math.min(lo, left), math.max(hi, far)
-			end
+		local left, far = Across(region, b, t, true)
+		if left then
+			lo, hi = math.min(lo, left), math.max(hi, far)
 		end
 	end
-	return l - lo, hi - r
+	local leftList, rightList = Edges(unitFrame)
+	local first, second = Edge(leftList, b, t, l, -1), Edge(rightList, b, t, r, 1)
+	first.d, second.d = l - lo, hi - r
+	return { first, second, mid = (b + t) / 2 }
 end
 
-local function Aim(mark, left, far)
-	local first, second = mark.arrows[1].frame, mark.arrows[2].frame
-	local scale = Read(first, "GetEffectiveScale")
+local function Aim(mark, reach)
+	local scale = Read(mark.arrows[1].frame, "GetEffectiveScale")
 	if not (ns.Finite(scale) and scale > 0) then
 		scale = 1
 	end
-	local outer, gap = ns.Pixels(first, Outer()), ns.Pixels(first, K.ROOM)
-	first:ClearAllPoints()
-	first:SetPoint("RIGHT", mark.box, "LEFT", -(math.max(left / scale, outer) + gap), 0)
-	second:ClearAllPoints()
-	second:SetPoint("LEFT", mark.box, "RIGHT", math.max(far / scale, outer) + gap, 0)
+	local outer, gap = ns.Pixels(mark.arrows[1].frame, Outer()), ns.Pixels(mark.arrows[1].frame, K.ROOM)
+	for index, arrow in ipairs(mark.arrows) do
+		local frame, side = arrow.frame, reach and reach[index] or {}
+		local point, other, sign = "LEFT", "RIGHT", 1
+		if index == 1 then
+			point, other, sign = "RIGHT", "LEFT", -1
+		end
+		local need = math.max((side.d or 0) / scale, outer)
+		frame:ClearAllPoints()
+		if side.edge then
+			frame:SetPoint(point, side.edge, other, sign * (math.max(0, need - side.ed / scale) + gap), (reach.mid - side.mid) / scale)
+		else
+			frame:SetPoint(point, mark.box, other, sign * (need + gap), 0)
+		end
+	end
 end
 
 local Make
@@ -486,6 +545,10 @@ function ns.PlateMarkSample(p, spec, o, m)
 	if p.tvalueSide == "left" and ns.Finite(p.tvalueL) then
 		lo = math.min(lo, p.tvalueL)
 	end
+	local quest = p.quest and p.quest:IsShown()
+	if quest and ns.Finite(p.questL) then
+		lo = math.min(lo, p.questL)
+	end
 	local right = o.levelSquare and (m.LX + m.LW) or m.BW
 	local hi = right
 	local level = m.levelOut and o.level ~= "hidden"
@@ -503,6 +566,12 @@ function ns.PlateMarkSample(p, spec, o, m)
 	end
 	if p.tvalueSide == "right" and ns.Finite(p.tvalueR) then
 		hi = math.max(hi, p.tvalueR)
+	end
+	if p.ttarget and p.ttarget:IsShown() and ns.Finite(p.ttargetR) then
+		hi = math.max(hi, p.ttargetR)
+	end
+	if quest and ns.Finite(p.questR) then
+		hi = math.max(hi, p.questR)
 	end
 	P.Put(p, first.frame, "RIGHT", math.min(lo, -outer) - gap, m.center, first.width, first.height)
 	P.Put(p, second.frame, "LEFT", math.max(hi, right + outer) + gap, m.center, second.width, second.height)

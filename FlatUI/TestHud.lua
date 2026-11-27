@@ -441,6 +441,9 @@ local function PlateMoves(holder, now)
 			P.Combo(p, spec, p.o, p.m)
 			P.Threat(p, spec, p.o, p.m)
 			P.QuestMark(p, spec, p.o, p.m)
+			if type(ns.PlateMarkSample) == "function" then
+				pcall(ns.PlateMarkSample, p, spec, p.o, p.m)
+			end
 		end
 	end
 end
