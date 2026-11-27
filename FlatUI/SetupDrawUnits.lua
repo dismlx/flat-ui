@@ -1740,6 +1740,9 @@ function E.petTarget(o, g, L)
 		r, gr, b = ns.Colour("general.reactionHostile")
 	end
 	r, gr, b = Mute(r, gr, b)
+	if g.flat and g.healthByLeft then
+		r, gr, b = Left(PET_TARGET.share)
+	end
 	Stretch(p.fill, p.frame, 0, width * PET_TARGET.share, height)
 	Fill(p.fill, FileOf("health"), r, gr, b, 1)
 	CutFill(p.frame, p.fill, radius)
