@@ -317,7 +317,8 @@ local function LinesFor(C, unit, guid, old)
 		end
 	end
 	copy.assumed = assumed
-	local read = C.Table({ special = ns.Get(HT.SPECIAL) ~= false, rules = ns.Get(HT.RULES) }, copy)
+	local special = ns.Get(HT.SPECIAL) ~= false and (type(C.Specials) ~= "function" or C.Specials(inputs.class, power))
+	local read = C.Table({ special = special, rules = ns.Get(HT.RULES) }, copy)
 	made.key, made.lines = key, type(read) == "table" and Shape(read, target, old) or {}
 	return made.lines
 end
