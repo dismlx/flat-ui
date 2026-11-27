@@ -444,6 +444,9 @@ local function PaintWindow(w)
 	for _, plate in ipairs(w.plates) do
 		PaintPlate(plate)
 	end
+	if w.gold and w.gold.hover then
+		w.gold.hover:SetColorTexture(ar, ag, ab, 0.2)
+	end
 	Grip.Paint(w)
 end
 
@@ -931,10 +934,27 @@ local function FootLabel(w, tip, onClick)
 	local text = ns.OwnText(holder, "OVERLAY", "GameFontHighlightSmall")
 	text:SetAllPoints(holder)
 	text:SetWordWrap(false)
+	local hover
+	if onClick then
+		hover = Own(holder:CreateTexture(nil, "ARTWORK"))
+		hover:SetAllPoints(holder)
+		local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
+		hover:SetColorTexture(ar, ag, ab, 0.2)
+		hover:Hide()
+		holder:SetScript("OnHide", function()
+			hover:Hide()
+		end)
+	end
 	holder:SetScript("OnEnter", function()
+		if hover then
+			hover:Show()
+		end
 		Run("window", tip, w, holder)
 	end)
 	holder:SetScript("OnLeave", function()
+		if hover then
+			hover:Hide()
+		end
 		Untip(holder)
 	end)
 	if onClick then
@@ -942,7 +962,7 @@ local function FootLabel(w, tip, onClick)
 			Run("window", onClick, w, holder, mouse)
 		end)
 	end
-	return { frame = holder, text = text }
+	return { frame = holder, text = text, hover = hover }
 end
 
 local function GoldTip(w, owner)
@@ -974,7 +994,13 @@ local function GoldTip(w, owner)
 			break
 		end
 		local r, g, b = ClassRGB(c.class)
-		tip:AddDoubleLine(Plain(Named(c.key, c)), Money(c.money), r or 1, g or 1, b or 1, 1, 1, 1)
+		local mark = ""
+		if c.me == true then
+			local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
+			mark = ("|TInterface\\Buttons\\WHITE8X8:6:6:0:0:8:8:0:8:0:8:%d:%d:%d|t "):format(math.floor(ar * 255 + 0.5), math.floor(ag * 255 + 0.5),
+				math.floor(ab * 255 + 0.5))
+		end
+		tip:AddDoubleLine(mark .. Plain(Named(c.key, c)), Money(c.money), r or 1, g or 1, b or 1, 1, 1, 1)
 	end
 	if #near > 1 then
 		tip:AddDoubleLine("Total", Money(total), DIM[1], DIM[2], DIM[3], 1, 1, 1)
@@ -991,6 +1017,10 @@ local function GoldTip(w, owner)
 		local hourly = ""
 		if Finite(seconds) and seconds >= HOURLY_AFTER then
 			hourly = (" (%s an hour)"):format(Money(math.abs(session) * 3600 / seconds))
+		end
+		local okSince, since = pcall(Call, ns, "SessionSince")
+		if okSince and type(since) == "string" and since ~= "" then
+			hourly = hourly .. DIM_HEX .. "  since " .. since .. "|r"
 		end
 		tip:AddLine(" ")
 		if session > 0 then
