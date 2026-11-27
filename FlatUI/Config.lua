@@ -2927,7 +2927,7 @@ ns.PAGES = {
 		{ key = "enabled", kind = "bool", default = true, label = "Keep drink and health macros",
 			tip = "Two macros in your account's macro list, Flat UI Drink and Flat UI Health, written again out of combat when your bags or your level change. Drag them onto a bar from the game's macro window (/macro). Turned off, they are deleted, but one still on a bar stays until you drag it off." },
 		{ key = "say", kind = "bool", default = true, label = "Say when a macro changes",
-			tip = "A line in chat when a macro moves to a better drink, food, potion or healthstone, or has none left. Not at login, and not for a row you change here." },
+			tip = "A line in chat when a macro moves to a better drink, food, potion or healthstone, or has none left. Not at login, and not for a row you change here. Also once when you are down to 5 drinks, or 5 foods while Flat UI Health eats, and again after you restock above 5." },
 		{ section = "Drink" },
 		{ key = "drink", kind = "bool", default = true, label = "Drink macro",
 			tip = "Flat UI Drink drinks the best drink in your bags that your level allows, conjured water first. A character without mana leaves it as it is." },
