@@ -1279,6 +1279,8 @@ end
 -- On the player and pet bars the game's own 16x16 icon, which their UNITFRAME look under Edit Mode's Lock to player frame shows
 -- (PlayerFrame.lua:34-48, CastingBarFrame.lua:886-899) on the very spot of Flat UI's bar-tall one, is faded while Spell icon on player and pet bars
 -- is on and Flat UI draws its own, so only one icon shows; the game only ever shows and hides it, so the fade (SetAlpha) also holds in a fight.
+-- A move of the target and focus icons that waits for the end of a fight says so once that fight in chat while the options window shows (0.5.41).
+local iconTold = false
 local function ApplyCastIcon(bar, option)
 	if option == "player" or option == "pet" then
 		local hide = ns.Enabled("castbars") and ns.Get("castbars.playerIcon") == true and not ns.PartStopped("castbars", "cast marks")
@@ -1317,8 +1319,13 @@ local function ApplyCastIcon(bar, option)
 			state.iconQueued = true
 			ns.OutOfCombat(function()
 				state.iconQueued = nil
+				iconTold = false
 				ns.Each("castbars", ApplyCastIcon, bar, option)
 			end)
+		end
+		if not iconTold and place ~= "hidden" and right ~= (state.iconMoved == true) and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+			iconTold = true
+			print("Flat UI: the target and focus bar icons move when the fight ends.")
 		end
 		return
 	end
@@ -1914,7 +1921,8 @@ end
 
 -- Interrupt strip (0.5.37): with Flat fill off there is no cover to colour, so while Interrupt readiness on enemy casts is on and an interrupt is
 -- known (ns.InterruptKnown, Interrupt.lua), the target and focus bars get a thin strip of the addon's own along their bottom edge (Interrupt strip
--- height, 1 to 6 screen pixels, 2 at first, set out of a fight only: a change in one waits for its end; OVERLAY), made and anchored out of a
+-- height, 1 to 6 screen pixels, 2 at first, set out of a fight only: a change in one waits for its end, and says so once in chat while the options
+-- window shows, 0.5.41; OVERLAY), made and anchored out of a
 -- fight, since these bars hang from protected unit frames (ns.MaybeProtected, as ApplyCastIcon
 -- waits). A frame of its own looks at the two bars every 0.1 s while the strip is wanted (ns.CastKickSync, called by Interrupt.lua's Sync, which
 -- the refresh of the cast bars and the interrupt row run): the strip shows while the bar's casting or channeling is a plain true and
@@ -2077,8 +2085,12 @@ do
 						pcall(strip.tex.SetHeight, strip.tex, ns.Pixels(bar, px))
 						strip.px = px
 					elseif strip and strip.px ~= px and not resized then
-						-- A height changed in a fight is set as it ends, once however many changes asked.
+						-- A height changed in a fight is set as it ends, once however many changes asked, and one chat line says so while the
+						-- options window shows (0.5.41), as CastBarSize.lua says it of a bar's size.
 						resized = true
+						if type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+							print("Flat UI: the interrupt strip takes its new height when the fight ends.")
+						end
 						ns.OutOfCombat(function()
 							resized = false
 							pcall(ns.CastKickSync)

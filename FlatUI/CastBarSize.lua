@@ -9,8 +9,9 @@ local _, ns = ...
 -- focus bars are created at one size and one font and nothing sets either again. This is not a module:
 -- the cast bars module calls ns.CastBarSizes whenever it applies its settings.
 -- A bar the game protects in a fight (the target and focus bars always, the player and pet bars while they hang from a protected frame) takes a
--- new size as the fight ends. A size row changed in the options window meanwhile says so once a fight, in chat, while the window shows (0.5.39):
--- "Flat UI: the target cast bar takes its new size when the fight ends.", when the size rows of that bar differ from those it last took.
+-- new size as the fight ends. A size row changed in the options window meanwhile says so once a fight for each bar (0.5.41; once a fight for
+-- all four before), in chat, while the window shows (0.5.39): "Flat UI: the target cast bar takes its new size when the fight ends.", when the
+-- size rows of that bar differ from those it last took.
 
 local KEY = "castbars"
 local PART = "size"
@@ -35,8 +36,8 @@ local sized = setmetatable({}, { __mode = "k" })
 local queued = {}
 local hooked = false
 local Apply
--- applied: per bar key, its size rows as they were when it was last sized. told: the line of a size that waits was said this fight.
-local applied, told = {}, false
+-- applied: per bar key, its size rows as they were when it was last sized. told: per bar key, the line of its size that waits was said this fight.
+local applied, told = {}, {}
 
 -- The size rows of a bar, as one string to compare.
 local function Rows(entry)
@@ -46,13 +47,13 @@ local function Rows(entry)
 		tostring(ns.Get(KEY .. "." .. key .. "Height")), player and tostring(ns.Get(KEY .. ".playerMatch")) or "", player and tostring(ns.Get(KEY .. ".playerText")) or "")
 end
 
--- A size changed in the options window in a fight waits for its end: one chat line a fight says so, while the window shows. A refresh that changed
--- no size row of the bar, or the game laying the bar out, says nothing.
+-- A size changed in the options window in a fight waits for its end: one chat line a fight for each bar says so, while the window shows. A
+-- refresh that changed no size row of the bar, or the game laying the bar out, says nothing.
 local function Tell(entry)
-	if told or applied[entry.key] == nil or applied[entry.key] == Rows(entry) or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
+	if told[entry.key] or applied[entry.key] == nil or applied[entry.key] == Rows(entry) or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
 		return
 	end
-	told = true
+	told[entry.key] = true
 	print(("Flat UI: the %s cast bar takes its new size when the fight ends."):format(entry.key))
 end
 
@@ -194,7 +195,7 @@ function Apply(entry)
 			queued[entry.key] = true
 			ns.OutOfCombat(function()
 				queued[entry.key] = nil
-				told = false
+				told[entry.key] = nil
 				Apply(entry)
 			end)
 		end

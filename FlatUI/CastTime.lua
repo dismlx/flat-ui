@@ -35,10 +35,13 @@ local _, ns = ...
 -- Shared/CastingBarFrame.lua:231-242). At a start it keeps the end of the cast (UnitCastingInfo, else UnitChannelInfo, in milliseconds: plain for
 -- the player and tested with ns.Finite all the same) and its castGUID (a plain string, else none); at each delay or channel update it adds how far
 -- the end moved, so a cast pushed back twice by half a second reads +1.0 and a channel cut short -0.8 (%+.1f), hidden while the total is under
--- 0.05 either way. A stop or an interrupt empties it when its castGUID is the one kept, or once the player no longer casts or channels: one of
+-- 0.05 either way. A stop or an interrupt ends it when its castGUID is the one kept, or once the player no longer casts or channels: one of
 -- another cast (a queued one, a key pressed during the cast) leaves it, as the game's bar ignores a stop whose castID is not its cast
--- (Shared/CastingBarFrame.lua:448, 530). A channel's stop empties it at once, and a failed cast once the player no longer casts or channels (a
--- second cast tried during one fails and leaves it). Each new delay that makes the total larger by PUSH_LEAST or more pops the text that shows
+-- (Shared/CastingBarFrame.lua:448, 530). A channel's stop ends it at once, and a failed cast once the player no longer casts or channels (a
+-- second cast tried during one fails and leaves it). Since 0.5.41 an end starts the count again but leaves the total shown, a child of the bar
+-- that fades with it through its finish flash and its Interrupted or Failed hold (Shared/CastingBarFrame.lua:443-472, 541-560), until the next
+-- cast starts or PUSH_HOLD (1.5) seconds pass (C_Timer.After, whose token an older timer finds replaced); the row going off or an error still
+-- hides it at once. Each new delay that makes the total larger by PUSH_LEAST or more pops the text that shows
 -- (0.5.39): a Scale animation in Vertex mode of its own, made with the font string, from 130% down to its size in 0.15 seconds, grown from its
 -- left end, as CombatCues.lua pops +Combat; a client that will not make it shows the text still. Only SetText, SetFont, SetTextColor, Show, Hide
 -- and the Stop and Play of that animation group reach it in a fight. /flatui status names the last pushback shown.
@@ -633,15 +636,18 @@ local PUSH_BARS = { "PlayerCastingBarFrame", "OverlayPlayerCastingBarFrame" }
 -- takes to settle.
 local PUSH_COLOUR, PUSH_LEAST, PUSH_COLOUR_ROW = { 1, 0.3, 0.3 }, 0.05, "castbars.pushbackColour"
 local PUSH_POP, PUSH_POP_TIME = 1.3, 0.15
+-- PUSH_HOLD: the seconds the total of a cast that ended stays on the bar, through its finish flash and its Interrupted hold (0.5.41).
+local PUSH_HOLD = 1.5
 local PUSH_EVENTS = { UNIT_SPELLCAST_START = "start", UNIT_SPELLCAST_CHANNEL_START = "start", UNIT_SPELLCAST_DELAYED = "move",
 	UNIT_SPELLCAST_CHANNEL_UPDATE = "move", UNIT_SPELLCAST_STOP = "ended", UNIT_SPELLCAST_CHANNEL_STOP = "stop",
 	UNIT_SPELLCAST_INTERRUPTED = "ended", UNIT_SPELLCAST_FAILED = "failed" }
 -- texts: per bar, its two font strings (near and after). queued: per bar, a make waits for the end of the fight. P: frame (the file's own, false
 -- when it could not be made), on (the events are heard), lastEnd and chan (the end in milliseconds of the cast now and whether it is a channel),
--- guid (the castGUID of its start, a plain string, else nil), total (the seconds it moved), last (the last total shown, for /flatui status).
+-- guid (the castGUID of its start, a plain string, else nil), total (the seconds it moved), last (the last total shown, for /flatui status), hold
+-- (the token of the timer that hides the total of a cast that ended; an older one does nothing).
 -- pushPops: per font string, its pop (an animation group), false when the client would not make one.
 local pushTexts, pushQueued, pushPops = setmetatable({}, weak), setmetatable({}, weak), setmetatable({}, weak)
-local P = { frame = nil, on = false, lastEnd = nil, chan = nil, guid = nil, total = 0, last = nil }
+local P = { frame = nil, on = false, lastEnd = nil, chan = nil, guid = nil, total = 0, last = nil, hold = nil }
 
 local function PushOn()
 	return Get(PUSH_ROW) == true and ns.Enabled("castbars")
@@ -785,6 +791,7 @@ end
 -- Writes the total on both bars, or hides it while it is under PUSH_LEAST either way. restyle: a new cast, whose font and colour are set first.
 -- grew: a delay made the total larger, which pops the text that shows.
 local function PushShow(restyle, grew)
+	P.hold = nil
 	local shown = math.abs(P.total) >= PUSH_LEAST
 	for _, name in ipairs(PUSH_BARS) do
 		local bar = PlayerBar(name)
@@ -814,8 +821,7 @@ local function PushShow(restyle, grew)
 	end
 end
 
-local function PushClear()
-	P.lastEnd, P.chan, P.guid, P.total = nil, nil, nil, 0
+local function PushHide()
 	for _, entry in pairs(pushTexts) do
 		if entry then
 			pcall(entry.near.Hide, entry.near)
@@ -823,6 +829,30 @@ local function PushClear()
 				pcall(entry.after.Hide, entry.after)
 			end
 		end
+	end
+end
+
+-- At once: the row went off, or an event raised.
+local function PushClear()
+	P.lastEnd, P.chan, P.guid, P.total, P.hold = nil, nil, nil, 0, nil
+	PushHide()
+end
+
+-- The cast ended: the count starts again, but the total shown stays on the bar, a child of it that fades and hides with it, for PUSH_HOLD
+-- seconds or until the next cast starts (PushShow), whichever comes first; at once without a timer.
+local function PushEnd()
+	P.lastEnd, P.chan, P.guid, P.total = nil, nil, nil, 0
+	local token = {}
+	P.hold = token
+	local ok = type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, PUSH_HOLD, function()
+		if P.hold == token then
+			P.hold = nil
+			pcall(PushHide)
+		end
+	end)
+	if not ok then
+		P.hold = nil
+		PushHide()
 	end
 end
 
@@ -855,12 +885,12 @@ local function PushHeard(what, guid)
 		-- leaves its cast; one of this cast, or any once the player casts nothing, clears it.
 		local plain = PlainGuid(guid)
 		if (plain ~= nil and plain == P.guid) or CastEnd() == nil then
-			PushClear()
+			PushEnd()
 		end
 	elseif what == "stop" or CastEnd() == nil then
-		-- A channel's stop clears at once. A failed cast clears only once the player casts nothing: a second cast tried during one fails and
+		-- A channel's stop ends it at once. A failed cast ends it only once the player casts nothing: a second cast tried during one fails and
 		-- leaves it.
-		PushClear()
+		PushEnd()
 	end
 end
 

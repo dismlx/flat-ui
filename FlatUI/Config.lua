@@ -1026,7 +1026,7 @@ ns.PAGES = {
 		{ key = "timeTotal", kind = "bool", default = false, label = "Total cast time too",
 			tip = "Seconds left and the whole cast, as 1.2 / 2.5, on the bars of the two rows above." },
 		{ key = "pushback", kind = "bool", default = true, label = "Pushback on your bar",
-			tip = "How far hits have set your cast back, as +0.5 in Pushback colour just past the right end of your cast bar, or after the game's own seconds from Edit Mode; a channel cut short shows -0.8. Each new delay makes it pop." },
+			tip = "How far hits have set your cast back, as +0.5 in Pushback colour just past the right end of your cast bar, or after the game's own seconds from Edit Mode; a channel cut short shows -0.8. Each new delay makes it pop. It stays as the bar flashes or holds Interrupted, and fades with it." },
 		{ key = "pushbackColour", kind = "colour", default = "ffff4d4d", label = "Pushback colour", needs = "pushback" },
 		{ section = "Icon" },
 		{ key = "iconPos", kind = "choice", default = "game", label = "Target and focus bar icon",
