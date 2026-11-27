@@ -9,6 +9,8 @@ local GRID_ALPHA, CENTRE_ALPHA = { dim = 0.12, bright = 0.25 }, 0.4
 local BAR_W, BAR_H = 722, 40
 local LIST_W, LIST_H, ROW_H, LIST_TOP = 240, 400, 24, 66
 local SIDE_W, SIDE_H = 224, 226
+local GROUP_W, GROUP_H, GROUP_BUTTON, GROUP_ROW = 300, 248, 134, 34
+local SWEEP_MIN, SWEEP_FILL, BURST = 4, 0.12, 1
 local STEPS_KEPT, SHIFT_STEP = 100, 10
 local GROUPS = { "Hidden", "Unit frames", "Action bars", "Flat UI", "Windows", "Other" }
 local UNITS = { PlayerFrame = true, TargetFrame = true, FocusFrame = true, PetFrame = true, PartyFrame = true, CompactRaidFrameContainer = true,
@@ -21,7 +23,7 @@ local WINDOW_MIN, WINDOW_MAX = 60, 150
 local TRACK_W = 80
 local LABEL_INSET, LABEL_MIN_W, LINE_H, FRONT_LEVEL = 3, 24, 10, 600
 
-local S = { snapshot = {}, last = {}, undo = {}, redo = {}, hidden = {}, list = true, texts = {} }
+local S = { snapshot = {}, last = {}, undo = {}, redo = {}, hidden = {}, list = true, texts = {}, chosen = {} }
 local ui = { lines = {}, paints = {}, rows = {} }
 
 local function Kit()
@@ -74,15 +76,33 @@ local function Differing()
 	return names
 end
 
+local function Merged(name)
+	local group = S.group
+	if not group then
+		return false
+	end
+	for index = #S.undo, 1, -1 do
+		local step = S.undo[index]
+		if step[3] ~= group then
+			return false
+		elseif step[1] == name then
+			return true
+		end
+	end
+	return false
+end
+
 function MM.Changed(name)
 	if not (S.session and not S.undoing and not S.muted and name) then
 		return
 	end
 	local now = Copy((Kit().Saved() or {})[name])
 	if not Same(now, S.last[name]) then
-		S.undo[#S.undo + 1] = { name, S.last[name] or false, S.group }
-		if #S.undo > STEPS_KEPT then
-			table.remove(S.undo, 1)
+		if not Merged(name) then
+			S.undo[#S.undo + 1] = { name, S.last[name] or false, S.group }
+			if #S.undo > STEPS_KEPT then
+				table.remove(S.undo, 1)
+			end
 		end
 		S.redo = {}
 		S.last[name] = now
@@ -118,21 +138,21 @@ local function Step(from, to)
 	if not step then
 		return
 	end
-	local last
+	local names = {}
 	repeat
 		to[#to + 1] = { step[1], Copy((Kit().Saved() or {})[step[1]]) or false, step[3] }
 		S.undoing = true
 		Kit().Restore(step[1], step[2] or nil)
 		S.undoing = false
 		S.last[step[1]] = Copy((Kit().Saved() or {})[step[1]])
-		last = step[1]
+		names[step[1]] = true
 		local nextStep = from[#from]
 		step = nextStep and step[3] and nextStep[3] == step[3] and table.remove(from) or nil
 	until not step
 	while #to > STEPS_KEPT do
 		table.remove(to, 1)
 	end
-	MM.Select(last)
+	MM.Choose(names)
 	MM.Refresh(true)
 end
 
@@ -395,6 +415,21 @@ function MM.Resized()
 	MM.DrawGrid()
 end
 
+local function Shows(name)
+	local sweep = S.sweep
+	local chosen = S.chosen[name] == true
+	if not (sweep and sweep.moved) then
+		return chosen
+	end
+	local hit = sweep.hits[name] == true
+	if sweep.mode == "add" then
+		return chosen or hit
+	elseif sweep.mode == "take" then
+		return chosen and not hit
+	end
+	return hit
+end
+
 function MM.Paint(name)
 	local look = Kit().looks[name]
 	if not look then
@@ -403,16 +438,11 @@ function MM.Paint(name)
 	local L = Look()
 	local outline = look.outline
 	local text = S.texts[name]
-	if S.selected == name then
+	if Shows(name) then
 		ns.SetOutlineColour(outline, L.Colour("accent"))
 		ns.SetOutlineAlpha(outline, 1)
 		local r, g, b = L.Colour("accent")
 		ns.SetOutlineFill(outline, r, g, b, 0.18)
-	elseif ns.MoversSnap and ns.MoversSnap.Picked(name) then
-		ns.SetOutlineColour(outline, L.Colour("accent"))
-		ns.SetOutlineAlpha(outline, 0.6)
-		local r, g, b = L.Colour("accent")
-		ns.SetOutlineFill(outline, r, g, b, 0.1)
 	elseif look.placedByGame then
 		ns.SetOutlineColour(outline, L.Colour("text-faint"))
 		ns.SetOutlineAlpha(outline, 0.6)
@@ -500,7 +530,7 @@ function MM.Front(name)
 	end
 	ui.front:ClearAllPoints()
 	ui.front:SetAllPoints(handle)
-	ns.SetOutlineColour(ui.frontEdges, Look().Colour(S.selected == name and "accent" or "text"))
+	ns.SetOutlineColour(ui.frontEdges, Look().Colour(S.chosen[name] and "accent" or "text"))
 	if ui.frontWords ~= words then
 		ui.frontWords = words
 		ui.frontText:SetText(words)
@@ -513,47 +543,424 @@ function MM.Hidden(name)
 	return S.hidden[name] == true
 end
 
-function MM.Press(name, button)
-	if name and button == "LeftButton" and type(IsControlKeyDown) == "function" and IsControlKeyDown() then
-		ns.MoversSnap.Toggle(name, S.selected)
-		MM.Spacing()
-	end
-	MM.Select(name)
+local function Held(fn)
+	return type(fn) == "function" and fn() == true
 end
 
-function MM.Select(name)
-	if S.selected == name then
+local function Modified()
+	return Held(IsShiftKeyDown) or Held(IsControlKeyDown)
+end
+
+local function Count()
+	local count = 0
+	for _ in pairs(S.chosen) do
+		count = count + 1
+	end
+	return count
+end
+
+local function Names()
+	local names = {}
+	for name in pairs(S.chosen) do
+		names[#names + 1] = name
+	end
+	table.sort(names)
+	return names
+end
+
+function MM.Chosen(name)
+	return S.chosen[name] == true
+end
+
+function MM.Choose(set)
+	local was = S.chosen
+	local changed, count, only = false, 0, nil
+	for name in pairs(set) do
+		count, only = count + 1, name
+		changed = changed or not was[name]
+	end
+	for name in pairs(was) do
+		changed = changed or not set[name]
+	end
+	if not changed then
 		return
 	end
-	local was = S.selected
-	S.selected = name
-	if was then
-		MM.Paint(was)
+	S.chosen, S.selected, S.press, S.burst, S.told = set, count == 1 and only or nil, nil, nil, nil
+	for name in pairs(was) do
+		MM.Paint(name)
 	end
-	if name then
+	for name in pairs(set) do
 		MM.Paint(name)
 	end
 	MM.Layout()
 	MM.Refresh(true)
 end
 
-local function Nudge(dx, dy)
-	local name = S.selected
+function MM.Select(name)
+	local set = {}
+	if name then
+		set[name] = true
+	end
+	MM.Choose(set)
+end
+
+function MM.Toggle(name)
+	local set = {}
+	for other in pairs(S.chosen) do
+		set[other] = true
+	end
+	set[name] = not set[name] or nil
+	MM.Choose(set)
+end
+
+function MM.Press(name, button)
+	S.press = nil
+	if not name then
+		return
+	end
+	if button == "LeftButton" and Modified() then
+		MM.Toggle(name)
+	elseif S.chosen[name] and Count() > 1 then
+		S.press = button == "LeftButton" and name or nil
+	else
+		MM.Select(name)
+	end
+end
+
+function MM.Let(name, dragged)
+	local pressed = S.press
+	S.press = nil
+	if pressed == name and not dragged then
+		MM.Select(name)
+	end
+end
+
+local function CanMove(name)
 	local kit = Kit()
-	local look = name and kit.looks[name]
-	local handle = name and kit.handles[name]
-	local info = name and kit.Describe(name)
-	if not (look and look.shown and not look.placedByGame and handle and info) then
+	local look = kit.looks[name]
+	if S.hidden[name] or not (look and look.shown and not look.placedByGame and kit.handles[name] and kit.Describe(name)) then
 		return false
 	end
-	local left, bottom, width, height = kit.Rect(handle)
-	if not left then
+	local H = ns.HideFrames
+	local key = H and H.Key(name)
+	return not (key and H.Hidden(key))
+end
+
+local function Movable()
+	local names, skipped = {}, {}
+	for _, name in ipairs(Names()) do
+		local list = CanMove(name) and names or skipped
+		list[#list + 1] = name
+	end
+	return names, skipped
+end
+
+local function Joined(names)
+	local labels = {}
+	for index, name in ipairs(names) do
+		local info = Kit().Describe(name)
+		labels[index] = info and info.label or name
+	end
+	if #labels < 2 then
+		return labels[1] or ""
+	end
+	return table.concat(labels, ", ", 1, #labels - 1) .. " and " .. labels[#labels]
+end
+
+local function Skipped(names)
+	if #names == 0 or Count() < 2 then
+		return
+	end
+	local key = table.concat(names, "|")
+	if S.told == key then
+		return
+	end
+	S.told = key
+	print(("Flat UI: %s %s put: hidden frames, frames not on screen now and frames the game places are left out of group moves."):format(Joined(names),
+		#names == 1 and "stays" or "stay"))
+end
+
+local function Boxes(names)
+	local kit, boxes = Kit(), {}
+	for _, name in ipairs(names) do
+		local left, bottom, width, height = kit.Rect(kit.handles[name])
+		if left then
+			boxes[#boxes + 1] = { left, bottom, width, height, name }
+		end
+	end
+	return boxes
+end
+
+local function Clamp(boxes, dx, dy)
+	local sw, sh = Kit().ScreenSize()
+	if not sw then
+		return dx, dy
+	end
+	for _, box in pairs(boxes) do
+		dx = math.max(math.min(0, -box[1]), math.min(math.max(0, sw - box[1] - box[3]), dx))
+		dy = math.max(math.min(0, -box[2]), math.min(math.max(0, sh - box[2] - box[4]), dy))
+	end
+	return dx, dy
+end
+
+local function Put(box, left, bottom)
+	local kit = Kit()
+	local info = kit.Describe(box[5])
+	if info then
+		kit.Commit(box[5], info, left, bottom, box[3], box[4])
+	end
+	kit.ShowHandle(box[5])
+end
+
+local function Shift(boxes, dx, dy)
+	for _, box in ipairs(boxes) do
+		Put(box, box[1] + dx, box[2] + dy)
+	end
+end
+
+local function Fighting()
+	return type(InCombatLockdown) == "function" and InCombatLockdown()
+end
+
+local function Grouped(fn, ...)
+	MM.Group(true)
+	local ok, err = pcall(fn, ...)
+	MM.Group(false)
+	if not ok then
+		error(err, 0)
+	end
+	MM.Refresh(true)
+end
+
+local function Burst()
+	local now = type(GetTime) == "function" and GetTime() or 0
+	if not ns.Finite(now) then
+		now = 0
+	end
+	local burst, top = S.burst, S.undo[#S.undo]
+	if not (burst and now - burst.at <= BURST and now >= burst.at and top and top[3] == burst.group) then
+		burst = { group = {} }
+		S.burst = burst
+	end
+	burst.at = now
+	return burst.group
+end
+
+local function Nudge(dx, dy)
+	local names, skipped = Movable()
+	local boxes = Boxes(names)
+	Skipped(skipped)
+	if #boxes == 0 then
 		return false
 	end
-	kit.Commit(name, info, left + dx, bottom + dy, width, height)
-	kit.ShowHandle(name)
+	dx, dy = Clamp(boxes, dx, dy)
+	if dx ~= 0 or dy ~= 0 then
+		S.group = Burst()
+		local ok, err = pcall(Shift, boxes, dx, dy)
+		S.group = nil
+		if not ok then
+			error(err, 0)
+		end
+	end
 	MM.Refresh(true)
 	return true
+end
+
+local function LetGo()
+	local carry = S.carry
+	S.carry = nil
+	if not carry then
+		return
+	end
+	local kit = Kit()
+	for name in pairs(carry.followers) do
+		local look = kit.looks[name]
+		if look then
+			look.left = nil
+		end
+		if kit.IsOpen() then
+			Try(kit.ShowHandle, name)
+		end
+	end
+end
+
+function MM.Carried(name)
+	local carry = S.carry
+	return carry ~= nil and carry.followers[name] ~= nil
+end
+
+function MM.Lift(name)
+	LetGo()
+	local kit = Kit()
+	local lead = kit.handles[name]
+	if not (lead and S.chosen[name] and Count() > 1) then
+		return
+	end
+	local left, bottom = kit.Rect(lead)
+	local names, skipped = Movable()
+	local followers, any, others = {}, false, {}
+	for _, box in ipairs(Boxes(names)) do
+		if box[5] ~= name then
+			followers[box[5]], any = box, true
+		end
+	end
+	for _, other in ipairs(skipped) do
+		if other ~= name then
+			others[#others + 1] = other
+		end
+	end
+	Skipped(others)
+	if left and any then
+		S.carry = { lead = name, left = left, bottom = bottom, dx = 0, dy = 0, followers = followers }
+	end
+end
+
+local function Follow(carry, left, bottom)
+	local dx, dy = Clamp(carry.followers, left - carry.left, bottom - carry.bottom)
+	if dx ~= carry.dx or dy ~= carry.dy then
+		carry.dx, carry.dy = dx, dy
+		local handles = Kit().handles
+		for name, box in pairs(carry.followers) do
+			local handle = handles[name]
+			if handle then
+				handle:ClearAllPoints()
+				handle:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", box[1] + dx, box[2] + dy)
+			end
+		end
+	end
+	return carry.left + dx, carry.bottom + dy
+end
+
+function MM.Carry(name, left, bottom)
+	local carry = S.carry
+	if not (carry and carry.lead == name and left and bottom) then
+		return left, bottom
+	end
+	local ok, newLeft, newBottom = pcall(Follow, carry, left, bottom)
+	if ok and newLeft then
+		return newLeft, newBottom
+	end
+	return left, bottom
+end
+
+local function Land(carry, name, info, left, bottom, width, height, middle)
+	local kit = Kit()
+	local dx, dy = Clamp(carry.followers, left - carry.left, bottom - carry.bottom)
+	left, bottom = carry.left + dx, carry.bottom + dy
+	local sw = kit.ScreenSize()
+	if middle and not (sw and math.abs(left + width / 2 - sw / 2) < 1) then
+		middle = nil
+	end
+	kit.Commit(name, info, left, bottom, width, height, middle)
+	if dx ~= 0 or dy ~= 0 then
+		local boxes = {}
+		for _, box in pairs(carry.followers) do
+			boxes[#boxes + 1] = box
+		end
+		Shift(boxes, dx, dy)
+	end
+end
+
+function MM.Drop(name, info, left, bottom, width, height, middle)
+	local carry = S.carry
+	if not (carry and carry.lead == name) then
+		LetGo()
+		return Kit().Commit(name, info, left, bottom, width, height, middle)
+	end
+	local ok, err = pcall(Grouped, Land, carry, name, info, left, bottom, width, height, middle)
+	LetGo()
+	if not ok then
+		error(err, 0)
+	end
+end
+
+local ARRANGE = {
+	left = function(box, edge)
+		return edge[1], box[2]
+	end,
+	right = function(box, edge)
+		return edge[3] - box[3], box[2]
+	end,
+	top = function(box, edge)
+		return box[1], edge[4] - box[4]
+	end,
+	bottom = function(box, edge)
+		return box[1], edge[2]
+	end,
+	middleX = function(box, edge)
+		return (edge[1] + edge[3] - box[3]) / 2, box[2]
+	end,
+	middleY = function(box, edge)
+		return box[1], (edge[2] + edge[4] - box[4]) / 2
+	end,
+}
+
+local function Line(boxes, how)
+	local edge = { math.huge, math.huge, -math.huge, -math.huge }
+	for _, box in ipairs(boxes) do
+		edge[1], edge[2] = math.min(edge[1], box[1]), math.min(edge[2], box[2])
+		edge[3], edge[4] = math.max(edge[3], box[1] + box[3]), math.max(edge[4], box[2] + box[4])
+	end
+	for _, box in ipairs(boxes) do
+		local left, bottom = ARRANGE[how](box, edge)
+		if math.abs(left - box[1]) >= 0.5 or math.abs(bottom - box[2]) >= 0.5 then
+			Put(box, left, bottom)
+		end
+	end
+end
+
+local function Spread(boxes, axis)
+	local at = axis == "y" and 2 or 1
+	local spans = {}
+	for index, box in ipairs(boxes) do
+		spans[index] = { box[at], box[at + 2] }
+	end
+	local starts = ns.MoversSnap.Spread(spans) or {}
+	for index, box in ipairs(boxes) do
+		local start = starts[index]
+		if start and math.abs(start - box[at]) >= 0.5 then
+			Put(box, axis == "y" and box[1] or start, axis == "y" and start or box[2])
+		end
+	end
+end
+
+local function Arrange(how)
+	if Fighting() then
+		return
+	end
+	local names, skipped = Movable()
+	local boxes = Boxes(names)
+	local spread = how == "x" or how == "y"
+	Skipped(skipped)
+	if #boxes < (spread and 3 or 2) then
+		print(spread and "Flat UI: Distribute needs three or more selected frames that can move."
+			or "Flat UI: Align and Centre need two or more selected frames that can move.")
+		return
+	end
+	Grouped(spread and Spread or Line, boxes, how)
+end
+
+local function ResetThese()
+	if Fighting() then
+		return
+	end
+	local kit = Kit()
+	local saved = kit.Saved() or {}
+	local names = {}
+	for _, name in ipairs(Names()) do
+		if saved[name] ~= nil then
+			names[#names + 1] = name
+		end
+	end
+	if #names == 0 then
+		print("Flat UI: none of the selected frames has been moved.")
+		return
+	end
+	Grouped(function()
+		for _, name in ipairs(names) do
+			kit.Restore(name, nil)
+		end
+	end)
 end
 
 local function Centre(name)
@@ -621,6 +1028,45 @@ local function SetScale(percent)
 	MM.Refresh(true)
 end
 
+local GROUP_ACTIONS = {
+	{ "Align left", "left", "Lines up their left edges with the one furthest left." },
+	{ "Align right", "right", "Lines up their right edges with the one furthest right." },
+	{ "Align top", "top", "Lines up their top edges with the highest one." },
+	{ "Align bottom", "bottom", "Lines up their bottom edges with the lowest one." },
+	{ "Centre horizontally", "middleX", "Puts their middles on one up and down line, halfway across the space they cover together." },
+	{ "Centre vertically", "middleY", "Puts their middles on one level line, halfway up the space they cover together." },
+	{ "Distribute across", "x", "Keeps the two outer frames where they are and makes the gaps between them all the same, in their order across the screen. "
+		.. "Needs three or more." },
+	{ "Distribute down", "y", "Keeps the top and bottom frames where they are and makes the gaps between them all the same, in their order down the screen. "
+		.. "Needs three or more." },
+}
+
+local function BuildGroup(panel)
+	local body = Make("Frame", panel)
+	body:SetAllPoints(panel)
+	body:Hide()
+	ui.groupBody, ui.spread = body, {}
+	for index, action in ipairs(GROUP_ACTIONS) do
+		local button, label = Button(body, action[1], GROUP_BUTTON, function()
+			Arrange(action[2])
+		end, nil, function()
+			return action[1], action[3] .. " Undo takes it back in one step."
+		end)
+		local column, row = (index - 1) % 2, math.floor((index - 1) / 2)
+		button:SetPoint("TOPLEFT", body, "TOPLEFT", 12 + column * (GROUP_BUTTON + 8), -36 - row * GROUP_ROW)
+		if action[2] == "x" or action[2] == "y" then
+			ui.spread[#ui.spread + 1] = label
+		end
+	end
+	local reset = Button(body, "Reset these", GROUP_BUTTON, ResetThese, nil, function()
+		return "Reset these", "Puts each selected frame back where the game has it. Undo takes them all back in one step."
+	end)
+	reset:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -36 - 4 * GROUP_ROW)
+	ui.groupNote = Text(body, "GameFontHighlightSmall", "text-dim")
+	ui.groupNote:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -40 - 5 * GROUP_ROW)
+	ui.groupNote:SetWidth(GROUP_W - 24)
+end
+
 local function BuildInspector()
 	local panel = Make("Frame")
 	panel:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -635,7 +1081,9 @@ local function BuildInspector()
 	ui.sideTitle:SetWidth(SIDE_W - 24)
 	ui.sideNone = Text(panel, "GameFontHighlightSmall", "text-dim")
 	ui.sideNone:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -38)
-	ui.sideNone:SetText("Select a frame.")
+	ui.sideNone:SetWidth(SIDE_W - 24)
+	ui.sideNone:SetText("Select a frame. Drag across empty space to select every box it touches, Shift to add them, Ctrl to take them away. "
+		.. "Shift or Ctrl and click a box adds it or takes it away.")
 	local body = Make("Frame", panel)
 	body:SetAllPoints(panel)
 	ui.sideBody = body
@@ -723,10 +1171,45 @@ local function BuildInspector()
 		end
 	end)
 	ui.hide:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -186)
+	BuildGroup(panel)
+end
+
+local function RefreshGroup(count)
+	local names, skipped = Movable()
+	ui.sideTitle:SetText(("%d frames selected"):format(count))
+	for _, label in ipairs(ui.spread) do
+		label:SetAlpha(#names >= 3 and 1 or 0.4)
+	end
+	local note = "Drag one of them to move them all. The arrow keys move them, Shift ten at a time."
+	if #skipped == 1 then
+		note = "1 of them stays put: it is hidden, not on screen now or placed by the game."
+	elseif #skipped > 1 then
+		note = ("%d of them stay put: hidden, not on screen now or placed by the game."):format(#skipped)
+	end
+	if ui.groupText ~= note then
+		ui.groupText = note
+		ui.groupNote:SetText(note)
+	end
 end
 
 function MM.Refresh(force)
 	if not (ui.side and S.session) then
+		return
+	end
+	local count = Count()
+	local group = count > 1
+	if ui.wide ~= group then
+		ui.wide = group
+		ui.side:SetSize(group and GROUP_W or SIDE_W, group and GROUP_H or SIDE_H)
+	end
+	ui.groupBody:SetShown(group)
+	ui.undoLabel:SetAlpha(#S.undo > 0 and 1 or 0.4)
+	ui.redoLabel:SetAlpha(#S.redo > 0 and 1 or 0.4)
+	if group then
+		ui.sideBody:Hide()
+		ui.sideNone:Hide()
+		ui.chip:Hide()
+		RefreshGroup(count)
 		return
 	end
 	local kit = Kit()
@@ -778,9 +1261,6 @@ function MM.Refresh(force)
 	if hide then
 		ui.hideLabel:SetText(ns.HideFrames.Ticked(hide) and "Show frame" or "Hide frame")
 	end
-	ui.undoLabel:SetAlpha(#S.undo > 0 and 1 or 0.4)
-	ui.redoLabel:SetAlpha(#S.redo > 0 and 1 or 0.4)
-	MM.Spacing()
 end
 
 local function GroupOf(info)
@@ -882,7 +1362,7 @@ local function BuildRow(index)
 	end)
 	Released(row, function(mouseButton)
 		if mouseButton == "LeftButton" and row.entry and row.entry.name then
-			Try(MM.Select, row.entry.name)
+			Try(Modified() and MM.Toggle or MM.Select, row.entry.name)
 		end
 	end)
 	Released(row.eye, function(mouseButton)
@@ -933,7 +1413,7 @@ function MM.Layout()
 				row.back:SetColorTexture(0, 0, 0, 0)
 				row.label:SetTextColor(L.Colour("text-faint"))
 			else
-				local chosen = entry.name ~= nil and S.selected == entry.name
+				local chosen = entry.name ~= nil and S.chosen[entry.name] == true
 				local fill = chosen and "raised" or row.over and "hover" or nil
 				if fill then
 					L.Solid(row.back, fill)
@@ -1011,7 +1491,9 @@ local TIPS = {
 			.. "boxes while you place them."
 	end,
 	list = function()
-		return "Frame list", "Shows or hides the list of frames at the left. Click a name to choose its frame; the arrow keys move it, Shift ten at a time."
+		return "Frame list", "Shows or hides the list of frames at the left. Click a name to choose its frame, Shift or Ctrl and click to add it or take it away. "
+			.. "Drag across empty space to select every box it touches, Shift to add them, Ctrl to take them away; Escape lets them go. "
+			.. "The arrow keys move what is selected, Shift ten at a time."
 	end,
 	undo = function()
 		local count, again = UndoSteps(), UndoSteps(S.redo)
@@ -1283,42 +1765,156 @@ function MM.Request()
 	ui.ask:Show()
 end
 
-local function BuildSpace()
-	local bar = Make("Frame")
-	bar:SetFrameStrata("FULLSCREEN_DIALOG")
-	bar:SetFrameLevel(20)
-	bar:SetSize(404, 44)
-	bar:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 24)
-	bar:EnableMouse(true)
-	Surface(bar, "card")
-	ui.space = bar
-	ui.spaceText = Text(bar, "GameFontHighlight", "text")
-	ui.spaceText:SetPoint("LEFT", bar, "LEFT", 12, 0)
-	local across = Button(bar, "Space across", 104, function()
-		ns.MoversSnap.Space("x")
-	end)
-	across:SetPoint("LEFT", bar, "LEFT", 100, 0)
-	local down = Button(bar, "Space down", 104, function()
-		ns.MoversSnap.Space("y")
-	end)
-	down:SetPoint("LEFT", bar, "LEFT", 212, 0)
-	local clear = Button(bar, "Clear", 72, function()
-		ns.MoversSnap.Clear()
-		MM.Spacing()
-	end)
-	clear:SetPoint("LEFT", bar, "LEFT", 324, 0)
-	bar:Hide()
+local function ButtonHeld()
+	if type(IsMouseButtonDown) ~= "function" then
+		return true
+	end
+	local ok, down = pcall(IsMouseButtonDown, "LeftButton")
+	return not ok or ns.IsSecret(down) or down ~= false
 end
 
-function MM.Spacing()
-	if not (ui.space and S.session) then
+local function Swept(sweep)
+	local kit, hits = Kit(), {}
+	for name, handle in pairs(kit.handles) do
+		local look = kit.looks[name]
+		if look and look.shown and not look.placedByGame then
+			local left, bottom, width, height = kit.Rect(handle)
+			if left and left < sweep.right and left + width > sweep.left and bottom < sweep.top and bottom + height > sweep.bottom then
+				hits[name] = true
+			end
+		end
+	end
+	local was = sweep.hits
+	sweep.hits = hits
+	for name in pairs(was) do
+		if not hits[name] then
+			MM.Paint(name)
+		end
+	end
+	for name in pairs(hits) do
+		if not was[name] then
+			MM.Paint(name)
+		end
+	end
+end
+
+local function SweepEnd(cancel)
+	local sweep = S.sweep
+	S.sweep = nil
+	if ui.screen then
+		ui.screen:SetScript("OnUpdate", nil)
+	end
+	if ui.sweep then
+		ui.sweep:Hide()
+	end
+	if not sweep then
 		return
 	end
-	local count = #ns.MoversSnap.List()
-	if count >= 3 then
-		ui.spaceText:SetText(("%d picked"):format(count))
+	for name in pairs(sweep.hits) do
+		MM.Paint(name)
 	end
-	ui.space:SetShown(count >= 3)
+	for name in pairs(S.chosen) do
+		MM.Paint(name)
+	end
+	if cancel == true or (not sweep.moved and sweep.mode ~= "set") then
+		return
+	end
+	local set = {}
+	if sweep.mode ~= "set" then
+		for name in pairs(S.chosen) do
+			set[name] = true
+		end
+	end
+	if sweep.moved then
+		for name in pairs(sweep.hits) do
+			set[name] = sweep.mode ~= "take" or nil
+		end
+	end
+	MM.Choose(set)
+end
+
+local function SweepStep()
+	local sweep = S.sweep
+	if not sweep then
+		ui.screen:SetScript("OnUpdate", nil)
+		return
+	end
+	if not ButtonHeld() then
+		Try(SweepEnd)
+		return
+	end
+	local x, y = Kit().Cursor()
+	if not x then
+		return
+	end
+	if not sweep.moved then
+		if math.abs(x - sweep.x) < SWEEP_MIN and math.abs(y - sweep.y) < SWEEP_MIN then
+			return
+		end
+		sweep.moved = true
+		for name in pairs(S.chosen) do
+			MM.Paint(name)
+		end
+	end
+	local left, right = math.min(x, sweep.x), math.max(x, sweep.x)
+	local bottom, top = math.min(y, sweep.y), math.max(y, sweep.y)
+	if sweep.left == left and sweep.right == right and sweep.bottom == bottom and sweep.top == top then
+		return
+	end
+	sweep.left, sweep.right, sweep.bottom, sweep.top = left, right, bottom, top
+	ui.sweep:ClearAllPoints()
+	ui.sweep:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left, bottom)
+	ui.sweep:SetSize(math.max(1, right - left), math.max(1, top - bottom))
+	ui.sweep:Show()
+	Swept(sweep)
+end
+
+local function SweepStart()
+	SweepEnd(true)
+	local x, y = Kit().Cursor()
+	if not x then
+		return
+	end
+	for _, field in ipairs({ ui.x, ui.y, ui.scale, ui.search }) do
+		field:ClearFocus()
+	end
+	S.sweep = { x = x, y = y, hits = {}, mode = Held(IsShiftKeyDown) and "add" or Held(IsControlKeyDown) and "take" or "set" }
+	ui.screen:SetScript("OnUpdate", function()
+		Try(SweepStep)
+	end)
+end
+
+local function BuildSweep()
+	local screen = ui.screen
+	screen:EnableMouse(true)
+	screen:SetScript("OnMouseDown", function(_, mouseButton)
+		if mouseButton == "LeftButton" then
+			Try(SweepStart)
+		end
+	end)
+	screen:SetScript("OnMouseUp", function(_, mouseButton)
+		if mouseButton == "LeftButton" and S.sweep then
+			Try(SweepEnd)
+		end
+	end)
+	screen:SetScript("OnHide", function()
+		if S.sweep then
+			SweepEnd(true)
+		end
+	end)
+	local frame = Make("Frame")
+	frame:SetFrameStrata("FULLSCREEN_DIALOG")
+	frame:SetFrameLevel(4)
+	local outline = ns.Outline(frame, frame, true)
+	ns.SetOutlineThickness(outline, 1)
+	Painted(function()
+		local r, g, b = Look().Colour("accent")
+		ns.SetOutlineColour(outline, r, g, b)
+		ns.SetOutlineAlpha(outline, 1)
+		ns.SetOutlineFill(outline, r, g, b, SWEEP_FILL)
+	end)
+	frame:Hide()
+	ui.sweep = frame
 end
 
 local function BuildKeys()
@@ -1339,6 +1935,10 @@ local function BuildKeys()
 				handled = true
 			elseif ui.ask and ui.ask:IsShown() then
 				ui.ask:Hide()
+			elseif S.sweep then
+				Try(SweepEnd, true)
+			elseif next(S.chosen) then
+				Try(MM.Select, nil)
 			else
 				Try(MM.Request)
 			end
@@ -1349,7 +1949,7 @@ local function BuildKeys()
 		elseif key == "Z" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and not (ui.ask and ui.ask:IsShown()) then
 			handled = true
 			Try(MM.Undo)
-		elseif ARROWS[key] and S.selected and not (ui.ask and ui.ask:IsShown()) then
+		elseif ARROWS[key] and next(S.chosen) and not (ui.ask and ui.ask:IsShown()) then
 			local step = type(IsShiftKeyDown) == "function" and IsShiftKeyDown() and SHIFT_STEP or 1
 			Try(function()
 				handled = Nudge(ARROWS[key][1] * step, ARROWS[key][2] * step)
@@ -1387,7 +1987,7 @@ local function Build()
 	BuildList()
 	BuildInspector()
 	BuildChip()
-	BuildSpace()
+	BuildSweep()
 	BuildKeys()
 end
 
@@ -1426,15 +2026,25 @@ local function Show()
 	MM.Refresh(true)
 end
 
+local function Unchoose()
+	local was = S.chosen
+	S.chosen, S.selected, S.press, S.burst, S.told = {}, nil, nil, nil, nil
+	for name in pairs(was) do
+		MM.Paint(name)
+	end
+end
+
 local function HideAll()
 	if not ui.screen then
 		return
 	end
 	ui.bar:SetScript("OnUpdate", nil)
+	SweepEnd(true)
+	LetGo()
 	ns.MoversSnap.Hide()
 	ui.sliding = false
 	ui.keys:EnableKeyboard(false)
-	for _, name in ipairs({ "screen", "bar", "list", "side", "chip", "front", "keys", "ask", "space" }) do
+	for _, name in ipairs({ "screen", "bar", "list", "side", "chip", "front", "keys", "ask", "sweep" }) do
 		if ui[name] then
 			ui[name]:Hide()
 		end
@@ -1448,9 +2058,9 @@ function MM.Opened(source)
 		S.session = true
 		S.snapshot = CopyAll(kit.Saved())
 		S.last = CopyAll(kit.Saved())
-		S.undo, S.redo, S.hidden, S.selected, S.hover, S.offset = {}, {}, {}, nil, nil, 0
+		S.undo, S.redo, S.hidden, S.hover, S.offset = {}, {}, {}, nil, 0
 		S.panel = false
-		ns.MoversSnap.Clear()
+		Unchoose()
 	end
 	if type(ns.PanelShown) == "function" and ns.PanelShown() then
 		S.panel = true
@@ -1472,8 +2082,8 @@ function MM.Closed()
 		return
 	end
 	S.session = false
-	S.snapshot, S.last, S.undo, S.redo, S.hidden, S.selected, S.hover = {}, {}, {}, {}, {}, nil, nil
-	ns.MoversSnap.Clear()
+	S.snapshot, S.last, S.undo, S.redo, S.hidden, S.hover = {}, {}, {}, {}, {}, nil
+	Unchoose()
 	if S.panel then
 		S.panel = false
 		local mode = S.panelMode

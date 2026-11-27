@@ -1561,7 +1561,7 @@ local function Dropped(name)
 				left, bottom = ns.MoversSnap.Snap(name, left, bottom, width, height, middle)
 			end
 			centre.dropMiddle = nil
-			Commit(name, info, left, bottom, width, height, middle)
+			ns.MoversMode.Drop(name, info, left, bottom, width, height, middle)
 		end
 	end
 	dragging = nil
@@ -1738,6 +1738,7 @@ local function MakeHandle(name)
 			dragging = name
 			handleLooks[name].left = nil
 			handleLooks[name].dragged = true
+			ns.Try(KEY, ns.MoversMode.Lift, name)
 			ns.Try(KEY, centre.Start, self)
 		end
 	end)
@@ -1775,6 +1776,7 @@ local function MakeHandle(name)
 		elseif mouseButton == "RightButton" then
 			ns.Try(KEY, ResetFrame, name)
 		elseif mouseButton == "LeftButton" then
+			ns.Try(KEY, ns.MoversMode.Let, name, handleLooks[name].dragged)
 			ns.Try(KEY, centre.Click, name)
 		end
 	end)
@@ -1784,7 +1786,7 @@ end
 function ShowHandle(name)
 	local info = Describe(name)
 	local handle = handles[name]
-	if dragging == name then
+	if dragging == name or ns.MoversMode.Carried(name) then
 		return
 	end
 	local left, bottom, width, height
@@ -2055,6 +2057,7 @@ function centre.Step(handle)
 	drag.snapped = middle ~= nil
 	left = middle or left
 	left, bottom = ns.MoversSnap.Snap(dragging, left, bottom, drag.width, drag.height, middle ~= nil)
+	left, bottom = ns.MoversMode.Carry(dragging, left, bottom)
 	if left ~= drag.left or bottom ~= drag.bottom then
 		drag.left, drag.bottom = left, bottom
 		handle:ClearAllPoints()
