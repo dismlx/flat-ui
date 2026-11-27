@@ -1441,10 +1441,10 @@ AREAS = [
         PanelTabs PanelHome PanelPreview TestMode TestUnits TestHud"""),
     ("setup", "Setup", "SetupSteps SetupProfiles SetupStops Setup SetupWalk SetupWelcome"),
     ("unitframes", "Unit frames", """ClassData UnitFrames UnitFramePortrait UnitFrameLevel UnitFrameCells UnitFrameLooks
-        UnitFrameHead UnitText UnitParts UnitExtras UnitGroupMarks UnitDruidMana UnitPetTarget UnitHots HealthColour
+        UnitFrameHead UnitText UnitParts UnitExtras UnitGroupMarks UnitDruidMana UnitManaRule UnitPetTarget UnitHots HealthColour
         PetFrameSize"""),
     ("nameplates", "Nameplates, combat text and cast bars", """Nameplates PlateThreat PlateColours PlateThreatLook PlateText
-        PlateClick PlateThreatText PlateOverpower PlateQuest PlateCombo CombatBurst CombatTextSpells CombatText ScrollText CombatCues Bars CastTime CastTicks CastRank
+        PlateClick PlateThreatText PlateOverpower PlateQuest PlateCombo PlateTarget CombatBurst CombatTextSpells CombatText ScrollText CombatCues Bars CastTime CastTicks CastRank
         Interrupt CastBarSize"""),
     ("actionbars", "Action bars", """ActionBars OwnBars OwnPaint ButtonText Cooldowns CooldownLooks ButtonStates CooldownData
         ProcData Procs ProcArt ProcGlow ButtonEffects ProcTriggers BarBlock BarBlockButtons BarBlockLists Blocks"""),
