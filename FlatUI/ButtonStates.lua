@@ -27,7 +27,10 @@ local _, ns = ...
 -- the fourth shown button of the main bar (ActionBars.lua); with test mode off, a change of one of those rows with the options window open plays it
 -- once on the first, and a change while it still runs gives it the new look without starting it again, so a dragged slider plays it once.
 -- Moving off on the bar of test mode holds it at 2 s of its 4 (ns.ButtonStatesSampleHold, Cooldown:Pause), with its edge and numbers, until Moving
--- on resumes it and its end moves on by the time held.
+-- on resumes it and its end moves on by the time held. With Grey out icon on cooldown on, the button's icon is grey while the sample sweeps
+-- (SampleGrey), and a change of that row plays it too. With test mode off, a change of Own usability colours, Not enough power colour, Cannot use
+-- colour, Tint icon when out of range or Out of range colour (while its row is on) paints the icon of the first sample button in that colour for
+-- 2 s instead (TintSample, through the icon painter), a change meanwhile giving it the 2 s again.
 
 local KEY = "actionbars"
 local BARS = {
@@ -90,13 +93,19 @@ local watcher
 local readyFlash = setmetatable({}, { __mode = "k" })
 local READY = { PEAK = 0.6, RISE = 0.1, FALL = 0.25, pending = false }
 -- The sweep sample: its Cooldown frame once made, the button it lies over, when it and its flash are over (ends), busy while this file sets or clears
--- it (its OnCooldownDone then does not count) and TIME, the sample cooldown in seconds. LOOKS: the rows a change of which plays it.
-local SAMPLE = { frame = nil, button = nil, ends = nil, busy = false, TIME = 4 }
+-- it (its OnCooldownDone then does not count), running while its sweep runs, the button whose icon it greys (grey, while Grey out icon on cooldown
+-- is on) and TIME, the sample cooldown in seconds. LOOKS: the rows a change of which plays it.
+local SAMPLE = { frame = nil, button = nil, ends = nil, busy = false, running = false, grey = nil, TIME = 4 }
+-- The colour sample: a change of a usability or range row paints the first sample button in the colour of TINTS[row] until ends (TIME seconds after
+-- the last change).
+local TINT = { button = nil, path = nil, ends = 0, TIME = 2 }
+local TINTS = { usableOwn = "manaColour", manaColour = "manaColour", unusableColour = "unusableColour", rangeTint = "rangeColour",
+	rangeColour = "rangeColour" }
 -- The places of the Sound when ready choices in ns.SOUNDS (IconRow.lua), as Party cooldowns has them; TEST: the sound test mode plays once.
 READY.SOUNDS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 READY.TEST = "actionbars.ready"
 local LOOKS = { sweep = true, sweepOwn = true, sweepColour = true, sweepAlpha = true, sweepEdge = true, sweepEdgeColour = true, cdFont = true,
-	cdColour = true, cdTenths = true, readyFlash = true, readyColour = true }
+	cdColour = true, cdTenths = true, readyFlash = true, readyColour = true, cdGrey = true }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -470,13 +479,20 @@ local function IconPainter(button, shown)
 	local icon = button.icon
 	if icon ~= nil and not ns.IsSecret(icon) then
 		local want = wanted and Opt("cdGrey") == true and shown.cdActive == true and shown.cdOnGCD ~= true
-		if want or greyed[button] then
+		if SAMPLE.grey == button then
+			-- The sweep sample greys the icon while it runs; greyed keeps the real state for its end (SampleGrey).
+			greyed[button] = want or nil
+		elseif want or greyed[button] then
 			pcall(icon.SetDesaturated, icon, want)
 			greyed[button] = want or nil
 		end
 	end
 	if not wanted then
 		return nil
+	end
+	-- The colour sample of a usability or range row (TintSample).
+	if TINT.button == button and GetTime() < TINT.ends then
+		return ns.Colour(KEY .. "." .. TINT.path)
 	end
 	local own, tint = Opt("usableOwn") == true, Opt("rangeTint") == true
 	if tint and shown.checksRange == true then
@@ -747,12 +763,33 @@ local function SampleLook(frame)
 	end
 end
 
--- The sample's sweep ended: the button's Flash when ready plays while the row is on, its frame made first when it has none. Sound when ready plays
--- with it only in test mode, once each time test mode is turned on (TM.Sound), not on each loop of 5 s.
+-- Grey out icon on cooldown on the icon of the sample's button while its sweep runs (Flat UI's own icon, SetDesaturated), and the icon it greyed
+-- before put back as its real state has it (greyed). button nil puts it back only.
+local function SampleGrey(button)
+	local want = button ~= nil and Opt("cdGrey") == true and Wanted()
+	local was = SAMPLE.grey
+	if was and (was ~= button or not want) then
+		SAMPLE.grey = nil
+		local icon = was.icon
+		if Plain(icon, "table") then
+			pcall(icon.SetDesaturated, icon, greyed[was] == true)
+		end
+	end
+	local icon = want and button.icon
+	if Plain(icon, "table") then
+		pcall(icon.SetDesaturated, icon, true)
+		SAMPLE.grey = button
+	end
+end
+
+-- The sample's sweep ended: its grey goes, and the button's Flash when ready plays while the row is on, its frame made first when it has none.
+-- Sound when ready plays with it only in test mode, once each time test mode is turned on (TM.Sound), not on each loop of 5 s.
 local function SampleDone()
 	if SAMPLE.busy then
 		return
 	end
+	SAMPLE.running = false
+	SampleGrey(nil)
 	local button = SAMPLE.button
 	if not button or Opt("readyFlash") ~= true or not Wanted() or not Visible(button) then
 		return
@@ -789,8 +826,10 @@ local function SampleStart(frame, button)
 	end
 	SAMPLE.button = button
 	SampleLook(frame)
+	SampleGrey(button)
 	frame:SetCooldown(GetTime(), SAMPLE.TIME)
 	frame:Show()
+	SAMPLE.running = true
 end
 
 -- The sweep sample on a Flat UI button, out of combat. Without force, a sample that still runs on that button takes the looks of now and goes on.
@@ -801,6 +840,10 @@ function ns.ButtonStatesSample(button, force)
 	local frame = SAMPLE.frame
 	if frame and not force and SAMPLE.button == button and (SAMPLE.heldAt or (SAMPLE.ends and GetTime() < SAMPLE.ends)) then
 		SampleLook(frame)
+		-- Grey out icon on cooldown changed while the sweep runs, before its end (ends also covers the flash after it).
+		if SAMPLE.running then
+			SampleGrey(button)
+		end
 		return
 	end
 	if not frame then
@@ -866,20 +909,53 @@ function ns.ButtonStatesSampleOff()
 		frame:Hide()
 		SAMPLE.busy = false
 	end
+	SAMPLE.running = false
+	SampleGrey(nil)
 	SAMPLE.button, SAMPLE.ends, SAMPLE.heldAt = nil, nil, nil
 end
 
+-- The colour sample on button: its icon takes the colour of the row just changed for TINT.TIME seconds, a change meanwhile giving it the time
+-- again, and the button it was on before takes its own colour back. OwnPaint.lua paints it through the icon painter (IconPainter).
+local function TintSample(button, path)
+	local was = TINT.button
+	TINT.button, TINT.path, TINT.ends = button, path, GetTime() + TINT.TIME
+	if type(ns.OwnRepaint) ~= "function" then
+		return
+	end
+	if was and was ~= button then
+		ns.OwnRepaint(was)
+	end
+	ns.OwnRepaint(button)
+	if C_Timer and C_Timer.After then
+		C_Timer.After(TINT.TIME + 0.05, function()
+			local lit = TINT.button
+			if lit and GetTime() >= TINT.ends then
+				TINT.button = nil
+				ns.OwnRepaint(lit)
+			end
+		end)
+	end
+end
+
 -- A look row changed with the options window open, out of combat and out of test mode (which plays the sample itself): the sample plays once on the
--- first shown button of Flat UI's main bar, or the one that runs takes the new look.
+-- first sample button (ns.ButtonSamples: Flat UI's main bar first, then bars 2 to 8), or the one that runs takes the new look. A usability or
+-- range row that is on paints that button in its colour for TINT.TIME seconds instead (TintSample): Own usability colours and Not enough power
+-- colour in the power colour, Cannot use colour in its own, Tint icon when out of range and Out of range colour in the range colour.
 local function Preview(path)
 	local row = type(path) == "string" and path:match("^" .. KEY .. "%.(.+)$")
 	local mode = ns.TestMode
-	if not (row and LOOKS[row]) or InCombatLockdown() or (mode and mode.IsOn()) or type(ns.PanelShown) ~= "function" or not ns.PanelShown()
+	local tint = row and TINTS[row]
+	if tint and Opt(tint == "rangeColour" and "rangeTint" or "usableOwn") ~= true then
+		tint = nil
+	end
+	if not (row and (LOOKS[row] or tint)) or InCombatLockdown() or (mode and mode.IsOn()) or type(ns.PanelShown) ~= "function" or not ns.PanelShown()
 		or type(ns.ButtonSamples) ~= "function" then
 		return
 	end
 	local first = ns.ButtonSamples()[1]
-	if first then
+	if first and tint then
+		TintSample(first, tint)
+	elseif first then
 		ns.ButtonStatesSample(first)
 	end
 end
