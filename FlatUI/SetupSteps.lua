@@ -1694,6 +1694,7 @@ ns.SETUP_STEPS = {
 		{ "grouptools.show", "o", "behaviour", "Chooses whether the buttons show in a group, only while you are its leader or an assistant, or also when you are alone." },
 		{ "grouptools.marks", "o", "behaviour", "Shows the eight raid markers and a clear for your target, the marker your target wears lit in its colour." },
 		{ "grouptools.readyCheck", "o", "behaviour", "Shows the button that starts a ready check." },
+		{ "grouptools.readySound", "o", "behaviour", "Chooses the sound that plays once as the last member of a ready check answers ready." },
 		{ "grouptools.rolePoll", "o", "behaviour", "Shows the button that asks everyone to pick a role, whose tooltip lists who has which role." },
 		{ "grouptools.pull", "o", "behaviour", "Shows the button that starts and stops a pull countdown." },
 		{ "grouptools.pullTime", "o", "behaviour", "Sets how many seconds the pull countdown counts." },

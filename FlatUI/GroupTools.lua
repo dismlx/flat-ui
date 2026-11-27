@@ -5,7 +5,8 @@ local _, ns = ...
 -- colour each marker's border takes the colour the game's own menu gives it (UnitPopupSharedButtonMixins.lua:2653-2752, GetColor of
 -- RaidTarget1 to 8). A module of its own, on by default, whose page is in the Group group. The row shows in a group, or as Show says, and /flatui move places it (FlatUIGroupTools in
 -- Movers.lua: the top left corner of the row is the top left corner of the box). While test mode is on (TestMode.lua, out of combat only) Show
--- reads as Always, the tick shows a sample tally of 4/5 with a sample Eli not ready, the pull button counts down from Countdown length in
+-- reads as Always, the tick shows a sample tally of 4/5 with a sample Eli not ready for 6 seconds, then 5/5 in green for 4 with the flash and
+-- Sound when all are ready (once each time test mode comes on), again and again (G.SampleTick), the pull button counts down from Countdown length in
 -- the warm colour, again and again, with its red last seconds and its flash at each 0, the Skull is lit as your target's marker while the target
 -- wears none, and the role poll's tooltip lists a sample party's roles, names in their class colours, while its count reads 1 for the sample Kai
 -- (G.SampleOn); a real ready check, countdown, marker or roles take their place. No frame or setting of the game is changed.
@@ -30,13 +31,13 @@ local _, ns = ...
 -- icon can be greyed in a fight while its secure button is not touched. The secure buttons make the frame of the row protected, so the row and
 -- its buttons are made, placed, sized, shown, hidden and given attributes only out of combat: a change in a fight (a group joined, a row of the
 -- page changed, the row moved) waits for its end (ns.OutOfCombat), and in a fight nothing on them changes. Nothing of the module runs but on
--- its events, the mouse and, only while a countdown runs, a ticker of one second, and with Fade until you point at it a wait of a second
+-- its events, the mouse and, only while a countdown runs, a ticker of one second (and while test mode is on, its shared ticker), and with Fade until you point at it a wait of a second
 -- and a short ticker as the icons fade; no OnUpdate.
 -- The tally of a ready check: from READY_CHECK to READY_CHECK_FINISHED (and on each READY_CHECK_CONFIRM: PartyInfoDocumentation.lua:839-870)
 -- the tick's icon shows how many are ready of those asked, as 3/5, read with GetReadyCheckStatus for the player and party1 to party4, or raid1
 -- to the size of the raid (the call the game's own frames make, CompactUnitFrame.lua:1371; plain answers only): green when all are ready, in
 -- the warm colour once someone is not ready or, after the check, did not answer; the tick gives the white flash of cooldown icons (IconRow.lua)
--- the moment the last member answers ready. Its tooltip names who is not ready and who has not answered, by plain names only, each in his class
+-- the moment the last member answers ready, and Sound when all are ready (None by default) plays with it (G.AllReady). Its tooltip names who is not ready and who has not answered, by plain names only, each in his class
 -- colour (ns.ClassColourOf, plain answers only), and the result stays 8 seconds after the check ends. The pull countdown: from START_TIMER of the
 -- player countdown type (Enum.StartTimerType.PlayerCountdown, TimerConstantsDocumentation.lua:13-16; timeRemaining,
 -- WorldStateInfoDocumentation.lua:43-62) its number counts the seconds left in the warm colour, the last three in red, once a second
@@ -116,8 +117,12 @@ local COLOURS = {
 	{ 1, 0.92, 0 }, { 0.98, 0.57, 0 }, { 0.83, 0.22, 0.9 }, { 0.04, 0.95, 0 },
 	{ 0.7, 0.82, 0.875 }, { 0, 0.71, 1 }, { 1, 0.24, 0.168 }, { 0.98, 0.98, 0.98 },
 }
--- The sample ready check of test mode, its member not ready with his class (PartyCooldowns.lua's sample priest).
+-- The sample ready check of test mode, its member not ready with his class (PartyCooldowns.lua's sample priest), and its loop: SAMPLE_WAIT seconds
+-- at 4/5, then SAMPLE_ALL seconds at 5/5 (G.SampleTick).
 local SAMPLE_READY, SAMPLE_TOTAL, SAMPLE_NAME, SAMPLE_CLASS = 4, 5, "Eli", "PRIEST"
+local SAMPLE_WAIT, SAMPLE_ALL = 6, 4
+-- The places of the Sound when all are ready choices in ns.SOUNDS (IconRow.lua), as Enemy cooldowns has them.
+local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 -- The marker your target wears is lit: its colour behind it at this opacity, as the Ping bar lights a waiting ping (PingBar.lua ARMED_ALPHA). The
 -- sample of test mode is the Skull.
 local LIT_ALPHA, SAMPLE_MARK = 0.35, 8
@@ -1077,8 +1082,20 @@ function G.ShowTally()
 	end
 end
 
+-- The flash of the tick as the last member answers ready (IconRow.lua), and Sound when all are ready (None by default) with it, through
+-- ns.PlayKit, so at most once a second; for the sample of test mode the sound plays once each time test mode comes on (TM.Sound).
+function G.AllReady(entry, sample)
+	ns.IconFlash(entry)
+	local sound = ns.SOUNDS[KITS[Opt("readySound")] or 0]
+	local mode = ns.TestMode
+	if sound and (not sample or (mode ~= nil and mode.Sound("grouptools.ready"))) then
+		ns.PlayKit(sound[1], KEY)
+	end
+end
+
 -- READY_CHECK and READY_CHECK_CONFIRM: the answers so far. The tick flashes as cooldown icons do (IconRow.lua) the moment the last member answers
--- ready: all ready now, not so at the answer before in the same check (an ended check or the sample counts as not).
+-- ready, and Sound when all are ready plays (G.AllReady): all ready now, not so at the answer before in the same check (an ended check or the
+-- sample counts as not).
 function G.Checking()
 	local was = G.check
 	local check = G.Tally()
@@ -1088,7 +1105,7 @@ function G.Checking()
 	local before = was ~= nil and not was.over and not was.sample and was.total > 0 and was.ready == was.total
 	local entry = G.Entry("check")
 	if entry and check.total > 0 and check.ready == check.total and not before then
-		ns.IconFlash(entry)
+		G.AllReady(entry, false)
 	end
 end
 
@@ -1197,12 +1214,13 @@ function G.TimerStopped(kind)
 	end
 end
 
--- Test mode on: a sample tally on the tick (4/5, a sample member not ready, in the warm colour) and a sample countdown on the pull button,
--- shown only, no /countdown sent, from Countdown length again and again. A real ready check or countdown replaces them, as it sets G.check and
--- G.ends. Only FontStrings of the icons change.
+-- Test mode on: a sample tally on the tick (4/5, a sample member not ready, in the warm colour, then 5/5 in green with the flash, G.SampleTick)
+-- and a sample countdown on the pull button, shown only, no /countdown sent, from Countdown length again and again. A real ready check or
+-- countdown replaces them, as it sets G.check and G.ends. Only FontStrings of the icons change.
 function G.SampleOn()
 	if not G.check then
 		G.check = { ready = SAMPLE_READY, total = SAMPLE_TOTAL, notReady = { ClassName(SAMPLE_NAME, SAMPLE_CLASS) }, waiting = {}, over = false, sample = true }
+		G.sampleFrom = Ask(GetTime)
 	end
 	G.ShowTally()
 	local now = Ask(GetTime)
@@ -1215,6 +1233,26 @@ function G.SampleOn()
 		G.PullText(G.Entry("pull"))
 	end
 	G.Paint()
+end
+
+-- Test mode's ticker, each second while the sample tally shows: SAMPLE_WAIT seconds at 4/5 with the sample Eli not ready, then SAMPLE_ALL seconds
+-- at 5/5 in green, the tick flashing and Sound when all are ready playing as it turns (G.AllReady), and again. A real check (no sample) is left.
+function G.SampleTick()
+	local check, now = G.check, Ask(GetTime)
+	if not (check and check.sample) or not ns.Finite(now) or not ns.Finite(G.sampleFrom) or now < G.sampleFrom then
+		return
+	end
+	local all = math.floor(now - G.sampleFrom) % (SAMPLE_WAIT + SAMPLE_ALL) >= SAMPLE_WAIT
+	if all == (check.ready == check.total) then
+		return
+	end
+	check.ready = all and SAMPLE_TOTAL or SAMPLE_READY
+	check.notReady = all and {} or { ClassName(SAMPLE_NAME, SAMPLE_CLASS) }
+	G.ShowTally()
+	local entry = G.Entry("check")
+	if all and entry then
+		G.AllReady(entry, true)
+	end
 end
 
 -- Test mode off or paused: the samples go, a real check or countdown stays.
@@ -1336,7 +1374,9 @@ ns.Register(KEY, {
 })
 
 -- Test mode: On, Off and a pause refresh the page, which shows the row or puts it back to its own Show rule (G.Allowed), out of combat or once the
--- fight ends (G.Apply); On shows the sample tally and countdown (G.SampleOn), Off and a pause take them away.
+-- fight ends (G.Apply); On shows the sample tally and countdown (G.SampleOn), Off and a pause take them away. Its ticker of a second turns the
+-- sample tally to 5/5 and back (G.SampleTick).
 if ns.TestMode then
-	ns.TestMode.Register("grouptools", { module = KEY, label = "Group tools", refresh = true, Start = G.SampleOn, Stop = G.SampleOff })
+	ns.TestMode.Register("grouptools", { module = KEY, label = "Group tools", refresh = true, Start = G.SampleOn, Stop = G.SampleOff, every = 1,
+		Tick = G.SampleTick })
 end

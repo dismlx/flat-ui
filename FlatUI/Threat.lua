@@ -31,12 +31,13 @@ local _, ns = ...
 -- as on a boss, warns of nothing. Not for a tank: while ns.PlayerRole (Core.lua: the group role, else the stance, form or aura nameplate
 -- threat reads, else the talents) says tank, read at the start of each fight and at each refresh, his bar never pulses near aggro. A tank has
 -- Warn when you lose aggro instead: when an enemy he was tanking (isTanking, plain only, on that enemy's GUID) turns to someone else while it is
--- still the enemy of the list, his bar pulses red for 2 seconds and Warning sound plays once; a new enemy, a withheld share or the list hiding
--- forgets what he held. With Show who is near your aggro, while his role is a tank's, the bar of any other member or pet at Warn at or above who
+-- still the enemy of the list, his bar pulses red for 2 seconds and Warning sound plays once, and for those 2 seconds the bar of the member
+-- or pet now tanking it (isTanking true, plain only) pulses red with his (T.Took), so the one to taunt off is marked; a new enemy, a withheld
+-- share or the list hiding forgets what he held. With Show who is near your aggro, while his role is a tank's, the bar of any other member or pet at Warn at or above who
 -- is not tanking (plain share and isTanking only) wears a steady amber wash under its text, with no sound, so he sees who is about to pull and
 -- can taunt or slow down (T.Others). The samples preview all three: for a damage dealer or healer the player's sample bar passes 90% at some
 -- steps of test mode and every fifth step reaches 100% and holds aggro; while his role is a tank's his sample bar holds aggro at 100%, every
--- fifth step (10 seconds) a sample Mage takes it for one step, so his bar pulses as Warn when you lose aggro has it, and two steps after each of
+-- fifth step (10 seconds) a sample Mage takes it for one step, so his bar and the Mage's pulse as Warn when you lose aggro has it, and two steps after each of
 -- those the sample Rogue climbs to 94% and turns amber. Each sound plays once for each time test mode is turned on (TestMode.lua's gate,
 -- TM.Sound).
 -- A bar glides to each new share (Enum.StatusBarInterpolation.ExponentialEaseOut, as the pet target bar has it, UnitPetTarget.lua), a withheld one
@@ -54,7 +55,7 @@ local _, ns = ...
 -- Movers.lua: the window's top left corner is the top left corner of the box, or with Bars stack Up its bottom left corner the bottom left
 -- corner of the box, so a list above the action bars grows upward). /flatui threat shows sample bars for a few seconds, out of
 -- combat. While test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh and sorted again every 2 seconds as their shares
--- move. Nothing of the game is changed.
+-- move; the sample Wolf and Voidwalker show only with Pets on, as pets do in a real list. Nothing of the game is changed.
 -- Built on the threat meter of EnhanceQoL's damage meter by Philipp Barth (R41Z0R), adapted with his permission
 -- (EnhanceQoLDamageMeter/DamageMeter.lua:2841-2936, 7345-7368, 7450-7468): the enemy it reads, the units of the group with their pets, the
 -- events that draw it again and the wait that draws a burst once. Its meter windows, its focus and focus target, and its share of the tank's
@@ -282,8 +283,11 @@ local TURN = 5
 function T.Sample()
 	local entries, step = {}, T.step or 0
 	local turn = step > 0 and step % TURN == 0
+	-- The sample pets show only with Pets on, as the real list adds pets (T.Members); order stays the place in SAMPLE, for SHIFT and the sort.
+	local pets = Opt("pets") == true
 	for order, spec in ipairs(SAMPLE) do
 		local share, me, tanking = spec[3], spec[1] == false, order == 1
+		local skip = spec[4] == true and not pets
 		if step > 0 and order > 1 then
 			share = math.max(1, math.min(99, share + SHIFT[(order + step) % #SHIFT + 1]))
 		end
@@ -302,7 +306,9 @@ function T.Sample()
 		elseif turn and order == 1 then
 			share, tanking = 96, false
 		end
-		entries[order] = { sample = spec, order = order, scaled = share, me = me, tanking = tanking }
+		if not skip then
+			entries[#entries + 1] = { sample = spec, order = order, scaled = share, me = me, tanking = tanking }
+		end
 	end
 	if step > 0 or T.tank then
 		table.sort(entries, function(a, b)
@@ -624,6 +630,17 @@ function T.Losing(entry)
 	return ns.Finite(now) and now < T.lostUntil
 end
 
+-- True while the bar of whoever took the enemy from the player as a tank pulses with his (T.Lost): another member's or pet's entry, not withheld,
+-- whose plain isTanking is true (T.Scan keeps plain answers only), for the same LOST_TIME, so the one to taunt off is marked at a glance. T.Others
+-- skips a tanking entry, so its amber never meets this red on one bar.
+function T.Took(entry)
+	if not T.lostUntil or not entry or entry.me or entry.withheld or entry.tanking ~= true then
+		return false
+	end
+	local now = Ask(GetTime)
+	return ns.Finite(now) and now < T.lostUntil
+end
+
 -- Reads the player's role for the warnings: true while ns.PlayerRole says tank (Core.lua). Read at the start of a fight and at each refresh.
 function T.ReadRole()
 	local ok, role = pcall(ns.PlayerRole)
@@ -753,7 +770,7 @@ end
 function T.Fill(row, entry)
 	row.mine:SetShown(entry.me == true and Opt("mine") ~= false)
 	row.near:SetShown(T.Others(entry))
-	T.Pulse(row, T.Near(entry) or T.Losing(entry), T.Holding(entry))
+	T.Pulse(row, T.Near(entry) or T.Losing(entry) or T.Took(entry), T.Holding(entry))
 	local who = entry.sample or entry.member.unit
 	local jump = row.who ~= who or not T.frame:IsShown()
 	row.who = who
