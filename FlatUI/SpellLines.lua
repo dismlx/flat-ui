@@ -33,7 +33,9 @@ local _, ns = ...
 -- modified one going to HandleModifiedItemClick (SetItemRef, Blizzard_UIPanels_Game/Mainline/ItemRef.lua:17-26), and builds it again only when its
 -- data changes (its OnUpdate, :351-355), never as a key goes down, so lines that waited for a key would never come there. A bar button's tooltip is
 -- built again five times a second (GameTooltip.lua:451-463; Blizzard_ActionBar/Shared/ActionButton.lua:1125-1129), so there the lines come as the
--- key goes down, and elsewhere at the next build, as Show IDs works (ChatTips.lua:28-31). The spell: one of the data for the player's class, its pet
+-- key goes down, and elsewhere at the next build, as Show IDs works (ChatTips.lua:28-31). While the key is up, GameTooltip of a spell with an
+-- entry of the data ends with one dim line, "Shift: your numbers for this spell" with the key's word (Hint while the key is up, chat.spellHint,
+-- on; 0.5.41, Hint), which goes as the key goes down and the lines come. The spell: one of the data for the player's class, its pet
 -- or every class (M.Find), or, while Threat lines is on, any other spell, which may be the tooltip of a rule (M.RuleLines answers nothing for the
 -- rest).
 -- The spell ID (design 1.1). A spell's data has it in its id (Blizzard_SharedXMLGame/Tooltip/TooltipUtil.lua:25-32): the rank on the button, in
@@ -82,9 +84,14 @@ local SL = {
 	-- none of them yet.
 	PATH = { spellPower = "chat.spellPower", spellStats = "chat.spellStats", spellLowRank = "chat.spellLowRank", spellThreat = "chat.spellThreat",
 		spellWhen = "chat.spellWhen", spellTotal = "chat.spellTotal", spellRates = "chat.spellRates", tipDetail = "chat.tipDetail",
-		spellNextRank = "chat.spellNextRank" },
+		spellNextRank = "chat.spellNextRank", spellHint = "chat.spellHint" },
 	DEFAULT = { spellPower = true, spellStats = true, spellLowRank = true, spellThreat = "special", spellWhen = "always", spellTotal = true,
-		spellRates = true, tipDetail = "compact", spellNextRank = true },
+		spellRates = true, tipDetail = "compact", spellNextRank = true, spellHint = true },
+	-- Hint while the key is up (chat.spellHint, 0.5.41): the dim line that ends a spell's tooltip while its lines wait for the key of Show spell
+	-- lines, the key's word, and its colour (Chat.lua's CompareHint, HINT_COLOUR).
+	HINT = "%s: your numbers for this spell",
+	HINT_KEYS = { shift = "Shift", ctrl = "Ctrl", alt = "Alt" },
+	HINT_COLOUR = { 0.66, 0.68, 0.62 },
 	-- The kinds of tooltip data a spell line goes on, for a client whose Enum.TooltipDataType does not say (TooltipInfoSharedDocumentation.lua:97,
 	-- 107, 121).
 	TYPES = { Spell = 1, PetAction = 11, Macro = 25 },
@@ -139,8 +146,10 @@ local added = setmetatable({}, { __mode = "k" })
 local cache, order = {}, {}
 -- What the lines of the cache were made for (Fresh): SpellModel's version, whether the stats were old, the text check's answer, and the rows.
 local made = {}
--- What Find found, for Work: ns.EachPart gives back no answer of the function it runs.
+-- What Find found, for Work: ns.EachPart gives back no answer of the function it runs. pick.hint: the spell whose lines wait for the key, for Hint.
 local pick = {}
+-- Per tooltip: { data, lines } of the build that has the hint of Hint while the key is up (0.5.41), so a second post call of it adds none.
+local hinted = setmetatable({}, { __mode = "k" })
 -- wanting: what SpellModel was told last (M.Want); reported: the first error of the part went to the game's handler; syncs: the number of the
 -- last sync; kinds: the values of Enum.TooltipDataType, once.
 local run = { wanting = false, reported = false, syncs = 0 }
@@ -322,8 +331,10 @@ local function Find(data, tooltip)
 	if not (spell or macro or kind == kinds.PetAction) then
 		return
 	end
-	-- A clicked link's tooltip is never built with a key down (header): its lines show at every choice.
-	if not rawequal(tooltip, ItemRefTooltip) and not KeyHeld(Opt("spellWhen")) then
+	-- A clicked link's tooltip is never built with a key down (header): its lines show at every choice. On GameTooltip while the key is up, a
+	-- spell with an entry gets the hint instead, with Hint while the key is up (0.5.41).
+	local waiting = not rawequal(tooltip, ItemRefTooltip) and not KeyHeld(Opt("spellWhen"))
+	if waiting and Opt("spellHint") ~= true then
 		return
 	end
 	local id, rank, trait
@@ -340,6 +351,10 @@ local function Find(data, tooltip)
 		return
 	end
 	local entry, index = M.Find(id)
+	if waiting then
+		pick.hint = type(entry) == "table" and SL.HINT_KEYS[Opt("spellWhen")] and id or nil
+		return
+	end
 	if type(entry) ~= "table" then
 		entry, index = nil, nil
 		-- No entry: only the lines of a rule could show, and only with Threat lines on.
@@ -648,6 +663,25 @@ local function Work(id, tooltip, data, entry, index, rank, trait)
 	record.data, record.lines, record.trait, record.rank, record.notes = data, shown, trait, rank, notes
 end
 
+-- Hint while the key is up (0.5.41): one dim line naming the key of Show spell lines, once for each build, as Work keeps its lines (the same data
+-- with at least that line still there is the same build). A bar button builds its tooltip again five times a second, so there the hint goes and
+-- the lines come as the key goes down; elsewhere at the next build.
+local function Hint(_, tooltip, data)
+	local key = SL.HINT_KEYS[Opt("spellWhen")]
+	local ok, shown = pcall(tooltip.NumLines, tooltip)
+	if not key or not ok or not ns.Finite(shown) then
+		return
+	end
+	local record = hinted[tooltip]
+	if record and rawequal(record.data, data) and shown >= record.lines then
+		return
+	end
+	local colour = SL.HINT_COLOUR
+	if pcall(tooltip.AddLine, tooltip, SL.HINT:format(key), colour[1], colour[2], colour[3]) then
+		hinted[tooltip] = { data = data, lines = shown + 1 }
+	end
+end
+
 -- Sends the first error of this part once to the game's error handler, as Bags' parts send theirs (Bags.lua:360-367).
 local function Report(ok, err)
 	if ok or err == nil or run.reported then
@@ -701,12 +735,14 @@ function ns.SpellTipLines(tooltip, data)
 	if IsSecret(tooltip) or IsSecret(data) or type(data) ~= "table" then
 		return
 	end
-	pick.id, pick.entry, pick.index, pick.rank, pick.trait = nil, nil, nil, nil, nil
+	pick.id, pick.entry, pick.index, pick.rank, pick.trait, pick.hint = nil, nil, nil, nil, nil, nil
 	local ok, err = ns.EachPart(KEY, PART, Find, data, tooltip)
 	Report(ok, err)
-	local id, entry, index, rank, trait = pick.id, pick.entry, pick.index, pick.rank, pick.trait
-	pick.id, pick.entry, pick.index, pick.rank, pick.trait = nil, nil, nil, nil, nil
-	if ok and id then
+	local id, entry, index, rank, trait, hint = pick.id, pick.entry, pick.index, pick.rank, pick.trait, pick.hint
+	pick.id, pick.entry, pick.index, pick.rank, pick.trait, pick.hint = nil, nil, nil, nil, nil, nil
+	if ok and hint then
+		Report(ns.EachPart(KEY, PART, Hint, hint, tooltip, data))
+	elseif ok and id then
 		Report(ns.EachPart(KEY, PART, Work, id, tooltip, data, entry, index, rank, trait))
 	end
 end

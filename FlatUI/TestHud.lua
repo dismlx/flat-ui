@@ -101,8 +101,8 @@ local DEBUFFS = {
 local BUFFS = { { kind = nil, seconds = 25 }, { kind = nil, seconds = 290 }, { kind = nil, seconds = 1700 } }
 -- The game's colour of an aura's time (GameFontNormalSmall), which Duration colour White replaces.
 local AURA_GOLD = { 1, 0.82, 0 }
--- White, red near the end: the seconds under which a sample's time is red when Red under gives no plain number, and the red, as AuraTime.lua's WARN
--- and RED paint the real ones; and the seconds under which the game's own time is white (BUFF_DURATION_WARNING_TIME, AuraUtil.lua:2).
+-- White, red near the end: the seconds under which a sample's time is red when AuraTime.lua's ns.AuraWarnAt is not there, and the red, as
+-- AuraTime.lua's RED paints the real ones; and the seconds under which the game's own time is white (BUFF_DURATION_WARNING_TIME, AuraUtil.lua:2).
 local AURA_WARN, AURA_RED, AURA_GAME_WHITE = 10, { 1, 0.3, 0.3 }, 90
 -- The rolls: the box of /flatui move, the game's room for each roll (GroupLootFrame.lua:15, Hud.lua's ROLL.step), its width (GroupLootFrame.xml:292),
 -- the seconds its timer runs, and the items, those of mock-loot.
@@ -354,8 +354,8 @@ local function AuraStandIn(id, game, label, list, filter)
 			local colour = ns.Get("hud.durationColour")
 			local on = ns.Get("hud.enabled") == true
 			holder.mode = on and (colour == "warn" or colour == "white") and colour or "game"
-			local under = ns.Get("hud.durationWarn")
-			holder.under = ns.Finite(under) and under or AURA_WARN
+			-- Red under, by the rule that paints the real times (AuraTime.lua, ns.AuraWarnAt), else 10.
+			holder.under = type(ns.AuraWarnAt) == "function" and ns.AuraWarnAt() or AURA_WARN
 			for index, aura in ipairs(list) do
 				local cell = holder.cells[index]
 				ns.DrawHud.PaintAura(cell, aura.kind)
