@@ -8,6 +8,7 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 local RIM_PX, SOON, MOST_ASKS = 2, 0.1, 4
 local FADE_FOR, FADE_LOW, FADE_STEP = 3, 0.35, 0.1
 local LATE = 0.5
+local POP_FROM, POP_TIME, POP_LATER = 1.5, 0.15, 1
 local HOTS = {
 	PRIEST = { { id = 139, colour = { 0.3, 0.9, 0.35 }, word = "green" }, { id = 17, colour = { 1, 1, 1 }, word = "white" },
 		{ id = 401859, colour = { 1, 0.85, 0.2 }, word = "yellow" } },
@@ -224,7 +225,7 @@ local function Make(rec)
 		fill:SetPoint("TOPLEFT", back, "TOPLEFT", px, -px)
 		fill:SetPoint("BOTTOMRIGHT", back, "BOTTOMRIGHT", -px, px)
 		fill:Hide()
-		h.squares[index] = { back = back, fill = fill, alpha = 1 }
+		h.squares[index] = { back = back, fill = fill, alpha = 1, pop = X.pop(back, POP_FROM, POP_TIME), popFill = X.pop(fill, POP_FROM, POP_TIME) }
 	end
 	rec.hots = h
 	return h
@@ -364,8 +365,16 @@ end
 
 local function Draw(h, found, ends)
 	local lit = false
+	local was, pops = h.shownEnds, h.seen and not h.withheld
 	for index, square in ipairs(h.squares) do
 		local on = found[index] == true
+		if on and pops then
+			local old, new = was and was[index], ends and ends[index]
+			if not square.lit or (ns.Finite(old) and ns.Finite(new) and new > old + POP_LATER) then
+				X.popNow(square.pop)
+				X.popNow(square.popFill)
+			end
+		end
 		square.back:SetShown(on)
 		square.fill:SetShown(on)
 		square.lit = on
@@ -450,6 +459,7 @@ local function Read(rec)
 		end
 	end
 	Draw(h, found, times)
+	h.seen = true
 end
 
 local dirty, pending = setmetatable({}, { __mode = "k" }), false
@@ -491,7 +501,7 @@ function Hear(rec, h, unit)
 	end
 	pcall(ear.UnregisterAllEvents, ear)
 	if h.unit ~= unit then
-		h.kept, h.count, h.ends = nil, nil, nil
+		h.kept, h.count, h.ends, h.seen = nil, nil, nil, nil
 	end
 	h.unit, h.heard = unit, nil
 	if unit == nil then
@@ -507,19 +517,6 @@ function Hear(rec, h, unit)
 end
 
 local Squares
-
-local told = false
-
-local function Tell(line)
-	if told or type(ns.PanelShown) ~= "function" or ns.PanelShown() ~= true then
-		return
-	end
-	told = true
-	print(line)
-	ns.OutOfCombat(function()
-		told = false
-	end)
-end
 
 local function AfterFight(rec)
 	if rec.hotsQueued then
@@ -547,7 +544,7 @@ function Squares(rec, on)
 	end
 	if h == nil then
 		if InCombatLockdown() then
-			Tell(TELL_MAKE)
+			X.tell(TELL_MAKE)
 			AfterFight(rec)
 			return
 		end
@@ -559,7 +556,7 @@ function Squares(rec, on)
 	elseif not InCombatLockdown() then
 		Place(h)
 	elseif h.placed ~= Key(h) then
-		Tell(TELL_MOVE)
+		X.tell(TELL_MOVE)
 		AfterFight(rec)
 	end
 	Hear(rec, h, not Hidden(rec) and UnitOfFrame(rec) or nil)
@@ -569,6 +566,7 @@ end
 local function Reread()
 	for _, rec in pairs(X.records) do
 		if rec.hots and rec.hots.withheld then
+			rec.hots.seen = nil
 			Soon(rec)
 		end
 	end

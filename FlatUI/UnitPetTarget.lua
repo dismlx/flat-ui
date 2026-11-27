@@ -507,19 +507,6 @@ end
 
 local Off
 
-local told = false
-
-local function Tell()
-	if told or type(ns.PanelShown) ~= "function" or ns.PanelShown() ~= true then
-		return
-	end
-	told = true
-	print(TELL_WAITS)
-	ns.OutOfCombat(function()
-		told = false
-	end)
-end
-
 local function Later()
 	if P.later then
 		return
@@ -544,7 +531,7 @@ function Off()
 		return
 	end
 	if Fighting() then
-		Tell()
+		X.tell(TELL_WAITS)
 		Later()
 		return
 	end
@@ -562,7 +549,7 @@ function P.Update()
 	end
 	if Fighting() then
 		if not P.button or not P.watched or P.width ~= Width() then
-			Tell()
+			X.tell(TELL_WAITS)
 		end
 		Later()
 		return

@@ -1291,7 +1291,7 @@ function E.bars(o, g, L)
 		if mode == "game" and k.bare then
 			words = nil
 		end
-		if mode ~= "game" and g.ownTextWhen == "hover" then
+		if mode ~= "game" and (g.ownTextWhen == "hover" or (g.ownTextWhen == "notfull" and numbers.cur >= numbers.max)) then
 			words = nil
 		end
 		if s.dead or s.offline or (L.on and role == "power" and Get("lookNoPowerText") == true) or not (role == "health" or L.power) then
@@ -2162,6 +2162,9 @@ local function PaintCell(cell, s, width, height, g)
 	Round(cell.hOutline, on and g.radius or nil, t)
 	cell.inner = width - 2 * inset
 	local hp = s.health or (on and g.lowHealth and s.low) or FRACTION
+	if on and g.flat and g.healthByLeft and not dead and not s.offline then
+		r, gr, b = Left(hp)
+	end
 	Stretch(cell.hFill, cell.health, 0, cell.inner * ((dead or s.offline) and 1 or hp), healthHeight)
 	Fill(cell.hFill, file, r, gr, b, 1)
 	cell.g, cell.s, cell.on, cell.lowRadius = g, s, on, LowRadius(cell.hOutline, on and g.radius or nil)

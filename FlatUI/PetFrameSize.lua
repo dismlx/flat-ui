@@ -138,6 +138,10 @@ function Apply(fromGame)
 		return
 	end
 	if InCombatLockdown() and ns.MaybeProtected(frame) then
+		local extra = ns.UnitFrameExtra
+		if fromGame ~= true and extra ~= nil and type(extra.tell) == "function" then
+			extra.tell("Flat UI: the pet frame takes its new size when the fight ends.")
+		end
 		if not state.queued then
 			state.queued = true
 			ns.OutOfCombat(function()
