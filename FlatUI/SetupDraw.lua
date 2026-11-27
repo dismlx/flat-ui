@@ -400,7 +400,7 @@ function D.Card(parent, view)
 				local key = row.keys[slot]
 				key:SetPoint("TOPLEFT", row.frame, "TOPLEFT", (slot - 1) * 22 + 2, -2)
 				key:SetText(tostring(slot))
-				Shown(key, keys and not (empty and mode == "hidden"))
+				Shown(key, keys and not (empty and (mode == "hidden" or get("actionbars.hotkeyEmpty") ~= true)))
 				Sized(key, get("actionbars.hotkeySize"))
 			end
 			row.name:SetPoint("BOTTOMLEFT", row.frame, "BOTTOMLEFT", 1, 1)

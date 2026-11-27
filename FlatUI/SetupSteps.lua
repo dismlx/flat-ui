@@ -274,6 +274,7 @@ ns.SETUP_STEPS = {
 		{ "actionbars.border", "o", "mock-action-row" },
 		{ "actionbars.empty", "o", "mock-action-row" },
 		{ "actionbars.emptyAlpha", "r", "mock-action-row" },
+		{ "actionbars.emptyBars", "o", "behaviour", "Hides bars 2 to 8 of Flat UI's buttons while nothing is on them, and shows them again while a spell or item is on the cursor, in /flatui move and in Edit Mode." },
 		{ "actionbars.hoverColour", "r", "mock-action-row" },
 		{ "actionbars.pressedColour", "r", "mock-action-row" },
 		{ "actionbars.checkedColour", "r", "mock-action-row" },
@@ -293,6 +294,7 @@ ns.SETUP_STEPS = {
 	} },
 	{ id = "ab-text", area = "Action bars", title = "Button text", draw = "mock-action-row", built = true, rows = {
 		{ "actionbars.hotkeyShow", "o", "mock-action-row" },
+		{ "actionbars.hotkeyEmpty", "o", "behaviour", "Shows the key on buttons with nothing on them; off, their key shows only while a spell or item is on the cursor." },
 		{ "actionbars.hotkeyText", "o", "behaviour", "Chooses whether mouse button, mouse wheel, number pad, page, arrow and other long key names show short (M4, WU, N1, Sp) or as the game has them, on the action buttons and the cooldown icons." },
 		{ "actionbars.hotkeySize", "o", "mock-action-row" },
 		{ "actionbars.hotkeyOwn", "o", "mock-action-row" },
