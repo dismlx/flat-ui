@@ -1786,17 +1786,22 @@ end
 -- Text run as the slot would, without test mode's sample) reads dim with its idle words, as "Soul shards (only for a warlock)", and can still be
 -- picked. A pick that leaves the slot with no room (None, or such a stream) says so in chat with print, as the data panels have no chat switch:
 -- "Flat UI: Soul shards shows nothing for this character now (only for a warlock), so the third slot of the top panel takes no room.", and that
--- the panel hides when it has nothing left to show. While the panel has a slot set to None, "Add a slot after this one" (before, for a free slot
--- before it) opens a second menu at the same slot for the first such slot after it, else before it, titled "Top panel, new fifth slot", listing
--- every choice but None, whose pick sets that slot's row. Its last line opens the Data panels page of the options (ns.OpenPanelPage, Panel.lua;
--- in a fight the window says it opens after it). SLOT_MENU stands for a stream in P.OpenMenu, for the label of its part; menu.target is the
--- slot the second menu fills.
+-- the panel hides when it has nothing left to show. "Move left" and "Move right" swap the slot's row with that of its nearest neighbour that
+-- takes room now (a None slot, or one with nothing to show, is passed over; a line is left out at either end) and open the menu again on the
+-- slot that now holds the moved kind, so each press moves it on. While the panel has a slot set to None, "Add a slot after this one" (before,
+-- for a free slot before it) opens a second menu at the same slot for the first such slot after it, else the nearest before it, titled with the
+-- place the new slot lands ("Top panel, new third slot"), listing every choice but None. Its pick lands right beside the slot clicked: the rows
+-- between it and the free slot shift one place toward the free slot, and the pick is written next to the slot clicked. A move or an add is one
+-- batch in Recent changes (SetSlot), one line there and one Ctrl+Z. Its last line opens the Data panels page of the options (ns.OpenPanelPage,
+-- Panel.lua; in a fight the window says it opens after it). SLOT_MENU stands for a stream in P.OpenMenu, for the label of its part; menu.target
+-- is the free slot the second menu fills.
 P.SLOT_MENU = { label = "Slot menu" }
 local ORDINALS = { "first", "second", "third", "fourth", "fifth", "sixth" }
 local TICK = " |TInterface\\Buttons\\UI-CheckBox-Check:0|t"
 
--- Sets the row of a slot, and notes the change in Home's Recent changes with the row of Config.lua, as a change made on the page is noted.
-local function SetSlot(path, id)
+-- Sets the row of a slot, and notes the change in Home's Recent changes with the row of Config.lua, as a change made on the page is noted. With
+-- batch ({ label, what }), every change of one move or add goes back in one Undo or Ctrl+Z (Home.Noted and Home.UndoBatch, PanelHome.lua).
+local function SetSlot(path, id, batch)
 	local before = ns.Get(path)
 	ns.Set(path, id)
 	local home = ns.PanelHome
@@ -1806,7 +1811,7 @@ local function SetSlot(path, id)
 	for _, page in ipairs(ns.PAGES) do
 		for _, row in ipairs(page) do
 			if type(row) == "table" and row.path == path then
-				home.Noted(row, before, ns.Get(path))
+				home.Noted(row, before, ns.Get(path), batch)
 				return
 			end
 		end
@@ -1848,19 +1853,61 @@ local function SayEmpty(slot, label, why)
 	print(line)
 end
 
--- The slot "Add a slot" fills: the first of the panel set to None after this one, else the first before it, or nil; and whether it is after.
+-- The slot "Add a slot" fills: the first of the panel set to None after this one, else the nearest before it, or nil; and whether it is after.
 local function FreeSlot(slot)
-	local spec, first = slot.panel.spec, nil
+	local spec, nearest = slot.panel.spec, nil
 	for index = 1, SLOTS do
 		if index ~= slot.index and Opt(spec.id .. index) == "none" then
 			if index > slot.index then
 				return index, true
 			end
-			first = first or index
+			nearest = index
 		end
 	end
-	return first, false
+	return nearest, false
 end
+
+-- The nearest slot of the panel from index in the direction step (-1 left, 1 right) that takes room now, or nil.
+local function Neighbour(panel, index, step)
+	local at = index + step
+	while at >= 1 and at <= SLOTS do
+		local other = panel.slots[at]
+		if other and other.width then
+			return at
+		end
+		at = at + step
+	end
+	return nil
+end
+
+-- Fills the free slot free (set to None) with id so that it lands right beside slot index: the rows from the free slot back to the one beside
+-- index each take the row next to them toward index, then id is written beside index. One batch.
+local function AddBeside(spec, index, free, id)
+	local batch = { label = "Add a slot", what = "adding the slot" }
+	local step = free > index and 1 or -1
+	local landing = index + step
+	for at = free, landing + step, -step do
+		SetSlot(KEY .. "." .. spec.id .. at, Opt(spec.id .. (at - step)), batch)
+	end
+	SetSlot(KEY .. "." .. spec.id .. landing, id, batch)
+end
+
+-- Swaps the rows of slots index and other, and opens the menu again on other, which now holds the moved kind. One batch.
+local function Swap(panel, index, other)
+	local spec = panel.spec
+	local batch = { label = "Move a slot", what = "the move" }
+	local mine, theirs = Opt(spec.id .. index), Opt(spec.id .. other)
+	SetSlot(KEY .. "." .. spec.id .. other, mine, batch)
+	SetSlot(KEY .. "." .. spec.id .. index, theirs, batch)
+	local moved = panel.slots[other]
+	P.SlotMenu(moved)
+	-- The light marks the slot the menu is on now, as a refresh keeps it.
+	if moved.hover and P.MenuOpen(moved) then
+		moved.hover:Show()
+	end
+end
+
+local MOVES = { { -1, "Move left" }, { 1, "Move right" } }
 
 -- Opens the menu of a slot, or with target the second menu, which fills that slot of the panel while it is still set to None.
 function P.SlotMenu(slot, target)
@@ -1872,8 +1919,10 @@ function P.SlotMenu(slot, target)
 	if target and not (panel.slots[target] and Opt(spec.id .. target) == "none") then
 		target = nil
 	end
-	local filled = target and panel.slots[target] or slot
-	local path, now = KEY .. "." .. spec.id .. filled.index, target and "none" or (slot.id or "none")
+	-- The slot the pick lands in: beside the one clicked for the second menu.
+	local landing = target and (target > slot.index and slot.index + 1 or slot.index - 1) or slot.index
+	local filled = panel.slots[landing] or slot
+	local path, now = KEY .. "." .. spec.id .. slot.index, target and "none" or (slot.id or "none")
 	local items = {}
 	for _, choice in ipairs(ns.DataPanelChoices()) do
 		local id, label = choice[1], choice[2]
@@ -1891,7 +1940,11 @@ function P.SlotMenu(slot, target)
 				end
 			end
 			items[#items + 1] = { text = text, inert = shown, pick = function()
-				SetSlot(path, id)
+				if target then
+					AddBeside(spec, slot.index, target, id)
+				else
+					SetSlot(path, id)
+				end
 				SayEmpty(filled, id ~= "none" and label or nil, why)
 			end }
 		end
@@ -1899,6 +1952,16 @@ function P.SlotMenu(slot, target)
 	local free, after = nil, false
 	if not target then
 		free, after = FreeSlot(slot)
+		if slot.width then
+			for _, move in ipairs(MOVES) do
+				local other = Neighbour(panel, slot.index, move[1])
+				if other then
+					items[#items + 1] = { text = move[2], pick = function()
+						Swap(panel, slot.index, other)
+					end }
+				end
+			end
+		end
 	end
 	if free then
 		items[#items + 1] = { text = after and "Add a slot after this one" or "Add a slot before this one", pick = function()
@@ -1911,7 +1974,7 @@ function P.SlotMenu(slot, target)
 		end
 	end }
 	local name = spec.id == "top" and "Top" or "Bottom"
-	local title = target and ("%s panel, new %s slot"):format(name, ORDINALS[target] or tostring(target))
+	local title = target and ("%s panel, new %s slot"):format(name, ORDINALS[landing] or tostring(landing))
 		or ("%s panel, %s slot"):format(name, ORDINALS[slot.index] or tostring(slot.index))
 	if P.OpenMenu(slot, P.SLOT_MENU, title, items) and target then
 		P.menu.target = target

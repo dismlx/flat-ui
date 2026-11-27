@@ -2973,7 +2973,7 @@ ns.PAGES = {
 		{ key = "background", kind = "bool", default = true, label = "Background and border",
 			tip = "A flat background with a thin border and a line between two slots, in the colours of the Flat UI page." },
 		{ key = "tooltips", kind = "bool", default = true, label = "Tooltips",
-			tip = "Off: Gold, Hearthstone and Frame rate let clicks through; the slots a click does something on (Bag space, Equipment set, Time, Coordinates, Quest log, Experience, Reputation, Friends, Guild, Durability) and another addon's feed keep their own clicks. Right-click a slot to choose what it shows, from a menu under it whose last line opens this page; while the panel has a slot set to None, Add a slot fills it from there." },
+			tip = "Off: Gold, Hearthstone and Frame rate let clicks through; the slots a click does something on (Bag space, Equipment set, Time, Coordinates, Quest log, Experience, Reputation, Friends, Guild, Durability) and another addon's feed keep their own clicks. Right-click a slot to choose what it shows, from a menu under it whose last line opens this page; Move left and Move right there swap it with the next shown slot, and while the panel has a slot set to None, Add a slot puts a new one right beside it." },
 		{ key = "outline", kind = "choice", default = "none", label = "Text outline", tip = "An outline makes a slot a little wider.",
 			choices = { { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } } },
 		{ key = "shadow", kind = "bool", default = true, label = "Text shadow" },
