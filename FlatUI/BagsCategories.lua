@@ -84,7 +84,7 @@ local _, ns = ...
 -- no value or a quest item. Junk is tried right after New items, so a new junk item stays in New items with its coin until the bags close, and
 -- nothing Sell junk sells is filed anywhere else: Junk comes before a placement by hand too. An item placed by hand that is junk now (put on the
 -- sell list with /flatui sell, or grey, not on the keep list and in a bag Errands sells from) shows in Junk and is sold with Sell junk; its
--- placement is kept, not taken off, and shows again once it is off the sell list or on the keep list (/flatui keep, or a drop on any section).
+-- placement is kept, not taken off, and shows again once it is off the sell list or on the keep list (/flatui keep, or a drop on its section).
 --
 -- Placement by hand: an item dropped on the title of a section stays in that section, by item ID, for the whole account, in FlatUIDB.bags.placed
 -- (at most MOST_PLACED items): every stack of it, in the bag and bank windows and for every character, ahead of New items and the top shelf
@@ -99,9 +99,10 @@ local _, ns = ...
 -- item, the two lists (ns.ErrandsJunkRule), so a grey item placed from a bag left out of junk selling, which is not in Junk there, goes on the keep
 -- list too, and none of its stacks shows in Junk in another bag, the bank or another character's bags (DroppedJunk). An item the game gives no
 -- value, or no sell price (C_Item.GetItemInfo, ItemDocumentation.lua:626-657), and a quest item cannot go in Junk, since Errands never sells them.
--- Dropped on the section it reaches by itself, an item is placed there too, so a change of a group's row, a section deleted and brought back or a
--- rule of a new kind never moves it; dropped on the section its placement shows in now, nothing is written (Writes), so a placement in a kind of a
--- group the row does not show (Potions at One section) keeps its key. An item whose slot the game does not say is judged by its ID alone, with its
+-- Dropped on the section it reaches by itself, an item is placed there too, so a section deleted and brought back, a rule of a new kind, or a
+-- change of a group's row that still shows that section never moves it (one the row no longer shows sends it to the section of its kind, Fit);
+-- dropped on the section its placement shows in now, nothing is written (Writes), so a placement in a kind of a group the row does not show
+-- (Potions at One section) keeps its key. An item whose slot the game does not say is judged by its ID alone, with its
 -- quality from C_Item.GetItemQualityByID. New items and Free slots take no drop, and no drop is taken in a fight (InCombatLockdown and
 -- UnitAffectingCombat, through Errands.Fighting): the item only goes back. The lines said in chat name an item as Errands does, by
 -- C_Item.GetItemNameByID and its ID. The row Items placed by hand lists the placements and takes one off, or, from its first line while two or
@@ -116,12 +117,14 @@ local _, ns = ...
 -- title's menu, BagsOrder.lua), and Categories.PlacedKey gives the section an item is placed in, which its tooltip in Flat UI's windows names
 -- (BagsTooltip.lua) and the search's #placed finds (BagsSearch.lua). A put back asks nothing, so the placements the last one took away (PutBack, or
 -- the first line of the row while two or more are placed) are kept in this file (lastBack, never saved) until the next put back or a reload:
--- Categories.Unput brings each back in the section it was saved in, but not one placed elsewhere since and none past MOST_PLACED, from the line
--- of that section title's menu and the first line of the row; an item the row puts back on its own leaves that record. Categories.PlaceAll places
+-- Categories.Unput brings each back in the section it was saved in, but not one placed elsewhere since (one placed there again counts as back) and
+-- none past MOST_PLACED, from the line of that section title's menu and the first line of the row; an item the row puts back on its own leaves
+-- that record. Categories.PlaceAll places
 -- many items at once, as many drops on a title would, with no cursor: the line of a section title's menu that places there every item the search
--- finds, but none of Junk or Keep in place; it is refused in a fight, as a drop is, and stops at MOST_PLACED with one line. Nothing else writes a
--- placement or takes one away: not a change of the rows, a hidden section, a sort, the bank, another character's view or a reset of BagsData's
--- record, which keeps FlatUIDB.bags.placed (BagsData.lua).
+-- finds, but none of Junk or Keep in place; it is refused in a fight, as a drop is, and stops at MOST_PLACED with one line. Besides these, only
+-- BagsCustom.lua writes a placement or takes one away: deleting a section of the player's own takes its placements (Delete, and Sweep for a key
+-- its list has lost) and Restore brings them back. Nothing else does: not a change of the rows, a hidden section, a sort, the bank, another
+-- character's view or a reset of BagsData's record, which keeps FlatUIDB.bags.placed (BagsData.lua).
 --
 -- Inside a section, equipment sorts by the place of its slot in the Character window (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:779-873),
 -- then by item level (ns.Items.LevelOf, Items.lua:425-438), quality and name; everything else by class, subclass, quality, name and count. An item
@@ -957,8 +960,9 @@ function Categories.LastPutBack()
 end
 
 -- Brings back the placements the last put back took away, each in the section it was saved in, but not one placed elsewhere since (that keeps its
--- new place) and none past MOST_PLACED (Categories.Place). Asks for the layout once. Returns how many came back, how many were taken, and the
--- section key of the put back (nil for every section).
+-- new place) and none past MOST_PLACED (Categories.Place); one placed in that same section again since (a drop on the section it reaches by itself
+-- places it there too) counts as back. Asks for the layout once. Returns how many came back, how many were taken, and the section key of the put
+-- back (nil for every section).
 function Categories.Unput()
 	local last = lastBack
 	if not last then
@@ -968,7 +972,10 @@ function Categories.Unput()
 	local back = 0
 	for id, saved in pairs(last.placed) do
 		local placed = Store(false)
-		if not placed or placed[id] == nil then
+		local now = placed and placed[id] or nil
+		if now == saved then
+			back = back + 1
+		elseif now == nil then
 			local done, why = Categories.Place(id, saved)
 			if done then
 				back = back + 1
