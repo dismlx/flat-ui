@@ -558,6 +558,8 @@ ns.SETUP_STEPS = {
 		{ "castbars.stateBorder", "o", "mock-cast-bar" },
 		{ "castbars.latency", "c", "mock-cast-bar" },
 		{ "castbars.latencyColour", "r", "mock-cast-bar" },
+		{ "castbars.queue", "c", "mock-cast-bar" },
+		{ "castbars.queueColour", "r", "mock-cast-bar" },
 		{ "castbars.ticks", "c", "mock-cast-bar" },
 		{ "castbars.ticksColour", "r", "mock-cast-bar" },
 		{ "castbars.flat", "c", "mock-cast-bar" },
