@@ -227,10 +227,10 @@ What does not show, and why:
 
 ## Test
 
-`FlatUI_test.lua` runs the addon in a simulated client. It needs Lua 5.4.
+`tools/test/FlatUI_test.lua` runs the addon in a simulated client, from the top folder of the repository. It needs Lua 5.4.
 
 ```
-lua5.4 FlatUI_test.lua FlatUI
+lua5.4 tools/test/FlatUI_test.lua FlatUI
 ```
 
 The last line must say `N passed, 0 failed`.

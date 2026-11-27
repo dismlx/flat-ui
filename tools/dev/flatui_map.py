@@ -1480,7 +1480,7 @@ def build(args):
         links.append(link)
     links.sort(key=lambda l: (-l["count"], l["from"], l["to"]))
 
-    test_path = os.path.join(repo, "FlatUI_test.lua")
+    test_path = os.path.join(repo, "tools", "test", "FlatUI_test.lua")
     labels = read_tests(test_path) if os.path.exists(test_path) else []
 
     page_by_key = {p["key"]: p["label"] for p in page_list}
@@ -1607,7 +1607,7 @@ def build(args):
     data = collections.OrderedDict()
     data["meta"] = collections.OrderedDict([
         ("title", "Flat UI map"), ("version", version), ("generated_by", VERSION_LABEL),
-        ("source", "FlatUI/*.lua in TOC order, FlatUI/Config.lua (ns.PAGES, run by lua5.4), FlatUI_test.lua; game names "
+        ("source", "FlatUI/*.lua in TOC order, FlatUI/Config.lua (ns.PAGES, run by lua5.4), tools/test/FlatUI_test.lua; game names "
                    "from Forever's interface source (Interface/AddOns, Blizzard_APIDocumentationGenerated) and the "
                    "client lists of wowless (apis.yaml, events.yaml, cvars.yaml)")])
     data["summary"] = summary

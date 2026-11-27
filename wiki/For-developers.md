@@ -2,10 +2,10 @@ Flat UI is plain Lua 5.1 for the WoW: Forever client 1.60.1 (interface 16001), w
 
 ## Running the addon outside the game
 
-`FlatUI_test.lua` runs the addon in a simulated client. It needs Lua 5.4.
+`tools/test/FlatUI_test.lua` runs the addon in a simulated client, from the top folder of the repository. It needs Lua 5.4.
 
 ```
-lua5.4 FlatUI_test.lua FlatUI
+lua5.4 tools/test/FlatUI_test.lua FlatUI
 ```
 
 The last line must say `N passed, 0 failed`.
