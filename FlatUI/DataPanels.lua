@@ -874,9 +874,11 @@ function P.Fill(panel, wanted)
 		end
 		P.Style(slot)
 		P.Draw(slot, texts[index])
-		-- A feed and a stream with a click of its own (Equipment set, Bag space, Time and the others) keep their clicks while the tooltips are off.
+		-- A feed and a stream with a click of its own (Equipment set, Bag space, Time and the others) keep their clicks while the tooltips are off;
+		-- one marked through (Gold, whose Ctrl-click goes with its tooltip) lets clicks through then.
 		local stream = P.StreamOf(slot.id)
-		slot.frame:EnableMouse(slot.id ~= nil and (tips or slot.feed ~= nil or (stream ~= nil and type(stream.Click) == "function")))
+		local clicks = stream ~= nil and type(stream.Click) == "function" and not stream.through
+		slot.frame:EnableMouse(slot.id ~= nil and (tips or slot.feed ~= nil or clicks))
 	end
 	ns.SetOutline(panel.outline, Opt("background") == true, Opt("background") == true)
 	-- The layer of the panel's own frame; its slots follow it.
