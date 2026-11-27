@@ -25,7 +25,7 @@ local ADDON_NAME, ns = ...
 -- leader and assistant icons, heal over time squares, the game's aura icons on a cell), which only its frames are made with, but for the dispel border,
 -- its type icon and the heal over time squares of a party frame, which the setup's party frames draw too (Mara's Magic debuff, Bex's squares in the
 -- colours and places of your class's heals over time, or two sample squares for a class with none, left of the type icon's spot on a right-hand
--- corner while Debuff type icon on party frames is on). With Blink as one lands the border and type icon blink three times as the marks are first
+-- corner while Debuff type icon on party frames is on, the last at half opacity with Fade as one runs out, as one in its last seconds). With Blink as one lands the border and type icon blink three times as the marks are first
 -- drawn, as they come into view and each time the row is turned on, in the live blink's steps (UnitGroupMarks.lua Blink). The setup's party frames show Mara's Star with
 -- Raid marker on party frames, and Fay dead while someone resurrects her, with the game's resurrection icon centred on her picture, or at the left end
 -- of her health bar with Picture None, with Resurrection icon on party frames (UnitGroupMarks.lua PlaceRez). Role icons for leaves out the icons of the
@@ -653,10 +653,12 @@ end
 -- Marks of party and raid frames ---------------------------------------------------------------------------------------------------------
 
 -- The thickness of the dispel border in screen pixels, the size of its type icon and the atlas of the type icons (UnitGroupMarks.lua RIM_PX, ICON,
--- ATLAS), the word of each type in the atlas, and the point and the signs of the offsets of each Square corner (UnitHots.lua CORNERS).
+-- ATLAS), the word of each type in the atlas, the point and the signs of the offsets of each Square corner (UnitHots.lua CORNERS), and the opacity
+-- of the last square with Fade as one runs out, halfway through the live fade from 1 to 0.35 (UnitHots.lua FADE_LOW).
 local DISPEL = { px = 2, icon = 12, atlas = "RaidFrame-Icon-Debuff" }
 local TYPE_WORD = { magic = "Magic", curse = "Curse", disease = "Disease", poison = "Poison" }
 local HOT_CORNERS = { tl = { "TOPLEFT", 1, -1 }, tr = { "TOPRIGHT", -1, -1 }, bl = { "BOTTOMLEFT", 1, 1 }, br = { "BOTTOMRIGHT", -1, 1 } }
+local HOT_FADED = 0.5
 
 -- The marks of a party frame, of the setup or of test mode, or of a raid cell of test mode, on frames above its parts: the four edges of the dispel
 -- border and its type icon on a frame of their own (rim), and over it four heal over time squares (frame), as the live squares lie over the live
@@ -692,7 +694,8 @@ end
 -- time, a square each in a row from Square corner, Square size on a side with a dark rim of one screen pixel, just inside the dispel border, with
 -- Squares for your heals over time (UnitHots.lua Make and Place); with typeIcon and Top right or Bottom right the row starts just left of the icon's
 -- spot, so the two show side by side as on the live party frames; on a party frame (party) the side is at most the bar's height less the row's inset
--- and the dispel border on the far side (UnitHots.lua Side). on: the frame's switch.
+-- and one screen pixel (UnitHots.lua Side). With Fade as one runs out the last square is at HOT_FADED, as one in its last seconds. on: the frame's
+-- switch.
 local function PaintMarks(m, bar, root, on, dispel, typeIcon, hots, party)
 	m.frame:SetAllPoints(root)
 	m.rim:SetAllPoints(root)
@@ -750,16 +753,21 @@ local function PaintMarks(m, bar, root, on, dispel, typeIcon, hots, party)
 	if party then
 		local ok, tall = pcall(bar.GetHeight, bar)
 		if ok and ns.Finite(tall) and tall > 0 then
-			size = math.max(2, math.min(size, tall - inset - px * DISPEL.px))
+			size = math.max(2, math.min(size, tall - inset - px))
 		end
 	end
 	-- With the type icon row on a party frame and a right-hand corner the row starts one screen pixel left of the icon's spot, whether a debuff is
 	-- there or not (UnitHots.lua Across).
 	local from = (typeIcon and corner[2] < 0) and (1 + t + DISPEL.icon + px) or inset
+	-- With Fade as one runs out the last square is drawn halfway through its fade (UnitHots.lua Fade), so the row shows what it does.
+	local last = lit and Get("hotFade") == true and #hots or nil
 	for index, square in ipairs(m.squares) do
 		local c = lit and hots[index] or nil
 		square.back:SetShown(c ~= nil)
 		square.fill:SetShown(c ~= nil)
+		local alpha = index == last and HOT_FADED or 1
+		square.back:SetAlpha(alpha)
+		square.fill:SetAlpha(alpha)
 		if c then
 			square.back:ClearAllPoints()
 			square.back:SetPoint(corner[1], bar, corner[1], corner[2] * (from + (index - 1) * (size + px)), corner[3] * inset)
@@ -2538,7 +2546,7 @@ local MARK = {
 	petTarget = { "pet", "petTarget" }, petTargetWidth = { "pet", "petTarget" }, petTargetWarn = { "pet", "petTarget" }, petTargetWarnColour = { "pet", "petTarget" },
 	lowHealthTarget = { "target", "health" }, lowHealthTargetAt = { "target", "health" }, lowHealthPulse = { "party1", "health" }, dispelBorder = { "party1", "health" }, dispelIcon = { "party1", "health" },
 	dispelFlash = { "party1", "health" },
-	hotSquares = { "party2", "health" }, hotCorner = { "party2", "health" }, hotSize = { "party2", "health" },
+	hotSquares = { "party2", "health" }, hotCorner = { "party2", "health" }, hotSize = { "party2", "health" }, hotFade = { "party2", "health" },
 	healPrediction = { "player", "pred" }, absorbShield = { "player", "shield" }, healAbsorb = { "player", "absorb" }, lookOwn = { "player", "health" },
 	lookBorder = { "player", "health" }, lookBack = { "player", "health" }, lookBackAlpha = { "player", "health" },
 	smallRow = { "pet", "row" }, levelPosition = { "target", "level" }, levelColour = { "player", "level" }, pvpWordColour = { "player", "level" }, levelSize = { "player", "level" },

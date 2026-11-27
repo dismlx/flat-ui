@@ -524,6 +524,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.hotSquares", "o", "mock-party-frames" },
 		{ "unitframes.hotCorner", "r", "mock-party-frames" },
 		{ "unitframes.hotSize", "r", "mock-party-frames" },
+		{ "unitframes.hotFade", "o", "mock-party-frames" },
 	} },
 	{ id = "uf-group", area = "Unit frames", title = "Boss and raid frames", draw = "mock-raid-cells", built = true, rows = {
 		{ "unitframes.bossName", "o", "mock-unit-frame" },

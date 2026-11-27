@@ -2243,7 +2243,9 @@ ns.PAGES = {
 		{ key = "hotCorner", kind = "choice", default = "tr", label = "Square corner", needs = "hotSquares",
 			tip = "The corner of the health bar the squares sit in. On party frames a right-hand corner starts them just left of the debuff type icon.",
 			choices = { { "tl", "Top left" }, { "tr", "Top right" }, { "bl", "Bottom left" }, { "br", "Bottom right" } } },
-		{ key = "hotSize", kind = "number", default = 6, min = 4, max = 14, step = 1, label = "Square size", needs = "hotSquares", tip = "The side of each square. On party frames at most as tall as the health bar inside its border." },
+		{ key = "hotSize", kind = "number", default = 6, min = 4, max = 14, step = 1, label = "Square size", needs = "hotSquares", tip = "The side of each square. On party frames at most what fits inside the health bar, so 6 stays 6 there." },
+		{ key = "hotFade", kind = "bool", default = true, label = "Fade as one runs out", needs = "hotSquares",
+			tip = "A square fades over the last 3 seconds of its heal over time, so you see which to cast again. In a fight it fades by the end read before the pull." },
 	},
 	{
 		key = "hud", label = "Minimap", moduleLabel = "Minimap and HUD",
