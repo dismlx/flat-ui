@@ -1478,6 +1478,8 @@ ns.PAGES = {
 		{ key = "tooltips", kind = "choice", default = "on", label = "Icon tooltips",
 			tip = "Pointing at an icon names the ability and the member and says Ready or the time left. Clicks still go through to the party frame.",
 			choices = { { "on", "On" }, { "out", "Out of combat only" }, { "off", "Off" } } },
+		{ key = "range", kind = "bool", default = true, label = "Dim members out of range",
+			tip = "The row of a member too far from you for the game's range check shows faded, also in a fight. A dead or offline member's row fades further." },
 		{ section = "Ready again" },
 		{ key = "flash", kind = "bool", default = false, label = "Flash when ready", tip = "A white flash on the icon as its cooldown ends." },
 		{ key = "sound", kind = "choice", default = "none", label = "Sound",
@@ -1537,6 +1539,8 @@ ns.PAGES = {
 			tip = "The sound plays for your target and focus only. Picking one plays it.",
 			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
+		{ key = "soundMinimum", kind = "number", default = 0, min = 0, max = 300, step = 10, unit = " s", label = "Shortest cooldown that sounds",
+			tip = "A cooldown shorter than this ends without the sound, so a Kick or a Pummel on your target stays quiet; the flash still shows. 0 sounds for every cooldown." },
 	},
 	-- Threat.lua: a window of Flat UI's own with the group by threat on the enemy you fight. On by default; it shows in a group, pets with it.
 	{
@@ -1614,7 +1618,7 @@ ns.PAGES = {
 		{ key = "readyCheck", kind = "bool", default = true, label = "Ready check",
 			tip = "Only the leader or an assistant can start one. During a check it shows how many are ready, and flashes as the last one answers ready; its tooltip names who is not, in class colours. The result stays 8 seconds." },
 		{ key = "rolePoll", kind = "bool", default = true, label = "Role poll",
-			tip = "Asks everyone to pick a role. Only the leader or an assistant can start one. An amber number in its corner counts the members with no role. Its tooltip lists who has which role in class colours, who has none, and in a party a missing tank or healer." },
+			tip = "Asks everyone to pick a role. Only the leader or an assistant can start one. Once anyone in the group has picked a role, an amber number in its corner counts the members with no role, grey while you cannot start a poll. Its tooltip lists who has which role in class colours, who has none, and in a party a missing tank or healer." },
 		{ key = "pull", kind = "bool", default = true, label = "Pull countdown",
 			tip = "Left-click counts down for the group, right-click stops it. Only the leader or an assistant can start one. While a countdown runs, it counts the seconds left, the last three in red, and flashes at 0." },
 		{ key = "pullTime", kind = "number", default = 10, min = 3, max = 60, step = 1, unit = " s", label = "Countdown length", needs = "pull",

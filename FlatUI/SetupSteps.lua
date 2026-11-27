@@ -1274,6 +1274,7 @@ ns.SETUP_STEPS = {
 		{ "partycd.seconds", "o", "mock-party-cooldowns" },
 		{ "partycd.numbersFont", "o", "mock-party-cooldowns" },
 		{ "partycd.tooltips", "o", "behaviour", "Names the ability, the member and the time left when you point at a party icon, always, out of combat only or never." },
+		{ "partycd.range", "o", "behaviour", "Fades the row of a party member who is out of range." },
 		{ "partycd.interrupts", "c", "mock-party-cooldowns" },
 		{ "partycd.defensives", "c", "mock-party-cooldowns" },
 		{ "partycd.externals", "o", "mock-party-cooldowns" },
@@ -1305,6 +1306,7 @@ ns.SETUP_STEPS = {
 		{ "enemycd.tooltips", "o", "behaviour", "Names the ability, the enemy and the time left when you point at an icon of the target and focus bars, always, out of combat only or never." },
 		{ "enemycd.flash", "c", "mock-enemy-cooldowns" },
 		{ "enemycd.sound", "r", "behaviour", "Chooses the sound that plays when an enemy ability is ready again." },
+		{ "enemycd.soundMinimum", "o", "behaviour", "Sets the shortest enemy cooldown whose end plays the sound." },
 	} },
 	{ id = "ct", area = "Combat text", title = "Combat text", draw = "mock-combat-text", built = true, rows = {
 		{ "combattext.enabled", "c", "behaviour", "Moves the game's combat numbers to the places set on this page." },

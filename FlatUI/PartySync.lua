@@ -4,7 +4,9 @@ local _, ns = ...
 -- starts the timers of the members it hears from. The messages, all with the prefix "FlatUI" and the version 1 first:
 --   1 H <GUID or -> <spell ID> ...   the abilities the sender has, sent on joining, on a roster change and when his spells change
 --   1 C <spell ID> [seconds]         his own use of an ability of the list, with the length of its cooldown when the game gives it plain
---   1 S <spell ID>:<seconds left> ...  his running timers, sent only as the answer to an H
+--   1 S <spell ID>:<seconds left> ...  his running timers, sent only as the answer to an H; each is started on the receiving side as long
+--                                    ago as it has run (its full length the cooldown typed for it, else the list's), so the sweep starts as
+--                                    far along as on the sender's screen and a long cooldown counts as long for Shortest cooldown that sounds
 -- Only plain values of the player's own are put in a message (SendAddonMessage takes no secret argument). The channel is chosen as
 -- Blizzard's cooldown broadcaster chooses it (Blizzard_CooldownBroadcaster.lua:146-152), at most 250 characters to a message and a bucket
 -- of 10 sends refilled 1 a second (the same file, line 8, and MessageQueue.lua:3-4; the limits of the call itself are not seen). The
@@ -486,11 +488,20 @@ function S.Receive(prefix, text, _, sender)
 			end
 		end
 	else
+		local typed = P.Lists().seconds
 		for position, id in ipairs(got.ids) do
 			local a = S.Ability(class, id)
 			if a then
 				book.seen[a.key] = true
-				book.timers[a.key] = { start = now, seconds = got.left[position] }
+				-- The timer keeps its full length (the cooldown typed for it, else the list's), started as long ago as it has run, so the
+				-- sweep is as far along as on the sender's screen and Shortest cooldown that sounds weighs the real cooldown; the end,
+				-- start + seconds, stays now + left. A length shorter than the time left keeps the time left as the length.
+				local left, full = got.left[position], typed[a.key] or a.cd
+				if ns.Finite(full) and full >= left then
+					book.timers[a.key] = { start = now - (full - left), seconds = full }
+				else
+					book.timers[a.key] = { start = now, seconds = left }
+				end
 			end
 		end
 	end

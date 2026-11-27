@@ -21,8 +21,10 @@ local _, ns = ...
 -- its class, in its kind's colour, the enemy's name and Ready, the time left or that its use is not known, in GameTooltip (Icon tooltips: On,
 -- Out of combat only or Off), written again each second while the mouse stays, so the time counts down and turns to Ready (E.TipTick); those
 -- icons take the mouse's motion only, never a click. Icons on nameplates take no mouse, so plates are
--- clicked as ever. Flash when ready flashes the icon at the end of a timer and, for the target and focus, Sound plays; /flatui test icons and
--- the samples of test mode follow both rows. The Add and Hide
+-- clicked as ever. Flash when ready flashes the icon at the end of a timer and, for the target and focus, Sound plays, but only for a cooldown
+-- at least Shortest cooldown that sounds long (0 by default, every one; E.Loud), so a Kick or a Pummel can end quiet while a Divine Shield
+-- rings; the flash is for every one. /flatui test icons and the samples of test mode follow both rows (the samples have no length and
+-- always sound). The Add and Hide
 -- lists and /flatui enemy are kept for the account. The helpers are in one table, E.
 
 local KEY = "enemycd"
@@ -577,8 +579,12 @@ function E.Hears(rec)
 end
 
 -- The timer of ability `key` has ended, a moment ago: with a flash or a sound chosen, its icon stays a moment, ready, so that it can flash.
+-- The sound holds it only for a cooldown that reaches Shortest cooldown that sounds (E.Loud).
 function E.Ended(rec, key, last)
-	if not (Opt("flash") == true or (KITS[Opt("sound")] ~= nil and E.Hears(rec))) or rec.owner == nil or type(last) ~= "table" or T.Now() - (last.start + last.seconds) > JUST then
+	if rec.owner == nil or type(last) ~= "table" or T.Now() - (last.start + last.seconds) > JUST then
+		return
+	end
+	if not (Opt("flash") == true or (KITS[Opt("sound")] ~= nil and E.Hears(rec) and E.Loud(last.seconds))) then
 		return
 	end
 	local held = E.holds[rec.owner] or {}
@@ -599,13 +605,21 @@ function E.Kit()
 	return sound and sound[1] or nil
 end
 
--- The icon of an ability that was used is now ready: it flashes, and for the target and the focus the sound plays.
-function E.Flash(row, icon)
+-- False for a cooldown shorter than Shortest cooldown that sounds, whose end stays quiet; a length that is not known (the samples) sounds,
+-- as Party cooldowns' P.Kit has it.
+function E.Loud(seconds)
+	local least = Opt("soundMinimum")
+	return not (ns.Finite(seconds) and ns.Finite(least) and seconds < least)
+end
+
+-- The icon of an ability that was used is now ready: it flashes, and for the target and the focus the sound plays, for a cooldown of
+-- `seconds` that reaches Shortest cooldown that sounds.
+function E.Flash(row, icon, seconds)
 	local sound = ns.SOUNDS[KITS[Opt("sound")] or 0]
 	if Opt("flash") then
 		ns.IconFlash(icon)
 	end
-	if sound and row.rec and E.Hears(row.rec) then
+	if sound and row.rec and E.Hears(row.rec) and E.Loud(seconds) then
 		ns.PlayKit(sound[1], KEY)
 	end
 end
@@ -785,14 +799,14 @@ function E.Draw(row, slot, item)
 	if item then
 		local state = item.unknown and "unknown" or item.ready and "ready" or "used"
 		key = ("%s:%s:%s:%s:%s:%s:%s:%s:%s:%s"):format(item.a.key, tostring(item.start), tostring(Opt("seconds")), tostring(Opt("kindBorder")), state,
-			tostring(Opt("show")), tostring(Opt("flash")), tostring(Opt("sound")), Opt("numbersFont"), tostring(Opt("iconBorder")))
+			tostring(Opt("show")), tostring(Opt("flash")), tostring(Opt("sound")), Opt("numbersFont"), tostring(Opt("iconBorder"))) .. ":" .. tostring(Opt("soundMinimum"))
 	end
 	if row.drawn[slot] == key then
 		return
 	end
 	row.drawn[slot] = key
 	local was = icon.was
-	icon.was = item and { key = item.a.key, ready = item.ready == true } or nil
+	icon.was = item and { key = item.a.key, ready = item.ready == true, seconds = item.seconds } or nil
 	if not item then
 		icon.key, icon.net = nil, nil
 		E.Mark(icon, false)
@@ -809,7 +823,7 @@ function E.Draw(row, slot, item)
 	if not item.ready then
 		E.Net(row, icon, item)
 	elseif was and was.key == item.a.key and not was.ready and not item.unknown then
-		E.Flash(row, icon)
+		E.Flash(row, icon, was.seconds)
 	end
 	local level = item.unknown and UNKNOWN or ((not item.ready and Opt("show") == "always") and DARK or 1)
 	icon.texture:SetDesaturated(level < 1)

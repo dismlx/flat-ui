@@ -11,7 +11,9 @@ local _, ns = ...
 -- /flatui move, each row labelled with the member's name in his class colour (RAID_CLASS_COLORS, plain answers only, else white), right-aligned
 -- on one line and cut at the room of the label. The row of a member who is dead, a ghost or offline (UnitIsDeadOrGhost, UnitIsConnected, plain
 -- answers only: a withheld one changes nothing) fades to 35% with its label, also in a fight, as both are frames of the addon's own, and comes
--- back as he is up again; its tooltips say Dead or Offline. The abilities an account adds or hides, by name or spell ID, are kept in
+-- back as he is up again; its tooltips say Dead or Offline. With Dim members out of range (on by default) the row of a member the game says is
+-- out of range fades to 45% with its label, also in a fight, as Healer mana's bars do (P.Range: UnitInRange's answer goes unread to
+-- SetAlphaFromBoolean); dead or offline wins, and test mode shows it on the sample Fay. The abilities an account adds or hides, by name or spell ID, are kept in
 -- the account (/flatui party). A member who also runs Flat UI sends his cooldowns as addon messages (PartySync.lua), which start his
 -- timers here and show his ready icons. Pointing at an icon writes the ability with its class, in its kind's colour, the member's name, Ready or
 -- the time left, and whether he shares by Flat UI, in GameTooltip (Icon tooltips: On, Out of combat only or Off), written again each second
@@ -35,8 +37,9 @@ local UNKNOWN_ICON = 134400
 -- The colours of a tooltip's lines: Ready, and the text-dim of the windows (PanelLook.lua).
 local READY = { 0.4, 0.9, 0.4 }
 local DIM = { 0.66, 0.68, 0.62 }
--- The opacity of the row of a member who is dead or offline.
+-- The opacity of the row of a member who is dead or offline, and of one out of range (Dim members out of range), as Healer mana's FAR.
 local GONE = 0.35
+local FAR = 0.45
 -- The places of the Sound choices in ns.SOUNDS (IconRow.lua), as Enemy cooldowns has them.
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 -- How long the flash of Flash when ready plays (IconRow.lua: FLASH), which a row waits before a ready icon leaves it.
@@ -45,6 +48,7 @@ local FLASH = 0.5
 local SWITCHES = { { "interrupts", { 1 } }, { "defensives", { 2, 6 } }, { "externals", { 3 } }, { "breaks", { 5 } }, { "group", { 9 } } }
 local LINE_ROSTER = "Party cooldowns: your subgroup is read from the raid roster here."
 local LINE_CASTS = "Party cooldowns: the game hides party members' casts here."
+local LINE_RANGE = "Party cooldowns: the game refused to fade a row by its answer about range, so members out of range stay bright."
 -- The handle of the raid group stack (Movers.lua), the room its labels take, its box, and the rows it holds at most.
 local MOVER = "FlatUIPartyRaid"
 local LABEL_W, MOST_ROWS, STACK_X, STACK_Y = 70, 5, -420, 0
@@ -62,8 +66,8 @@ local IsSecret = ns.IsSecret
 local T = ns.Tracking
 local TM = ns.TestMode
 -- The sample party of test mode (TestMode.lua) for a player in no group, by name and class: a paladin, a priest, a warlock and a rogue. The
--- warlock is shown dead, so the fade of a dead member's row can be seen.
-local SAMPLE_PARTY = { { "Mara", "PALADIN" }, { "Eli", "PRIEST" }, { "Ivo", "WARLOCK", "Dead" }, { "Fay", "ROGUE" } }
+-- warlock is shown dead, so the fade of a dead member's row can be seen, and the rogue out of range (far), for Dim members out of range.
+local SAMPLE_PARTY = { { "Mara", "PALADIN" }, { "Eli", "PRIEST" }, { "Ivo", "WARLOCK", "Dead" }, { "Fay", "ROGUE", far = true } }
 local P = { assigned = {}, pool = {}, known = {}, level = {}, never = {}, tex = {}, last = {}, frames = {}, raidUnits = {} }
 
 local function Own(object)
@@ -558,11 +562,72 @@ function P.Gone(row)
 	return false
 end
 
+-- The row and its label back at full opacity, where Dim members out of range wrote them (row.ranged).
+function P.Unrange(row)
+	if row.ranged then
+		row.ranged = nil
+		row.holder:SetAlpha(1)
+		if row.label then
+			row.label:SetAlpha(1)
+		end
+	end
+end
+
+-- Dim members out of range (on by default): the row of a member who is not the player, and its label, fade to FAR while UnitInRange says he is
+-- out of range, its answer, withheld or not, going unread to SetAlphaFromBoolean (SimpleRegionAPIDocumentation.lua:134-145), as Healer
+-- mana's bars do, so in a fight too: both are frames of the addon's own. A dead or offline member's GONE wins (P.Fade). Written on every render
+-- while it applies, since P.Fade writes only on a change; row.ranged marks a row whose opacity this wrote, which goes back to full once it no
+-- longer applies. A sample row is far by its sample's far field (row.sampleFar, P.SyncSample). A client that refuses leaves the row full and
+-- is noted for the status.
+function P.Range(row)
+	if row.gone then
+		row.ranged = nil
+		return
+	end
+	if Opt("range") == false then
+		P.Unrange(row)
+		return
+	end
+	if not row.unit then
+		if row.testing and row.sampleFar then
+			row.ranged = true
+			row.holder:SetAlpha(FAR)
+			if row.label then
+				row.label:SetAlpha(FAR)
+			end
+		else
+			P.Unrange(row)
+		end
+		return
+	end
+	if T.Ask(UnitIsUnit, row.unit, "player") ~= false or type(UnitInRange) ~= "function" or type(row.holder.SetAlphaFromBoolean) ~= "function" then
+		P.Unrange(row)
+		return
+	end
+	local ok, inRange = pcall(UnitInRange, row.unit)
+	if not ok or not (IsSecret(inRange) or type(inRange) == "boolean") then
+		P.Unrange(row)
+		return
+	end
+	row.ranged = true
+	local done = pcall(row.holder.SetAlphaFromBoolean, row.holder, inRange, 1, FAR)
+	if done and row.label and type(row.label.SetAlphaFromBoolean) == "function" then
+		done = pcall(row.label.SetAlphaFromBoolean, row.label, inRange, 1, FAR)
+	end
+	if done then
+		P.rangeRefused = nil
+	else
+		P.Unrange(row)
+		P.rangeRefused = true
+	end
+end
+
 function P.RenderRow(row)
 	local gone = P.Gone(row)
 	if gone ~= nil then
 		P.Fade(row, gone)
 	end
+	P.Range(row)
 	if row.testing then
 		return
 	end
@@ -632,6 +697,7 @@ end
 function P.Release(row)
 	P.assigned[row.owner] = nil
 	row.owner, row.unit, row.frame, row.side, row.testing, row.stackAt, row.flashEnd, row.sampleGone = nil, nil, nil, nil, nil, nil, nil, nil
+	row.sampleFar = nil
 	for slot, icon in ipairs(row.icons) do
 		P.Untip(icon)
 		ns.IconClear(icon)
@@ -641,6 +707,7 @@ function P.Release(row)
 		row.label:Hide()
 	end
 	P.Fade(row, nil)
+	P.Unrange(row)
 	row.holder:Hide()
 	P.pool[#P.pool + 1] = row
 end
@@ -1787,7 +1854,7 @@ function P.SyncSample()
 	end
 	if TM.Group() ~= "solo" then
 		for index, member in ipairs(SAMPLE_PARTY) do
-			list[#list + 1] = { owner = "test:" .. index, class = member[2], name = member[1], gone = member[3] }
+			list[#list + 1] = { owner = "test:" .. index, class = member[2], name = member[1], gone = member[3], far = member.far }
 		end
 	end
 	local wanted, position = {}, 0
@@ -1797,12 +1864,13 @@ function P.SyncSample()
 			position = position + 1
 			wanted[member.owner] = true
 			row.unit, row.class, row.own, row.level, row.race, row.raceFile = nil, member.class, nil, nil, nil, nil
-			row.sampleGone = member.gone
+			row.sampleGone, row.sampleFar = member.gone, member.far
 			P.Fit(row, size, count, "right")
 			P.Stacked(row, stack, position, size)
 			P.Label(row, stack, member.name, member.class)
 			P.Hold(row)
 			P.Fade(row, member.gone)
+			P.Range(row)
 			row.holder:Show()
 		end
 	end
@@ -1898,6 +1966,9 @@ function P.Status()
 	local state, members = P.Look()
 	if state == "raid" and P.via == "roster" then
 		lines[#lines + 1] = LINE_ROSTER
+	end
+	if P.rangeRefused then
+		lines[#lines + 1] = LINE_RANGE
 	end
 	for _, member in ipairs(LIVE[state] and members or {}) do
 		if member.unit ~= "player" then

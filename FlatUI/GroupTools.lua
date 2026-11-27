@@ -62,7 +62,9 @@ local _, ns = ...
 -- plain answers only), each name in its class colour: a line for each role in a party, and there "No tank" or "No healer" in the warm colour
 -- when nobody holds that role while someone holds one, the counts in a raid, and in the warm colour who has none, written again on
 -- PLAYER_ROLES_ASSIGNED (PartyInfoDocumentation.lua:829) while the mouse is over it. The corner of its icon counts in the warm colour how many
--- members have no role (a plain NONE), as the tick shows its tally, hidden at 0 and out of a group (G.RoleCount), on each paint.
+-- members have no role (a plain NONE), as the tick shows its tally, only once someone in the group holds a tank, healer or damage role (most
+-- groups on Forever pick none, and the whole group would read as missing), grey while the role poll is greyed, hidden at 0 and out of a group
+-- (G.RoleCount), on each paint.
 -- Fade until you point at it (off by default): the icons stay at 30% until the mouse comes over any button, back to full at once, and fade again
 -- over a quarter of a second a second after the mouse leaves (ns.IconFader, IconRow.lua). They stay full during a real ready check and its tally
 -- and a real countdown; the samples of test mode hold nothing, so the fade can be tried there. Only the opacity of the icons changes, frames of
@@ -748,7 +750,6 @@ function G.Paint()
 	end
 	local grouped, raid, lead = G.State()
 	G.Marked()
-	G.RoleCount(G.Entry("roles"))
 	for _, entry in ipairs(G.buttons) do
 		local usable, why = G.Usable(entry.kind, grouped, raid, lead)
 		entry.usable, entry.why = usable, why
@@ -764,6 +765,7 @@ function G.Paint()
 			G.Tip(entry)
 		end
 	end
+	G.RoleCount(G.Entry("roles"))
 	G.fader.Settle()
 end
 
@@ -777,31 +779,38 @@ function G.Marked()
 end
 
 -- The role poll's count: how many members of the group have no role (a plain NONE of UnitGroupRolesAssigned; a withheld role counts for
--- nothing), in the warm colour in the icon's corner, hidden at 0 and out of a group. While test mode is on and the group gave no plain role it
--- reads 1, for the sample Kai. Only a FontString of the icon changes, so in a fight too.
+-- nothing), in the icon's corner, but only once someone holds a plain tank, healer or damage role, the rule of G.Roles for its "No tank" lines:
+-- on Forever most groups pick no role at all, and a number of the whole group would say nothing. It is in the warm colour while the role poll
+-- can work, grey (0.6, as G.PullText greys the pull number) while it is greyed, hidden at 0 and out of a group. While test mode is on and
+-- nobody holds a role it reads 1, for the sample Kai. G.Paint calls it after the greying, so entry.usable is fresh. Only a FontString of the
+-- icon changes, so in a fight too.
 function G.RoleCount(entry)
 	local count = entry and entry.count
 	if not count then
 		return
 	end
-	local none, read = 0, false
+	local none, held = 0, false
 	if Truth(IsInGroup) == true then
 		for _, unit in ipairs(G.Units()) do
 			local role = Ask(UnitGroupRolesAssigned, unit)
-			if type(role) == "string" and role ~= "" then
-				read = true
-				if role == "NONE" then
-					none = none + 1
-				end
+			if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
+				held = true
+			elseif role == "NONE" then
+				none = none + 1
 			end
 		end
 	end
-	if not read and Testing() then
-		none = 1
+	if not held then
+		none = Testing() and 1 or 0
 	end
 	if none > 0 then
+		local shade = entry.usable == false and 0.6 or nil
 		count:SetText(tostring(none))
-		count:SetTextColor(WARN[1], WARN[2], WARN[3], 1)
+		if shade then
+			count:SetTextColor(shade, shade, shade, 1)
+		else
+			count:SetTextColor(WARN[1], WARN[2], WARN[3], 1)
+		end
 		count:Show()
 	else
 		count:SetText("")
