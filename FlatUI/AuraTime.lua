@@ -11,7 +11,7 @@ local _, ns = ...
 -- Duration colour: White sets the text white after the game's colour on each tick; White, red near the end (0.5.37) sets it red while the time
 -- left the game passes is a plain number under Red under (hud.durationWarn, 3 to 60 s, 10 by default; 0.5.39; WARN while the saved value is no
 -- plain number) and white otherwise, so a fresh aura is white again at its next tick and a time the game withholds stays white; As the game has
--- it leaves the game's gold and white.
+-- it leaves the game's gold and white. ns.AuraWarnAt gives that rule's seconds to test mode's sample auras too (TestHud.lua, 0.5.41).
 
 local FORMAT, COLOUR, TOTEM_SIZE, WARN_AT = "hud.durationFormat", "hud.durationColour", "unitframes.totemTimeSize", "hud.durationWarn"
 local FRAMES = { "BuffFrame", "DebuffFrame", "ExternalDefensivesFrame" }
@@ -40,6 +40,15 @@ local function Tight()
 		end
 	end
 	return tight or nil
+end
+
+-- The seconds under which White, red near the end turns a time red: Red under, else WARN. Test mode's sample buffs and debuffs read it too.
+function ns.AuraWarnAt()
+	local warn = ns.Get(WARN_AT)
+	if ns.Finite(warn) then
+		return warn
+	end
+	return WARN
 end
 
 local function IsTotem(button)
@@ -88,11 +97,7 @@ local function After(button, timeLeft)
 	local mode = ns.Get(COLOUR)
 	if (mode == "white" or mode == "warn")
 		and not (totem and ns.Get("unitframes.totemTimer") == false and not ns.UnitFrameExtra.off("Totem timers")) then
-		local warn = mode == "warn" and ns.Get(WARN_AT) or nil
-		if not ns.Finite(warn) then
-			warn = WARN
-		end
-		if mode == "warn" and not ns.IsSecret(timeLeft) and type(timeLeft) == "number" and timeLeft < warn then
+		if mode == "warn" and not ns.IsSecret(timeLeft) and type(timeLeft) == "number" and timeLeft < ns.AuraWarnAt() then
 			text:SetVertexColor(RED[1], RED[2], RED[3])
 		else
 			text:SetVertexColor(1, 1, 1)

@@ -923,7 +923,7 @@ ns.SETUP_STEPS = {
 		{ "chat.fadeAfter", "o", "behaviour", "Sets how many seconds a chat message waits before it fades." },
 		{ "chat.restore", "o", "behaviour", "Shows the chat lines of the last hour again in the main chat window after a reload or a login." },
 		{ "chat.restoreLines", "r", "behaviour", "Sets how many recent chat lines show again after a reload." },
-		{ "chat.restoreChannels", "r", "behaviour", "Keeps the lines of General, Trade and the other numbered channels too." },
+		{ "chat.restoreChannels", "r", "behaviour", "Keeps the lines of General, Trade and the other numbered channels too, for Copy recent chat and after a reload." },
 		{ "chat.copyChat", "o", "behaviour", "Opens a box with the last chat lines heard, ready to copy with Ctrl+C." },
 		{ "chat.channelNames", "o", "behaviour", "Shortens the label of a numbered channel's lines to its number and name, as [2. Trade] for [2. Trade - City]." },
 		{ "chat.webLinks", "o", "behaviour", "Turns web addresses in chat into links that open a box to copy them." },

@@ -2571,10 +2571,11 @@ ns.PAGES = {
 			tip = "Each time you reload or log in, the lines of the last hour show again in your main chat window: say, yell, emotes, party, raid, guild, officer and whispers. They are kept in Flat UI's saved settings of this character; lines the game withholds in fights and dungeons are not kept." },
 		{ key = "restoreLines", kind = "number", default = 50, min = 10, max = 200, step = 10, unit = " lines", label = "Lines to show again",
 			tip = "None older than an hour, and no more than three quarters of Lines kept per window, so that the other lines of a login stay in the window.", needs = "restore" },
-		{ key = "restoreChannels", kind = "bool", default = false, label = "Numbered channels too", tip = "General, Trade and the other numbered channels.", needs = "restore" },
+		{ key = "restoreChannels", kind = "bool", default = false, label = "Numbered channels too",
+			tip = "General, Trade and the other numbered channels: in Copy recent chat, and after a reload with Show recent chat after a reload." },
 		-- ChatHistory.lua: the lines heard this session in a box to copy from (0.5.39).
 		{ key = "copyChat", kind = "list", default = 0, label = "Copy recent chat", none = "Choose", items = "ChatCopyLines", pick = "ChatCopyPick",
-			tip = "Opens a box with the last lines Flat UI heard, ready for Ctrl+C: say, yell, emotes, party, raid, guild, officer and whispers, and the numbered channels with Numbered channels too. Each reads as [21:04] [Party] [Mara]: text, links as their name in brackets. Not in a fight. /flatui copy does the same." },
+			tip = "Opens a box with the last lines Flat UI heard, ready for Ctrl+C: say, yell, emotes, party, raid, guild, officer and whispers. Numbered channels too adds General, Trade and the other numbered channels. Each reads as [21:04] [Party] [Mara]: text, links as their name in brackets. Not in a fight. /flatui copy does the same." },
 		-- ChatLinks.lua: a chat filter that puts the short label in place of the game's on numbered channel lines (0.5.35).
 		{ section = "Channels" },
 		{ key = "channelNames", kind = "choice", default = "short", label = "Channel names",
@@ -2582,7 +2583,7 @@ ns.PAGES = {
 			choices = { { "game", "As the game has it ([2. Trade - City])" }, { "short", "Number and name ([2. Trade])" } } },
 		{ section = "Links" },
 		{ key = "webLinks", kind = "bool", default = true, label = "Web addresses as links",
-			tip = "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy." },
+			tip = "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy. Not in a fight: chat then says to click it again after." },
 		{ key = "linkTips", kind = "bool", default = true, label = "Tooltips of chat links",
 			tip = "While the mouse is over an item, spell, achievement or quest link in a chat window, its tooltip shows. Not in a fight." },
 		-- ChatLinks.lua: a chat filter that colours the player's own name in other players' lines (0.5.36).
@@ -2595,7 +2596,7 @@ ns.PAGES = {
 			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 		{ key = "mentionTab", kind = "bool", default = true, label = "Light the tab that names you", needs = "mentions",
-			tip = "When a line names you in a chat window whose tab is not chosen (a Trade, Guild or LFG tab), that tab's box and label take Your name colour with a slow pulse until you click the tab. Needs Chat tabs on the Chat page." },
+			tip = "When a line names you in a chat window whose tab is not chosen (a Trade, Guild or LFG tab), that tab's box and label take Your name colour with a slow pulse until you click the tab, and a small number at its top right corner counts the lines that named you there (up to 9+). Needs Chat tabs on the Chat page." },
 		{ key = "mentionWords", kind = "list", default = 0, label = "Other words to colour", none = "Add one, or choose one to stop colouring it",
 			items = "ChatWordLines", pick = "ChatWordPick", needs = "mentions",
 			tip = "Add a word... opens a box: type the word and press Enter. Up to 20 for all your characters: whole words, any case, in Your name colour and with Sound when you are named. Choose a word to stop colouring it. /flatui words add tank does the same." },
@@ -2771,7 +2772,7 @@ ns.PAGES = {
 		key = "gearWindow", label = "Window and finder", parent = "gearCompare", owner = "chat",
 		{ section = "Window" },
 		{ key = "gearOpen", kind = "list", default = 0, label = "Gear comparison window", none = "Choose", items = "GearOpenLines", pick = "GearOpenPick",
-			tip = "Every spell you chose, now and with an item you drop on it. /flatui gear opens it too. Drag its bottom right corner to size it, and set each spell's weight for the Overall line there." },
+			tip = "Every spell you chose, now and with an item you drop on it. /flatui gear opens it too, and so does an Alt-click on an item link in chat, with that item. Shift-click the item there to link it in chat, Ctrl-click to try it on. Drag its bottom right corner to size it, and set each spell's weight for the Overall line there." },
 		-- GearButton.lua: the Compare gear button of Flat UI's own on the title bar of the Character window.
 		{ key = "gearCharButton", kind = "bool", default = true, label = "Button on the Character window", changed = "GearButtonChanged",
 			tip = "A Compare gear button on the title bar of the Character window, left of the close button, opens and closes the Gear comparison window; its words light up while the window is open. With an item on the cursor, or one dropped on it, the window compares that item. Right-click opens the item finder. Move it with /flatui move (Compare gear button): it keeps its place on the Character window." },

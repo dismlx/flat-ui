@@ -27,15 +27,18 @@ local _, ns = ...
 -- since the AddMessage of a chat window is a Lua method of the game (Shared/ChatFrame.lua:35-41). The links in a text stay as they came.
 -- A window keeps only its newest lines (Blizzard_SharedXML/CircularBuffer.lua:29-40): 128 as the game sets it up, or Lines kept per window. At most
 -- three quarters of that is printed, the Flat UI line with them, so that line and the other lines of the login stay in the window.
--- Turning the row or its page off empties FlatUICharDB.chatLog; with Numbered channels too off the lines of channels go.
+-- Turning the row or its page off empties FlatUICharDB.chatLog; with Numbered channels too off the lines of channels go. Numbered channels too
+-- stands on its own (0.5.41, no longer greyed while the row is off): it decides whether the lines of channels are heard at all, for Copy recent
+-- chat below and, with the row on, for the lines kept.
 -- Copy recent chat (0.5.39; the row of that name on the Chat text page, and /flatui copy): the frame hears the same lines while the module is on,
 -- whatever the row, and keeps the newest MOST of this session in memory alone (S.session; the lines the game withholds left out as above, the
 -- channels only with Numbered channels too); FlatUICharDB.chatLog is written only with the row on, as before. A pick of The last 50 lines or
 -- The last 200 lines, or /flatui copy (copy 200), opens on the next frame a box of Flat UI's own over the middle of the screen: a scroll frame of
 -- its own with a multi-line box of its own, the newest lines oldest first as "[21:04] [Party] [Mara]: text" (as above, with the lines kept from
 -- before a reload first while the row is on), links as their bracketed text and colour codes, textures and atlases left out (Bare), all
--- selected and scrolled to the newest, for Ctrl+C. Typing in it puts the lines back; Escape, the loss of its focus and the start of a fight close
--- it. It never opens in a fight. The chat windows' own lines stay out of reach: their GetMessageInfo is a Lua method of the game
+-- selected and scrolled to the newest, for Ctrl+C, which turns the line of help over it to "Copied 50 lines." (0.5.41; "Copied what you selected."
+-- once a click or a key that moves the cursor may have chosen a part). Typing in it puts the lines back; Escape, the loss of its focus and the
+-- start of a fight close it. It never opens in a fight. The chat windows' own lines stay out of reach: their GetMessageInfo is a Lua method of the game
 -- (Blizzard_SharedXML/ScrollingMessageFrame.lua:30).
 -- This follows the chat history of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLChatSocial/ChatIM/ChannelHistory.lua:
 -- 777-898, 1884-1910, 2293-2305; Settings_ChatFrame.lua:720-735). Left out: its history window with search and lists per channel, the other lines
@@ -68,7 +71,12 @@ local S = { frame = nil, given = {}, withheld = 0, shown = false, session = {}, 
 -- Copy recent chat (0.5.39): the lines of its row, the most /flatui copy takes, the box's size and parts, and its words.
 local COPY = { LINES = { { 50, "The last 50 lines" }, { 200, "The last 200 lines" } }, FIRST = 50, WIDTH = 560, HEIGHT = 340, PAD = 8, HELP = 24,
 	WHEEL = 42,
+	-- The keys that move the cursor, and with Shift choose a part of the lines.
+	MOVES = { LEFT = true, RIGHT = true, UP = true, DOWN = true, HOME = true, END = true, PAGEUP = true, PAGEDOWN = true },
 	SAY = "The last %d %s heard: press %s to copy %s, or select a part first. Escape closes this.",
+	-- Once Ctrl+C was pressed (0.5.41): all the lines, or a part the player chose with the mouse or the arrow keys.
+	COPIED = "Copied %d %s. Paste %s where you like; Escape closes this.",
+	COPIED_PART = "Copied what you selected. Paste it where you like; Escape closes this.",
 	NONE = "Flat UI: no chat heard yet to copy. Lines are heard while Chat and tooltips is on.",
 	FIGHT = "Flat UI: chat is copied out of a fight.",
 	OFF = "Flat UI: Chat and tooltips is off, so no chat is heard to copy.",
@@ -477,11 +485,42 @@ local function BuildCopy()
 	end)
 	edit:SetScript("OnEscapePressed", CloseCopy)
 	edit:SetScript("OnEditFocusLost", CloseCopy)
-	-- What is typed over the lines is taken back: the box is for copying.
+	-- What is typed over the lines is taken back, all selected again: the box is for copying.
 	edit:SetScript("OnTextChanged", function(self, typed)
 		if typed and box.text ~= nil then
 			pcall(self.SetText, self, box.text)
 			pcall(self.HighlightText, self)
+			box.part = nil
+		end
+	end)
+	-- Ctrl+C (Cmd+C on a Mac, ns.ChatCopyKey of ChatLinks.lua) says it was taken, as the export box of Profiles does (Panel.lua's CopyField): the
+	-- count of lines while all are selected, else a part. A click in the lines or an arrow key, Home, End or a page key may have chosen a part;
+	-- Ctrl+A selects all again.
+	edit:SetScript("OnMouseDown", function()
+		box.part = true
+	end)
+	edit:SetScript("OnKeyDown", function(_, key)
+		if ns.IsSecret(key) or type(key) ~= "string" or box.text == nil or box.text == "" then
+			return
+		end
+		if type(ns.ChatCopyKey) == "function" and ns.ChatCopyKey(key) then
+			if box.help then
+				local count = box.lines or 0
+				box.help:SetText(box.part and COPY.COPIED_PART or COPY.COPIED:format(count, count == 1 and "line" or "lines", count == 1 and "it" or "them"))
+			end
+		elseif key == "A" then
+			for _, name in ipairs({ "IsControlKeyDown", "IsMetaKeyDown" }) do
+				local fn = _G[name]
+				local ok, held = false, nil
+				if type(fn) == "function" then
+					ok, held = pcall(fn)
+				end
+				if ok and not ns.IsSecret(held) and held == true then
+					box.part = nil
+				end
+			end
+		elseif COPY.MOVES[key] then
+			box.part = true
 		end
 	end)
 	-- The keyboard goes back to the game when a fight starts.
@@ -504,7 +543,7 @@ local function OpenCopy(count)
 		S.box = BuildCopy()
 	end
 	local box = S.box
-	box.text = nil
+	box.text, box.lines, box.part = nil, lines, nil
 	box.edit:SetText(text)
 	box.text = text
 	local mac = false
@@ -659,7 +698,8 @@ function ns.ChatHistorySync()
 		CloseCopy()
 	end
 	if Opt("restoreChannels") ~= true then
-		-- This session's lines of channels go too, as the kept ones.
+		-- Numbered channels too is off, whatever the row: this session's lines of channels go too, as the kept ones, and Listen above no
+		-- longer hears them.
 		local kept = {}
 		for _, line in ipairs(S.session) do
 			if line.event ~= CHANNEL then
@@ -669,7 +709,8 @@ function ns.ChatHistorySync()
 		S.session = kept
 	end
 	if Opt("restore") ~= true or ns.Get(KEY .. ".enabled") ~= true then
-		-- The row or its page is off: nothing more is heard, and what was kept goes.
+		-- The row or its page is off: nothing more is kept (this session's lines are still heard for Copy recent chat while the module is on),
+		-- and what was kept goes.
 		Forget()
 	elseif Opt("restoreChannels") ~= true then
 		DropChannels()

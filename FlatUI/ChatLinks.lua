@@ -12,8 +12,10 @@ local _, ns = ...
 -- whose handler for addon links (Shared/ItemRefHandlersShared.lua:279-282) fires EventRegistry's SetItemRef and counts the click as handled, so the
 -- ItemRef tooltip stays shut. Flat UI listens to that callback: no function of the game is hooked or replaced, nothing is written in its link
 -- handlers, and a click on any other link takes the game's own path. The click opens a small box of Flat UI's own at the cursor, with the address
--- selected; Enter or Escape closes it, and so does the loss of its focus or the start of a fight. Typing in it puts the address back. A click in a
--- fight opens none: the box takes the keyboard, and in a fight the keys stay with the game.
+-- selected; Enter or Escape closes it, and so does the loss of its focus or the start of a fight. Typing in it puts the address back, and Ctrl+C
+-- (Cmd+C on a Mac) turns its line of help to "Copied." (0.5.41, ns.ChatCopyKey, which the copy box of ChatHistory.lua asks too). A click in a
+-- fight opens none: the box takes the keyboard, and in a fight the keys stay with the game; chat says so once a fight (0.5.41, WORDS.LINK_FIGHT),
+-- and the box does not open by itself when the fight ends.
 -- Link tooltips: every chat window fires ChatFrame.OnHyperlinkEnter and ChatFrame.OnHyperlinkLeave through EventRegistry (Shared/ChatFrame.lua:27-33,
 -- the scripts of ChatFrameTemplate, Mainline/ChatFrame.xml:16-18), so no script of a chat window is hooked, and a window the game opens later counts
 -- too. GameTooltip gets a frame of Flat UI's own as its owner, at the cursor, and is filled from the link with SetHyperlink, a secure accessor of the
@@ -86,6 +88,9 @@ local WORDS = { SHORT = 2, LONG = 24, MOST = 20,
 	ADD_LINE = "Add a word...", FULL_LINE = "At most 20 other words: choose one to stop colouring it",
 	TYPE = "Type a word and press Enter. Escape closes this.",
 	FIGHT = "Flat UI: words are added out of a fight.",
+	-- A web address clicked in a fight (0.5.41), once a fight, and the line of help once Ctrl+C was pressed in the copy box.
+	LINK_FIGHT = "Flat UI: web addresses open their copy box out of a fight. Click it again then.",
+	COPIED = "Copied. Enter or Escape closes this.",
 }
 
 -- The state of the file: whether the filter is in the registry, whether each callback was given (true) or refused (false), the last line
@@ -760,13 +765,33 @@ local function Select(edit)
 	pcall(edit.HighlightText, edit)
 end
 
-local function Help()
-	local mac = false
+local function Mac()
 	if type(IsMacClient) == "function" then
 		local ok, answer = pcall(IsMacClient)
-		mac = ok and not ns.IsSecret(answer) and answer == true
+		return ok and not ns.IsSecret(answer) and answer == true
 	end
-	return ("Press %s to copy it. Enter or Escape closes this."):format(mac and "Cmd+C" or "Ctrl+C")
+	return false
+end
+
+local function Help()
+	return ("Press %s to copy it. Enter or Escape closes this."):format(Mac() and "Cmd+C" or "Ctrl+C")
+end
+
+-- True for the key that copies in a box of text (0.5.41): C with Ctrl held, or with Cmd (IsMetaKeyDown) on a Mac client, as the help line names
+-- it. The copy box of Copy recent chat (ChatHistory.lua) asks it too.
+function ns.ChatCopyKey(key)
+	if key ~= "C" then
+		return false
+	end
+	local function down(name)
+		local fn = _G[name]
+		if type(fn) ~= "function" then
+			return false
+		end
+		local ok, held = pcall(fn)
+		return ok and not ns.IsSecret(held) and held == true
+	end
+	return down("IsControlKeyDown") or (Mac() and down("IsMetaKeyDown"))
 end
 
 -- Built the first time an address is clicked: a frame of Flat UI's own on UIParent, its look from the chat page, a line of help and the box. Its
@@ -813,11 +838,22 @@ local function BuildBox()
 		end
 	end)
 	edit:SetScript("OnEditFocusLost", CloseBox)
-	-- What is typed over the address is taken back: the box is for copying.
+	-- What is typed over the address is taken back: the box is for copying. In the word box, typing again takes a refusal's red line away.
 	edit:SetScript("OnTextChanged", function(self, typed)
 		if typed and box.address ~= nil then
 			pcall(self.SetText, self, box.address)
 			pcall(self.HighlightText, self)
+		elseif typed and box.mode == "word" and box.refused and help then
+			box.refused = nil
+			help:SetText(WORDS.TYPE)
+			help:SetTextColor(HELP_COLOUR[1], HELP_COLOUR[2], HELP_COLOUR[3])
+		end
+	end)
+	-- Ctrl+C (Cmd+C on a Mac) in the copy box says it was taken, as the export box of Profiles does (Panel.lua's CopyField).
+	edit:SetScript("OnKeyDown", function(_, key)
+		if box.mode == "copy" and box.address ~= nil and box.address ~= "" and help and ns.ChatCopyKey(key) then
+			help:SetText(WORDS.COPIED)
+			help:SetTextColor(HELP_COLOUR[1], HELP_COLOUR[2], HELP_COLOUR[3])
 		end
 	end)
 	-- The keyboard goes back to the game when a fight starts.
@@ -845,6 +881,7 @@ end
 -- The line of help over the box: its text in the colour it was made with, or in red for a refusal of the word box.
 local function SayInBox(box, text, refused)
 	local help = box.help
+	box.refused = refused and true or nil
 	if help then
 		help:SetText(text)
 		if refused then
@@ -856,8 +893,16 @@ local function SayInBox(box, text, refused)
 end
 
 local function OpenBox(_, address)
-	-- None opens in a fight: the box would hold the keyboard, which goes back to the game when a fight starts.
+	-- None opens in a fight: the box would hold the keyboard, which goes back to the game when a fight starts. Chat says so once a fight (0.5.41),
+	-- and the box does not open by itself as the fight ends, since it would take the keyboard while the player moves.
 	if Fighting() then
+		if not S.linkFightSaid then
+			S.linkFightSaid = true
+			print(WORDS.LINK_FIGHT)
+			pcall(ns.OutOfCombat, function()
+				S.linkFightSaid = nil
+			end)
+		end
 		return
 	end
 	if not S.box then
