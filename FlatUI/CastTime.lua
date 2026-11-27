@@ -456,6 +456,23 @@ do
 	local KICK_TIME_ROW, KICK_COLOUR_ROW = "castbars.kickTime", "castbars.interruptCooling"
 	local kicks, kickQueued = setmetatable({}, weak), setmetatable({}, weak)
 
+	function ns.KickTimeColour()
+		if ns.Enabled("castbars") and Get("castbars.flat") == true then
+			if Get("castbars.textOwn") == true then
+				local r, g, b = ns.Colour("castbars.textColour")
+				if ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
+					return r, g, b, "own" .. tostring(Get("castbars.textColour"))
+				end
+			end
+			return 1, 1, 1, "flat"
+		end
+		local r, g, b = ns.Colour(KICK_COLOUR_ROW)
+		if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+			r, g, b = 0.85, 0.45, 0.18
+		end
+		return r, g, b, "cooling" .. tostring(Get(KICK_COLOUR_ROW))
+	end
+
 	function KickTimeOn()
 		return Get(KICK_TIME_ROW) == true and Get("castbars.interrupt") == true and ns.Enabled("castbars")
 	end
@@ -502,16 +519,23 @@ do
 	end
 
 	local function KickColour(kick)
-		local hex = Get(KICK_COLOUR_ROW)
-		if kick.hex == hex then
+		local r, g, b, key = ns.KickTimeColour()
+		if kick.hex == key then
 			return
 		end
-		local r, g, b = ns.Colour(KICK_COLOUR_ROW)
-		if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
-			r, g, b = 0.85, 0.45, 0.18
-		end
 		pcall(kick.fs.SetTextColor, kick.fs, r, g, b)
-		kick.hex = hex
+		kick.hex = key
+	end
+
+	local function KickOutline(kick)
+		local ok, file, size, flags = pcall(kick.fs.GetFont, kick.fs)
+		if not ok or ns.IsSecret(file) or ns.IsSecret(size) or ns.IsSecret(flags) or type(file) ~= "string" or not ns.Finite(size) or size <= 0 then
+			return
+		end
+		flags = type(flags) == "string" and flags or ""
+		if not flags:upper():find("OUTLINE", 1, true) then
+			pcall(kick.fs.SetFont, kick.fs, file, size, "OUTLINE")
+		end
 	end
 
 	local function KickBind(kick, duration)
@@ -557,6 +581,7 @@ do
 		if not kick.shown or kick.id ~= id then
 			if not kick.shown then
 				AimFont(bar, kick)
+				KickOutline(kick)
 			end
 			KickColour(kick)
 			kick.id, kick.duration = id, duration
@@ -955,13 +980,21 @@ local function PushListen(on)
 	end
 end
 
-local K = { frame = nil, on = false, at = nil, played = 0, focusFrame = nil, focusOn = false, focusAt = nil, focusPlayed = 0, focusByUnit = false }
+local K = { frame = nil, on = false, at = nil, played = 0 }
 local KickListen
 do
-	local KICK_ROW, KICK_GAP, FOCUS_ROW = "castbars.kickedSound", 1, "castbars.focusSound"
-	local FOCUS_EVENTS = { "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START" }
+	local KICK_ROW, KICK_GAP = "castbars.kickedSound", 1
+	local WATCH_EVENTS = { "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START" }
 	local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 	local KICK_EVENTS = { "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_CHANNEL_STOP" }
+	local WATCH = {
+		{ unit = "focus", row = "castbars.focusSound", bar = "FocusFrameSpellBar", label = "Sound when your focus casts" },
+		{ unit = "target", row = "castbars.targetSound", bar = "TargetFrameSpellBar", label = "Sound when your target casts" },
+	}
+	for _, rec in ipairs(WATCH) do
+		rec.on, rec.played, rec.byUnit = false, 0, false
+	end
+	K.watch = WATCH
 
 	local function KickOn()
 		return ns.Enabled("castbars") and KITS[Get(KICK_ROW)] ~= nil
@@ -1002,15 +1035,24 @@ do
 		end
 	end
 
-	local function FocusOn()
-		return ns.Enabled("castbars") and KITS[Get(FOCUS_ROW)] ~= nil and Get("castbars.interrupt") == true
+	local function WatchOn(rec)
+		return ns.Enabled("castbars") and KITS[Get(rec.row)] ~= nil and Get("castbars.interrupt") == true
 	end
 
-	local function FocusLook()
-		if not (K.focusOn and FocusOn()) or type(ns.InterruptReady) ~= "function" or ns.InterruptReady("focus") ~= true then
+	local function SameAsFocus(rec)
+		local focus = WATCH[1]
+		if rec == focus or not (focus.on and WatchOn(focus)) then
+			return false
+		end
+		local ok, same = pcall(UnitIsUnit, rec.unit, focus.unit)
+		return ok and not ns.IsSecret(same) and same == true
+	end
+
+	local function WatchLook(rec)
+		if not (rec.on and WatchOn(rec)) or type(ns.InterruptReady) ~= "function" or ns.InterruptReady(rec.unit) ~= true or SameAsFocus(rec) then
 			return
 		end
-		local bar = PlayerBar("FocusFrameSpellBar")
+		local bar = PlayerBar(rec.bar)
 		local shield = bar and bar.BorderShield
 		if shield ~= nil and not ns.IsSecret(shield) and type(shield) == "table" then
 			local ok, shown = pcall(shield.IsShown, shield)
@@ -1019,63 +1061,67 @@ do
 			end
 		end
 		local now = GetTime()
-		if K.focusAt and now >= K.focusAt and now - K.focusAt < KICK_GAP then
+		if rec.at and now >= rec.at and now - rec.at < KICK_GAP then
 			return
 		end
-		local kit = KITS[Get(FOCUS_ROW)]
+		local kit = KITS[Get(rec.row)]
 		local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
 		if sound and type(ns.PlayKit) == "function" then
-			K.focusAt = now
+			rec.at = now
 			if ns.PlayKit(sound[1], "castbars") then
-				K.focusPlayed = K.focusPlayed + 1
+				rec.played = rec.played + 1
 			end
 		end
 	end
 
-	local function FocusEvent(_, _, unit)
-		if not K.focusOn then
+	local function WatchEvent(rec, unit)
+		if not rec.on then
 			return
 		end
-		if not K.focusByUnit and (ns.IsSecret(unit) or unit ~= "focus") then
+		if not rec.byUnit and (ns.IsSecret(unit) or unit ~= rec.unit) then
 			return
 		end
 		pcall(C_Timer.After, 0, function()
-			pcall(FocusLook)
+			pcall(WatchLook, rec)
 		end)
 	end
 
-	local function FocusListen()
-		local on = FocusOn()
-		if on == K.focusOn then
+	local function WatchListen(rec)
+		local on = WatchOn(rec)
+		if on == rec.on then
 			return
 		end
-		if K.focusFrame == nil then
+		if rec.frame == nil then
 			local ok, frame = pcall(CreateFrame, "Frame")
-			K.focusFrame = ok and not ns.IsSecret(frame) and type(frame) == "table" and frame or false
-			if K.focusFrame then
+			rec.frame = ok and not ns.IsSecret(frame) and type(frame) == "table" and frame or false
+			if rec.frame then
 				ns.Own[frame] = true
-				frame:SetScript("OnEvent", FocusEvent)
+				frame:SetScript("OnEvent", function(_, _, unit)
+					WatchEvent(rec, unit)
+				end)
 			end
 		end
-		local frame = K.focusFrame
+		local frame = rec.frame
 		if not frame then
 			return
 		end
-		K.focusOn = on
+		rec.on = on
 		local byUnit = true
-		for _, event in ipairs(FOCUS_EVENTS) do
+		for _, event in ipairs(WATCH_EVENTS) do
 			if not on then
 				pcall(frame.UnregisterEvent, frame, event)
-			elseif not (frame.RegisterUnitEvent and pcall(frame.RegisterUnitEvent, frame, event, "focus")) then
+			elseif not (frame.RegisterUnitEvent and pcall(frame.RegisterUnitEvent, frame, event, rec.unit)) then
 				pcall(frame.RegisterEvent, frame, event)
 				byUnit = false
 			end
 		end
-		K.focusByUnit = on and byUnit
+		rec.byUnit = on and byUnit
 	end
 
 	function KickListen()
-		pcall(FocusListen)
+		for _, rec in ipairs(WATCH) do
+			pcall(WatchListen, rec)
+		end
 		local on = KickOn()
 		if on == K.on then
 			return
@@ -1226,8 +1272,10 @@ function ns.StatusLines()
 	if K.on then
 		lines[#lines + 1] = ("Sound when you are interrupted: %d played."):format(K.played)
 	end
-	if K.focusOn then
-		lines[#lines + 1] = ("Sound when your focus casts: %d played."):format(K.focusPlayed)
+	for _, rec in ipairs(K.watch or {}) do
+		if rec.on then
+			lines[#lines + 1] = ("%s: %d played."):format(rec.label, rec.played)
+		end
 	end
 	return lines
 end

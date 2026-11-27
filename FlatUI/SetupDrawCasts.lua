@@ -577,6 +577,20 @@ local function AimRGB(spec)
 	return ClassRGB()
 end
 
+local function KickLook(row, look)
+	local r, g, b
+	if look.flat then
+		if look.r then
+			r, g, b = look.r, look.g, look.b
+		else
+			r, g, b = 1, 1, 1
+		end
+	else
+		r, g, b = ns.Colour("castbars.interruptCooling")
+	end
+	Look(row.kickTime, look.percent, r, g, b, (look.outline == "thin" or look.outline == "thick") and look.outline or "thin")
+end
+
 local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	local inst, spec, bar = row.inst, row.spec, row.bar
 	local enabled, flat = look.enabled, look.flat
@@ -632,8 +646,7 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	if row.kickTime then
 		row.kickTime:SetShown(enabled and kick == "cooling" and G("castbars.kickTime") == true and G("castbars.interrupt") == true
 			and (state == "cast" or state == "channel"))
-		local kr, kg, kb = ns.Colour("castbars.interruptCooling")
-		Look(row.kickTime, look.percent, kr, kg, kb, look.outline)
+		KickLook(row, look)
 	end
 	if row.text then
 		local mode = "top10"

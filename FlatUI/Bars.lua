@@ -286,6 +286,9 @@ local SWING_TIMERS = {
 	{ "SwingTimerRangedFrame", "ranged" },
 }
 
+local SWING_GRACE, SWING_FADE = 0.4, 0.25
+local idleSince, swingFaded = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
+
 local function SwingIdle(timer)
 	local mode = ns.Enabled("swing") and ns.Get("swing.idle")
 	if mode ~= "hide" and mode ~= "combat" then
@@ -299,7 +302,18 @@ local function SwingIdle(timer)
 		local ok, fighting = pcall(UnitAffectingCombat, "player")
 		return ok and fighting == false
 	end
-	return not ns.IsSecret(ending) and ending == nil
+	if ns.IsSecret(ending) then
+		return false
+	elseif ending ~= nil then
+		idleSince[timer] = nil
+		return false
+	end
+	local now, since = GetTime(), idleSince[timer]
+	if since == nil or since > now then
+		idleSince[timer] = now
+		return false
+	end
+	return now - since >= SWING_GRACE + SWING_FADE
 end
 
 local swingOption = setmetatable({}, { __mode = "k" })
@@ -471,6 +485,36 @@ local function ApplySwingReverse(timer)
 	end
 end
 
+local function SwingFadeStep(timer)
+	local bar = timer.StatusBar
+	if bar == nil or ns.Forbidden(bar) then
+		return
+	end
+	local ending, editing, since = timer.swingEndTime, timer.isInEditMode, idleSince[timer]
+	local swinging = ns.IsSecret(ending) or ending ~= nil
+	local left
+	if not swinging and since ~= nil and not (ns.IsSecret(editing) or editing == true) and ns.Enabled("swing") and ns.Get("swing.idle") == "hide" then
+		local t = GetTime() - since - SWING_GRACE
+		if t >= 0 and t < SWING_FADE then
+			left = 1 - t / SWING_FADE
+		end
+	end
+	local base = swingFaded[timer]
+	if left then
+		if base == nil then
+			local ok, alpha = pcall(bar.GetAlpha, bar)
+			base = ok and ns.Finite(alpha) and alpha or 1
+			swingFaded[timer] = base
+		end
+		pcall(bar.SetAlpha, bar, base * left)
+	elseif base ~= nil then
+		swingFaded[timer] = nil
+		if not swinging then
+			pcall(bar.SetAlpha, bar, base)
+		end
+	end
+end
+
 local function ApplySwingIdle(timer)
 	local bar = timer.StatusBar
 	if bar == nil or ns.Forbidden(bar) then
@@ -486,6 +530,7 @@ local function ApplySwingIdle(timer)
 		ns.SetHidden(bar, hide)
 		set.idle = hide or nil
 	end
+	SwingFadeStep(timer)
 end
 
 local AUTO_SHOT_AIM = 0.5
@@ -832,10 +877,10 @@ local function SwingInFlight()
 	if ns.Get("swing.idle") ~= "hide" and not ns.Get("swing.textOwn") and math.abs(ns.Get("swing.rangeAlpha") / 100 - GAME_RANGE_ALPHA) <= 0.0001 then
 		return false
 	end
-	local found = false
+	local found, hide, now = false, ns.Get("swing.idle") == "hide", GetTime()
 	EachTimer(function(timer)
-		local ending = timer.swingEndTime
-		if not ns.IsSecret(ending) and ending ~= nil then
+		local ending, since = timer.swingEndTime, idleSince[timer]
+		if (not ns.IsSecret(ending) and ending ~= nil) or (hide and since ~= nil and now >= since and now - since < SWING_GRACE + SWING_FADE) then
 			found = true
 		end
 	end)
@@ -865,6 +910,7 @@ local function SwingLight(timer)
 		SwingLooks(timer)
 	end
 	ns.Each("swing", ApplySwingRange, timer)
+	ns.Each("swing", SwingFadeStep, timer)
 end
 
 local function SwingFull(timer)
