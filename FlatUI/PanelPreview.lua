@@ -1,11 +1,5 @@
 local _, ns = ...
 
--- The preview band of the options window: a drawing of Flat UI setup above the settings of a page (SetupDraw.lua), read through ns.LiveView, so it follows
--- the profile in use. It is made of textures, font strings and frames of the addon's own: no nameplate, unit frame or other protected frame of the game is
--- touched, and every number in it is a fixed sample. Pointing at a part outlines it and fills its row; a click opens the tab of the row, scrolls to it and flashes
--- it. Pointing at a row brackets its part. Previews (Config.lua, panel.preview) is On, Collapsed or Off. The Flat UI page and its Colours tab show setup's
--- own drawings of the Look steps (SetupDraw.lua, D.Builds), which have no parts, so no hint.
-
 local Preview = {}
 ns.PanelPreview = Preview
 
@@ -17,13 +11,10 @@ local GAP, BAR = 12, 28
 local BAND = STAGE_H + 2 * GAP
 local HIT_LEVEL, OVER_LEVEL = 300, 900
 local HINT = "Point at a part to find its setting."
--- The setting that stands for a whole part, where a region has many.
 local PRIMARY = { enabled = 1, show = 2, style = 3, health = 4 }
 
--- The drawing of each page that has a band.
 local NAMEPLATE = "mock-nameplate"
 local DRAWINGS = {
-	-- The Threat tab draws the threat samples of setup's step of nameplate colours and threat, whose parts mark each threat row.
 	nameplates = NAMEPLATE, nameplatesHealth = NAMEPLATE, nameplatesColours = NAMEPLATE, nameplatesThreat = "mock-nameplate-threat", nameplatesText = NAMEPLATE,
 	nameplatesCast = "mock-nameplate-cast", nameplatesMarks = "mock-nameplate-marks", nameplatesAuras = "mock-nameplate-auras", nameplatesGame = "mock-nameplate-stack",
 	unitframes = "mock-unit-frames", unitframesParty = "mock-party-frames", unitframesBoss = "mock-raid-cells", unitframesRaid = "mock-raid-cells",
@@ -34,20 +25,15 @@ local DRAWINGS = {
 	swing = "mock-swing",
 	combattext = "mock-combat-text", combattextScroll = "mock-combat-text", combattextHits = "mock-combat-text", combattextFriendly = "mock-combat-text",
 	combattextYou = "mock-combat-alerts",
-	-- The Fonts page: a title, a body line, a number line and small print in the chosen faces beside the game's pop-up text (SetupDrawLook.lua).
 	fonts = "mock-text",
-	-- The Flat UI page: setup's bordered panel with a health and a mana bar; its Colours tab: setup's colour bars (health at four shares, the cast
-	-- colours, reaction and power). Both are SetupDraw.lua's own drawings, with no parts to point at.
 	general = "mock-panel", generalColours = "mock-bars",
 }
 
--- The page of each frame of the Unit frames drawings, which the Per frame chooser shows.
 local FRAME_PAGE = { player = "unitframesPlayer", target = "unitframesTarget", focus = "unitframesFocus", pet = "unitframesPet", tot = "unitframesTot",
 	party1 = "unitframesParty", party2 = "unitframesParty", party3 = "unitframesParty", party4 = "unitframesParty", party5 = "unitframesParty",
 	partypet1 = "unitframesParty", partypet2 = "unitframesParty", totem = "unitframes", boss = "unitframesBoss", boss2 = "unitframesBoss", raid = "unitframesRaid" }
 Preview.FRAME_PAGE = FRAME_PAGE
 
--- The id of the drawing a page shows, or nil for a page with none (or when the drawings are not loaded).
 function Preview.Drawing(key)
 	local id = DRAWINGS[key]
 	local D = ns.SetupDraw
@@ -67,7 +53,6 @@ local function Size(region)
 	return (type(w) == "number" and w or 0) * (type(h) == "number" and h or 0)
 end
 
--- host: Model(), Arrive(entry, item), Show(entry), Fill(path, on) and Relayout().
 function Preview.Build(right, host)
 	local self = { opened = false }
 	local D = ns.SetupDraw
@@ -77,7 +62,6 @@ function Preview.Build(right, host)
 	local active, failed = {}, {}
 	local byPath
 
-	-- Runs fn(...) in the context of the band with the profile in use as the view. Returns pcall's answer.
 	local function Under(fn, ...)
 		return pcall(D.In, ctx, function(...)
 			local done, result = ns.Viewing(ns.LiveView, fn, ...)
@@ -88,7 +72,6 @@ function Preview.Build(right, host)
 		end, ...)
 	end
 
-	-- The entry and the row item of a setting, from the pages of the window.
 	local function Find(path)
 		local model = host.Model()
 		if not byPath or byPath.model ~= model then
@@ -125,7 +108,6 @@ function Preview.Build(right, host)
 		edges[4]:SetWidth(1)
 	end
 
-	-- Takes the outline and the fill of the row off the part that was pointed at.
 	function self.Leave()
 		local hit = self.over
 		self.over = nil
@@ -147,7 +129,6 @@ function Preview.Build(right, host)
 		end
 	end
 
-	-- A click on a part: the first one ends the hint. A part of a frame picks that frame in the Per frame chooser; a part with a setting opens its row.
 	local function Click(hit)
 		if not Look.Hinted() then
 			Look.SetHinted()
@@ -189,7 +170,6 @@ function Preview.Build(right, host)
 		return hit
 	end
 
-	-- The frame of a drawing a region is part of: the id whose root is the region or one of its parents.
 	local function Owner(region, byRoot)
 		local node = region
 		for _ = 1, 24 do
@@ -204,7 +184,6 @@ function Preview.Build(right, host)
 		return nil
 	end
 
-	-- One frame that takes the mouse over each part, the smaller on top. A frame of a unit frame drawing has one over its whole root.
 	local function Hits(id, drawing)
 		local roots, byRoot, ids = {}, {}, {}
 		local registered = ns.SetupDrawings[id]
@@ -224,7 +203,6 @@ function Preview.Build(right, host)
 				paths[#paths + 1] = path
 			end
 		end
-		-- Several settings share a region: the one that names the whole part comes first, then the others by name.
 		table.sort(paths, function(a, b)
 			local ra, rb = PRIMARY[a:match("[^.]+$")] or 99, PRIMARY[b:match("[^.]+$")] or 99
 			if ra ~= rb then
@@ -236,7 +214,6 @@ function Preview.Build(right, host)
 			local region = drawing.parts[path]
 			if not seen[region] then
 				seen[region] = true
-				-- The unit frame drawings key a part by the bare name of its setting.
 				local full = registered and registered.itemsOf and not path:find(".", 1, true) and "unitframes." .. path or path
 				list[#list + 1] = { region = region, path = full, frame = Owner(region, byRoot), area = Size(region) }
 			end
@@ -308,7 +285,6 @@ function Preview.Build(right, host)
 		hint:SetText(HINT)
 	end
 
-	-- Brackets the part that the setting `path` changes, or clears the bracket for nil.
 	function self.Mark(path)
 		if ctx and frame:IsShown() and holder:IsShown() then
 			pcall(D.In, ctx, function()
@@ -327,7 +303,6 @@ function Preview.Build(right, host)
 		frame:Hide()
 	end
 
-	-- Paints the drawing again from the profile in use and puts a frame over each of its parts.
 	function self.Update()
 		local id = self.id
 		if not (frame and id and frame:IsShown() and holder:IsShown()) or failed[id] then
@@ -351,12 +326,10 @@ function Preview.Build(right, host)
 				failed[id] = true
 				geterrorhandler()(err)
 			end
-			-- A drawing with no parts to point at has no hint.
 			hint:SetShown(not Look.Hinted() and type(drawing.parts) == "table" and next(drawing.parts) ~= nil)
 		end
 	end
 
-	-- The frames over the parts of the drawing shown, and whether a bracket is on it (the checks read these).
 	function self.Hits()
 		return active
 	end
@@ -366,7 +339,6 @@ function Preview.Build(right, host)
 		return drawing ~= nil and drawing.mark ~= nil and drawing.mark:IsShown() == true
 	end
 
-	-- Shows the band for a page `top` units from the top of the right side, or hides it. Returns its height: 0 when the page has none or Previews is Off.
 	function self.Set(entry, top)
 		local id = entry and not entry.home and not entry.profiles and Preview.Drawing(entry.key) or nil
 		local mode = Look.Get("preview")

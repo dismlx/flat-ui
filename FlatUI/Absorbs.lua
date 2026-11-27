@@ -1,67 +1,24 @@
 local _, ns = ...
 
--- Absorb shields: a small stack of Flat UI bars for the shields on the player, in the manner of the NanShield display: a bar for the total of
--- every absorb on the player, and a bar for each listed shield (Power Word: Shield, Ice Barrier, Mana Shield, the wards, Sacrifice, protection
--- potions and items) with its icon, the amount it has left over its size, its time left and its name, in the colour of the one school it
--- takes. Nothing here comes from the WeakAura but the idea; the spell IDs, schools and lengths are Forever's own (CooldownData.lua,
--- tools/dev/spelltips/client_spells.json, SpellData.lua).
--- The total is UnitGetTotalAbsorbs, which the game always withholds from addon code (SecretReturns, UnitDocumentation.lua:1286-1299). It is
--- never read, compared or added: it goes as it is to SetValue of status bars (SimpleStatusBarAPIDocumentation.lua:355-363) and, through
--- C_StringUtil.TruncateWhenZero (ns.CombatWithheld), to SetText, which take it. So the bar has no test for zero: its backdrop, border and
--- icon are status bars of their own set from 0 to 1 and given the total too, full for any shield and empty at none, and the text of a zero is
--- empty. Its scale is the size of the shields Flat UI knows to be up (Total bar is full at: Your shields; with none known, the player's
--- health) or the player's health, given unread to SetMinMaxValues.
--- The bar of each shield is drawn from a read of the player's buffs (C_UnitAuras.GetUnitAuras): its amount is the first value of the aura
--- (points[1], WL structures.yaml AuraData), its size the largest plain amount read for that aura, else an estimate of the player's own
--- spell (SpellData.lua through ns.SpellModel.Find, with the spell power read out of a fight). That read works only while the game shows
--- buffs. While it hides them in a fight, one aura container of the game's own (CustomAuraContainerTemplate) draws the shields instead, as
--- Defensives on you does: one group of buttons for each school, so each button knows its colour, with the icon, the time and a bar the game
--- fills by the time left; the game gives no amount of a single shield then, so only the total bar has one. The container's alpha says which
--- of the two shows, a change allowed at any time; the parts of its buttons are made inside the function the game calls while it builds a
--- button, and a later change to them waits until the game says buffs are open. A shield that goes before its time while buffs are read,
--- and is still listed, broke: a sound plays, if chosen, and a red wash over every bar shown fades out; out of combat, a pick of the sound plays
--- both once, on the samples when no bar shows (ns.AbsorbSoundChanged). Out of combat with no shield up, a change of a row of the look shows
--- the samples in the new look for 4 seconds, with no line in the chat (ns.AbsorbLookChanged). The target's total can have a bar of its own;
--- the samples of the test and of a preview draw it too, and turning it on out of combat shows them. The time left on a bar, Flat UI's own
--- (A.Clock) and the game's in a fight (A.TimeOptions), turns amber in its last 5 seconds.
--- Out of a fight the totals follow the game's events; in one, a step a few times a second. While test mode is on (TestMode.lua) the sample
--- bars of /flatui absorbs test stay, with the target's (A.Hold). /flatui absorbs test shows out of combat only, since its samples hide the
--- game's own rows. Bar tooltips (On by default) shows the game's tooltip of a shield over its bar and the shields on you over the total bar,
--- and never takes a click (A.TipShow); over a sample it says whether it is the test's or the look preview's. Every frame is Flat UI's own, and
--- nothing of the game is changed or hooked. The helpers are
--- in one table, A.
-
 local KEY = "absorbs"
 local MOVER, MOVER_TARGET = "FlatUIAbsorbs", "FlatUIAbsorbsTarget"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local SHIELD_ICON = "Interface\\Icons\\Spell_Holy_PowerWordShield"
 local FONT = "GameFontHighlightSmall"
 local CROP = 0.08
--- The most bars of single shields. A read is made at most this often; the time texts step, the total step, a test and a flash last so long.
 local MOST = 6
 local REREAD, STEP, TOTAL_STEP, TEST_TIME, FLASH = 0.2, 0.1, 0.25, 8, 0.4
--- How long the samples a change of the look shows stay after the last change.
 local PREVIEW = 4
--- A shield gone this long or more before its end broke; one gone later ran out. One read this soon after it was put on is read whole.
 local EARLY, FRESH = 0.3, 1
--- School masks: every school, and physical (Mana Shield).
 local ALL = 127
--- One group of the game's container for each mask, in this order, and the most buttons of each.
 local GROUPS = { 127, 1, 4, 16, 32, 8, 64, 2 }
 local GROUP_MOST = { [127] = 4 }
--- The colour of a school by its mask, as the game colours the schools of its combat log (CombatLogColors.lua:13-22); physical, which only
--- Mana Shield takes, is grey here.
 local SCHOOL_RGB = { [1] = { 0.7, 0.7, 0.7 }, [2] = { 1, 0.9, 0.5 }, [4] = { 1, 0.5, 0 }, [8] = { 0.3, 1, 0.3 }, [16] = { 0.5, 1, 1 },
 	[32] = { 0.5, 0.5, 1 }, [64] = { 1, 0.5, 1 } }
--- The opacity of the bar the game fills by the time left, in a fight, where it stands for a shield whose amount is withheld.
 local TIME_ALPHA = 0.6
 local FLASH_RGB = { 1, 0.15, 0.1, 0.55 }
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
--- The events of the totals, which the player's and the target's bars hear; out of a fight they and the reads of the buffs move the totals.
 local TOTAL_EVENTS = { UNIT_ABSORB_AMOUNT_CHANGED = true, UNIT_MAXHEALTH = true }
--- The shields: the row of the page that lists them, the school mask, the length in seconds of the player's own cast (self: cast on the player
--- only, so a cast in a fight counts toward the size), a family (a new cast replaces the shield of its family) and the spell IDs of the aura,
--- rank 1 first (CooldownData.lua; Contingency Plan's shield auras from client_spells.json, whose rank 4 and 5 IDs are crossed).
 local LIST = {
 	{ "priest", 127, 30, "pws", { 17, 592, 600, 3747, 6065, 6066, 10898, 10899, 10900, 10901 } },
 	{ "priest", 127, 15, "cp", { 1277463, 1277464, 1277465, 1277467, 1277466 } },
@@ -98,8 +55,6 @@ local HELP = {
 local IsSecret = ns.IsSecret
 local T = ns.Tracking
 local Ask = T.Ask
--- rows: the bars of single shields. buttons: the parts of the container's buttons. known: by aura instance, the shields last read, with their
--- size, end and mask. casts: by family, the player's own shields cast while buffs were hidden. bonus: spell power read out of a fight.
 local A = { rows = {}, buttons = {}, refused = {}, known = {}, casts = {}, bonus = {}, items = {}, loose = {}, acc = 0, accTotal = 0 }
 local SHIELDS = {}
 for _, entry in ipairs(LIST) do
@@ -130,7 +85,6 @@ local function Now()
 	return type(GetTime) == "function" and GetTime() or 0
 end
 
--- A timer of the client, false when there is none or it raises.
 local function After(seconds, fn)
 	return type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, seconds, fn)
 end
@@ -156,9 +110,6 @@ local function SpellIcon(id)
 	return (Plain(file, "number") or Plain(file, "string")) and file or nil
 end
 
--- The lists ------------------------------------------------------------------------------------------------------------------------------
-
--- The spell IDs added to the list and those taken off it, kept for the account: two maps by spell ID, whole numbers only.
 function A.Saved()
 	local account = ns.Account()
 	if type(account) ~= "table" then
@@ -184,7 +135,6 @@ function A.Saved()
 	return saved
 end
 
--- The shields shown now: those of the rows that are on, and what was added, less what was taken off. A map by spell ID.
 function A.Effective()
 	local set, saved = {}, A.Saved()
 	for id, info in pairs(SHIELDS) do
@@ -203,13 +153,11 @@ function A.Effective()
 	return set
 end
 
--- The mask of a shield: its school, or every school for one added by hand.
 local function MaskOf(id)
 	local info = SHIELDS[id]
 	return info and info.mask or ALL
 end
 
--- The shields shown now, by mask: one map of spell IDs for each group of the container.
 function A.Masks()
 	local masks = {}
 	for _, mask in ipairs(GROUPS) do
@@ -239,7 +187,6 @@ local function ByName(rows)
 	return rows
 end
 
--- The listed shields that are not shown now (a row that is off, or one taken off), by name.
 function ns.AbsorbCandidates()
 	local rows, set = {}, A.Effective()
 	for id in pairs(SHIELDS) do
@@ -258,7 +205,6 @@ function ns.AbsorbListed()
 	return ByName(rows)
 end
 
--- Both work in a fight and with the page off: they change what is saved, and the bars hear of it.
 function ns.AbsorbAdd(id)
 	local saved = A.Saved()
 	if not (Whole(id) and SpellName(id)) then
@@ -279,7 +225,6 @@ function ns.AbsorbAdd(id)
 	elseif not SHIELDS[id] and count >= MOST_ADDED then
 		return false, ("%d added spells is the most."):format(MOST_ADDED)
 	end
-	-- A shield of a row that is off is added by hand.
 	if not A.Effective()[id] then
 		saved.added[id] = true
 	end
@@ -307,9 +252,6 @@ function A.ListsChanged()
 	end
 end
 
--- Colours and pieces ---------------------------------------------------------------------------------------------------------------------
-
--- Red, green and blue of a shield by its mask: its school's with Colour by school on, else Shield colour.
 function A.Colour(mask)
 	local rgb = Opt("school") == true and SCHOOL_RGB[mask] or nil
 	if rgb then
@@ -318,12 +260,10 @@ function A.Colour(mask)
 	return ns.Colour(KEY .. ".colour")
 end
 
--- The bar texture of the page, or the flat one: a bar needs a texture to take a withheld value (HealthColour.lua:90-110).
 function A.File()
 	return ns.BarTexture(Opt("texture")) or WHITE
 end
 
--- A piece of a bar: a texture, or for a bar that has to vanish at zero without a test, a status bar from 0 to 1 that is given the value.
 function A.Piece(owner, presence, layer, sub, level, file)
 	if presence then
 		local bar = Own(CreateFrame("StatusBar", nil, owner))
@@ -348,7 +288,6 @@ local function Tint(piece, r, g, b, a)
 	end
 end
 
--- The four edges of the thin border, just inside a frame, in the border colour of the Flat UI page; none while borderless.
 local function Edges(edges, frame, thick)
 	edges[1]:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
 	edges[1]:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
@@ -379,7 +318,6 @@ local function TextHeight(height)
 	return math.max(7, math.min(14, height - 4))
 end
 
--- The places of the parts of a bar of height h with a border of thick: the icon square on the left, the fill right of it.
 local function Inner(icon, bar, frame, h, thick)
 	icon:ClearAllPoints()
 	icon:SetPoint("TOPLEFT", frame, "TOPLEFT", thick, -thick)
@@ -388,8 +326,6 @@ local function Inner(icon, bar, frame, h, thick)
 	bar:SetPoint("TOPLEFT", frame, "TOPLEFT", h, -thick)
 	bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -thick, thick)
 end
-
--- Flat UI's bars -------------------------------------------------------------------------------------------------------------------------
 
 function A.Holder()
 	if not A.holder then
@@ -400,7 +336,6 @@ function A.Holder()
 			ns.Try(KEY, A.OnUpdate, elapsed)
 		end)
 		A.holder = holder
-		-- The flash lies on a frame above the bars, over the first of them.
 		local over = Own(CreateFrame("Frame", nil, holder))
 		over:SetFrameLevel(holder:GetFrameLevel() + 12)
 		over:SetAllPoints(holder)
@@ -412,8 +347,6 @@ function A.Holder()
 	return A.holder
 end
 
--- A bar: a backdrop, the icon, the fill, a thin strip of the time, the border, the name, the amount and the time. With presence the backdrop,
--- the icon and the border are status bars that a withheld total fills or empties (the total bars).
 function A.NewRow(parent, presence)
 	local frame = Own(CreateFrame("Frame", nil, parent))
 	local row = { frame = frame, presence = presence, edges = {} }
@@ -457,7 +390,6 @@ function A.NewRow(parent, presence)
 	row.time:SetPoint("RIGHT", bar, "RIGHT", -3, 0)
 	row.name:SetPoint("LEFT", bar, "LEFT", 3, 0)
 	row.name:SetPoint("RIGHT", row.time, "LEFT", -3, 0)
-	-- Bar tooltips: never a click, so a click goes through to the world; the mouse only while A.Mouse lets it.
 	pcall(frame.SetMouseClickEnabled, frame, false)
 	frame:SetScript("OnEnter", function()
 		A.TipEnter(row)
@@ -468,7 +400,6 @@ function A.NewRow(parent, presence)
 	return row
 end
 
--- The look of a bar after a change of its size, the bar texture, the border or the text: its parts placed and painted.
 function A.PaintRow(row, w, h)
 	local thick = ns.Pixels(row.frame, ns.Get("general.thickness"))
 	row.frame:SetSize(w, h)
@@ -487,7 +418,6 @@ function A.PaintRow(row, w, h)
 	for _, name in ipairs({ "name", "amount", "time" }) do
 		row[name]:SetTextHeight(text)
 	end
-	-- The amount is on the left; while the name shows, it is on the right, left of the time, and the name ends before it.
 	row.amount:ClearAllPoints()
 	row.name:ClearAllPoints()
 	row.name:SetPoint("LEFT", row.bar, "LEFT", 3, 0)
@@ -504,7 +434,6 @@ function A.PaintRow(row, w, h)
 	end
 end
 
--- The total bar of the player, made once.
 function A.Total()
 	if not A.total then
 		A.total = A.NewRow(A.Holder(), true)
@@ -513,7 +442,6 @@ function A.Total()
 	return A.total
 end
 
--- The bar of shield number index, made the first time it is needed.
 function A.Row(index)
 	local row = A.rows[index]
 	if not row then
@@ -526,7 +454,6 @@ function A.Row(index)
 	return row
 end
 
--- The slot of a bar from the edge of the box the bars grow from.
 local function Put(frame, slot)
 	local h, gap = Number("barHeight", 16), Number("spacing", 2)
 	frame:ClearAllPoints()
@@ -537,12 +464,10 @@ local function Put(frame, slot)
 	end
 end
 
--- The number of slots before the first shield: one while the total bar shows.
 local function FirstSlot()
 	return (Opt("show") == "shields" or type(UnitGetTotalAbsorbs) ~= "function") and 0 or 1
 end
 
--- Places and paints every bar; a layout already in place is left as it is.
 function A.Layout()
 	local w, h = Number("barWidth", 180), Number("barHeight", 16)
 	local parts = { w, h, Number("spacing", 2), Opt("grow"), Opt("show"), Opt("name"), A.File(), ns.Get("general.thickness"), ns.Get("general.border"),
@@ -579,8 +504,6 @@ function A.Layout()
 	end
 end
 
--- Hangs the bars, which are as wide as the holder, from the middle of the top of the box of the movers, or of its bottom while they grow up: so
--- they stay centred on the box at any Bar width.
 function A.Place()
 	local holder = A.Holder()
 	local up = Opt("grow") == "up"
@@ -594,9 +517,6 @@ function A.Place()
 	end
 end
 
--- The writing of a bar -------------------------------------------------------------------------------------------------------------------
-
--- The amount of a bar as Amount says: digits, or digits and the size. A withheld amount is written by the client and is empty at zero.
 function A.WriteAmount(text, value, size)
 	local mode = Opt("amount")
 	local after = mode == "leftmax" and ns.Finite(size) and size > 0 and (" / %d"):format(math.floor(size + 0.5)) or nil
@@ -624,11 +544,9 @@ local function Seconds(left)
 	return ("%.1f"):format(math.max(0, left))
 end
 
--- One shield on a bar: plain fields only, but the amount may be withheld, and goes to the bar and the text unread.
 function A.Fill(row, item)
 	row.icon:SetTexture(item.file or SHIELD_ICON)
 	local r, g, b = A.Colour(item.mask)
-	-- An aura with no amount at all is a full, fainter bar: it is up, by how much is not known.
 	row.bar:SetStatusBarColor(r, g, b, item.amount == nil and TIME_ALPHA or 1)
 	local size = item.size
 	if item.amount == nil then
@@ -654,7 +572,6 @@ function A.Fill(row, item)
 	A.Clock(row, item)
 end
 
--- The time left on a bar, and on its strip; the time amber in its last A.LOW seconds, as on Your buffs and Defensives on you, else white.
 A.LOW, A.AMBER = 5, { 1, 0.7, 0.2 }
 function A.Clock(row, item)
 	if item.expires <= 0 then
@@ -677,8 +594,6 @@ function A.Tint(row, low)
 	end
 end
 
--- The options of the game's time text on its buttons in a fight: white, amber in the last A.LOW seconds, by a step curve of the time left
--- (DurationTextBindingProperty.RemainingDuration) that the game reads itself. Made once; nil where the game has no colour curve.
 function A.TimeOptions()
 	if A.timeOptions == nil then
 		local ok, options = pcall(function()
@@ -693,7 +608,6 @@ function A.TimeOptions()
 	return A.timeOptions or nil
 end
 
--- The bars of the shields of a list, newest first, and the rest hidden.
 function A.DrawRows(list)
 	local n = 0
 	if list and Opt("show") ~= "total" then
@@ -712,14 +626,6 @@ function A.DrawRows(list)
 	A.Mouse()
 end
 
--- Bar tooltips ------------------------------------------------------------------------------------------------------------------------------
-
--- Bar tooltips (On by default, as on Defensives on you): the mouse over the bar of a shield shows the game's own tooltip of its buff with the
--- amount it has left under it, or for a sample and in a fight its name, amount and time left; over the total bar, the shields on you, each with
--- its amount and time left. Never a click. Out of combat only takes the mouse away in a fight (A.fighting, set at PLAYER_REGEN_DISABLED, before
--- the lockdown), Off always. A bar takes the mouse only while it is seen: a shield's bar while it shows, the total bar while a shield on you is
--- known, since it draws a withheld total that is empty at none. In a fight the game's own rows have the game's own tooltip (A.ButtonMouse).
--- Only GameTooltip's widget calls and SetUnitBuffByAuraInstanceID, as the game's own frames call it; it is hidden only while a bar owns it.
 function A.TipsNow()
 	local tips = Opt("tooltips")
 	return tips == "on" or (tips == "out" and not (A.fighting or InCombatLockdown()))
@@ -738,7 +644,6 @@ function A.Mouse()
 	end
 end
 
--- "612 left of 942" for a plain amount, else nil; and "0:23 left" for a shield with an end.
 function A.TipWords(item)
 	local words = {}
 	if ns.Finite(item.amount) then
@@ -777,14 +682,12 @@ function A.TipLines(tip, row)
 			tip:AddLine(words, TIP_DIM[1], TIP_DIM[2], TIP_DIM[3])
 		end
 	end
-	-- The look preview's samples say so; those of the test and of test mode are the test's.
 	if sample then
 		local preview = A.sample and not A.held and A.sampleWhy == "preview"
 		tip:AddLine(preview and "A sample of the look you are setting." or "A sample of the test.", TIP_DIM[1], TIP_DIM[2], TIP_DIM[3])
 	end
 end
 
--- The tooltip of a bar, drawn again each second while the mouse stays: false when none may show now, and it is then hidden if it is the bar's.
 function A.TipShow(row)
 	local tip = GameTooltip
 	if type(tip) ~= "table" or ns.Forbidden(tip) then
@@ -841,7 +744,6 @@ function A.TipLeave(row)
 	A.TipHide(row)
 end
 
--- Gives a withheld total to the pieces that show the bar at all.
 local function Present(row, value)
 	for _, piece in ipairs(row.pieces) do
 		if not pcall(piece.SetValue, piece, value) then
@@ -850,8 +752,6 @@ local function Present(row, value)
 	end
 end
 
--- The size of the shields known to be up and their masks: those last read, and the player's own cast while buffs were hidden. A shield that
--- broke while hidden counts until its end.
 function A.Known()
 	local now, sum, masks, families = Now(), 0, {}, {}
 	for _, item in pairs(A.known) do
@@ -874,8 +774,6 @@ function A.Known()
 	return sum, masks
 end
 
--- The top of the total bar: the size of the shields known to be up, or the player's health (withheld, unread). The second answer is that
--- size when it is one.
 function A.Scale(unit)
 	if unit == "player" and Opt("scale") ~= "health" then
 		local sum = A.Known()
@@ -890,7 +788,6 @@ function A.Scale(unit)
 	return 1, nil
 end
 
--- Writes a total bar from the game's total of a unit, never read: the presence pieces, the fill and the text.
 function A.WriteTotal(row, unit)
 	local ok, total = false, nil
 	if type(UnitGetTotalAbsorbs) == "function" and (unit == "player" or Ask(UnitExists, unit) == true) then
@@ -908,7 +805,6 @@ function A.WriteTotal(row, unit)
 		row.bar:SetValue(0)
 	end
 	A.WriteAmount(row.amount, total, size)
-	-- The colour of the one school every known shield takes, else Shield colour.
 	local mask = nil
 	if unit == "player" then
 		local _, masks = A.Known()
@@ -932,16 +828,11 @@ function A.Totals()
 	end
 end
 
--- The bars flash red once and the sound plays, when a shield broke. A.Track calls this before A.DrawRows takes the broken shield's bar away,
--- so the bars shown now are the stack as it was: the red wash covers them all, from the total (or the first slot) to the last bar shown, from
--- the top or, while Bars grow is Up, from the bottom, as A.Layout anchors it, and fades out over FLASH by an Alpha animation of the texture,
--- made once. Where the game refuses the animation, a timer hides it after FLASH.
 function A.Broke()
 	A.Sound()
 	A.Wash()
 end
 
--- The sound of When a shield breaks, when one is picked.
 function A.Sound()
 	local sound = KITS[Opt("sound")]
 	local kit = sound and ns.SOUNDS and ns.SOUNDS[sound]
@@ -950,7 +841,6 @@ function A.Sound()
 	end
 end
 
--- The red wash over the bars shown now.
 function A.Wash()
 	local flash = A.flash
 	local last = A.Total().frame:IsShown() and 0 or -1
@@ -990,10 +880,6 @@ function A.Wash()
 	end
 end
 
--- Sound of When a shield breaks picked on the page: the page is refreshed, as without a changed function of the row (Core.lua's Changed), and out
--- of combat the sound plays once and the bars shown, real or the samples of a test, flash red, so the whole warning is seen and heard; with no
--- bar shown, the samples show for a few seconds first (A.Preview) and flash. Only a pick in the options calls this, not a profile switch or a
--- reset.
 function ns.AbsorbSoundChanged()
 	ns.Try(KEY, A.Refresh)
 	if InCombatLockdown() or not ns.Enabled(KEY) then
@@ -1013,8 +899,6 @@ function ns.AbsorbSoundChanged()
 	end
 end
 
--- The target's total bar ------------------------------------------------------------------------------------------------------------------
-
 function A.TargetBar()
 	if not A.target then
 		local holder = Own(CreateFrame("Frame", nil, UIParent))
@@ -1031,7 +915,6 @@ function A.PlaceTarget()
 	if not A.target then
 		return
 	end
-	-- The target's bar, as big as its holder, is centred on its box at any Bar width and height.
 	local holder = A.target.frame:GetParent()
 	local x, y = ns.MoverSpot(MOVER_TARGET, "CENTER")
 	holder:ClearAllPoints()
@@ -1042,9 +925,6 @@ function A.PlaceTarget()
 	end
 end
 
--- Reading the player's buffs ---------------------------------------------------------------------------------------------------------------
-
--- The listed shields on the player from one read, plain tables only: nil when the game hides buffs or gives no answer.
 function A.Read()
 	if not T.Open() then
 		return nil
@@ -1081,20 +961,15 @@ function A.Read()
 	return found
 end
 
--- The order of the bars: by the order of the groups (every school first), then the newest first.
 local ORDER = {}
 for index, mask in ipairs(GROUPS) do
 	ORDER[mask] = index
 end
 
--- True when a shield was put on just now, so what is read of it is the whole of it.
 local function Fresh(item, now)
 	return item.expires > 0 and item.length > 0 and now - (item.expires - item.length) < FRESH
 end
 
--- The size of a shield first read: the largest plain amount, or the estimate of the player's own cast while buffs were hidden, or, unless it
--- was put on just now, the estimate of the player's own spell, whichever is larger. So a shield cast in a fight, or first seen after a reload,
--- is not sized at what it has left.
 function A.FirstSize(item, size, now)
 	local info = SHIELDS[item.id]
 	local cast = info and A.casts[info.family]
@@ -1108,7 +983,6 @@ function A.FirstSize(item, size, now)
 	return size
 end
 
--- The sizes of what was read, the shields that broke since the last read, and what is known now.
 function A.Track(found)
 	local now, was, seen, families, set = Now(), A.known, {}, {}, A.Effective()
 	for _, item in ipairs(found) do
@@ -1127,7 +1001,6 @@ function A.Track(found)
 			families[info.family] = true
 		end
 	end
-	-- A shield that a new one of its family replaced did not break, nor one no longer listed.
 	if A.wasRead and Ask(UnitIsDeadOrGhost, "player") ~= true then
 		for instance, old in pairs(was) do
 			if not seen[instance] and set[old.id] and not (old.family and families[old.family]) and (old.expires <= 0 or now < old.expires - EARLY) then
@@ -1146,7 +1019,6 @@ function A.Track(found)
 	end)
 end
 
--- One pass: a read where the game shows buffs, and Flat UI's bars of the shields from it; else the game's rows.
 function A.Pass()
 	A.scheduled = false
 	if not ns.Enabled(KEY) or A.sample or A.held then
@@ -1179,9 +1051,6 @@ function A.Queue()
 	end
 end
 
--- The step of the bars: the time texts, and a few times a second the totals and whether the game shows buffs now. Out of a fight, while the
--- game shows buffs and no cast in a fight still counts, the events say every change of the totals, and the step leaves them. A sample held by
--- test mode starts its time again when it runs out, and keeps its time left while Moving is off on the bar of test mode.
 function A.OnUpdate(elapsed)
 	if not Plain(elapsed, "number") then
 		return
@@ -1220,9 +1089,6 @@ function A.OnUpdate(elapsed)
 	end
 end
 
--- Sizes the game does not give --------------------------------------------------------------------------------------------------------------
-
--- Spell healing and spell damage by school, read while the game gives them plain (out of a fight), for the estimates.
 function A.ReadBonus()
 	local heal = Ask(GetSpellBonusHealing)
 	if ns.Finite(heal) then
@@ -1236,8 +1102,6 @@ function A.ReadBonus()
 	end
 end
 
--- The size of a shield of the player's own class at the player's level and spell power, from SpellData.lua: the base of the rank, its gain a
--- level up to its last level, and the share of spell power or healing. The talents that raise a shield are not in the data, so it can be low.
 function A.Estimate(id)
 	local model = ns.SpellModel
 	if type(model) ~= "table" or type(model.Find) ~= "function" then
@@ -1269,8 +1133,6 @@ function A.Estimate(id)
 	return math.floor(size + 0.5)
 end
 
--- The player cast a shield on themself while buffs are hidden: its estimate counts toward the size of the total until its end, and replaces
--- the shield of its family.
 function A.OnCast(spellID)
 	local info = Plain(spellID, "number") and SHIELDS[spellID] or nil
 	if not (info and info.self) or A.open then
@@ -1289,16 +1151,12 @@ function A.OnCast(spellID)
 	A.Totals()
 end
 
--- The game's rows in a fight -----------------------------------------------------------------------------------------------------------
-
--- The options of a bar filled by the time left (SimpleStatusBarConstantsDocumentation.lua), as Your buffs has them.
 local function BarOptions()
 	local direction = type(Enum) == "table" and type(Enum.StatusBarTimerDirection) == "table" and Enum.StatusBarTimerDirection.RemainingTime
 	local interpolation = type(Enum) == "table" and type(Enum.StatusBarInterpolation) == "table" and Enum.StatusBarInterpolation.Immediate
 	return { interpolation = interpolation or 0, direction = direction or 1 }
 end
 
--- Places and paints the parts of one button of the container. Raises where the game refuses; the callers catch it.
 function A.PaintButton(parts)
 	local button = parts.button
 	local w, h = Number("barWidth", 180), Number("barHeight", 16)
@@ -1331,7 +1189,6 @@ function A.PaintButton(parts)
 	end
 end
 
--- Binds the time text or the name of a button to the game, or takes it back, as Time left and Spell name say.
 function A.BindText(parts, kind)
 	local want, button, text = Opt(kind) == true, parts.button, parts[kind]
 	if not text or parts[kind .. "On"] == want then
@@ -1340,7 +1197,6 @@ function A.BindText(parts, kind)
 	if want then
 		text:Show()
 		if kind == "time" then
-			-- Amber in its last seconds where the game takes the colour, else white.
 			local options = A.TimeOptions()
 			if not (options and pcall(button.SetDurationText, button, text, options)) then
 				button:SetDurationText(text, nil)
@@ -1360,7 +1216,6 @@ function A.BindText(parts, kind)
 	parts[kind .. "On"] = want
 end
 
--- The name of a button ends left of its time, or of its edge, so a long one is cut short as on Flat UI's bars.
 function A.NameEnd(parts, text)
 	if parts.time then
 		text:SetPoint("RIGHT", parts.time, "LEFT", -3, 0)
@@ -1369,9 +1224,6 @@ function A.NameEnd(parts, text)
 	end
 end
 
--- Bar tooltips on the game's rows in a fight, as Defensives on you has them (Defensives.lua's D.Mouse): the game's own tooltip on hover and never
--- a click; Out of combat only has the game hide the tooltip in a fight, and Off takes the mouse away. A refused call leaves parts.tips empty, so
--- A.Flush tries again, and the status names it.
 function A.ButtonMouse(parts)
 	local button, tips = parts.button, Opt("tooltips")
 	local ok = pcall(button.SetMouseClickEnabled, button, false)
@@ -1386,8 +1238,6 @@ function A.ButtonMouse(parts)
 	end
 end
 
--- Makes the parts of one button. Run by the game inside AddAuraGroup while the button is still open; nothing here may raise, and a part the
--- game refuses is left out and named in the status.
 function A.Init(button, mask)
 	local parts = { button = button, mask = mask }
 	A.buttons[#A.buttons + 1] = parts
@@ -1464,7 +1314,6 @@ function A.InitCall(button, mask)
 	end
 end
 
--- The changes to the buttons wait until the game says buffs are open, as Defensives on you has it.
 function A.Flush()
 	if not A.waiting or not T.Open() then
 		return
@@ -1488,14 +1337,11 @@ function A.Flush()
 	end
 end
 
--- The layout of each group: one column of bars of the size of Flat UI's, in the order of GROUPS. The spacing after a group's last bar already
--- parts it from the next group (AnchorUtil.lua:684-727), so groups add none, and the bars are as far apart as Flat UI's.
 local function GroupLayout(index)
 	local gap = Number("spacing", 2)
 	return { elementSpacing = gap, groupSpacing = 0, elementWidth = Number("barWidth", 180), elementHeight = Number("barHeight", 16), layoutIndex = index }
 end
 
--- The column grows down from the top left corner, or up from the bottom left corner (AnchorUtil.lua:465-477).
 function A.Flow()
 	local container = A.container
 	local util = type(AnchorUtil) == "table" and AnchorUtil or {}
@@ -1506,7 +1352,6 @@ function A.Flow()
 	pcall(container.SetFlowLayoutGrowthDirection, container, direction.Right or 1, up and (direction.Up or 1) or (direction.Down or -1))
 end
 
--- One container for the player, out of combat, with one group for each school: the newest shield first in each.
 function A.Build()
 	A.tried = true
 	local ok, container = pcall(CreateFrame, "AuraContainer", nil, A.Holder(), "CustomAuraContainerTemplate")
@@ -1543,7 +1388,6 @@ function A.Build()
 	A.Flow()
 end
 
--- The container under the total bar, or over it while the bars grow up. Out of combat.
 function A.PlaceContainer()
 	local container = A.container
 	if not container then
@@ -1560,7 +1404,6 @@ function A.PlaceContainer()
 	A.Flow()
 end
 
--- Each group's spell IDs and layout again, and on while it has a spell and the page shows shields. Container calls, allowed at any time.
 function A.Groups()
 	local container = A.container
 	if not container then
@@ -1576,21 +1419,16 @@ function A.Groups()
 	end
 end
 
--- The game's rows show while Flat UI's cannot: its alpha, a container call allowed at any time.
 function A.ShowContainer(show)
 	if A.container then
 		pcall(A.container.SetAlpha, A.container, show and Opt("show") ~= "total" and 1 or 0)
 	end
 end
 
--- Putting it in place --------------------------------------------------------------------------------------------------------------------
-
 function A.Listen(on)
 	if not A.watcher then
 		local frame = Own(CreateFrame("Frame"))
-		-- The payload of the auras and of the total is not read: the game may withhold it. A cast's spell ID is read only where it is plain.
 		frame:SetScript("OnEvent", function(_, event, unit, _, spellID)
-			-- Where the game would not give the event for the player (and the target) alone, the others are left out by a plain unit.
 			if A.loose[event] then
 				local plain = Plain(unit, "string")
 				if TOTAL_EVENTS[event] then
@@ -1633,7 +1471,6 @@ function A.Listen(on)
 	end
 end
 
--- Switched off, Flat UI forgets what it read, so a shield that ends meanwhile is not taken for broken when it is on again.
 function A.Off()
 	A.sample, A.held, A.heldList = nil, nil, nil
 	A.known, A.casts, A.wasRead = {}, {}, false
@@ -1687,7 +1524,6 @@ function A.Refresh()
 	end
 end
 
--- True while the bars have a handle in the movers: while the page is on; the target's while its row is on too.
 function ns.AbsorbsShown()
 	return ns.Enabled(KEY)
 end
@@ -1696,7 +1532,6 @@ function ns.AbsorbsTargetShown()
 	return ns.Enabled(KEY) and Opt("target") == true
 end
 
--- The movers set or put back a spot.
 function ns.AbsorbsMoved()
 	if A.holder and ns.Enabled(KEY) then
 		ns.Try(KEY, A.Place)
@@ -1704,9 +1539,6 @@ function ns.AbsorbsMoved()
 	end
 end
 
--- The test, the check and the commands --------------------------------------------------------------------------------------------------
-
--- The sample shields: a Power Word: Shield partly used and a whole Fire Ward.
 local function SampleList(now)
 	return {
 		{ id = 17, amount = 612, size = 942, mask = ALL, expires = now + 23, length = 30, file = SpellIcon(17), name = SpellName(17) or "Power Word: Shield" },
@@ -1714,7 +1546,6 @@ local function SampleList(now)
 	}
 end
 
--- A sample on a total bar: amount of most, in Shield colour, its size written after it as Amount says when size is given.
 local function SampleTotal(row, amount, most, size)
 	Present(row, 1)
 	row.bar:SetMinMaxValues(0, most)
@@ -1723,19 +1554,11 @@ local function SampleTotal(row, amount, most, size)
 	A.WriteAmount(row.amount, amount, size)
 end
 
--- Test mode (TestMode.lua): while it is on (it pauses in a fight) with the page on, the samples of the test stay, with no end and no line
--- in the chat, and the target's bar has one too (640 of a health of 2400) while Your target's total is on. A.held keeps the reads
--- (A.Pass) and the totals off them, and what was read before is not set against the first read after (A.wasRead, A.Track), so a shield
--- that ended meanwhile is not taken for broken when the real bars come back. Each Refresh (On, resume, the page coming on, a change of
--- most of its rows) and every change of a setting after it (TestMode.lua's Changed) draws them again with the look of the page; their
--- times run on from where they were. A.Drop forgets them at Off, at the pause for a fight and when the page goes off, and the Refresh
--- that test mode runs at Off and at the pause draws the real bars at once.
 function A.Holding()
 	local mode = ns.TestMode
 	return mode ~= nil and mode.IsOn() == true and ns.Enabled(KEY)
 end
 
--- Draws the samples of test mode while it holds them, else forgets them; true while they show.
 function A.Hold()
 	if not A.Holding() then
 		A.held, A.heldList = nil, nil
@@ -1756,13 +1579,10 @@ function A.Hold()
 	return true
 end
 
--- The samples of test mode go, and those of the test with them.
 function A.Drop()
 	A.held, A.heldList, A.sample = nil, nil, nil
 end
 
--- The sample shields and their total for so many seconds, drawn again in the look of the page. While test mode holds its samples, the same
--- ones, so their times go on. Each call takes a new token, so the last call's time is the one that ends them.
 function A.Samples(seconds)
 	local token = {}
 	A.sample = token
@@ -1772,7 +1592,6 @@ function A.Samples(seconds)
 	if total and total.frame:IsShown() then
 		SampleTotal(total, 1525, 1855, 1855)
 	end
-	-- The target's sample too, as test mode draws it (A.Hold); A.Pass writes the real total again as the samples end.
 	if A.target and Opt("target") == true then
 		SampleTotal(A.target, 640, 2400, nil)
 	end
@@ -1786,8 +1605,6 @@ function A.Samples(seconds)
 	end
 end
 
--- Sample bars for a few seconds: the sample shields and their total. Out of combat only: the samples hide the game's own rows, which are all
--- that shows the shields in a fight, and cover the live total.
 function A.Test()
 	if not ns.Enabled(KEY) then
 		print("Absorb shields: turn on Absorb shields first.")
@@ -1803,9 +1620,6 @@ function A.Test()
 	print("Absorb shields: sample bars for 8 seconds.")
 end
 
--- The samples for PREVIEW seconds with no line in the chat, out of combat with the page on, test mode off (its own samples show then) and no
--- shield of the player's up (its bars show the look then). A change while they show draws them again and starts their time again, so a slider
--- dragged keeps them up until PREVIEW after its last step.
 function A.Preview()
 	if InCombatLockdown() or not ns.Enabled(KEY) or A.Holding() or (next(A.items or {}) ~= nil and not A.sample) then
 		return
@@ -1814,17 +1628,11 @@ function A.Preview()
 	A.Samples(PREVIEW)
 end
 
--- A row of the look changed (Show, Total bar is full at, Bar width and height, Spacing, Bars grow, Bar texture, Time strip, Amount, Time left,
--- Spell name, Colour by school, Shield colour), or Your target's total: the page is refreshed, as without a changed function of the row
--- (Core.lua's Changed), which makes and shows the target's bar when it is on, and out of combat with no shield up the samples show in the new
--- look for a few seconds (A.Preview), the target's among them, so its bar shows where it sits with nothing targeted. A.Pass leaves bars alone
--- while samples show, so the samples are drawn again after the refresh, and writes the real totals again after them.
 function ns.AbsorbLookChanged()
 	ns.Try(KEY, A.Refresh)
 	ns.Try(KEY, A.Preview)
 end
 
--- What the game gives of each listed shield on the player: its amount, its end and whether the game hides its aura.
 function A.Check()
 	print(("Absorb shields: %s."):format(T.Open() and "the game shows your buffs now" or "the game hides your buffs now, so only the total bar has an amount"))
 	local found = A.Read()
@@ -1932,12 +1740,10 @@ ns.Register(KEY, {
 	Resized = A.Refresh,
 	Status = A.Status,
 	events = {
-		-- After a loading screen the first read is not compared with the last, so a shield the game had not yet listed again did not break.
 		PLAYER_ENTERING_WORLD = function()
 			A.wasRead = false
 			A.Refresh()
 		end,
-		-- Bar tooltips: Out of combat only takes the bars' mouse away from the start of a fight to its end.
 		PLAYER_REGEN_DISABLED = function()
 			A.fighting = true
 			A.Mouse()
@@ -1958,8 +1764,6 @@ ns.Register(KEY, {
 	help = HELP,
 })
 
--- The samples of test mode (A.Hold): On, resume and the page coming on draw them through A.Refresh, every change of a setting through Changed;
--- Stop forgets them at Off, at the pause for a fight and when the page goes off.
 if ns.TestMode then
 	ns.TestMode.Register(KEY, {
 		module = KEY,

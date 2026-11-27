@@ -1,19 +1,7 @@
 local _, ns = ...
 
--- One button size, spacing and row length for every action bar of the bar block, written as Edit Mode settings into the layout in use, so the
--- game's own code sizes the bars (EditModeSettingDisplayInfo.lua:50-88; EllesmereUI writes icon counts the same way,
--- EllesmereUIActionBars/EllesmereUIActionBars.lua:7096-7180). This file is not a module: it registers a writer with LayoutSpots (the layout
--- build), which saves the values in the Reload click, and it reads rectangles and scales only. Nothing here sets a scale or a size on a frame.
--- It writes the bars of all three blocks (BarBlockLists.lua), also while Leave the game's action bars alone is on, which guards only the bars
--- no block holds. Stance, pet and possess bars are in no block and are never touched.
--- Two checks decide at login whether the feature is on: the writer's own bookkeeping (a layout that still lacks the values after a save and a
--- reload means Edit Mode did not keep them) and a read of the button container scale of each bar (the game applies IconSize as SetScale on
--- every button container, EditModeSystemTemplates.lua:1077-1097, names ActionBar.lua:1-45). A failed check puts the writer off and gives one
--- line in /flatui status.
-
 local KEY = "barblock"
 local WRITER = "buttons"
--- Enum.EditModeActionBarSetting (EditModeManagerConstantsDocumentation.lua:250-266), for a client where the enum is not yet there.
 local SETTING = { Orientation = 0, NumRows = 1, NumIcons = 2, IconSize = 3, IconPadding = 4, AlwaysShowButtons = 9 }
 local LINES = {
 	refused = "Button size and spacing: Edit Mode did not take it.",
@@ -22,8 +10,6 @@ local LINES = {
 }
 local TOLERANCE = 0.01
 
--- off: a check failed this session, so nothing is written. checked: the login checks have run. waiting: they wait for the end of a fight.
--- wrote: a value was handed to the layout this session.
 local state = { off = false, checked = false, waiting = false, wrote = false }
 
 local function Opt(name)
@@ -47,7 +33,6 @@ local function Clamp(value, low, high)
 	return math.max(low, math.min(high, value))
 end
 
--- The number of buttons in a row: 12, 6, 4 or 3, else 12.
 local function PerRow()
 	local n = tonumber(Opt("perRow"))
 	if n == 6 or n == 4 or n == 3 then
@@ -56,7 +41,6 @@ local function PerRow()
 	return 12
 end
 
--- The raw Edit Mode value of each setting this build writes, by name.
 local function Size()
 	return Clamp(math.floor((tonumber(Opt("size")) or 100) / 10 + 0.5) * 10, 50, 200)
 end
@@ -75,7 +59,6 @@ end
 
 local ORDER = { "Orientation", "NumRows", "NumIcons", "IconSize", "IconPadding", "AlwaysShowButtons" }
 
--- The frame names of the bars of every block, each once.
 local function BlockFrames()
 	local names = {}
 	local bars = ns.BarFrames
@@ -94,7 +77,6 @@ local function BlockFrames()
 	return names
 end
 
--- The rows of the layout for the bars of the block: { frameName, row }.
 local function Rows(layout)
 	local rows = {}
 	local LS = ns.LayoutSpots
@@ -178,7 +160,6 @@ local function Call(name, ...)
 	end
 end
 
--- Puts the earlier values back at the next Reload when nothing is wanted any more, then asks for the Reload notice.
 local function Sync()
 	if not On() then
 		Call("Unwrite", WRITER)
@@ -187,12 +168,10 @@ local function Sync()
 	Call("Recheck")
 end
 
--- A row of the Buttons section changed.
 function ns.BarButtonsChanged()
 	Sync()
 end
 
--- The live read: the scale of the first button container of each bar of the block, out of combat. A withheld or failed read says nothing.
 local function ScaleCheck()
 	local want = Size() / 100
 	for _, name in ipairs(BlockFrames()) do
@@ -209,7 +188,6 @@ local function ScaleCheck()
 	return true
 end
 
--- Runs once a session, one frame after the first layout update (or the world entered, with the feature off), out of combat.
 local function Check()
 	if state.checked then
 		return
@@ -237,7 +215,6 @@ local function Check()
 	if kept == "pending" then
 		return
 	end
-	-- Only a layout in use that holds the values says anything about the game applying them: no layout, a preset, or one without them says nothing.
 	local info, entry = Call("Resolve")
 	if not info or type(entry) ~= "table" or WantedFor(entry) then
 		return
@@ -268,9 +245,6 @@ pcall(boot.RegisterEvent, boot, "PLAYER_ENTERING_WORLD")
 pcall(boot.RegisterEvent, boot, "EDIT_MODE_LAYOUTS_UPDATED")
 pcall(boot.RegisterEvent, boot, "PLAYER_REGEN_ENABLED")
 boot:SetScript("OnEvent", function(_, event)
-	-- The game applies the layout, container scale included, in its EDIT_MODE_LAYOUTS_UPDATED handler (EditModeManager.lua:60, 192-199), which
-	-- nothing puts before the world is entered. The checks wait for the first one; with the feature off nothing needs the layout, so the world
-	-- entered starts the put-back at once.
 	if event == "EDIT_MODE_LAYOUTS_UPDATED" or (event == "PLAYER_ENTERING_WORLD" and not On()) then
 		Soon(function()
 			pcall(Check)

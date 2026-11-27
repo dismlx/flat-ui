@@ -1,29 +1,13 @@
 local _, ns = ...
 
--- Window titles and item slots. This is not a module: the windows module calls ns.Items from its window frames, its item slots and its bag
--- and bank hooks, and its Refresh calls ns.Items.Apply. The title of a window is TitleContainer.TitleText (Blizzard_SharedXML/PortraitFrame.lua:4-14);
--- a dialog whose title is in a Header has none and is left alone. A slot's bag is read with button:GetBagID() (Blizzard_UIPanels_Game/
--- Mainline/ContainerFrame.lua:1845-1847) and a bank slot's with GetBankTabID and GetContainerSlotID (Mainline/BankFrameTemplates.lua:494, 521).
--- Every item button has a GetBagID, which reads the field bagID of ItemButtonMixin (Blizzard_ItemButton/Shared/ItemButtonTemplate.lua:247-253;
--- Shared/ItemButtonTemplate.xml:4 gives the mixin to every ItemButton), so the slots of the Character and Inspect windows and the buttons of the
--- equipment flyout are known by their names, before that.
--- Every row at its default makes no call the game does not make, and a row put back to its default gives the game's own value back, with two
--- exceptions: Item level on the Inspect window is on, and reads the items of the player the window shows once the game says it has them; and the
--- three bag marks of ItemMarks.lua are on, and read the binding and the tooltip of each bag and bank item, and with a pet out whether it eats it.
--- The levels of the equipment flyout and of the Inspect window, the inspected player's average and the corner of a level on gear follow
--- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
-
 local KEY = "windows"
 local PART = "item details"
 
--- The lowest quality each choice of Quality border from draws, and the quality colours that are compared to find where a colour belongs.
 local MIN_QUALITY = { all = 0, uncommon = 2, rare = 3, epic = 4 }
 local WEAPON, ARMOUR = 2, 4
 local LEVEL_FONT = "NumberFontNormal"
 local AVERAGE_FONT = "GameFontHighlightSmall"
 local WHITE, GOLD = { 1, 1, 1 }, { 1, 0.82, 0 }
--- Where the item level of a slot of the Character or Inspect window sits (Item level corner on gear): the point of the text and of the slot, and
--- the offset. Every other slot keeps the first.
 local CORNERS = {
 	bottomLeft = { "BOTTOMLEFT", 2, 2 },
 	bottomRight = { "BOTTOMRIGHT", -2, 2 },
@@ -31,33 +15,19 @@ local CORNERS = {
 	topRight = { "TOPRIGHT", -2, -2 },
 }
 local GEAR = { char = true, inspect = true }
--- The slots of the Inspect window (INSPECTPAPERDOLLFRAME_SLOTS, Blizzard_InspectUI/Camelot/Blizzard_InspectUI.lua:13-33), the function that
--- fills one (Mainline/InspectPaperDollFrame.lua:245-273) and the addon that holds them, which the game loads the first time it inspects.
 local INSPECT_SLOTS = { "InspectHeadSlot", "InspectNeckSlot", "InspectShoulderSlot", "InspectBackSlot", "InspectChestSlot", "InspectShirtSlot",
 	"InspectTabardSlot", "InspectWristSlot", "InspectHandsSlot", "InspectWaistSlot", "InspectLegsSlot", "InspectFeetSlot", "InspectFinger0Slot",
 	"InspectFinger1Slot", "InspectTrinket0Slot", "InspectTrinket1Slot", "InspectMainHandSlot", "InspectSecondaryHandSlot", "InspectRangedSlot" }
 local INSPECT_UPDATE = "InspectPaperDollItemSlotButton_Update"
 local INSPECT_ADDON = "Blizzard_InspectUI"
--- The function that fills a button of the equipment flyout with the item at its location (Blizzard_FrameXML/Camelot/EquipmentFlyout.lua:533-580).
 local FLYOUT_BUTTON = "EquipmentFlyout_DisplayButton"
--- How a location of the flyout is made, for a client whose globals do not say: the flags of a worn item, a bag and the bank, the shift of the bag
--- (Blizzard_FrameXMLBase/Constants.lua:129-132), and the first of the three locations that hold no item (EquipmentFlyout.lua:32-35).
 local LOCATION = { player = 0x00100000, bags = 0x00200000, bank = 0x00400000, shift = 8, special = 0xFFFFFFFD }
 
--- The slots this file looks at, by button: { kind = "bag", "bank", "char" (the player's slots), "inspect" (the Inspect window's) or "flyout" (the
--- buttons of the equipment flyout), level = the item level text, corner = the spot it was put at, dim = the dim texture, hidGlow = true while the
--- new item glow is hidden here }.
 local buttons = setmetatable({}, { __mode = "k" })
--- What the game answers for the colour of each quality from 0 to 4, read at each refresh: { quality, r, g, b }.
 local ranks
--- True once a row of the bag, bank or character slots away from its default has been applied, so that nothing is read for those slots while
--- every one of their rows is at its default.
 local touched = false
--- Parts the game refused: the part is off and says so on /flatui status.
 local refused = {}
 local burst = false
--- The Inspect window: ready is the GUID INSPECT_READY last named for the unit the window shows, average the text of that player's average,
--- queued true while a pass over the average waits for the next frame, and seen true once the slots of the window were dressed.
 local inspect = { ready = nil, average = nil, queued = false, seen = false }
 
 local Items = {}
@@ -71,7 +41,6 @@ local function Usable(value)
 	return value ~= nil and not ns.IsSecret(value) and type(value) == "table"
 end
 
--- A frame or region held in a field of a frame that may not be touched or withheld.
 local function Held(frame, key)
 	if ns.Forbidden(frame) then
 		return nil
@@ -83,7 +52,6 @@ local function Held(frame, key)
 	return nil
 end
 
--- Any value held in a field of a frame, unless the frame may not be touched or the client withholds the value.
 local function FieldOf(frame, key)
 	if ns.Forbidden(frame) then
 		return nil
@@ -95,7 +63,6 @@ local function FieldOf(frame, key)
 	return value
 end
 
--- A number the game keeps in a global, or the fallback when it keeps none.
 local function Constant(name, fallback)
 	local value = _G[name]
 	if ns.Finite(value) then
@@ -104,7 +71,6 @@ local function Constant(name, fallback)
 	return fallback
 end
 
--- Runs fn on the next frame.
 local function Soon(fn)
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
 		C_Timer.After(0, fn)
@@ -126,7 +92,6 @@ local function NameOf(frame)
 	return nil
 end
 
--- True when the game would refuse to make a texture or text on the frame now.
 local function Blocked(frame)
 	if not InCombatLockdown() then
 		return false
@@ -135,16 +100,11 @@ local function Blocked(frame)
 	return not ok or ns.IsSecret(protected) or protected == true
 end
 
--- Titles ----------------------------------------------------------------------------------
-
 local function TitleOf(frame)
 	local container = Held(frame, "TitleContainer")
 	return container and Held(container, "TitleText") or nil
 end
 
--- The game colours a title only through SetTitleColor, which sets the text colour. Its windows call it from their own methods (the
--- character window in UpdateTitle, CharacterFrame.lua:242-246, on show, on a tab change and on the name and rank events), so the colour
--- is set again a frame after each of those: when a titled window is shown, and when the windows module calls Items.Retitle.
 local titled = setmetatable({}, { __mode = "k" })
 local shownHooked = setmetatable({}, { __mode = "k" })
 local retitleQueued = false
@@ -159,7 +119,6 @@ local function OnTitleColour(frame)
 	end
 end
 
--- Sets the size and colour of the title of a window, or gives the game's back.
 function Items.Title(frame, on)
 	local text = TitleOf(frame)
 	if text == nil then
@@ -197,7 +156,6 @@ local function Retitled()
 	end
 end
 
--- Sets the own colour of every titled window again, a frame from now.
 function Items.Retitle()
 	if retitleQueued or next(titled) == nil then
 		return
@@ -209,8 +167,6 @@ function Items.Retitle()
 		Retitled()
 	end
 end
-
--- Quality ---------------------------------------------------------------------------------
 
 local function ReadRanks()
 	local list = {}
@@ -226,8 +182,6 @@ local function ReadRanks()
 	return list
 end
 
--- True when a slot whose border has this colour is drawn with it. Poor to epic are found by comparing the colour, within 0.01, with the game's
--- colour of each quality; a colour that is none of them is a better quality than epic.
 function Items.Passes(colour)
 	local least = MIN_QUALITY[Opt("qualityMin")] or 0
 	if least == 0 then
@@ -248,12 +202,6 @@ function Items.Passes(colour)
 	return rank >= least
 end
 
--- The inspected player ------------------------------------------------------------------------
-
--- The Inspect window keeps the unit it shows in its field unit: InspectFrame_Show sets it before the game asks the server for that player's
--- items, and the window clears it when it hides (Camelot/Blizzard_InspectUI.lua:41-50, 144-152). The game names the player's GUID in INSPECT_READY
--- once it has them (PaperDollInfoDocumentation.lua:349-358) and fills its slots then (Mainline/InspectPaperDollFrame.lua:12-27, 63-73); its own
--- window asks for every inspection, and this file never does.
 local function InspectedUnit()
 	local frame = _G.InspectFrame
 	if not Usable(frame) then
@@ -274,7 +222,6 @@ local function GuidOf(unit)
 	return nil
 end
 
--- The unit the Inspect window shows, once INSPECT_READY has named it: only then are its items read.
 local function ReadyUnit()
 	local unit = InspectedUnit()
 	if unit and inspect.ready and GuidOf(unit) == inspect.ready then
@@ -283,10 +230,6 @@ local function ReadyUnit()
 	return nil
 end
 
--- Slots --------------------------------------------------------------------------------------
-
--- True while no row wants anything of the bag, bank or character slots: each at the value that reads nothing. The bag marks are on by default and
--- read every bag and bank slot on a client that has their calls.
 local function Quiet()
 	return Opt("countSize") == 100 and not Opt("ilvlBags") and not Opt("ilvlCharacter") and Opt("newGlow") and not Opt("junkDim")
 		and not ns.ItemMarks.Wanted()
@@ -301,7 +244,6 @@ local function Shown(frame)
 	return ok and not ns.IsSecret(visible) and visible == true
 end
 
--- The size of the stack count of a slot.
 local function Count(button, live)
 	local text = Held(button, "Count")
 	if text == nil then
@@ -319,7 +261,6 @@ local function Count(button, live)
 	end
 end
 
--- The link of an item a unit wears in an inventory slot.
 local function WornLink(unit, slot)
 	if type(GetInventoryItemLink) ~= "function" then
 		return nil
@@ -328,7 +269,6 @@ local function WornLink(unit, slot)
 	return ok and not ns.IsSecret(link) and type(link) == "string" and link or nil
 end
 
--- The link and the container item info of a bag slot, and the bag and slot.
 local function BagItem(bag, slot)
 	if type(C_Container) ~= "table" or not ns.Finite(bag) or not ns.Finite(slot) then
 		return nil
@@ -344,10 +284,6 @@ local function BagItem(bag, slot)
 	return link, info, bag, slot
 end
 
--- The bag and slot of an item of the equipment flyout, or nil and the inventory slot of a worn one, from the location the game gave its button
--- (EquipmentFlyout.lua:373), read as EquipmentManager_GetLocationData reads it (Blizzard_FrameXML/Shared/EquipmentManager.lua:1-28). Nothing for a
--- location that holds no item: none, Leave this slot alone, Put in bags (EquipmentFlyout.lua:533-542, 582-628), and a bank bag the game has no
--- offset for (Constants.lua:172).
 local function Located(location)
 	if not ns.Finite(location) or location < 0 or location % 1 ~= 0
 		or location >= Constant("EQUIPMENTFLYOUT_FIRST_SPECIAL_LOCATION", LOCATION.special) then
@@ -382,7 +318,6 @@ local function Located(location)
 	return math.floor(bag), math.floor(slot)
 end
 
--- The item link and the container item info of a slot, and the bag and slot they came from.
 local function Source(button, kind)
 	if kind == "char" then
 		return WornLink("player", button:GetID())
@@ -410,7 +345,6 @@ local function Source(button, kind)
 	return BagItem(bag, slot)
 end
 
--- True for an item of poor quality that a vendor buys.
 local function Junk(info)
 	if info == nil then
 		return false
@@ -461,7 +395,6 @@ end
 
 local Dress
 
--- Takes up the slot again once the game lets text and textures be made on it.
 local function Later(button, entry)
 	if not entry.queued then
 		entry.queued = true
@@ -472,8 +405,6 @@ local function Later(button, entry)
 	end
 end
 
--- Puts the item level of a slot in its corner: a slot of the Character or Inspect window where Item level corner on gear says, any other at the
--- bottom left. It is moved only when the corner changes.
 local function Place(text, button, entry)
 	local spot = GEAR[entry.kind] and CORNERS[Opt("ilvlCorner")] or CORNERS.bottomLeft
 	if entry.corner == spot then
@@ -486,8 +417,6 @@ local function Place(text, button, entry)
 	entry.corner = spot
 end
 
--- Gives an item level text of this file the size of Item level size, a colour and its words, and shows it. A font the game refuses stops the
--- item details.
 local function Fill(text, record, r, g, b, words)
 	local size = Opt("ilvlSize")
 	if record.levelSize ~= size and record.levelFile then
@@ -558,7 +487,6 @@ local function Dim(button, entry, want)
 	pcall(texture.Show, texture)
 end
 
--- The new item glow and its flash are shown by the game on every update of the bag, so they are hidden again after it.
 local function Glow(button, entry, hide, bag, slot)
 	if hide then
 		ns.SetHidden(Held(button, "NewItemTexture"), true)
@@ -576,8 +504,6 @@ local function Glow(button, entry, hide, bag, slot)
 	end
 end
 
--- Whether the rows want an item level on a slot of this kind. The flyout shows the bag items for a slot of the Character window, so it has
--- them only with Item level on equipped gear.
 local function Wanted(kind)
 	if kind == "bag" or kind == "bank" then
 		return Opt("ilvlBags")
@@ -589,8 +515,6 @@ local function Wanted(kind)
 	return Opt("ilvlInspect")
 end
 
--- The bag marks of a bag or bank slot (ItemMarks.lua), in a part of their own, so that a failure there stops them alone; a stopped part hides every
--- mark.
 local function Mark(button, live, info, bag, slot)
 	local marks = ns.ItemMarks
 	if not ns.EachPart(KEY, marks.PART, marks.Dress, button, live, info, bag, slot) and ns.PartStopped(KEY, marks.PART) then
@@ -598,7 +522,6 @@ local function Mark(button, live, info, bag, slot)
 	end
 end
 
--- Applies the rows to one slot.
 function Dress(button, entry)
 	local live = ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and not refused[PART]
 	Count(button, ns.Enabled(KEY))
@@ -628,7 +551,6 @@ function Dress(button, entry)
 	end
 end
 
--- The kind of a slot, by its name first (see the top of this file). The bag bar's slots are named CharacterBag0Slot and the like.
 local function KindOf(button)
 	local name = NameOf(button)
 	if name then
@@ -663,9 +585,6 @@ local function OnBank(button)
 	end
 end
 
--- The game's Refresh of a bank slot ends by setting the slot's quality (BankFrameTemplates.lua:567-571) and then its frame art
--- (Camelot/BankFrame.lua:254-262), so a slot is dressed a frame after SetItemButtonQuality is called for it. A bank slot that no kind of the
--- windows module styled (Item slots or Bags and bank off) is taken up here, as Items.Bag takes up the bag slots whatever their look.
 local bankPending, bankQueued = {}, false
 
 local function BankDressed()
@@ -704,17 +623,12 @@ local function OnPaperDoll(button)
 	end
 end
 
--- The game filled a button of the equipment flyout. It does so for every button of the page each time it fills the flyout, which is every
--- frame while the flyout is pinned open (EquipmentFlyout.lua:142-162, 646-653), and dressing a button reads only its item.
 local function OnFlyoutButton(button)
 	if Usable(button) and not ns.Forbidden(button) and (buttons[button] or (ns.Enabled(KEY) and Opt("ilvlCharacter") and Opt("ilvlFlyout"))) then
 		ns.EachPart(KEY, PART, Dress, button, EntryOf(button, "flyout"))
 	end
 end
 
--- The Inspect window ------------------------------------------------------------------------
-
--- The inspected player's average: C_PaperDollInfo.GetInspectItemLevel (PaperDollInfoDocumentation.lua:122-135), or nil.
 local function InspectLevel(unit)
 	local info = C_PaperDollInfo
 	local call = type(info) == "table" and not ns.IsSecret(info) and info.GetInspectItemLevel or nil
@@ -728,8 +642,6 @@ local function InspectLevel(unit)
 	return nil
 end
 
--- The words of the average: the game's name for it (STAT_AVERAGE_ITEM_LEVEL, the title of the average on the character page,
--- Camelot/CharacterFrame.xml:494), in English when the client has none, and the level to one decimal.
 local function AverageWords(level)
 	local label = _G.STAT_AVERAGE_ITEM_LEVEL
 	if ns.IsSecret(label) or type(label) ~= "string" or label == "" then
@@ -738,8 +650,6 @@ local function AverageWords(level)
 	return ("%s %.1f"):format(label, level)
 end
 
--- Shows the average in a small font under the level on the window's character page (InspectLevelText, Camelot/InspectPaperDollFrame.xml:58-75),
--- or hides it. The text is made on that page, and while the page is protected in a fight it waits for the next pass.
 local function Average()
 	local record = inspect.average
 	local live = ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and not refused[PART] and Opt("ilvlInspect")
@@ -784,7 +694,6 @@ local function AverageSoon()
 	end
 end
 
--- Dresses every slot of the Inspect window, and its average.
 local function DressInspect()
 	inspect.seen = true
 	for _, name in ipairs(INSPECT_SLOTS) do
@@ -796,8 +705,6 @@ local function DressInspect()
 	ns.EachPart(KEY, PART, Average)
 end
 
--- The game filled a slot of the Inspect window: on INSPECT_READY, when its page is shown and when the inspected player changes gear
--- (InspectPaperDollFrame.lua:63-73, 81-86, 209-217). A player whose items the game has not announced is not read.
 local function OnInspectSlot(button)
 	if Usable(button) and not ns.Forbidden(button) and (buttons[button] or (ns.Enabled(KEY) and Opt("ilvlInspect"))) then
 		ns.EachPart(KEY, PART, Dress, button, EntryOf(button, "inspect"))
@@ -805,7 +712,6 @@ local function OnInspectSlot(button)
 	end
 end
 
--- The game has the items of the player with this GUID. Only those of the unit the Inspect window shows are read.
 local function OnInspectReady(guid)
 	if ns.IsSecret(guid) or type(guid) ~= "string" then
 		return
@@ -820,14 +726,12 @@ local function OnInspectReady(guid)
 	end
 end
 
--- The addon of the Inspect window has loaded, with the function that fills its slots.
 local function OnAddonLoaded(name)
 	if name == INSPECT_ADDON and Opt("ilvlInspect") then
 		ns.FollowGlobal(INSPECT_UPDATE, OnInspectSlot)
 	end
 end
 
--- Called for each slot the windows module styles, and when the game sets its border again.
 function Items.Slot(button)
 	if ns.Forbidden(button) then
 		return
@@ -847,10 +751,6 @@ function Items.Slot(button)
 	end
 end
 
--- Called after a bag window updates its items. Only a bag that is shown is dressed: a closed one is dressed when it opens, as the windows module
--- looks at a bag when it is shown and after ContainerFrame_GenerateFrame. Its slots are the list Items the game fills when it opens the bag
--- (ContainerFrameMixin:ClearItems and AcquireNewItemButton, Mainline/ContainerFrame.lua:1046-1056), read as a field: EnumerateValidItems asks
--- GetBagSize, which writes the field size (and on the combined bag shownSlots) of a bag the game has not opened yet (:535-545, 567-578, 2917-2941).
 function Items.Bag(root)
 	if Idle() or ns.Forbidden(root) or not Shown(root) then
 		return
@@ -866,7 +766,6 @@ function Items.Bag(root)
 	end
 end
 
--- The rows of the Inspect window, applied: a window that shows a player whose items the game has is dressed again, and the average with it.
 local function InspectApplied()
 	if Opt("ilvlInspect") and ReadyUnit() then
 		DressInspect()
@@ -875,12 +774,10 @@ local function InspectApplied()
 	end
 end
 
--- Called when the windows module applies its settings.
 function Items.Apply()
 	ranks = nil
 	refused.qualityMin = nil
 	ns.ItemMarks.Apply()
-	-- The bank slots are followed whatever the look of the windows: Items.Slot runs only for a slot the windows module styles.
 	if ns.Enabled(KEY) and not Quiet() then
 		ns.FollowGlobal("SetItemButtonQuality", OnQuality)
 	end
@@ -902,7 +799,6 @@ function Items.Apply()
 	end
 end
 
--- Dresses a slot again, as ItemMarks.lua asks once a fight that kept a mark from being made is over.
 function Items.Redress(button)
 	local entry = buttons[button]
 	if entry then
@@ -910,8 +806,6 @@ function Items.Redress(button)
 	end
 end
 
--- Dresses again every bag and bank slot that is shown, as ItemMarks.lua asks when an answer it kept went old. A hidden slot is dressed when its
--- bag or the bank opens again.
 function Items.Redraw()
 	for button, entry in pairs(buttons) do
 		if (entry.kind == "bag" or entry.kind == "bank") and Shown(button) then
@@ -920,7 +814,6 @@ function Items.Redraw()
 	end
 end
 
--- Item information that arrives after the slots were drawn fills in the levels. One refresh covers a run of events.
 local function Refill()
 	burst = false
 	for button, entry in pairs(buttons) do
@@ -946,6 +839,4 @@ ns.AddEvent(KEY, "ADDON_LOADED", OnAddonLoaded, function(name)
 	return not ns.IsSecret(name) and name == INSPECT_ADDON
 end)
 
--- The item level of a weapon or a piece of armour from its link, or nil for any other item and while the game has not said: Bags draws it on
--- slots of its own and searches by it (BagsItems.lua, BagsSearch.lua), whatever the switch of Windows and its rows.
 Items.LevelOf = LevelOf

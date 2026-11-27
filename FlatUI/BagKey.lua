@@ -1,22 +1,8 @@
 local _, ns = ...
 
--- Backpack key opens every bag. WoW: Forever binds B to Toggle Backpack (TOGGLEBACKPACK, Bindings_Camelot.xml:1172-1174) and Shift+B to Open
--- All Bags (OPENALLBAGS, :1190-1192). With Combine bags on, Toggle Backpack shows the combined bag alone (ToggleBackpack_Combined,
--- Mainline/ContainerFrame.lua:171-177): the reagent bag is never part of it (ContainerFrame_IsGenericHeldBag and IsUsingCombinedBags, :83-86 and
--- 2460-2464) and has a window and a key of its own (TOGGLEREAGENTBAG1, Bindings_Camelot.xml:1175-1177). Open All Bags opens the backpack and then
--- every bag up to the reagent bag, and closes them all when all are open (ToggleAllBags, ContainerFrame.lua:2141-2148 and 2173-2213).
--- So while the row is on, each key the player has for Toggle Backpack gets an override binding to Open All Bags, owned by a frame of this addon's
--- own (SetOverrideBinding). The key then runs the game's own binding, and nothing of this addon runs when it is pressed. The player's bindings are
--- not written: GetBindingKey without its override flag reads them, so this addon's own overrides are not counted; ClearOverrideBindings takes the
--- overrides away when the row goes off, and they end with the session (the page goes off with a reload). Neither call may be made in combat, so a
--- change then waits for the end of the fight. UPDATE_BINDINGS follows a key the player binds again; this addon's own calls fire it as well, and a
--- pass for the keys already done does nothing.
--- This is not a module: the windows module calls ns.BagKey.Apply whenever it applies its settings, and the row calls ns.BagKeyChanged.
-
 local KEY = "windows"
 local FROM, TO = "TOGGLEBACKPACK", "OPENALLBAGS"
 local owner = CreateFrame("Frame")
--- done: the keys the last pass was for. applied: those the game took. refused: those it did not. waiting: a pass waits for the end of combat.
 local done, applied, refused = {}, {}, {}
 local waiting, busy = false, false
 
@@ -24,7 +10,6 @@ local function Wanted()
 	return ns.Enabled(KEY) and ns.Get(KEY .. ".bagKey") == true
 end
 
--- The keys the player has bound to Toggle Backpack, in the order the game gives them.
 local function Keys()
 	local keys = {}
 	if type(GetBindingKey) ~= "function" then

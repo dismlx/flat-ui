@@ -1,56 +1,8 @@
 local _, ns = ...
 
--- Show recent chat after a reload (chat.restore on the Chat text page of Chat and tooltips, off by default), with Lines to show again and Numbered
--- channels too. A reload, Flat UI's Uprank and reload among them, empties the chat windows, and the game keeps no chat across one: its history keeper
--- maps the targets of replies only (Blizzard_ChatFrameBase/Shared/HistoryKeeper.lua). This file adds to the chat module and has no switch of its own:
--- Chat.lua calls ns.ChatHistorySync at the end of each refresh.
--- Kept: while the row is on (and, for Copy recent chat below, while the module is), a frame of Flat UI's own hears what players write, registered
--- only then: say, yell, emotes, party, raid, raid warnings,
--- instance chat, guild, officer and whispers both ways, and with Numbered channels too the numbered channels (the CHAT_MSG_* events of
--- ChatInfoDocumentation.lua; wowless, data/products/wowf/events.yaml). The newest 200 lines of this character are kept in FlatUICharDB.chatLog.lines,
--- each { time (GetServerTime, SystemTimeDocumentation.lua:30-37), event, sender, text } and for a channel its name and number, and in
--- FlatUICharDB.chatLog.colours the colour the game gave each kind of line when one was heard. The game makes the text and the sender secret in its
--- chat messaging lockdown: in an encounter, a challenge mode or a PvP match, and on a map that restricts communication such as a dungeon or a raid
--- (SecretInChatMessagingLockdown, ChatInfoDocumentation.lua:2063-2067; SecretPredicatesDocumentation.lua:65-67). Such a line is never kept, only
--- counted for /flatui status, as EnhanceQoL skips it (EnhanceQoLChatSocial/ChatIM/ChannelHistory.lua:791). Battle.net whispers are other events,
--- not heard: their sender is the client's |K token for a name. Nor is a line the game shows in no chat window kept: a whisper of a Game Master, which
--- goes to a window of its own, and a line it shows only in the letterbox of a cinematic (Mainline/ChatFrameOverrides.lua:306-320). A line the chat
--- filters of other addons drop is heard all the same.
--- Shown: Core.lua listens for a module's events from ADDON_LOADED and hands them to it once it has started (Core.lua:3174-3186, 3226-3244,
--- 3294-3302), so PLAYER_LOGIN, which comes at every login and every reload, is heard through the module (ns.AddEvent) and not on the frame, which
--- is made in the refresh that the start of the module runs inside that same PLAYER_LOGIN. Once a session, one Flat UI line and then the newest kept
--- lines go to the main chat window: up to Lines to show again, none older than an hour, oldest first, each as "[hh:mm] [sender]: text" with the
--- kind before the sender as the game names it (a channel's label as the windows show it now, "[2. Trade]" while Channel names is short:
--- ns.ChatChannelLabel of ChatLinks.lua, 0.5.35), in the colour of its kind (ChatTypeInfo, read only: ChatFrameOverrides.lua:145-151 sets it, and
--- Shared/ChatTypeInfoColors.lua gives every kind white until the chat settings come, so the colour kept from the last session comes first),
--- dimmed. They go out through print(), whose handler writes to DEFAULT_CHAT_FRAME (Blizzard_PrintHandler/Blizzard_PrintHandler.lua:66-72, 93-95),
--- since the AddMessage of a chat window is a Lua method of the game (Shared/ChatFrame.lua:35-41). The links in a text stay as they came.
--- A window keeps only its newest lines (Blizzard_SharedXML/CircularBuffer.lua:29-40): 128 as the game sets it up, or Lines kept per window. At most
--- three quarters of that is printed, the Flat UI line with them, so that line and the other lines of the login stay in the window.
--- Turning the row or its page off empties FlatUICharDB.chatLog; with Numbered channels too off the lines of channels go. Numbered channels too
--- stands on its own (0.5.41, no longer greyed while the row is off): it decides whether the lines of channels are heard at all, for Copy recent
--- chat below and, with the row on, for the lines kept.
--- Copy recent chat (0.5.39; the row of that name on the Chat text page, and /flatui copy): the frame hears the same lines while the module is on,
--- whatever the row, and keeps the newest MOST of this session in memory alone (S.session; the lines the game withholds left out as above, the
--- channels only with Numbered channels too); FlatUICharDB.chatLog is written only with the row on, as before. A pick of The last 50 lines or
--- The last 200 lines, or /flatui copy (copy 200), opens on the next frame a box of Flat UI's own over the middle of the screen: a scroll frame of
--- its own with a multi-line box of its own, the newest lines oldest first as "[21:04] [Party] [Mara]: text" (as above, with the lines kept from
--- before a reload first while the row is on), links as their bracketed text and colour codes, textures and atlases left out (Bare), all
--- selected and scrolled to the newest, for Ctrl+C, which turns the line of help over it to "Copied 50 lines." (0.5.41; "Copied what you selected."
--- once a click or a key that moves the cursor may have chosen a part). Typing in it puts the lines back; Escape, the loss of its focus and the
--- start of a fight close it. It never opens in a fight. The chat windows' own lines stay out of reach: their GetMessageInfo is a Lua method of the game
--- (Blizzard_SharedXML/ScrollingMessageFrame.lua:30).
--- This follows the chat history of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLChatSocial/ChatIM/ChannelHistory.lua:
--- 777-898, 1884-1910, 2293-2305; Settings_ChatFrame.lua:720-735). Left out: its history window with search and lists per channel, the other lines
--- it keeps (system, loot, achievements and Battle.net), and the lines of other characters.
-
--- A part of its own: "chat history" is the part of Lines kept per window in ChatText.lua (149), which fails and stops apart from this one.
 local KEY, PART = "chat", "recent chat"
--- The most lines kept for a character, and the age in seconds of the oldest line shown again.
 local MOST, HOUR = 200, 3600
--- The lines a chat window keeps when the game sets it up (ChatFrameMixin:OnLoad, Mainline/ChatFrameOverrides.lua:3).
 local GAME_LINES = 128
--- The share of its colour a line shown again keeps.
 local DIM = 0.75
 local CHANNEL = "CHAT_MSG_CHANNEL"
 local EVENTS = { "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_EMOTE", "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER",
@@ -60,21 +12,15 @@ local HEARD = {}
 for _, event in ipairs(EVENTS) do
 	HEARD[event] = true
 end
--- The kind before the sender, as the game names it in English.
 local TAGS = { CHAT_MSG_PARTY = "[Party] ", CHAT_MSG_PARTY_LEADER = "[Party Leader] ", CHAT_MSG_RAID = "[Raid] ", CHAT_MSG_RAID_LEADER = "[Raid Leader] ",
 	CHAT_MSG_RAID_WARNING = "[Raid Warning] ", CHAT_MSG_INSTANCE_CHAT = "[Instance] ", CHAT_MSG_INSTANCE_CHAT_LEADER = "[Instance Leader] ",
 	CHAT_MSG_GUILD = "[Guild] ", CHAT_MSG_OFFICER = "[Officer] " }
 
--- The frame that hears the lines, the events it is given, the lines withheld since login, whether the lines were shown this session, the lines
--- heard this session (memory only, for Copy recent chat) and the copy box.
 local S = { frame = nil, given = {}, withheld = 0, shown = false, session = {}, box = nil, closing = false }
--- Copy recent chat (0.5.39): the lines of its row, the most /flatui copy takes, the box's size and parts, and its words.
 local COPY = { LINES = { { 50, "The last 50 lines" }, { 200, "The last 200 lines" } }, FIRST = 50, WIDTH = 560, HEIGHT = 340, PAD = 8, HELP = 24,
 	WHEEL = 42,
-	-- The keys that move the cursor, and with Shift choose a part of the lines.
 	MOVES = { LEFT = true, RIGHT = true, UP = true, DOWN = true, HOME = true, END = true, PAGEUP = true, PAGEDOWN = true },
 	SAY = "The last %d %s heard: press %s to copy %s, or select a part first. Escape closes this.",
-	-- Once Ctrl+C was pressed (0.5.41): all the lines, or a part the player chose with the mouse or the arrow keys.
 	COPIED = "Copied %d %s. Paste %s where you like; Escape closes this.",
 	COPIED_PART = "Copied what you selected. Paste it where you like; Escape closes this.",
 	NONE = "Flat UI: no chat heard yet to copy. Lines are heard while Chat and tooltips is on.",
@@ -90,18 +36,14 @@ local function Plain(value, kind)
 	return not ns.IsSecret(value) and type(value) == kind
 end
 
--- True while lines are kept: the module on, the row on and the part not stopped.
 local function Wanted()
 	return ns.Enabled(KEY) and Opt("restore") == true and not ns.PartStopped(KEY, PART)
 end
 
--- True while lines are heard: with the module on and the part not stopped, for this session's lines (Copy recent chat, 0.5.39) and, with the row
--- on, for the lines kept.
 local function Hearing()
 	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART)
 end
 
--- The seconds of the server clock, or nil when the client does not say.
 local function Now()
 	local clock = type(GetServerTime) == "function" and GetServerTime or (type(time) == "function" and time or nil)
 	if not clock then
@@ -114,7 +56,6 @@ local function Now()
 	return nil
 end
 
--- What is kept for this character: { lines, colours }. A list that is not one is made again with make, else read as none.
 local function Log(make)
 	local char = ns.Character()
 	if type(char) ~= "table" then
@@ -141,7 +82,6 @@ local function Forget()
 	end
 end
 
--- The colour the game gives a kind of line now, as "rrggbb", or nil.
 local function GameColour(kind)
 	local info = ChatTypeInfo
 	if not Plain(info, "table") then
@@ -161,7 +101,6 @@ local function GameColour(kind)
 	return ("%02x%02x%02x"):format(byte(r), byte(g), byte(b))
 end
 
--- The kind of a line in ChatTypeInfo: the event without CHAT_MSG_, and a channel by its number (Mainline/ChatFrameOverrides.lua:311-353).
 local function KindOf(event, index)
 	if event == CHANNEL then
 		return Plain(index, "number") and index == math.floor(index) and ("CHANNEL%d"):format(index) or "CHANNEL"
@@ -169,15 +108,12 @@ local function KindOf(event, index)
 	return event:sub(10)
 end
 
--- A line kept, or nil for one that is not whole.
 local function Whole(line)
 	return Plain(line, "table") and Plain(line.time, "number") and Plain(line.event, "string") and HEARD[line.event] == true and Plain(line.sender, "string")
 		and Plain(line.text, "string")
 		and (line.event ~= CHANNEL or (Plain(line.channel, "string") and Plain(line.index, "number") and line.index == math.floor(line.index)))
 end
 
--- A line players wrote, as the event gives it: the text, the sender, and for a channel its name (4th) and number (8th); the 6th is the flag of a
--- Game Master and the 16th whether the game shows the line only in the letterbox.
 local function Keep(event, ...)
 	local text, sender, _, channel, _, flag, _, index = ...
 	local letterbox = select(16, ...)
@@ -202,7 +138,6 @@ local function Keep(event, ...)
 		end
 		line.channel, line.index = channel, index
 	end
-	-- This session's lines, for Copy recent chat; kept in the saved settings only with the row on.
 	local session = S.session
 	session[#session + 1] = line
 	while #session > MOST do
@@ -227,7 +162,6 @@ local function Keep(event, ...)
 	end
 end
 
--- The sender without the realm when it is the player's own (Ambiguate, PlayerScriptDocumentation.lua:22-36).
 local function Short(sender)
 	if type(Ambiguate) == "function" then
 		local ok, name = pcall(Ambiguate, sender, "none")
@@ -238,7 +172,6 @@ local function Short(sender)
 	return sender
 end
 
--- "hh:mm" of a time of the server clock in the time of this computer.
 local function Clock(seconds)
 	if type(date) == "function" then
 		local ok, text = pcall(date, "%H:%M", seconds)
@@ -249,7 +182,6 @@ local function Clock(seconds)
 	return "--:--"
 end
 
--- "rrggbb" darkened to the share DIM.
 local function Dimmed(hex)
 	local out = {}
 	for index = 1, 5, 2 do
@@ -259,7 +191,6 @@ local function Dimmed(hex)
 	return table.concat(out)
 end
 
--- A line as "[hh:mm] [kind] [sender]: text", the kind as the game names it, with no colour: for a line shown again (Text) and a line copied.
 local function Line(line)
 	local name, body = Short(line.sender), nil
 	if line.event == "CHAT_MSG_EMOTE" then
@@ -269,7 +200,6 @@ local function Line(line)
 	elseif line.event == "CHAT_MSG_WHISPER_INFORM" then
 		body = "To [" .. name .. "]: " .. line.text
 	elseif line.event == CHANNEL then
-		-- The label as the windows show it now (Channel names, ChatLinks.lua): "2. Trade" while it is short.
 		local label = type(ns.ChatChannelLabel) == "function" and ns.ChatChannelLabel(line.channel) or line.channel
 		body = "[" .. (Plain(label, "string") and label or line.channel) .. "] [" .. name .. "]: " .. line.text
 	else
@@ -278,7 +208,6 @@ local function Line(line)
 	return "[" .. Clock(line.time) .. "] " .. body
 end
 
--- The text of a line shown again, in the colour of its kind. A colour code a text ends with |r is begun again after it.
 local function Text(line, colours)
 	local kind = KindOf(line.event, line.index)
 	local hex = colours[kind]
@@ -289,8 +218,6 @@ local function Text(line, colours)
 	return code .. (Line(line):gsub("|r", "|r" .. code)) .. "|r"
 end
 
--- The lines the main chat window keeps: Lines kept per window, which ChatText.lua sets on every window at each pass of the module (ChatText.lua:
--- 120-123), the start of the module at login among them, and the game's 128 once that part of ChatText.lua has stopped and put the game's back.
 local function Room()
 	local lines = Opt("history")
 	if ns.PartStopped(KEY, "chat history") or not Plain(lines, "number") or lines < 1 then
@@ -299,8 +226,6 @@ local function Room()
 	return lines
 end
 
--- At PLAYER_LOGIN, once a session: one line that says what they are, then the newest kept lines of the last hour, up to Lines to show again and,
--- with that line, no more than three quarters of what the main window keeps.
 local function Show()
 	if S.shown then
 		return
@@ -344,10 +269,6 @@ ns.AddEvent(KEY, "PLAYER_LOGIN", function()
 	end
 end)
 
--- Copy recent chat ---------------------------------------------------------------------------------------------------------------------------
-
--- The lines to copy from, oldest first: with the row on, the lines kept from before this session (a reload or a login) and then this session's;
--- else this session's alone.
 local function Recent()
 	local session = S.session
 	local log = Wanted() and Log(false) or nil
@@ -366,8 +287,6 @@ local function Recent()
 	return out
 end
 
--- A text with nothing but its words: a link as its bracketed text ([Thunderfury]), and colour codes, textures, atlases and Battle.net names
--- left out. An escaped bar (||) stays one, as the box shows it.
 local function Bare(text)
 	local out = text:gsub("||", "\001")
 	out = out:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|cn[^:|]*:", ""):gsub("|r", "")
@@ -375,7 +294,6 @@ local function Bare(text)
 	return (out:gsub("\001", "||"))
 end
 
--- The newest count lines heard, oldest first, as "[21:04] [Party] [Mara]: text", one to a line, and how many there are.
 function ns.ChatCopyText(count)
 	local lines = Recent()
 	local most = Plain(count, "number") and math.max(1, math.floor(count)) or COPY.FIRST
@@ -409,7 +327,6 @@ local function CloseCopy()
 	S.closing = false
 end
 
--- The scroll of the box within what its text needs.
 local function Scroll(box, to)
 	local scroll = box.scroll
 	pcall(scroll.UpdateScrollChildRect, scroll)
@@ -418,8 +335,6 @@ local function Scroll(box, to)
 	pcall(scroll.SetVerticalScroll, scroll, math.max(0, math.min(range, to)))
 end
 
--- Built the first time: a frame of Flat UI's own on UIParent, as the copy box of web addresses (ChatLinks.lua), with a line of help, and a scroll
--- frame of its own whose child is a multi-line box of its own. The mouse wheel scrolls it and the scroll follows the cursor.
 local function BuildCopy()
 	local frame = CreateFrame("Frame", nil, UIParent)
 	ns.Own[frame] = true
@@ -444,13 +359,11 @@ local function BuildCopy()
 	edit:SetMultiLine(true)
 	edit:SetAutoFocus(false)
 	edit:SetFontObject("ChatFontNormal")
-	-- A multi-line box grows as tall as its text, as the game's InputScrollFrameTemplate's (Shared/InputBox/InputBoxTemplates.xml:149-151).
 	edit:SetSize(COPY.WIDTH - 2 * COPY.PAD, 1)
 	edit:SetTextInsets(6, 6, 4, 4)
 	pcall(edit.SetMaxLetters, edit, 0)
 	pcall(edit.SetMaxBytes, edit, 0)
 	scroll:SetScrollChild(edit)
-	-- A click under the lines gives the box the keyboard, as that template's OnMouseDown.
 	scroll:EnableMouse(true)
 	scroll:SetScript("OnMouseDown", function()
 		pcall(edit.SetFocus, edit)
@@ -466,7 +379,6 @@ local function BuildCopy()
 		pcall(part.EnableMouseWheel, part, true)
 		part:SetScript("OnMouseWheel", Wheel)
 	end
-	-- The scroll keeps the cursor in sight (y is its offset down from the top of the box, negative).
 	edit:SetScript("OnCursorChanged", function(_, _, y, _, height)
 		if not (ns.Finite(y) and ns.Finite(height)) then
 			return
@@ -485,7 +397,6 @@ local function BuildCopy()
 	end)
 	edit:SetScript("OnEscapePressed", CloseCopy)
 	edit:SetScript("OnEditFocusLost", CloseCopy)
-	-- What is typed over the lines is taken back, all selected again: the box is for copying.
 	edit:SetScript("OnTextChanged", function(self, typed)
 		if typed and box.text ~= nil then
 			pcall(self.SetText, self, box.text)
@@ -493,9 +404,6 @@ local function BuildCopy()
 			box.part = nil
 		end
 	end)
-	-- Ctrl+C (Cmd+C on a Mac, ns.ChatCopyKey of ChatLinks.lua) says it was taken, as the export box of Profiles does (Panel.lua's CopyField): the
-	-- count of lines while all are selected, else a part. A click in the lines or an arrow key, Home, End or a page key may have chosen a part;
-	-- Ctrl+A selects all again.
 	edit:SetScript("OnMouseDown", function()
 		box.part = true
 	end)
@@ -523,14 +431,12 @@ local function BuildCopy()
 			box.part = true
 		end
 	end)
-	-- The keyboard goes back to the game when a fight starts.
 	pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_DISABLED")
 	frame:SetScript("OnEvent", CloseCopy)
 	frame:Hide()
 	return box
 end
 
--- Opens the box with the newest count lines, all selected and scrolled to the newest. Never in a fight: the box takes the keyboard.
 local function OpenCopy(count)
 	if Fighting() then
 		return
@@ -564,7 +470,6 @@ local function OpenCopy(count)
 		CloseCopy()
 		return
 	end
-	-- The box knows its height once it has drawn its text: the newest lines are shown on the next frame, still all selected.
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
 		pcall(C_Timer.After, 0, function()
 			local okShown, shown = pcall(box.frame.IsShown, box.frame)
@@ -576,7 +481,6 @@ local function OpenCopy(count)
 	end
 end
 
--- What a pick or /flatui copy may not do, or nil: in a fight, with the module off, or with nothing heard.
 local function CopyRefusal()
 	if Fighting() then
 		return COPY.FIGHT
@@ -590,8 +494,6 @@ local function CopyRefusal()
 	return nil
 end
 
--- The box opens on the next frame, out of the click or the slash command that asked for it, whose own box (the chat input) gives the keyboard back
--- as it closes.
 local function CopyLater(count)
 	local function run()
 		if Hearing() then
@@ -603,7 +505,6 @@ local function CopyLater(count)
 	end
 end
 
--- The row Copy recent chat (Config.lua): its two lines, and a pick that opens the box; what the Panel prints of a pick is the second answer.
 function ns.ChatCopyLines()
 	return COPY.LINES
 end
@@ -620,7 +521,6 @@ function ns.ChatCopyPick(id)
 	return true
 end
 
--- /flatui copy, and copy N for the newest N lines, up to MOST.
 ns.AddSlash(KEY, "copy", function(rest)
 	local count = tonumber((type(rest) == "string" and rest or ""):match("^%s*(%d+)")) or COPY.FIRST
 	local refusal = CopyRefusal()
@@ -631,8 +531,6 @@ ns.AddSlash(KEY, "copy", function(rest)
 	CopyLater(math.max(1, math.min(MOST, count)))
 end, { COPY.HELP })
 
--- The frame hears the events of the lines while the module is on (this session's lines for Copy recent chat, and with the row on the lines kept),
--- and channels only with Numbered channels too.
 local function Listen(on)
 	if on and not S.frame and type(CreateFrame) == "function" then
 		local ok, frame = pcall(CreateFrame, "Frame")
@@ -662,7 +560,6 @@ local function Listen(on)
 	end
 end
 
--- The lines of channels go when Numbered channels too is off.
 local function DropChannels()
 	local log = Log(false)
 	if not log then
@@ -687,8 +584,6 @@ local function DropChannels()
 	log.lines = kept
 end
 
--- Called by Chat.lua at the end of every refresh of the module: at its start, at a change of a row, when it goes off and when it stops. As in
--- ChatLinks.lua, a failure counts toward stopping the part while it is to work, and is let go while it only stops hearing.
 function ns.ChatHistorySync()
 	local on = Hearing()
 	if on then
@@ -698,8 +593,6 @@ function ns.ChatHistorySync()
 		CloseCopy()
 	end
 	if Opt("restoreChannels") ~= true then
-		-- Numbered channels too is off, whatever the row: this session's lines of channels go too, as the kept ones, and Listen above no
-		-- longer hears them.
 		local kept = {}
 		for _, line in ipairs(S.session) do
 			if line.event ~= CHANNEL then
@@ -709,8 +602,6 @@ function ns.ChatHistorySync()
 		S.session = kept
 	end
 	if Opt("restore") ~= true or ns.Get(KEY .. ".enabled") ~= true then
-		-- The row or its page is off: nothing more is kept (this session's lines are still heard for Copy recent chat while the module is on),
-		-- and what was kept goes.
 		Forget()
 	elseif Opt("restoreChannels") ~= true then
 		DropChannels()

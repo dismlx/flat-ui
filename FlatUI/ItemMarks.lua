@@ -1,87 +1,28 @@
 local _, ns = ...
 
--- Bag marks: three marks of this addon's own on the item slots of the bags and the bank, each its own row in The game's bag windows section of Item slots,
--- all on by default. Not a module: Items.lua dresses a bag or bank slot and calls ItemMarks.Dress for it, in a part of its own (PART).
--- Mark bind on equip items: BoE at the top left of an item that binds when equipped and is not bound yet. The binding is the 14th answer of
--- C_Item.GetItemInfo (ItemDocumentation.lua:626-650; Enum.ItemBind.OnEquip is 2, ItemConstantsDocumentation.lua:249-266), kept per item ID as it
--- never changes, and the slot says whether its item is bound (isBound of C_Container.GetContainerItemInfo, ContainerDocumentation.lua:766-783).
--- That is when the game's tooltip says "Binds when equipped", and no tooltip is read for it.
--- Tint items you cannot use: red over the icon of an item whose tooltip shows a requirement in red: a line of the kind UsageRequirement (class, race,
--- level, skill, reputation, PvP rank, a recipe already known) or the slot line, of the kind EquipSlot, whose armour or weapon type is red or that
--- the game marks as not for this character (isValidItemType, isValidInvSlot). TooltipInfoSharedDocumentation.lua:27-86 has the kinds, and the game
--- reads the same fields in Blizzard_PerksProgram/Blizzard_PerksProgramElements.lua:898-927. The tooltip is C_TooltipInfo.GetBagItem
--- (TooltipInfoDocumentation.lua:137-152), read once per item ID once the game has loaded the item. The lines of the item a recipe makes, which
--- the recipe's tooltip holds in the same list (Nested), say nothing of the recipe and are left out. A level, a skill and a reputation only rise for
--- a player levelling, so after PLAYER_LEVEL_UP (read LEVEL_WAIT seconds later, once the game counts the new level), SKILL_LINES_CHANGED and
--- UPDATE_FACTION only the items found unusable are read again; a learned spell or recipe can make an item unusable and a PvP rank can fall, so
--- after LEARNED_SPELL_IN_SKILL_LINE, NEW_RECIPE_LEARNED and PLAYER_PVP_RANK_CHANGED every item is read again (UnitDocumentation.lua:3832, 3877;
--- SkillInfoDocumentation.lua:105; PaperDollInfoDocumentation.lua:432; SpellBookDocumentation.lua:851; TradeSkillUIDocumentation.lua:1239). So are
--- the unusable ones whenever the windows module applies its settings, since it hears no event while it is off. A skill is lost only to a profession
--- the player abandons (C_SkillInfo.AbandonSkill, SkillInfoDocumentation.lua:11-18, from the Unlearn button of the professions book,
--- Blizzard_ProfessionsBook/Camelot/Blizzard_ProfessionsBook.lua:63-69 and Blizzard_StaticPopup_Game/Mainline/GameDialogDefs.lua:1101-1112), which
--- takes its line out of the skills window: when SKILL_LINES_CHANGED or the settings find fewer lines there than at the last look
--- (C_SkillInfo.GetNumSkillLines, SkillInfoDocumentation.lua:41-47), every item is read again. The window does not count the lines of a closed
--- header, so closing one only has the items read once more, and a profession abandoned under a closed header that keeps other lines goes unseen.
--- The red is a texture with the MOD blend just above the icon (the icon is in the BORDER layer,
--- Blizzard_ItemButton/Shared/ItemButtonTemplate.xml:17-21), so it darkens the icon as the game's own red on an item does, under the stack count, the
--- search overlay and the other marks.
--- Mark food your pet eats: the Feed Pet icon at the bottom left of food the pet that is out eats. The answer is C_PetInfo.CanPetEatItem, the call
--- of the game's own Feed Pet item context and of its gamepad Feed To Pet (Blizzard_FrameXMLUtil/ItemUtil.lua:235-236,
--- Blizzard_UIPanels_Game/Mainline/ContainerFrame.lua:3287-3301), kept per item ID while the diet of the pet (C_PetInfo.GetPetFoodTypes,
--- PetInfoDocumentation.lua:10-33) is the same; Forever has no call for the food type of an item. The diet is read when first needed and again
--- after UNIT_PET for the player (UnitDocumentation.lua:4448-4457), UNIT_LEVEL for the pet and each loading screen; a pet with no diet, such as a
--- warlock's, marks nothing.
--- When an answer goes old, and when an item that had not loaded arrives (GET_ITEM_INFO_RECEIVED, ItemDocumentation.lua:1815-1822), the shown bag
--- and bank slots are dressed again on the next frame (Items.Redraw); a hidden one is dressed when its bag or the bank opens. Every answer the game
--- may withhold marks nothing and is not kept. Nothing of the game's is written: a mark is a text or a texture of this addon's own made on the slot,
--- out of a fight while the slot is protected. On a client without one of the calls its mark is never made, and /flatui status says so.
--- Bags (Bags*.lua) draws the same three marks on slots of its own with these answers (ItemMarks.BoE, Unusable and Eats), whatever the switch of
--- Windows and its rows, and a fourth of its own: a green plus on a recipe this character can learn now (ItemMarks.Learnable, Unusable's answer
--- false for a recipe whose tooltip lines were all read); the game's windows do not get it. An item in no bag slot the game can read now, such as
--- one of the bank away from the banker, has the tooltip of its link read (C_TooltipInfo.GetHyperlink, TooltipInfoDocumentation.lua:337-354) in
--- place of the slot's. ItemMarks.Hear has Bags hear the events after
--- which an answer goes old while it is on, and each function given to ItemMarks.Watch is called when an answer goes old or an item that was
--- waited for arrives, so Bags draws its slots again.
--- These follow the bind status, unusable item and Hunter pet food overlays of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
-
 local KEY = "windows"
 local PART = "bag marks"
 local KINDS = { "bind", "tint", "food" }
 local ROWS = { bind = "windows.boeMark", tint = "windows.unusableTint", food = "windows.petFood" }
--- Enum.ItemBind.OnEquip, and Enum.TooltipDataLineType.UsageRequirement, EquipSlot, NestedBlock and ItemSpellTriggerLearn, for a client whose
--- Enum does not say.
 local BIND_ON_EQUIP = 2
 local USAGE, EQUIP_SLOT, NESTED, LEARN = 43, 21, 19, 38
--- Enum.ItemClass.Recipe (wowless, data/products/wowf/enums.yaml:4649), for ItemMarks.Learnable.
 local RECIPE = 9
--- The game's red for a requirement not met is 1, 0.125, 0.125 (RED_FONT_COLOR); any colour this close to it counts.
 local RED_LEAST, OTHER_MOST = 0.9, 0.25
 local BIND_WORD, BIND_FONT, BIND_COLOUR = "BoE", "NumberFontNormalSmall", { 0.38, 0.82, 1 }
 local TINT = { 1, 0.18, 0.18 }
--- Feed Pet (ContainerFrame.lua:3287), whose icon marks food; a client that gives no icon gets a flat square of FOOD_COLOUR.
 local FEED_PET, FOOD_SIZE, FOOD_COLOUR = 6991, 14, { 0.45, 0.85, 0.3 }
 local LEVEL_WAIT = 2
 local LABELS = { bind = "Mark bind on equip items", tint = "Tint items you cannot use", food = "Mark food your pet eats" }
 local COUNTS = { bind = "%d bind on equip", tint = "%d you cannot use", food = "%d your pet eats" }
 local MISSING = { bind = "binding of items", tint = "item tooltips", food = "diet of a pet" }
 
--- Per slot: { bind = the BoE text, tint = the red texture, food = the food texture, bindOn, tintOn, foodOn = true while shown, queued = true while a
--- fight keeps a mark from being made }.
 local marks = setmetatable({}, { __mode = "k" })
--- Per item ID: its binding; true when it cannot be used, false when it can; true while its information has not loaded; true when its answer read
--- every line of the item's own (a recipe whose made item's lines were told apart from its own, or an item with none), kept with blocked.
 local binds, blocked, waiting, clear = {}, {}, {}, {}
--- The pet: diet is nil until read, false with no pet out or one that eats nothing, else its food types in one text; foods the list of them, and
--- eats the answer for each item ID.
 local pet = { diet = nil, foods = nil, eats = {} }
--- Marks the game refused: the mark is off and says so on /flatui status.
 local refused = {}
 local foodIcon
 local redrawQueued = false
--- The number of lines of the skills window at the last look, or nil before the first.
 local skillLines
--- The functions ItemMarks.Watch was given, and the modules that hear the events after which an answer goes old: Windows, and those ItemMarks.Hear
--- names.
 local watchers, heard = {}, {}
 
 local ItemMarks = { PART = PART }
@@ -91,7 +32,6 @@ local function Usable(value)
 	return value ~= nil and not ns.IsSecret(value) and type(value) == "table"
 end
 
--- A frame or region held in a field of a frame that may not be touched or withheld.
 local function Held(frame, key)
 	if ns.Forbidden(frame) then
 		return nil
@@ -103,7 +43,6 @@ local function Held(frame, key)
 	return nil
 end
 
--- True when the game would refuse to make a texture or text on the frame now.
 local function Blocked(frame)
 	if not InCombatLockdown() then
 		return false
@@ -112,7 +51,6 @@ local function Blocked(frame)
 	return not ok or ns.IsSecret(protected) or protected == true
 end
 
--- The function called name in the client's namespace called space, or nil when the client has none.
 local function Call(space, name)
 	local namespace = _G[space]
 	if type(namespace) ~= "table" or ns.IsSecret(namespace) then
@@ -125,7 +63,6 @@ local function Call(space, name)
 	return nil
 end
 
--- A value of the client's Enum, or the fallback when it has none.
 local function EnumValue(group, name, fallback)
 	local enum = _G.Enum
 	local values = type(enum) == "table" and not ns.IsSecret(enum) and enum[group] or nil
@@ -136,7 +73,6 @@ local function EnumValue(group, name, fallback)
 	return fallback
 end
 
--- Runs fn on the next frame.
 local function Soon(fn)
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
 		C_Timer.After(0, fn)
@@ -145,7 +81,6 @@ local function Soon(fn)
 	end
 end
 
--- True when the client has every call a mark needs.
 local function Can(kind)
 	if kind == "bind" then
 		return Call("C_Item", "GetItemInfo") ~= nil
@@ -164,14 +99,11 @@ local function Refuse(kind, what)
 	ns.Note(KEY, ("Windows: %s stopped, the game refused %s on an item slot."):format(LABELS[kind], what))
 end
 
--- Reading -------------------------------------------------------------------------------------
-
 local function NameAndBinding(call, item)
 	local name, _, _, _, _, _, _, _, _, _, _, _, _, bind = call(item)
 	return name, bind
 end
 
--- The binding of an item, or nil while the game has not loaded it: GetItemInfo then asks for it, and the item waits for GET_ITEM_INFO_RECEIVED.
 local function Binding(id, link)
 	local known = binds[id]
 	if known ~= nil then
@@ -194,7 +126,6 @@ local function Binding(id, link)
 	return bind
 end
 
--- True for an item that binds when equipped and that the slot says is not bound.
 local function Unbound(id, link, info)
 	local bound = info.isBound
 	if ns.IsSecret(bound) or bound ~= false then
@@ -215,7 +146,6 @@ local function IsFalse(value)
 	return not ns.IsSecret(value) and value == false
 end
 
--- True for a line of a tooltip that says in red that the character cannot use the item.
 local function Unmet(line)
 	local kind = line.type
 	if not ns.Finite(kind) then
@@ -229,11 +159,6 @@ local function Unmet(line)
 	return false
 end
 
--- The first and last index of the lines of the item shown inside a tooltip, or nil when it shows none. That is the item a recipe makes: in Forever
--- a recipe's lines are its name, a NestedBlock line, the made item's own lines (its armour or weapon type, its Requires Level), then the recipe's
--- Use: Teaches you line (ItemSpellTriggerLearn), its reagents, Requires <profession> and Already known. The made item can have a Teaches you line
--- of its own, so the block ends before the last one after the NestedBlock line; with none, it runs to the end of the tooltip, and a red line of the
--- recipe is missed rather than a recipe the player can learn tinted. The third answer is true when the block's end was found that way.
 local function Nested(lines)
 	local nested = EnumValue("TooltipDataLineType", "NestedBlock", NESTED)
 	local learn = EnumValue("TooltipDataLineType", "ItemSpellTriggerLearn", LEARN)
@@ -257,9 +182,6 @@ local function Nested(lines)
 	return first, last or count, last ~= nil
 end
 
--- True when the item in this slot cannot be used, false when it can, nil when the game has not said yet. A tooltip of another item than the slot
--- had a moment ago is not kept. With no bag and slot, the tooltip of the link is read (C_TooltipInfo.GetHyperlink): Bags asks so for an item in
--- no bag slot the game can read now (ItemMarks.Unusable).
 local function Unusable(id, link, bag, slot)
 	local known = blocked[id]
 	if known ~= nil then
@@ -299,7 +221,6 @@ local function Unusable(id, link, bag, slot)
 	return answer
 end
 
--- The diet of the pet that is out, in one text, or false.
 local function Diet()
 	if pet.diet ~= nil then
 		return pet.diet
@@ -329,7 +250,6 @@ local function Diet()
 	return pet.diet
 end
 
--- True when the pet that is out eats the item.
 local function Eats(id)
 	if not Diet() then
 		return false
@@ -350,8 +270,6 @@ local function Eats(id)
 	return pet.eats[id]
 end
 
--- True when the skills window has fewer lines than at the last look, which is now (see the top of this file). A count the game withholds changes
--- nothing.
 local function FewerSkills()
 	local call = Call("C_SkillInfo", "GetNumSkillLines")
 	if call == nil then
@@ -366,9 +284,6 @@ local function FewerSkills()
 	return fewer
 end
 
--- Drawing ---------------------------------------------------------------------------------------
-
--- The icon of Feed Pet, read once, or nil.
 local function FoodIcon()
 	if foodIcon == nil then
 		foodIcon = false
@@ -383,7 +298,6 @@ local function FoodIcon()
 	return foodIcon or nil
 end
 
--- Each of these shows or hides one mark of a slot, and makes it the first time it shows. False when a fight keeps it from being made now.
 local function Bind(button, rec, want)
 	local text = rec.bind
 	rec.bindOn = nil
@@ -412,7 +326,6 @@ local function Bind(button, rec, want)
 	return true
 end
 
--- A texture of this addon's own on the slot, or nil when the game refuses it.
 local function Made(button, kind, layer, sublevel)
 	local ok, made = pcall(button.CreateTexture, button, nil, layer, nil, sublevel)
 	if not ok or not Usable(made) then
@@ -480,7 +393,6 @@ local function Food(button, rec, want)
 	return true
 end
 
--- Takes up the slot again once the fight that kept a mark from being made is over.
 local function Later(button, rec)
 	if not rec.queued then
 		rec.queued = true
@@ -491,18 +403,14 @@ local function Later(button, rec)
 	end
 end
 
--- True while one of the rows wants a mark the client can make.
 function ItemMarks.Wanted()
 	return Wanted("bind") or Wanted("tint") or Wanted("food")
 end
 
--- True when the slot has to be read: a mark is wanted, or the slot has marks that may need hiding.
 function ItemMarks.Needs(button)
 	return marks[button] ~= nil or ItemMarks.Wanted()
 end
 
--- Shows the marks a bag or bank slot wants and hides the others. live is false while the item details of Items.lua are off or stopped; info, bag
--- and slot are what Items.lua read for the slot.
 function ItemMarks.Dress(button, live, info, bag, slot)
 	local rec = marks[button]
 	local wantBind = live and Wanted("bind")
@@ -535,8 +443,6 @@ function ItemMarks.Dress(button, live, info, bag, slot)
 	end
 end
 
--- Called when the windows module applies its settings, before the slots are dressed: the module heard no event while it was off, so the answers a
--- change of the character can turn are read again, every one when the skills window lost a line, and so is the pet.
 function ItemMarks.Apply()
 	local all = FewerSkills()
 	for id, answer in pairs(blocked) do
@@ -547,7 +453,6 @@ function ItemMarks.Apply()
 	pet.diet = nil
 end
 
--- The part stopped: every mark is hidden.
 function ItemMarks.Release()
 	for _, rec in pairs(marks) do
 		for _, kind in ipairs(KINDS) do
@@ -560,18 +465,12 @@ function ItemMarks.Release()
 	end
 end
 
--- Answers that went old ----------------------------------------------------------------------
-
--- Tells each function ItemMarks.Watch was given that an answer went old or an item arrived, whatever the switch of Windows. Each is called inside
--- pcall, so none can stop the marks.
 local function Tell()
 	for _, fn in ipairs(watchers) do
 		pcall(fn)
 	end
 end
 
--- Tells the watchers, and while windowsWants (the windows module wants the marks that changed) dresses the shown bag and bank slots of the game's
--- windows again on the next frame, once for a run of changes.
 local function Redraw(windowsWants)
 	Tell()
 	if not windowsWants or redrawQueued then
@@ -584,7 +483,6 @@ local function Redraw(windowsWants)
 	end)
 end
 
--- Drops the answers of Tint items you cannot use: every one, or with only "unusable" those that said an item cannot be used.
 local function Forget(which)
 	local dropped = false
 	for id, answer in pairs(blocked) do
@@ -598,9 +496,6 @@ local function Forget(which)
 	end
 end
 
--- Adds the events after which an answer goes old to a module, heard while that module is on: Windows' own here, and another module's through
--- ItemMarks.Hear. Each change is made in that module's part PART, so an error stops that part alone. The answers are shared, so a module that hears
--- an event after another finds them dropped already. False for a module that is not registered or hears them already.
 local function Listen(key)
 	if heard[key] or type(ns.modules[key]) ~= "table" then
 		return false
@@ -621,7 +516,6 @@ local function Listen(key)
 	ns.AddEvent(key, "PLAYER_ENTERING_WORLD", function()
 		pet.diet = nil
 	end)
-	-- A pet that gains a level may take food it left before.
 	ns.AddEvent(key, "UNIT_LEVEL", function()
 		pet.diet = nil
 		Redraw(Wanted("food"))
@@ -635,7 +529,6 @@ local function Listen(key)
 			ForgetUnusable()
 		end
 	end)
-	-- A skill that rose, or a profession abandoned (see the top of this file).
 	ns.AddEvent(key, "SKILL_LINES_CHANGED", function()
 		if FewerSkills() then
 			ForgetAll()
@@ -660,9 +553,6 @@ end
 
 Listen(KEY)
 
--- Answers for Bags ------------------------------------------------------------------------------
-
--- A link the game can read for an item: the one given when it is a hyperlink or an item string, else the item string of its ID.
 local function LinkOf(id, link)
 	if not ns.IsSecret(link) and type(link) == "string" and (link:find("|H", 1, true) or link:find("^item:")) then
 		return link
@@ -670,8 +560,6 @@ local function LinkOf(id, link)
 	return "item:" .. id
 end
 
--- True for an item that binds when equipped and is not bound: bound is false for an item its slot or its record says is not bound, true for one
--- that is, nil when nothing says. False while the game has not loaded the item; the watchers are told when it has.
 function ItemMarks.BoE(id, link, bound)
 	if not ns.Finite(id) then
 		return false
@@ -679,8 +567,6 @@ function ItemMarks.BoE(id, link, bound)
 	return Unbound(id, LinkOf(id, link), { isBound = bound })
 end
 
--- True when the character cannot use the item, false when it can, nil while the game has not said: the tooltip of the bag and slot, or with no
--- bag and slot that of the link. The answer is kept per item ID, as for Windows.
 function ItemMarks.Unusable(id, link, bag, slot)
 	if not ns.Finite(id) then
 		return nil
@@ -688,10 +574,6 @@ function ItemMarks.Unusable(id, link, bag, slot)
 	return Unusable(id, LinkOf(id, link), bag, slot)
 end
 
--- True for a recipe (Enum.ItemClass.Recipe, from C_Item.GetItemInfoInstant) that this character can learn now: its tooltip has no requirement in red
--- (Unusable said false: the right profession and skill, the level, not known already). False for any other item, and for a recipe whose made
--- item's lines could not be told apart from its own (Nested found no end of the block), since a red line of it may have been missed; nil while
--- the game has not said. Only Bags asks it (a green plus on its own slots); the answers go old with Unusable's, after the same events.
 function ItemMarks.Learnable(id, link, bag, slot)
 	if not ns.Finite(id) then
 		return nil
@@ -714,7 +596,6 @@ function ItemMarks.Learnable(id, link, bag, slot)
 	return answer == false and clear[id] == true
 end
 
--- True when the pet that is out eats the item.
 function ItemMarks.Eats(id)
 	if not ns.Finite(id) then
 		return false
@@ -722,8 +603,6 @@ function ItemMarks.Eats(id)
 	return Eats(id)
 end
 
--- Adds a function called with no values each time an answer goes old or an item that was waited for arrives, whatever the switch of Windows: Bags
--- draws its slots again then. A function given twice is called once. True once it is in the list.
 function ItemMarks.Watch(fn)
 	if type(fn) ~= "function" then
 		return false
@@ -737,8 +616,6 @@ function ItemMarks.Watch(fn)
 	return true
 end
 
--- Has another module hear the events after which an answer goes old, while it is on and whatever the switch of Windows (Listen). Call it while the
--- files load, after that module is registered: Bags.lua calls it with "bags". False for a module that is not registered or hears them already.
 function ItemMarks.Hear(key)
 	if type(key) ~= "string" then
 		return false
@@ -746,10 +623,6 @@ function ItemMarks.Hear(key)
 	return Listen(key)
 end
 
--- /flatui status: how many slots on screen show each mark, the diet of the pet, and the marks the client cannot make. A stopped part has its note.
--- A slot keeps its marks while it is hidden: in a closed bag or bank, in the frames of the other bag layout (combined or one frame per bag), and
--- after its bag gave it back to its pool, which hides it (Mainline/ContainerFrame.lua:1053-1056, Mainline/BankFrameTemplates.lua:691-694,
--- 1076-1077, Blizzard_SharedXMLBase/Pools.lua:519-522). Only a slot the game shows is counted.
 ns.AddStatus(KEY, function()
 	if not ns.Enabled(KEY) or ns.PartStopped(KEY, PART) then
 		return {}

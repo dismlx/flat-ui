@@ -1,9 +1,5 @@
 local ADDON_NAME, ns = ...
 
--- The sidebar of the options window: four fixed rows, then eleven groups with 45 pages, each with its icon. A group folds on a click and the
--- fold is kept per account. A module that is off shows the Off chip. Also the switch widget, and the header of a page that has the module
--- switch. Panel.lua hands the drawing of these to this file; the widgets are the ones of ns.PanelKit.
-
 local Nav = {}
 ns.PanelNav = Nav
 
@@ -12,26 +8,15 @@ local Look = ns.PanelLook
 local ATLAS = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Panel.tga"
 local PAD = kit.PAD
 
--- The cell of each icon in FlatUI/Media/Panel.tga: 8 columns and 8 rows of 64 by 64. tools/make_panel_icons.py draws the first four rows; the
--- pouch of Errands (cell 32), the three bars of Data panels (cell 33), the warning sign of Threat list (cell 34), the drop of Healer mana
--- (cell 35), the flask of Drink and health macros (cell 36), the horseshoe of Mount key (cell 37), the star of Group tools (cell 38) and the bag
--- of Bags (cell 39) fill the fifth, and the three rows after it are free. Hidden frames shares the eye (cell 30), Ping bar the crosshair of
--- Trackers (cell 11), and the pages of the sidebar that hold part of another module share a cell that says what they are: Absorb shields the
--- shield, Gear comparison the magnifier, Spell tooltips and Tooltips the tooltip, Hit table the crosshair, Buffs and debuffs the dots,
--- Experience and menu bars the bar, Quests and loot the check, Messages and timers the warning sign, Item slots the grid and World and cursor
--- the wand. Trinket queue, a module of its own, shares the icon of Cooldowns (cell 10), since a trinket's use is a cooldown.
 local CELLS = { general = 0, fonts = 1, unitframes = 2, nameplates = 3, resource = 4, castbars = 5, swing = 6, actionbars = 7, barblock = 8, blocks = 9,
 	cooldowns = 10, trackers = 11, defensives = 12, partycd = 13, enemycd = 14, combattext = 15, hud = 16, windows = 17, chat = 18, movers = 19, fade = 20,
 	tooltip = 21, home = 22, setup = 23, profiles = 24, chevron = 25, check = 26, search = 27, close = 28, reset = 29, eye = 30, more = 31, errands = 32, datapanels = 33, threat = 34, healermana = 35, consumables = 36, mount = 37, grouptools = 38, pingbar = 11,
 	bags = 39, hide = 30, absorbs = 12, gearCompare = 27, chatSpells = 21, hudHitTable = 11, hudBuffs = 13, hudBars = 5, hudTracker = 26, hudMessages = 34,
 	chatTips = 21, windowsItems = 8, generalWorld = 23, trinkets = 10 }
--- Consumables bar shares the flask of Drink and health macros (cell 36).
 CELLS.consumebar = 36
 local COLUMNS, ROWS = 8, 8
 Nav.CELLS = CELLS
 
--- The groups, and the key of each page of the sidebar in them: a module's own page, or a page that holds part of a module (an owner and no
--- parent in Config.lua), such as Gear comparison of Chat and tooltips. A group is named for what its pages set, not for the module.
 Nav.GROUPS = {
 	{ label = "Look", "general", "fonts" },
 	{ label = "Frames and bars", "unitframes", "nameplates", "castbars", "resource", "swing" },
@@ -51,7 +36,6 @@ local FIXED = { { id = "home", label = "Home", icon = "home" }, { id = "setup", 
 
 local ROW_H, GROUP_H, SECTION_H = 28, 20, 18
 
--- Puts a cell of the atlas on a texture, turned over when flip is set. White line art, tinted with SetVertexColor.
 function Nav.Cell(texture, name)
 	local cell = CELLS[name] or CELLS.more
 	local column, row = cell % COLUMNS, math.floor(cell / COLUMNS)
@@ -59,9 +43,6 @@ function Nav.Cell(texture, name)
 	texture:SetTexCoord(column / COLUMNS, (column + 1) / COLUMNS, row / ROWS, (row + 1) / ROWS)
 end
 
--- Pages -----------------------------------------------------------------------------------------------
-
--- The page a page is a tab of, or the page itself.
 function Nav.Top(model, entry)
 	for _ = 1, 8 do
 		local up = entry and entry.parent and entry.parent ~= entry.key and model.byKey[entry.parent]
@@ -73,7 +54,6 @@ function Nav.Top(model, entry)
 	return entry
 end
 
--- The pages under a module, in the order of the model.
 function Nav.Children(model, top)
 	local list = {}
 	for _, entry in ipairs(model.pages) do
@@ -84,8 +64,6 @@ function Nav.Children(model, top)
 	return list
 end
 
--- The groups that have a page: { label, entries }. A page that no group names, with the pages that are under it, goes into a last group Other,
--- so every page is reachable.
 function Nav.Groups(model)
 	local groups, placed = {}, {}
 	for _, group in ipairs(Nav.GROUPS) do
@@ -127,13 +105,11 @@ function Nav.Groups(model)
 	return groups
 end
 
--- False while the module of a page is switched off. A page without a switch of its own is on.
 function Nav.IsOn(entry)
 	local item = entry and entry.switchItem
 	return item == nil or ns.Get(item.path) ~= false
 end
 
--- The group of a page, by the label of the group.
 function Nav.GroupOf(model, entry)
 	local top = Nav.Top(model, entry)
 	for _, group in ipairs(Nav.Groups(model)) do
@@ -146,10 +122,6 @@ function Nav.GroupOf(model, entry)
 	return nil
 end
 
--- The switch --------------------------------------------------------------------------------------------
-
--- A switch 32 by 16: the track in the accent while it is on, and the knob at the end, which slides there (kit.Slider). onClick runs on a click; the
--- click sound is its caller's (Panel.lua's Toggle plays kit.SwitchClick), so a switch set by a change elsewhere slides with no sound.
 function Nav.Switch(parent, onClick)
 	local frame = kit.Frame(parent)
 	frame:SetSize(32, 16)
@@ -164,7 +136,6 @@ function Nav.Switch(parent, onClick)
 		Look.Solid(knob, object.on and "on-accent" or "text-dim")
 	end
 	kit.Painted(Paint)
-	-- instant puts the knob at its end at once, as the first Set does: the header's switch that now shows another module's setting.
 	function object.Set(on, instant)
 		on = on == true
 		if object.placed == nil or object.on ~= on then
@@ -179,10 +150,6 @@ function Nav.Switch(parent, onClick)
 	return object
 end
 
--- The sidebar -------------------------------------------------------------------------------------------
-
--- host: Model() the model of the pages, Current() the page that shows (nil while a search shows), Show(entry), Setup(), Movers(), Sections(entry) the
--- list { name, number } of the open page, Scroll(entry, number), and height of the column.
 function Nav.Sidebar(left, host)
 	local side, pool = {}, {}
 	local scroller = kit.Scroller(left, Look.SideWidth() - 1, host.height)
@@ -226,8 +193,6 @@ function Nav.Sidebar(left, host)
 		b.dot:SetColorTexture(kit.Accent())
 	end
 
-	-- The modules whose pages (their tabs and Per frame) hold a setting off its default, by the sidebar's entry, as the dots of the tabs count them
-	-- (PanelTabs.lua). Counted again only after a value or the profile changed (Core.lua, ns.settingsStamp), not on every refresh of the window.
 	local marks, markedAt = {}, nil
 	local function Marks()
 		local model, trust = host.Model(), ns.PanelTrust
@@ -244,7 +209,6 @@ function Nav.Sidebar(left, host)
 		end
 	end
 
-	-- The chip of a row: Off for a module that is off, After combat for Move frames in a fight.
 	local function Chip(b)
 		local label = b.status and b.status() or nil
 		b.off = label == "Off"
@@ -256,8 +220,6 @@ function Nav.Sidebar(left, host)
 			b.chip:SetWidth(label == "Off" and 28 or 76)
 			b.chipText:SetWidth(label == "Off" and 28 or 76)
 		end
-		-- The name has the row to the chip, or to the edge when there is none, less the room of the dot after it while it shows. The dot sits 4
-		-- after the name's words; none in the Icon rail, which shows no names.
 		local dotted = b.entry ~= nil and marks[b.entry] == true and not b.rail and b.text:IsShown()
 		if b.textW then
 			b.text:SetWidth(math.max(20, (show and b.textW - (label == "Off" and 36 or 84) or b.textW) - (dotted and 9 or 0)))
@@ -292,7 +254,6 @@ function Nav.Sidebar(left, host)
 		b.chip:SetPoint("RIGHT", frame, "RIGHT", -8, 0)
 		b.chipText = kit.Label(frame, "GameFontHighlightSmall", "CENTER")
 		b.chipText:SetPoint("CENTER", b.chip, "CENTER", 0, 0)
-		-- The dot after the name of a module that holds changes (Marks).
 		b.dot = kit.Fill(frame, "OVERLAY")
 		b.dot:SetSize(5, 5)
 		b.dot:Hide()
@@ -345,7 +306,6 @@ function Nav.Sidebar(left, host)
 			b.icon:Hide()
 			if kind == "group" then
 				Nav.Cell(b.icon, "chevron")
-				-- Down when open, right when folded (the AddOn list turns its arrow the same way: AddonList.lua:920-921).
 				b.icon:SetRotation(spec.folded and math.pi / 2 or 0)
 				b.icon:SetSize(12, 12)
 				b.icon:SetPoint("RIGHT", b.frame, "RIGHT", -8, 0)
@@ -430,7 +390,6 @@ function Nav.Sidebar(left, host)
 							return not Nav.IsOn(entry) and "Off" or nil
 						end,
 					})
-					-- The tabs of the module are in the page (PanelTabs.lua); the sections of the page that shows are under the module.
 					if open then
 						Under(current, 32)
 					end
@@ -448,7 +407,6 @@ function Nav.Sidebar(left, host)
 		end
 	end
 
-	-- The chips follow the state of the modules and of the fight, and the dots the changes.
 	function side.Update()
 		Marks()
 		for _, b in ipairs(pool) do
@@ -458,7 +416,6 @@ function Nav.Sidebar(left, host)
 		end
 	end
 
-	-- Opens the group of a page.
 	function side.Reveal(entry)
 		local label = Nav.GroupOf(host.Model(), entry)
 		if label and Look.Folded(label) then
@@ -468,9 +425,6 @@ function Nav.Sidebar(left, host)
 	return side
 end
 
--- The header -----------------------------------------------------------------------------------------------
-
--- The line under the title of a page and, for a module that has one, its switch with the label of the setting. host.Toggle(item) flips the setting.
 function Nav.Header(right, host)
 	local head = {}
 	local sub = kit.Dim(kit.Label(right, "GameFontHighlightSmall", "LEFT", 520))
@@ -496,7 +450,6 @@ function Nav.Header(right, host)
 		kit.Tip("")
 	end)
 	head.switch = switch
-	-- The page shown, and the words under its title. A page with no switch of its own shows none.
 	function head.Set(entry, text)
 		local was = head.item
 		head.item = entry and entry.switchItem or nil

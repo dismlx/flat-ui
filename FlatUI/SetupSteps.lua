@@ -1,10 +1,5 @@
 local _, ns = ...
 
--- The steps of Flat UI setup, from FlatUI/Config.lua. Kept by hand, since tools/dev/setup_steps.py, which first wrote it, is not in the repository.
--- A step has id, area, title, draw (the id of its drawing), built (true when the wizard shows it) and rows. A row is { saved path, tier, drawing
--- id or "behaviour", sentence }, the tier c for a main choice, o for an optional one and r for a rare one; behaviour rows have the sentence.
--- Every setting of Config.lua is in exactly one step.
-
 ns.SETUP_STEPS = {
 	{ id = "look", area = "Look", title = "Borders and backgrounds", draw = "mock-panel", built = true, rows = {
 		{ "general.thickness", "c", "mock-panel" },
@@ -1003,7 +998,6 @@ ns.SETUP_STEPS = {
 		{ "chat.compareShift", "c", "behaviour", "Shows the items you wear beside an item's tooltip only while Shift is held." },
 		{ "chat.compareHint", "o", "behaviour", "Adds a dim line to an item's tooltip saying Shift compares it with what you wear, while Shift is up." },
 	} },
-	-- The spell and gear lines go into tooltips of spells and items the drawing does not show, so every row describes itself.
 	{ id = "tips-spells", area = "Character and gear", title = "Spell tooltips and gear comparison", draw = "mock-tooltip", built = true, rows = {
 		{ "chat.spellPower", "c", "behaviour", "Adds to a spell's tooltip the share of your spell damage, healing or attack power it adds." },
 		{ "chat.spellStats", "o", "behaviour", "Adds how much that share is with your stats now, and the threat your attack power adds." },
@@ -1036,7 +1030,6 @@ ns.SETUP_STEPS = {
 		{ "chat.gearFindLevel", "r", "behaviour", "Chooses whether the item finder starts on items near your level or at any level." },
 		{ "chat.gearFindUsable", "r", "behaviour", "Starts the item finder on only the armor and weapons your class can wear." },
 	} },
-	-- The trinket queue swaps by itself only once a slot's Auto queue is ticked, so its step shows the screen; every row describes itself.
 	{ id = "trinkets", area = "Character and gear", title = "Trinket queue", draw = "mock-screen", built = false, rows = {
 		{ "trinkets.enabled", "c", "behaviour", "Keeps a list of your trinkets for each trinket slot and opens it from the Character window or /flatui queue." },
 		{ "trinkets.autoTop", "c", "behaviour", "Swaps your top trinket by its list out of combat: the best one you carry that is ready." },
@@ -1047,7 +1040,6 @@ ns.SETUP_STEPS = {
 		{ "trinkets.sound", "r", "behaviour", "Plays a sound on each trinket swap." },
 		{ "trinkets.slotButtons", "o", "behaviour", "Puts a small square beside each trinket slot on the Character window that shows the queue's state and opens its window." },
 	} },
-	-- The hit table hangs under the player frame, so its step shows the player's frame (mock-player, SetupDrawUnits.lua); every row describes itself.
 	{ id = "hud-hittable", area = "Character and gear", title = "Hit table", draw = "mock-player", built = true, rows = {
 		{ "hud.hitTable", "c", "behaviour", "Shows under your player frame your chances to miss, be dodged, parried or blocked, glance, crit and hit against your target, and the share of a spell's damage resisted with your Spell Piercing, while you are a tank or a damage dealer, or always." },
 		{ "hud.hitTableTip", "o", "behaviour", "Adds your hit table against an enemy to its tooltip, while you are a tank or a damage dealer, or always. Needs Restyle chat and tooltips on." },
@@ -1393,7 +1385,6 @@ ns.SETUP_STEPS = {
 		{ "combattext.ownHealColour", "r", "mock-combat-text" },
 		{ "combattext.gainSize", "o", "behaviour", "Sets the size of the text the game draws near you, such as experience." },
 	} },
-	-- The combat alerts of CombatCues.lua, drawn in their colours and sizes (SetupDrawChat.lua, mock-combat-alerts).
 	{ id = "ct-alerts", area = "Combat text", title = "Combat alerts", draw = "mock-combat-alerts", built = true, rows = {
 		{ "combattext.noTarget", "c", "mock-combat-alerts" },
 		{ "combattext.noTargetFriendly", "o", "behaviour", "Chooses whether a friendly target brings the No target warning too; while you heal it never does." },

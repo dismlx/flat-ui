@@ -1,43 +1,5 @@
 local _, ns = ...
 
--- Flat UI's own action buttons, piece B: eight bars of twelve secure buttons, the paging of the main bar, the parking of the game's bars, the layout
--- copied from the game's bars and the keys that open flyouts. The design is research/own-buttons/design.md (sections 2 to 5, 7 and 10).
---
--- A Flat UI button is a CheckButton of ActionButtonTemplate, SecureActionButtonTemplate. It runs the template's OnLoad and nothing of the game's
--- button code. This file writes no field on a button, a bar or a watcher: what it keeps is in tables, and every attribute is set by secure code (a
--- header's Execute, a state driver, a handle). The game's bars stay shown and laid out at alpha 0 with the mouse off, so every key still reaches
--- the game's own buttons, which keep their page from the game's own controller. Nothing is hooked, nothing of the game's is hidden, moved,
--- reparented or given an attribute. All of it runs only while Action buttons (actionbars.own) is Flat UI's.
--- The layout follows the game's bars: at login, on an Edit Mode or UI scale change, and every half second out of combat when the rectangle of a
--- game bar moved since the last layout, as /flatui move, the bar block (ns.OwnRelayout) and a tab dragged in /flatui move place a bar with a
--- snippet that fires no event.
--- Page arrows on the main bar (actionbars.pageArrows, on by default): the game's page number and arrows sit at alpha 0 with the parked main bar, so
--- Flat UI's bar 1 has its own beside it, where the game puts them (MainActionBar.xml:93-140): two secure buttons of the game's paging action
--- (type actionbar, action increment or decrement, SECURE_ACTIONS.actionbar in SecureTemplates.lua:322-339), which page the bar in a fight too, and
--- between them the page number (C_ActionBar.GetActionBarPage, as MainActionBar.lua:11 and 57 write it), a font string of Flat UI's own set again
--- as the page changes, which pops (its holder scales from 140% back to full over 0.25 s, in a fight too) at each change after the first, while an
--- arrow's tooltip that is up is drawn again with the new page. They are children of FlatUIBar1, so they move, hide and fade with it; they take the
--- place and size of the game's own, read at each layout, and show while the row is on and the game's page number is shown, which Edit Mode's
--- Hide bar scrolling turns off (EditModeSystemTemplates.lua:1129-1130), read only. They are placed and shown out of combat, the buttons by the
--- header. They page on the left button only, play the game's scroll click as they page (SOUNDKIT.U_CHAT_SCROLL_BUTTON, as
--- MainActionBar.lua:164-182), and say in a tooltip which way they page, the page you are on and the key of that command (NEXTACTIONPAGE,
--- PREVIOUSACTIONPAGE, short as the hotkeys are with Hotkey text at Short): hooks of Flat UI's own buttons (HookScript), which only play the sound
--- and draw the tooltip. The page number is a third secure button of the same action (FlatUIBar1PageNumber, action 1) under the number, so a left
--- click on it goes back to page 1, in a fight too, with the same click sound unless it was on page 1 already, and its tooltip says the page and,
--- past page 1, "Click: back to page 1". A change of profile reaches the row through ActionBars.lua's Refresh (ns.OwnPagerChanged); the mouse over a
--- shown arrow or the number counts as over the main bar for Fading and the bar block (ns.OwnPagerOver), and the bar block's background panel
--- widens to take them in (ns.OwnPagerRect, told after each placing through ns.BarBlockPanels). Past page 1 the number lights white under the mouse,
--- with a faint square behind it, and sinks a pixel while the left button is held on it (F.NumberLook). With the mouse over an arrow or the number the
--- wheel pages the bar, up to the next page and down to the previous, in a fight too: secure wraps of their OnEnter, OnLeave and OnHide bind and
--- unbind the wheel to two more secure buttons of the paging action (FlatUIBar1PageWheelUp and FlatUIBar1PageWheelDown, no mouse, acting on the
--- press), with the same scroll click and the pop; the tooltips say "Wheel: change page". A change of Page arrows on the main bar in a fight, with
--- the options window open, says once a fight in chat that it waits for the fight's end (ns.OwnPagerChanged).
--- Quick Keybind Mode (the game's Key Bindings) works on the game's own buttons: while it is open the game's eight bars are given back where they
--- are (alpha 1, the mouse on) and Flat UI's are hidden, out of combat; as it closes, or just before a fight starts, the game's bars are parked
--- again and Flat UI's shown. A mode opened in a fight waits for its end. A fight that starts while the mode is open says so in one chat line: Flat
--- UI's buttons are back for the fight and the game's show again when it ends, or, when the lockdown came first, that the game's stay for the fight.
-
--- Flat UI bar n: the game bar and its buttons, the key command of the buttons, the slot before the first one.
 local BAR = {
 	{ game = "MainActionBar", twin = "ActionButton", cmd = "ACTIONBUTTON", base = 0 },
 	{ game = "MultiBarBottomLeft", twin = "MultiBarBottomLeftButton", cmd = "MULTIACTIONBAR1BUTTON", base = 60 },
@@ -49,29 +11,20 @@ local BAR = {
 	{ game = "MultiBar7", twin = "MultiBar7Button", cmd = "MULTIACTIONBAR7BUTTON", base = 168 },
 }
 
--- What the state of this file is, in tables so that no function holds many upvalues.
 local S = {
 	built = false, pending = false, busy = false, error = nil, header = nil,
 	bars = {}, buttons = {}, grid = {}, watchers = {}, parked = false,
-	-- bar and index by button
 	info = setmetatable({}, { __mode = "k" }),
 	flag = {}, clock = 0, putBack = 0,
-	-- what was last laid out, by bar
 	chunk = {},
-	-- the twelve slots of the main bar last seen by the watch
 	slots = {},
 	slotListeners = {}, builtListeners = {},
 	editWas = false,
-	-- the game bars' rectangles at the last layout, and the time since they were last compared
 	rect = {}, rectClock = 0,
-	-- Quick Keybind Mode: open (kbWant), the game's bars given back for it (kbHeld), the line printed for this opening (kbTold), between
-	-- PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED (fight), and the owner of its two callbacks
 	kbWant = false, kbHeld = false, kbTold = false, fight = false, kbOwner = {},
 }
 local F = {}
 
--- The restricted code. PAGE runs with `bar` as the main bar's handle: the page the game's own controller computes (ActionBarController.lua:159-171),
--- the slot of each button, and the keys of the slots that hold a flyout sent to Flat UI's button, as a click (the others cleared).
 local PAGE = [=[
 local page = HasVehicleActionBar() and GetVehicleBarIndex() or HasOverrideActionBar() and GetOverrideBarIndex() or HasTempShapeshiftActionBar() and GetTempShapeshiftBarIndex() or (HasBonusActionBar() and GetActionBarPage() == 1) and GetBonusBarIndex() or GetActionBarPage()
 bar:SetAttribute("flatui-page", page)
@@ -97,11 +50,9 @@ bar:SetAttribute("flatui-routed", routed)
 local PAGE_STATE = "local bar = self\n" .. PAGE
 local PAGE_EXEC = "local bar = self:GetFrameRef('bar1')\n" .. PAGE
 
--- The value of the page driver only has to change when the page does: a bonus bar counts only on page 1, as the game's formula does.
 local PAGE_VALUE = "[vehicleui] v; [overridebar] o; [possessbar] p; [shapeshift] s; [bonusbar:5,bar:1] b5; [bonusbar:4,bar:1] b4; [bonusbar:3,bar:1] b3; "
 	.. "[bonusbar:2,bar:1] b2; [bonusbar:1,bar:1] b1; [bar:6] 6; [bar:5] 5; [bar:4] 4; [bar:3] 3; [bar:2] 2; 1"
 
--- Bars 2 to 8 have fixed slots: the keys of their flyout slots, run out of combat.
 local ROUTE = [=[
 for n = 2, 8 do
 	local cmd = select(n - 1, %s)
@@ -123,8 +74,6 @@ for n = 2, 8 do
 end
 ]=]
 
--- The create snippet: type first goes to a value that is not an action, so that a popup field the template's OnLoad wrote under the caller's
--- taint is cleared by secure code (UpdateFlyout, ActionButton.lua:1672-1710); then the rest, then the action, then the type.
 local CREATE = [=[
 for n = 1, 8 do
 	local base = select(n, %s)
@@ -142,8 +91,6 @@ for n = 1, 8 do
 end
 ]=]
 
--- A Flat UI bar is shown exactly while its game bar is: the watcher under the game bar's first button container sets flatui-game, a pet battle sets
--- flatui-pb.
 local ON_SHOW = [=[
 local bar = self:GetFrameRef("bar")
 bar:SetAttribute("flatui-game", true)
@@ -168,7 +115,6 @@ else
 end
 ]=]
 
--- A drag starts only unlocked or with the pickup key, and picks up the button's slot. A drop puts down on it (SecureHandlers.lua:128-161).
 local DRAG_START = [=[
 if control:GetAttribute("flatui-locked") and not IsModifiedClick("PICKUPACTION") then
 	return false
@@ -189,9 +135,6 @@ end
 self:GetFrameRef("game1"):EnableMouse(false)
 ]=]
 
--- The page arrows of the main bar: the game's paging action on a click (SECURE_ACTIONS.actionbar), on the button's release as Flat UI's buttons. The
--- page number under the text takes the same action with a page number, 1 (SecureTemplates.lua:329-330, C_ActionBar.SetActionBarPage). The two
--- wheel buttons page up and down on the press the wheel's binding sends (useOnKeyDown, SecureTemplates.lua:792-811), so a roll pages once.
 local PAGER_WIRE = [=[
 for _, dir in ipairs(newtable("Up", "Down", "Number", "WheelUp", "WheelDown")) do
 	local b = self:GetFrameRef("page" .. dir)
@@ -206,9 +149,6 @@ for _, dir in ipairs(newtable("Up", "Down", "Number", "WheelUp", "WheelDown")) d
 	end
 end
 ]=]
--- The mouse over an arrow or the page number: the wheel is bound to the two wheel buttons, up to the next page and down to the previous, by override
--- bindings of the button the mouse is over (restricted code, so in a fight too, as PAGE binds the flyout keys); they go as the mouse leaves it or it
--- hides, and the wheel zooms the camera again.
 local PAGER_WHEEL_ON = [=[
 self:SetBindingClick(true, "MOUSEWHEELUP", "FlatUIBar1PageWheelUp", "LeftButton")
 self:SetBindingClick(true, "MOUSEWHEELDOWN", "FlatUIBar1PageWheelDown", "LeftButton")
@@ -216,15 +156,12 @@ self:SetBindingClick(true, "MOUSEWHEELDOWN", "FlatUIBar1PageWheelDown", "LeftBut
 local PAGER_WHEEL_OFF = [=[
 self:ClearBindings()
 ]=]
--- The two arrows and the number: where the game's are, else the place of its XML from the bar's bottom left (the group's bottom right 4 left of
--- and 9 up from it, the arrows 10 over and under its middle), and the game's atlases.
 local PAGER = {
 	{ dir = "Up", key = "UpButton", x = -12.5, y = 36, w = 17, h = 14, atlas = "ui-hud-actionbar-pageuparrow" },
 	{ dir = "Down", key = "DownButton", x = -12.5, y = 16, w = 17, h = 14, atlas = "ui-hud-actionbar-pagedownarrow" },
 	{ key = "Text", x = -13.5, y = 26, w = 17, h = 10 },
 }
 
--- The reverse of PARK, through the same handles.
 local UNPARK = [=[
 for n = 1, 8 do
 	self:GetFrameRef("game" .. n):SetAlpha(1)
@@ -235,8 +172,6 @@ end
 self:GetFrameRef("game1"):EnableMouse(true)
 ]=]
 
--- Quick Keybind Mode: the game's bars back (UNPARK) and Flat UI's hidden, with flatui-kb set so that neither a watcher nor the pet battle driver shows
--- one again; KB_OFF parks the game's bars again and shows each Flat UI bar whose game bar shows outside a pet battle, as ON_SHOW does.
 local KB_ON = UNPARK .. [=[
 for n = 1, 8 do
 	local bar = self:GetFrameRef("bar" .. n)
@@ -253,8 +188,6 @@ for n = 1, 8 do
 	end
 end
 ]=]
-
--- Setup -----------------------------------------------------------------------------------------------------------------------------------------
 
 local function Guard(what, fn, ...)
 	local ok, err = pcall(fn, ...)
@@ -278,7 +211,6 @@ local function Pager()
 	return pager and pager.UpButton, pager and pager.DownButton
 end
 
--- A state of the button in one of the game's atlases, else a texture of the atlas.
 local function Atlas(button, which, atlas)
 	local set = button["Set" .. which .. "Atlas"]
 	if type(set) == "function" and pcall(set, button, atlas) then
@@ -290,7 +222,6 @@ local function Atlas(button, which, atlas)
 	end
 end
 
--- The page the main bar shows now, or nil.
 function F.Page()
 	local get = C_ActionBar and C_ActionBar.GetActionBarPage or _G.GetActionBarPage
 	if type(get) ~= "function" then
@@ -300,8 +231,6 @@ function F.Page()
 	return ok and ns.Finite(page) and page or nil
 end
 
--- The tooltip of a page arrow: which way it pages, the page shown now and the key of that command. The page number's says the page and, past page
--- 1, that a click goes back to it.
 function F.PagerTip(button)
 	local tip = GameTooltip
 	local pager = S.pager
@@ -346,9 +275,6 @@ function F.PagerTip(button)
 	tip:Show()
 end
 
--- The look of the page number under the mouse (over) and while the left button is held on it (down): past page 1, where a click does something, its
--- gold turns white with a faint square behind it, as the data panel slots light, and held it sinks a pixel, as Flat UI's other buttons do. On page 1
--- it stays gold. Font string and texture calls on Flat UI's own holder, so in a fight too; the square is made the first time.
 function F.NumberLook(over, down)
 	local pager = S.pager
 	local text, holder = pager and pager.text, pager and pager.holder
@@ -386,7 +312,6 @@ function F.NumberLook(over, down)
 	end
 end
 
--- The hooks of the page number's look, once (insecure hooks of Flat UI's own button, as F.HookPager's).
 function F.HookNumber(number)
 	local pager = S.pager
 	if pager.numberHooked then
@@ -409,7 +334,6 @@ function F.HookNumber(number)
 	end)
 end
 
--- The wheel over an arrow or the number (PAGER_WHEEL_ON, PAGER_WHEEL_OFF), wrapped once, before the insecure hooks, so a wrap never takes them off.
 function F.WrapWheel(button)
 	local pager = S.pager
 	pager.wrapped = pager.wrapped or {}
@@ -422,8 +346,6 @@ function F.WrapWheel(button)
 	SecureHandlerWrapScript(button, "OnHide", S.header, PAGER_WHEEL_OFF)
 end
 
--- The hooks of a page arrow or the page number, once: the game's scroll click after a click that paged (the number's on a page past 1 only,
--- read before the click), and the tooltip.
 function F.HookPager(button)
 	local pager = S.pager
 	pager.hooked = pager.hooked or {}
@@ -457,7 +379,6 @@ function F.HookPager(button)
 	end)
 end
 
--- The page arrows and the page number of bar 1, hidden until the layout places them.
 function F.MakePager()
 	local bar = S.bars[1]
 	local pager = S.pager or {}
@@ -479,7 +400,6 @@ function F.MakePager()
 			S.header:SetFrameRef("page" .. def.dir, button)
 		end
 	end
-	-- The wheel buttons: no mouse, no art, shown with bar 1, clicked only by the wheel's bindings while the mouse is over an arrow or the number.
 	for _, dir in ipairs({ "WheelUp", "WheelDown" }) do
 		local name = "FlatUIBar1Page" .. dir
 		local button = _G[name] or CreateFrame("Button", name, bar, "SecureActionButtonTemplate")
@@ -500,7 +420,6 @@ function F.MakePager()
 		holder:Hide()
 		pager.holder, pager.text = holder, text
 	end
-	-- The page number takes a click: a secure button of the paging action under the number's holder, which takes no mouse, so the number stays on top.
 	local name = "FlatUIBar1PageNumber"
 	local number = _G[name] or CreateFrame("Button", name, bar, "SecureActionButtonTemplate")
 	number:RegisterForClicks("LeftButtonUp")
@@ -513,7 +432,6 @@ function F.MakePager()
 	S.header:SetFrameRef("pageNumber", number)
 end
 
--- The bars, the header, the buttons and the watchers; the frame refs the snippets walk.
 function F.Make()
 	local header = _G.FlatUIOwnHeader or CreateFrame("Frame", "FlatUIOwnHeader", UIParent, "SecureHandlerBaseTemplate")
 	S.header = header
@@ -544,7 +462,6 @@ function F.Make()
 			header:SetFrameRef("b" .. n .. "_" .. i, button)
 			header:SetFrameRef("t" .. n .. "_" .. i, _G[def.twin .. i])
 		end
-		-- The watcher: one frame of 1 x 1 under the container of the game bar's first button. The container is shown whenever the bar is.
 		local container = first.container or first:GetParent()
 		local watcher = CreateFrame("Frame", nil, container, "SecureHandlerShowHideTemplate")
 		watcher:SetSize(1, 1)
@@ -556,15 +473,12 @@ function F.Make()
 	F.MakePager()
 end
 
--- The attributes of the buttons, the watchers' and drivers' snippets, the drag wraps, the paging driver and the pet battle drivers.
 function F.Wire()
 	local bases = {}
 	for n = 1, 8 do
 		bases[n] = BAR[n].base
 	end
 	Run(CREATE:format(table.concat(bases, ", ")))
-	-- The snippets are attributes of Flat UI's own bars and watchers, written out of combat with a plain SetAttribute: a handle refuses a name that
-	-- starts with an underscore (RestrictedFrames.lua:522-526).
 	for n = 1, 8 do
 		S.watchers[n]:SetAttribute("_onshow", ON_SHOW)
 		S.watchers[n]:SetAttribute("_onhide", ON_HIDE)
@@ -588,9 +502,6 @@ function F.Wire()
 	Run(PAGER_WIRE)
 end
 
--- Layout -----------------------------------------------------------------------------------------------------------------------------------------
-
--- A game frame's rectangle in the units of Flat UI's bars (those of UIParent), or nil when it has not been laid out.
 local function Rect(frame)
 	local ok, l, b, w, h = pcall(frame.GetRect, frame)
 	if not ok or not (ns.Finite(l) and ns.Finite(b) and ns.Finite(w) and ns.Finite(h)) or w <= 0 or h <= 0 then
@@ -600,7 +511,6 @@ local function Rect(frame)
 	return l * e, b * e, w * e, h * e
 end
 
--- The way a flyout opens: up from a bar in the lower half of the screen, down from the upper half, toward the middle from a vertical bar.
 local function ScreenSize()
 	local scale = UIParent:GetEffectiveScale()
 	if type(GetPhysicalScreenSize) == "function" and type(scale) == "number" and scale > 0 then
@@ -638,7 +548,6 @@ local function Count(n)
 	return math.max(0, math.min(12, count))
 end
 
--- Each Flat UI bar takes the game bar's rectangle, and each button its container's place and size, copied: a Flat UI button is never anchored to the game.
 function F.Layout()
 	local run = {}
 	for n = 1, 8 do
@@ -648,7 +557,6 @@ function F.Layout()
 		if bl then
 			local count = Count(n)
 			local dir = Direction(bl, bb, bw, bh, count)
-			-- The bar's own place goes through the header too (the bar is a handle of a protected frame), relative to its parent, UIParent (a handle takes "$parent", RestrictedFrames.lua:489-491).
 			local t = { ("do local bar = self:GetFrameRef('bar%d') local b"):format(n),
 				("bar:ClearAllPoints() bar:SetPoint('BOTTOMLEFT', '$parent', 'BOTTOMLEFT', %.3f, %.3f) bar:SetWidth(%.3f) bar:SetHeight(%.3f)"):format(bl, bb, bw, bh) }
 			for i = 1, 12 do
@@ -677,12 +585,10 @@ function F.Layout()
 	if #run > 0 then
 		Run(table.concat(run, "\n"))
 	end
-	-- A page arrow that cannot be placed stays hidden; it never stops the bars (Guard would).
 	local ok, err = pcall(F.Pager)
 	S.pagerError = not ok and tostring(err) or nil
 end
 
--- The pop of the page number as the page changes: its holder, Flat UI's own frame, scales from POP_FROM back to 1 over POP_TIME, made the first time.
 local POP_FROM, POP_TIME = 1.4, 0.25
 function F.PagePop(pager)
 	if not pager.pop then
@@ -701,8 +607,6 @@ function F.PagePop(pager)
 	pager.pop:Play()
 end
 
--- The page number shown now, set on Flat UI's own font string when it changed; allowed in a fight. A change after the first pops the number
--- (F.PagePop), and a tooltip of a page arrow that is up reads the new page at once.
 function F.PageText()
 	local pager = S.pager
 	local get = C_ActionBar and C_ActionBar.GetActionBarPage or _G.GetActionBarPage
@@ -714,7 +618,6 @@ function F.PageText()
 		local known = pager.page ~= nil
 		pager.page = page
 		pager.text:SetText(page)
-		-- Under the mouse the number lights past page 1 and goes back to gold on page 1.
 		if pager.over then
 			pcall(F.NumberLook, true, pager.down)
 		end
@@ -735,8 +638,6 @@ function F.PageText()
 	end
 end
 
--- Page arrows on the main bar, out of combat: each part of the game's page number at its place beside the game bar, moved by the same offset onto
--- Flat UI's bar 1, shown while the row is on and the game's own is shown.
 function F.Pager()
 	local pager = S.pager
 	if not pager then
@@ -767,14 +668,12 @@ function F.Pager()
 				t[#t + 1] = "p:Hide()"
 			end
 		elseif show then
-			-- The number at the game's scale (Edit Mode's icon size scales it down, MainActionBar.lua:107-115); offsets are in the holder's own units.
 			local scale = h / def.h
 			scale = ns.Finite(scale) and scale > 0.2 and scale or 1
 			pager.holder:SetScale(scale)
 			pager.holder:SetSize(def.w, def.h)
 			pager.holder:ClearAllPoints()
 			pager.holder:SetPoint("CENTER", S.bars[1], "BOTTOMLEFT", x / scale, y / scale)
-			-- Its button, over the number's rectangle in the bar's units.
 			t[#t + 1] = ("p = self:GetFrameRef('pageNumber') if p then p:ClearAllPoints() p:SetPoint('CENTER', bar, 'BOTTOMLEFT', %.3f, %.3f) "
 				.. "p:SetWidth(%.3f) p:SetHeight(%.3f) p:Show() end"):format(x, y, def.w * scale, h)
 		else
@@ -790,13 +689,11 @@ function F.Pager()
 	if show then
 		F.PageText()
 	end
-	-- The bar block's background panel takes the arrows in (ns.OwnPagerRect), now that they are placed.
 	if type(ns.BarBlockPanels) == "function" then
 		ns.BarBlockPanels()
 	end
 end
 
--- True when a game bar's rectangle is not the one of the last layout, by more than half a unit on an edge.
 function F.Moved()
 	for n = 1, 8 do
 		local was = S.rect[n]
@@ -809,9 +706,6 @@ function F.Moved()
 	return false
 end
 
--- Parking ---------------------------------------------------------------------------------------------------------------------------------------
-
--- The game's bars stay where they are and shown, at alpha 0 with the mouse off on the bar, the pager buttons and the 96 buttons.
 function F.Park()
 	Run(PARK)
 	for _, button in pairs({ Pager() }) do
@@ -824,9 +718,7 @@ function F.Park()
 	S.parked = true
 end
 
--- The game may put an alpha back at once, in a fight too. The mouse is put back out of combat.
 function F.UpkeepAlpha()
-	-- Quick Keybind Mode has the game's bars shown.
 	if S.kbHeld then
 		return
 	end
@@ -873,8 +765,6 @@ function F.Upkeep()
 	end
 end
 
--- Flat UI's buttons are not in use this session: what an earlier session of Flat UI's buttons parked is put back, once. The game's own frames start a
--- reload with alpha 1 and the mouse on, so this finds nothing to change unless the setting went back during the session.
 function F.Revert()
 	if InCombatLockdown() then
 		S.flag.revert = true
@@ -897,8 +787,6 @@ function F.Revert()
 	end
 end
 
--- Keys, lock and the build ----------------------------------------------------------------------------------------------------------------------
-
 function F.Resync()
 	Run(PAGE_EXEC)
 end
@@ -911,7 +799,6 @@ function F.Keys()
 	Run(PAGE_EXEC .. ROUTE:format(table.concat(cmds, ", ")))
 end
 
--- locked mirrors lockActionBars for the drag wraps, which run in a fight.
 function F.Lock()
 	local locked = GetCVarBool("lockActionBars") and true or false
 	if S.locked ~= locked then
@@ -920,7 +807,6 @@ function F.Lock()
 	end
 end
 
--- What the snippets of the build write, read back: a snippet that failed inside Execute raises nothing here (SecureHandlers.lua:680-699).
 function F.Missing()
 	local last = S.grid[8] and S.grid[8][12]
 	if not last or last:GetAttribute("type") ~= "action" or last:GetAttribute("action") ~= BAR[8].base + 12 then
@@ -938,8 +824,6 @@ function F.Missing()
 	return nil
 end
 
--- A build that failed: Flat UI's layer is taken down, out of combat, so that the game's bars are the only ones left. The drivers and the watchers are
--- plain calls on Flat UI's own frames; the header hides each bar and clears the key bindings it routed.
 local DOWN = [=[
 for n = 1, 8 do
 	local bar = self:GetFrameRef("bar" .. n)
@@ -1012,7 +896,6 @@ function F.Build()
 	end
 end
 
--- Quick Keybind Mode was seen to open or close (its EventRegistry callbacks and the 0.1 s watch). Only noted here: the bars change in F.Process.
 function F.KeybindSeen(open)
 	open = open == true
 	if open == S.kbWant then
@@ -1027,7 +910,6 @@ function F.KeybindSeen(open)
 	end
 end
 
--- Out of combat: the game's bars while Quick Keybind Mode is open, Flat UI's again once it has closed.
 function F.Keybind()
 	local want = S.kbWant and S.parked and not S.fight
 	if want and not S.kbHeld then
@@ -1042,7 +924,6 @@ function F.Keybind()
 	end
 end
 
--- Flat UI's bars back and the game's parked again: the mode closed, or a fight is about to start (PLAYER_REGEN_DISABLED comes before the lockdown).
 function F.KeybindEnd()
 	if S.kbHeld and not InCombatLockdown() then
 		S.kbHeld = false
@@ -1050,7 +931,6 @@ function F.KeybindEnd()
 	end
 end
 
--- Runs what an event left to do, when not in combat.
 function F.Process()
 	if S.busy or S.error or InCombatLockdown() then
 		return
@@ -1092,8 +972,6 @@ function F.Process()
 	end
 end
 
--- Every 0.1 s: Edit Mode is polled while it is open (and once when it closes), Quick Keybind Mode is polled, the twelve slots of the main bar are
--- compared with the last seen and, every 0.5 s out of combat, the game bars' rectangles with those of the last layout.
 function F.Watch()
 	local manager = _G.EditModeManagerFrame
 	local active = false
@@ -1183,7 +1061,6 @@ function F.Event(event, name)
 		S.fight = true
 		local held = S.kbHeld
 		F.KeybindEnd()
-		-- One chat line says what the fight does to Quick Keybind Mode's buttons; kbTold stays, so the reopening after it says nothing more.
 		if held and not S.kbHeld then
 			print("Flat UI: your action buttons are back for the fight; the game's show again for Quick Keybind Mode when it ends.")
 		elseif held then
@@ -1215,7 +1092,6 @@ function F.Event(event, name)
 	end
 end
 
--- The events and the frame's script are taken up at login, and only when Flat UI's buttons are on: a session of the game's buttons has one event.
 local frame = CreateFrame("Frame")
 local LATER = { "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR",
 	"UPDATE_VEHICLE_ACTIONBAR", "UPDATE_OVERRIDE_ACTIONBAR", "UPDATE_SHAPESHIFT_FORM", "ACTIONBAR_SLOT_CHANGED", "UPDATE_BINDINGS",
@@ -1231,7 +1107,6 @@ function F.Listen()
 	frame:SetScript("OnUpdate", function(...)
 		Guard("update", F.Update, ...)
 	end)
-	-- The game's own callbacks of Quick Keybind Mode (QuickKeybind.lua OnShow and OnHide). They only note it; the watch polls it too.
 	if type(EventRegistry) == "table" and type(EventRegistry.RegisterCallback) == "function" then
 		pcall(EventRegistry.RegisterCallback, EventRegistry, "QuickKeybindFrame.QuickKeybindModeEnabled", function()
 			Guard("keybind", F.KeybindSeen, true)
@@ -1246,36 +1121,26 @@ frame:SetScript("OnEvent", function(_, event, ...)
 	Guard(event, F.Event, event, ...)
 end)
 
--- Interface for the other files ---------------------------------------------------------------------------------------------------------------
-
--- True when Flat UI's buttons are built and in use this session.
 function ns.OwnOn()
 	return S.built == true
 end
 
--- True while Flat UI's buttons are chosen and have not failed to build: built, or still to be built (a login in a fight). The game's buttons of bars 1
--- to 8 are left alone from then on.
 function ns.OwnWanted()
 	return F.Mode() and not S.error
 end
 
--- The overIf of the rows that apply with the game's buttons only (Hide bar frame, Hide end caps, Hide dividers, Rotation helper highlight): greyed
--- while Flat UI's buttons are chosen (Panel.lua, Over).
 function ns.OwnButtonsChosen()
 	return ns.OwnWanted() == true
 end
 
--- The first thing a build's snippets did not write, or nil.
 function ns.OwnMissing()
 	return F.Missing()
 end
 
--- The 96 buttons, in bar then index order (only those built).
 function ns.OwnButtons()
 	return S.buttons
 end
 
--- Bar number 1 to 8 and index 1 to 12 of a Flat UI button; nil for any other frame.
 function ns.OwnBar(button)
 	local info = type(button) == "table" and S.info[button]
 	if info then
@@ -1287,8 +1152,6 @@ function ns.OwnBarFrame(n)
 	return S.bars[n]
 end
 
--- The Flat UI bar that takes the place of the game bar of this name (MainActionBar, MultiBarBottomLeft and the rest), while Flat UI's buttons are
--- built; nil for any other name.
 function ns.OwnBarOf(name)
 	if not S.built then
 		return nil
@@ -1301,8 +1164,6 @@ function ns.OwnBarOf(name)
 	return nil
 end
 
--- True while the mouse is over one of the page arrows or the page number of the main bar that shows: Fading (its Main action bar row) and the bar
--- block's fade count it as over the main bar, since the arrows sit left of the bar's rectangle. A withheld answer counts as over, as Fading's own reads do.
 function ns.OwnPagerOver()
 	local pager = S.pager
 	if not (S.built and pager) then
@@ -1323,8 +1184,6 @@ function ns.OwnPagerOver()
 	return false
 end
 
--- The rectangle round the page arrows and the page number of the main bar while they show, in UIParent units: left, bottom, right and top, or nil.
--- The bar block's background panel and its mouse area take it in (BarBlock.lua).
 function ns.OwnPagerRect()
 	local pager = S.pager
 	if not (S.built and pager and pager.holder) then
@@ -1351,9 +1210,6 @@ function ns.OwnPagerRect()
 	return nil
 end
 
--- Page arrows on the main bar changed: the arrows are placed, shown or hidden on the next check out of combat. ActionBars.lua's Refresh calls this on
--- every refresh, so the row is compared with the last value seen: a change in a fight, with the options window open, says once a fight in chat that
--- the arrows show or go when it ends (S.pagerTold, cleared as the fight ends), as the bar block and the cast bars say theirs.
 function ns.OwnPagerChanged()
 	local want = ns.Get("actionbars.pageArrows") == true
 	local was = S.pagerWant
@@ -1368,8 +1224,6 @@ function ns.OwnPagerChanged()
 	end
 end
 
--- Lays Flat UI's bars out again on the next check out of combat: the bar block placed the game's bars. The rectangles are compared at the next watch
--- as well, since the block's places are put down a frame later.
 function ns.OwnRelayout()
 	if S.built then
 		S.flag.layout = true
@@ -1383,7 +1237,6 @@ function ns.OwnSlot(button)
 	end
 end
 
--- The game button with the same bar and index.
 function ns.OwnTwin(button)
 	local info = type(button) == "table" and S.info[button]
 	if info then
@@ -1398,14 +1251,12 @@ function ns.OwnCommand(button)
 	end
 end
 
--- fn() runs after the main bar's slots changed (a page or a slot change), from the 0.1 s watch.
 function ns.OnOwnSlots(fn)
 	if type(fn) == "function" then
 		S.slotListeners[#S.slotListeners + 1] = fn
 	end
 end
 
--- fn() runs once when Flat UI's buttons have been built (at once when they already are).
 function ns.OnOwnBuilt(fn)
 	if type(fn) ~= "function" then
 		return
@@ -1417,7 +1268,6 @@ function ns.OnOwnBuilt(fn)
 	end
 end
 
--- The main bar's page as Flat UI computed it, and the game's actionpage.
 function ns.OwnPage()
 	if not S.built then
 		return nil
@@ -1426,8 +1276,6 @@ function ns.OwnPage()
 	return S.bars[1]:GetAttribute("flatui-page"), main and main:GetAttribute("actionpage")
 end
 
--- One line for /flatui status, or nil. id is one of the ids of Core.lua's OWN_STATUS: "buttons", "waiting", "page", "keys", "flyoutkeys", "parked",
--- "leave", "taint" or "totem". A build that failed says why in the "buttons" line.
 function ns.OwnStatus(id)
 	if id == "buttons" then
 		if not F.Mode() then

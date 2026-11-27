@@ -1,30 +1,12 @@
 local _, ns = ...
 
--- The game's own icon, bar or text for each buff tracker. In a fight the game withholds the values of a buff from addon code,
--- so Trackers.lua cannot read its charges or time left, but the game will draw the buff itself: an aura container
--- with one slot, laid over the tracker's frame, shows the buff, its charges and its time left. A bar is a second look of the same
--- slot: a status bar the game fills by the time left, and for a bar filled by charges a second slot whose button fills a bar by
--- the charges (a button has one application bar and the icon's cover has it). The icon, the bar and the text are three wrapper
--- frames of the button, and the shape the tracker has is the wrapper whose alpha is 1. The slot is made
--- out of sight (alpha 0) with every part it will ever need made inside the function the game calls while it builds
--- the slot, because from then on the game closes the button to addon code while it hides buffs. A change to those
--- parts waits until the game says buffs are open; a change to the container itself (its alpha, its slot, the
--- spell IDs it matches) is allowed at any time. The game has no call that frees a container, so a tracker frame
--- keeps its container for good and the next tracker on that frame uses it. This file is no module of its own:
--- Trackers.lua calls ns.TrackerSlots, and what it has to say goes to the status lines of Trackers.
-
 local KEY = "trackers"
--- The key of the slot, and of the second try after the first slot could not be made.
 local SLOT, SLOT_AGAIN = "tracker", "tracker2"
--- The key of the second slot, the bar filled by charges.
 local SLOT_BAR = "trackerbar"
--- Levels the container is drawn above the tracker's frame, so above every child of it.
 local ABOVE = 10
 local CROP = 0.08
--- The thickness of the low rim, in screen pixels.
 local RIM = 2
 local UNKNOWN_ICON = 134400
--- ffffb333, the amber of a low count, of the low rim and of a low time left, as on the trackers' own frames (Trackers.lua K.AMBER).
 local AMBER = { 1, 0.7, 0.2 }
 local LOW_FORMAT = "|cffffb333%d|r"
 local PLAIN_FORMAT = "%d"
@@ -35,14 +17,11 @@ local NOTE_TARGET = "Trackers: the game refused to refresh its own icon for the 
 local NOTE_HIDE = "Trackers: in fights Only when low or missing shows every tracker, because the game refused a hidden answer."
 local NOTE_BAR = "Trackers: the game refused its own bar, so in fights the bar shows its last known fill, or is hidden, as In fights without the game's icon says."
 local NOTE_ART = "Trackers: the game refused art on its own icon, so in fights proc art follows only the proc's other triggers."
--- The plate behind a bar or text, the blue of a bar when the tracker has no colour, the white image a bar is filled from, the font object
--- of the strings of a bar or text, and the inset of a string from the edge and the gap between two strings.
 local PLATE = { 0.06, 0.06, 0.06, 1 }
 local BLUE = { 0.302, 0.6, 0.902 }
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local FONT_BAR, FONT_COUNT, FONT_TIME = "GameFontHighlightSmall", "NumberFontNormalSmall", "NumberFontNormal"
 local PAD, GAP = 3, 4
--- What the container is told, in the order it is told. The last two are for the second slot.
 local KINDS = { "enabled", "ids", "alpha", "enabled2", "ids2" }
 local WHY = { off = "off in settings", never = "not needed, the game never hides this buff" }
 local DIGITS = { coloured = "coloured digits", plain = "plain digits", above = "digits above 1 only" }
@@ -50,15 +29,9 @@ local TIMES = { text = "time as text", sweep = "time as the sweep's numbers", no
 
 local IsSecret = ns.IsSecret
 
--- The extra parts other files add to the button, by kind of tracker: fn(rec, button, entry), run at the end of Init inside the function the
--- game calls while it builds the slot. It may return a handle { Pending() -> bool, Apply(), Shown(on) } for what changes later: Pending says
--- the parts differ from the settings, Apply puts them right (only while the game says buffs are open), and Shown is told when the game's own
--- icon starts or stops being used. Procs.lua registers the proc art.
 ns.TrackerSlotParts = ns.TrackerSlotParts or {}
 
--- The record of each tracker frame: its container and button, what was applied to them, and what waits.
 local records = setmetatable({}, { __mode = "k" })
--- A frame that a withheld answer is handed to, made out of combat, and what the last probe found.
 local scratch, looked
 
 local function Opt(key)
@@ -69,7 +42,6 @@ local function Plain(value, kind)
 	return not IsSecret(value) and type(value) == kind
 end
 
--- A short form of an error text, without the file and line.
 local function Brief(err)
 	if type(err) == "string" then
 		return (err:gsub("^[^:]*:%d+: ", ""):sub(1, 80))
@@ -77,13 +49,11 @@ local function Brief(err)
 	return "an error"
 end
 
--- The note for an error that stopped a call of this file, with the text of the error.
 local function Failure(err)
 	local text = Brief(err)
 	return NOTE_ERROR .. (text:find("%.$") and text or (text .. "."))
 end
 
--- True when the game says buffs are open to addon code. Without the call, out of combat.
 local function Open()
 	local call = type(C_Secrets) == "table" and C_Secrets.ShouldAurasBeSecret
 	if type(call) == "function" then
@@ -97,8 +67,6 @@ local function Value(entry, key)
 	return ns.TrackerValue(entry, key)
 end
 
--- The Low at (seconds left) the tracker has here (ns.TrackerLowTime, Trackers.lua): in a dungeon or raid the larger one of dungeons and raids for a
--- buff of 10 minutes or more, by the length kept at its last reading, so the game's own icon colours its time by the value the tracker turns low at.
 local function LowTime(entry)
 	return ns.TrackerLowTime(entry)
 end
@@ -117,8 +85,6 @@ local function Art(spellID)
 	return UNKNOWN_ICON
 end
 
--- Why a tracker has no icon of the game's: "off" (the setting), "none" (no spell ID to match) or "never" (the game
--- never hides any of its IDs). Nil when it has one.
 local function Why(entry)
 	if Opt("gameIcon") == false then
 		return "off"
@@ -143,8 +109,6 @@ local function Wanted(entry)
 	return Why(entry) == nil
 end
 
--- The unit the container looks at and the filter of its slots, from the kind of the entry. A frame keeps its container for good, so the pool of the
--- frame (Trackers.lua) is the unit and the filter, and a container is never given another unit.
 local function Spec(entry)
 	return ns.TrackerSlotSpec(entry) or { unit = "player", filter = "HELPFUL" }
 end
@@ -153,7 +117,6 @@ local function IdKey(entry)
 	return table.concat(entry.spells, ",")
 end
 
--- The unit and the aura filter of the slot of an entry: a buff on the player, or what the entry's kind names.
 local function Spec(entry)
 	local spec = type(ns.TrackerSlotSpec) == "function" and ns.TrackerSlotSpec(entry)
 	if type(spec) == "table" and type(spec.unit) == "string" and type(spec.filter) == "string" then
@@ -170,25 +133,19 @@ local function IdSet(entry)
 	return set
 end
 
--- True when the game's own icon can show the charges of the tracker. Its digit and its cover follow the stacks field
--- of the buff alone (Blizzard_CustomAuraButton.lua, ApplyApplicationBar and ApplyApplicationCount), so a buff
--- that gives its count in the charges field would show a red 0 there.
 local function Charged(entry)
 	return entry.charged == true and entry.chargesField ~= true
 end
 
--- The shape of a tracker: bar, text or icon.
 local function ShapeOf(entry)
 	local shape = Value(entry, "shape")
 	return (shape == "bar" or shape == "text") and shape or "icon"
 end
 
--- How a bar is filled: by the charges for a charged tracker set to Bar fill Charges, else by the time left.
 local function FillOf(entry, shape)
 	return (shape == "bar" and Charged(entry) and Value(entry, "barFill") == "charges") and "charges" or "time"
 end
 
--- The most charges the bar of a tracker stands for.
 local function Top(entry)
 	return math.max(Plain(entry.top, "number") and entry.top or 3, 1)
 end
@@ -198,7 +155,6 @@ local function Number(key, default)
 	return Plain(value, "number") and value or default
 end
 
--- What the parts of the button should be now. A tracker that is not charged has no Low at (charges).
 local function Want(rec)
 	local entry = rec.entry
 	local charged = Charged(entry)
@@ -215,8 +171,6 @@ local function Want(rec)
 		hex = Plain(hex, "string") and hex or "", texture = ns.BarTexture(ns.Get(KEY .. ".barTexture")) or WHITE }
 end
 
--- Which parts differ from what was applied, and what they should be. shape: the wrappers and the strings, fill: what the bars show, texture:
--- the Bar texture of both bars.
 local function Dirty(rec)
 	local want, was = Want(rec), rec.applied
 	return { count = want.charged ~= was.charged or want.counts ~= was.counts or want.low ~= was.low, time = want.lowTime ~= was.lowTime or want.numbers ~= was.numbers,
@@ -225,9 +179,6 @@ local function Dirty(rec)
 		fill = want.fill ~= was.fill or want.top ~= was.top or want.shape ~= was.shape or want.hex ~= was.hex }, want
 end
 
--- The parts of the button -----------------------------------------------------------------------------
-
--- A child of the button that fills it, `above` levels over it.
 local function Layer(kind, button, template, above)
 	local frame = Own(CreateFrame(kind, nil, button, template))
 	frame:SetAllPoints()
@@ -235,7 +186,6 @@ local function Layer(kind, button, template, above)
 	return frame
 end
 
--- The four edges of the rim, just inside the button.
 local function PlaceRim(rec, thick)
 	local button, rim = rec.parts.iconW or rec.button, rec.parts.rim
 	rim[1]:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
@@ -252,7 +202,6 @@ local function PlaceRim(rec, thick)
 	rim[4]:SetWidth(thick)
 end
 
--- What shows under the cover once a count is at or under Low at: a black square, a still of the spell and the amber rim.
 local function Look(rec, button, entry)
 	local parts = rec.parts
 	local back = Own(button:CreateTexture(nil, "BACKGROUND", nil, 0))
@@ -276,7 +225,6 @@ local function Look(rec, button, entry)
 	PlaceRim(rec, ns.Pixels(rec.frame, RIM))
 end
 
--- A formatter for the count: amber up to Low at, plain from Low at + 1. Nil when the game refuses a breakpoint.
 local function Digits(low, colour)
 	local call = type(C_StringUtil) == "table" and C_StringUtil.CreateNumericRuleFormatter
 	local ok, formatter = pcall(call)
@@ -290,15 +238,12 @@ local function Digits(low, colour)
 	return ok and formatter or nil
 end
 
--- The count: the game writes the formatter's text for the charges of the buff. A buff that is not charged gets the
--- game's own text, a number above 1 only.
 local function Count(rec, entry, low)
 	local button, font = rec.button, rec.parts.count
 	if not font then
 		return false
 	end
 	if not Value(entry, "counts") then
-		-- Charges off: the game writes no digit, whatever the shape.
 		pcall(button.ClearApplicationCount, button)
 		pcall(font.SetText, font, "")
 		rec.parts.countKind = nil
@@ -328,8 +273,6 @@ local function Count(rec, entry, low)
 	return ok
 end
 
--- The cover, with the live icon on it: the game shows it only while the charges are over Low at, so the low look
--- under it shows at or under Low at.
 local function Cover(rec, entry, low)
 	local button, parts = rec.button, rec.parts
 	local cover = parts.cover
@@ -351,8 +294,6 @@ local function Cover(rec, entry, low)
 	return cleared and shown
 end
 
--- The colour of the time left: amber under `seconds`, white from there on. A step curve takes the value of the last
--- point at or under its input.
 local function Colours(seconds)
 	local ok, options = pcall(function()
 		local curve = C_CurveUtil.CreateColorCurve()
@@ -364,7 +305,6 @@ local function Colours(seconds)
 	return ok and options or nil
 end
 
--- The sweep draws numbers of its own when the game's time text is not there.
 local function Numbers(parts, shown)
 	if parts.sweep and parts.numbers ~= shown and pcall(parts.sweep.SetHideCountdownNumbers, parts.sweep, not shown) then
 		parts.numbers = shown
@@ -382,7 +322,6 @@ local function Time(rec, entry)
 		local seconds = LowTime(entry)
 		local options = seconds > 0 and Colours(seconds) or nil
 		local ok = pcall(button.SetDurationText, button, text, options)
-		-- The colour is the part a client may refuse in a fight: the time shows without it.
 		if not ok and options ~= nil then
 			ok = pcall(button.SetDurationText, button, text)
 			parts.plainText = ok or nil
@@ -400,14 +339,10 @@ local function Time(rec, entry)
 	return ok
 end
 
--- The wrappers, the strings and the bars -------------------------------------------------------------
-
--- The call, and whether every call so far went through.
 local function Try(ok, fn, ...)
 	return pcall(fn, ...) and ok
 end
 
--- Red, green and blue of a tracker's colour: the 8 digits of its hex, else the blue of a bar.
 local function Colour(hex)
 	if #hex == 8 then
 		local r, g, b = tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16), tonumber(hex:sub(7, 8), 16)
@@ -418,29 +353,22 @@ local function Colour(hex)
 	return BLUE[1], BLUE[2], BLUE[3]
 end
 
--- The text of the strings is as high as the bar allows.
 local function TextHeight(height)
 	return math.max(7, math.min(14, height - 4))
 end
 
--- The options of a bar filled by the time left. The enumerations are those of the documentation (SimpleStatusBarConstantsDocumentation.lua).
 local function TimeOptions()
 	local direction = type(Enum) == "table" and type(Enum.StatusBarTimerDirection) == "table" and Enum.StatusBarTimerDirection.RemainingTime
 	local interpolation = type(Enum) == "table" and type(Enum.StatusBarInterpolation) == "table" and Enum.StatusBarInterpolation.Immediate
 	return { interpolation = interpolation or 0, direction = direction or 1 }
 end
 
--- Puts the body of a bar or text, the part that is not the icon's square, in a wrapper of the button.
 local function Body(wrapper, button, square)
 	wrapper:ClearAllPoints()
 	wrapper:SetPoint("TOPLEFT", button, "TOPLEFT", square, 0)
 	wrapper:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 0, 0)
 end
 
--- The wrappers of the shape: the icon's has the cover, the sweep and the low look, a bar's the plate and the fill by time, a text's the plate.
--- The one that is not the shape has alpha 0. The strings are one count and one time that the game fills, and a name of the tracker's own, set
--- in the font and the places of the shape. Every call is on a part of the button, so this runs while the game says buffs are open, or while
--- the button is built.
 local function Shape(rec, want, first)
 	local parts, ok = rec.parts, true
 	local shape, height, button = want.shape, want.height, rec.button
@@ -482,7 +410,6 @@ local function Shape(rec, want, first)
 			ok = Try(ok, text.SetTextHeight, text, size)
 		end
 	end
-	-- The time string is registered with the game once built, and a registered string keeps the colour it had then.
 	for _, text in ipairs({ name, count, time }) do
 		if text ~= time or first then
 			ok = Try(ok, text.SetTextColor, text, r, g, b, 1)
@@ -495,7 +422,6 @@ local function Shape(rec, want, first)
 		ok = Try(ok, count.SetPoint, count, "BOTTOMRIGHT", top, "BOTTOMRIGHT", -2, 2)
 		ok = Try(ok, time.SetPoint, time, "CENTER", top, "CENTER", 0, 0)
 	elseif shape == "bar" then
-		-- The name stops before the strings on the right.
 		local size = TextHeight(height)
 		local room = want.width - PAD * 2 - GAP * 2 - size * 0.6 * 7
 		ok = Try(ok, name.SetPoint, name, "LEFT", top, "LEFT", square + PAD, 0)
@@ -514,7 +440,6 @@ local function Shape(rec, want, first)
 	return ok
 end
 
--- The geometry and the look of the second slot's bar: the body of the bar, in the colour of the tracker, shown for a bar filled by charges.
 local function Charges(rec, want)
 	local second = rec.parts2
 	if rec.bar2 == "refused" or not (second and second.wrap) then
@@ -532,7 +457,6 @@ local function Charges(rec, want)
 	return ok
 end
 
--- What the bars show: the bar of the time left in the colour of the tracker, and which of the two bars is on.
 local function Bars(rec, want)
 	local parts, ok = rec.parts, true
 	if parts.timeBar then
@@ -543,8 +467,6 @@ local function Bars(rec, want)
 	return Charges(rec, want) and ok
 end
 
--- Run once by the game inside AddAuraSlot, before it closes the button. Nothing here may raise: a call that does is
--- kept in the record, and a failure without which the button is of no use is the error of the whole build.
 local function Init(rec, button)
 	local entry, parts = rec.entry, rec.parts
 	local function Fail(err)
@@ -559,7 +481,6 @@ local function Init(rec, button)
 	parts.hideOk = pcall(button.SetHideTooltipInCombat, button, true)
 	parts.mouseOff = pcall(button.EnableMouse, button, false)
 	parts.level = select(2, pcall(button.GetFrameLevel, button))
-	-- The icon wrapper: the low look, and the cover with the icon the game fills.
 	local made, iconW = pcall(Layer, "Frame", button, nil, 0)
 	if made then
 		parts.iconW = iconW
@@ -589,7 +510,6 @@ local function Init(rec, button)
 	else
 		Fail(cover)
 	end
-	-- The sweep.
 	local sweep
 	made, sweep = pcall(function()
 		local frame = Layer("Cooldown", iconW, "CooldownFrameTemplate", 2)
@@ -603,7 +523,6 @@ local function Init(rec, button)
 		parts.sweep, parts.numbers = sweep, false
 		parts.sweepOk = pcall(button.SetDurationCooldown, button, sweep)
 	end
-	-- The bar: a plate and a status bar the game fills by the time left. A refusal leaves the tracker without a bar of the game's.
 	local want = Want(rec)
 	made, err = pcall(function()
 		local wrapper = Layer("Frame", button, nil, 0)
@@ -631,7 +550,6 @@ local function Init(rec, button)
 		back:SetColorTexture(PLATE[1], PLATE[2], PLATE[3], PLATE[4])
 		parts.textW = wrapper
 	end)
-	-- The count and the time left, and the name of the tracker, on a frame above the sweep and the bars.
 	local top, count, left
 	made, top, count, left = pcall(function()
 		local frame = Layer("Frame", button, nil, 3)
@@ -652,7 +570,6 @@ local function Init(rec, button)
 	Cover(rec, entry, want.low)
 	Time(rec, entry)
 	rec.applied = want
-	-- The parts other files make on the button, inside this call, because from here on the game closes the button.
 	local extra = ns.TrackerSlotParts[entry.kind]
 	if type(extra) == "function" then
 		local fine, made = pcall(extra, rec, button, entry)
@@ -664,8 +581,6 @@ local function Init(rec, button)
 		end
 	end
 end
-
--- The container and its slot --------------------------------------------------------------------------
 
 local CALLS = {
 	enabled = function(rec, on)
@@ -685,8 +600,6 @@ local CALLS = {
 	end,
 }
 
--- Tells the container what differs from what it was told last. A call that raises is held for the next Flush; at
--- the Flush (final) it is dropped with a note, and the container is taken to have what was asked for.
 local function Send(rec, final)
 	local goal, now, held = rec.goal, rec.now, rec.held
 	for _, kind in ipairs(KINDS) do
@@ -709,12 +622,10 @@ local function Send(rec, final)
 	end
 end
 
--- True when the game's bar is of no use: its parts were not made or the game refused its timer.
 local function BarRefused(rec)
 	return rec.parts.timeBar == nil or rec.parts.barOk ~= true
 end
 
--- One note, when a tracker set to Bar has no bar of the game's.
 local function BarNote(rec, want)
 	if want.shape == "bar" and BarRefused(rec) and not rec.barNoted then
 		rec.barNoted = true
@@ -722,7 +633,6 @@ local function BarNote(rec, want)
 	end
 end
 
--- Registers again what differs on the button. Only while the game says buffs are open.
 local function Apply(rec)
 	local dirty, want = Dirty(rec)
 	local entry, parts, ok = rec.entry, rec.parts, true
@@ -749,7 +659,6 @@ local function Apply(rec)
 		local called, done = pcall(Bars, rec, want)
 		filled = called and done and true or false
 	end
-	-- A new Bar texture: the bar of the time left and the bar of the charges, both Flat UI's own bars on the button.
 	if dirty.texture then
 		local second = rec.parts2
 		for _, bar in pairs({ parts.timeBar or false, second and second.bar or false }) do
@@ -760,7 +669,6 @@ local function Apply(rec)
 		end
 	end
 	ok = shaped and filled and textured and ok
-	-- A change the game refused stays asked for: the record keeps what the button has, and the next Flush sends it again.
 	if not shaped then
 		want.shape, want.height, want.width, want.name, want.hex = was.shape, was.height, was.width, was.name, was.hex
 	end
@@ -778,7 +686,6 @@ local function Apply(rec)
 	return ok
 end
 
--- Puts the extra parts of the button right when they differ from the settings. Only while the game says buffs are open.
 local function PartsApply(rec)
 	local handle = rec.partsHandle
 	if not (rec.partsOk and handle) then
@@ -792,7 +699,6 @@ local function PartsApply(rec)
 	end
 end
 
--- True when the game's own icon of the tracker is on show, with the extra parts made on it.
 local function InUse(rec)
 	return rec ~= nil and rec.partsOk == true and rec.state == "built" and rec.now ~= nil and rec.now.alpha == 1
 end
@@ -822,8 +728,6 @@ local function Build(rec, key)
 	rec.slotMade = true
 end
 
--- Makes the slot. A refusal while the game hides buffs is tried once more at the next Flush; a refusal while buffs
--- are open, or the second one, is final.
 local function Make(rec, attempt)
 	local open = Open()
 	rec.parts, rec.err, rec.slotMade, rec.button = {}, nil, nil, nil
@@ -857,8 +761,6 @@ local function Make(rec, attempt)
 	end
 end
 
--- Run once by the game inside AddAuraSlot for the second slot: a button that holds the bar filled by the charges. The bar is a descendant
--- of the button, in a wrapper placed over the body of the bar.
 local function Init2(rec, button)
 	local second, want = rec.parts2, Want(rec)
 	second.button = button
@@ -885,13 +787,11 @@ local function Init2(rec, button)
 	end
 end
 
--- True when the tracker is a bar filled by the charges, so it needs the second slot.
 local function Needs(rec)
 	local shape = ShapeOf(rec.entry)
 	return FillOf(rec.entry, shape) == "charges"
 end
 
--- Makes the second slot, once, while the game says buffs are open. A refusal is final and a note.
 local function Make2(rec)
 	local key = SLOT_BAR
 	rec.slotKey2 = key
@@ -921,7 +821,6 @@ local function Make2(rec)
 	ns.Note(KEY, NOTE_BAR)
 end
 
--- A frame for the probe, made out of combat with the first frame that gets a container.
 local function MakeScratch(frame)
 	local holder = Own(CreateFrame("Frame", nil, frame))
 	holder:SetSize(1, 1)
@@ -960,7 +859,6 @@ local function One(frame, entry)
 	local spec = Spec(entry)
 	local pool = spec.unit .. "|" .. spec.filter
 	if rec and rec.pool ~= pool then
-		-- The container of the frame looks at another unit than this entry needs: it is left off.
 		Off(rec)
 		return
 	end
@@ -979,9 +877,6 @@ local function One(frame, entry)
 	end
 end
 
--- What Trackers.lua calls -----------------------------------------------------------------------------
-
--- A new target: the containers that look at the target are told to look again. A refusal, in a fight, is a note and nothing else.
 local function Retarget()
 	for _, rec in pairs(records) do
 		if rec.state == "built" and rec.pool:find("^target|") then
@@ -992,8 +887,6 @@ local function Retarget()
 	end
 end
 
--- Runs what waits, when the game says buffs are open: the second try of a build, the calls the container refused, and
--- the parts of the button that changed.
 local function Flush()
 	if not Open() then
 		return
@@ -1018,7 +911,6 @@ local function Flush()
 	end
 end
 
--- The trackers that are on: a slot for each that needs one, and the slot of a frame that has none now switched off.
 local function Sync(entries)
 	local current = {}
 	for _, entry in ipairs(entries) do
@@ -1042,8 +934,6 @@ local function Sync(entries)
 	Flush()
 end
 
--- True when what the game draws is what the tracker is set to: the shape and the fill the wrappers were last given, and for a bar the parts
--- and the timer the game took, and for a bar filled by charges the second slot.
 local function Fits(rec)
 	local entry, was = rec.entry, rec.applied
 	local shape = ShapeOf(entry)
@@ -1058,14 +948,6 @@ local function Fits(rec)
 	return true
 end
 
--- A tracker set to Only when low or missing is fine in a fight while the game's own icon is visible (the cover when the tracker has charges,
--- since the cover shows only above Low at, else the icon's wrapper). The answer is withheld, so it goes unread to the frame of the tracker:
--- alpha 0 while fine, 1 while low or missing. Only while the container is drawn and the probe found that the game takes such an answer.
--- A tracker with Low at (seconds left) stays shown, since the game's icon does not follow the time left. Without that the tracker stays shown, and one note says so. Back at the alpha the tracker's own drawing has: given by the caller.
--- That Low at is the stored one (Value), not the larger one of dungeons and raids (LowTime): Wanted in Trackers.lua gives 1 to a tracker set to Only
--- when low or missing that is not drawn live in a fight, so fed that value every buff of 10 minutes or more set so (Mark of the Wild, Fortitude,
--- Arcane Intellect, the armors, Inner Fire) would stay shown through every fight in a dungeon or raid, whatever its time left. On the stored value
--- such a tracker still hides in a fight while its buff is up, and the warning of dungeons and raids shows between pulls, where the buff can be cast.
 local function Hide(rec, entry, alpha)
 	local want = Value(entry, "show") == "low" and rec.now.alpha == 1 and rec.goal.alpha == 1 and Plain(alpha, "number") and alpha == 1
 		and Value(entry, "lowTime") == 0
@@ -1092,8 +974,6 @@ local function Hide(rec, entry, alpha)
 	end
 end
 
--- The container is shown with its alpha: it works only while it is visible, so it is never hidden. alpha is the alpha the tracker's frame has
--- when the game's own icon is not hiding it.
 local function Show(entry, shown, alpha)
 	local rec = RecOf(entry)
 	if rec and rec.state == "built" then
@@ -1108,7 +988,6 @@ local function Show(entry, shown, alpha)
 	end
 end
 
--- True when the game's own icon of the tracker is on show and the art made on it is in place.
 local function Used(entry)
 	return InUse(RecOf(entry))
 end
@@ -1118,8 +997,6 @@ local function Live(entry)
 	return rec ~= nil and rec.state == "built" and rec.now.enabled == true and Wanted(entry) and Fits(rec)
 end
 
--- The low look of a count: with a number, a charged tracker is low up to that count. With nil the real values again.
--- Only while buffs are open.
 local function LowTest(entry, count)
 	local rec = RecOf(entry)
 	if not rec or rec.state ~= "built" then
@@ -1140,14 +1017,11 @@ local function LowTest(entry, count)
 	return true
 end
 
--- The check -------------------------------------------------------------------------------------------
-
 local function Level(object)
 	local ok, level = pcall(object.GetFrameLevel, object)
 	return ok and Plain(level, "number") and level or nil
 end
 
--- The level of the container, and the highest level of the tracker's frame and of its children.
 local function Levels(rec)
 	local frame, container = rec.frame, rec.container
 	local highest = Level(frame)
@@ -1198,7 +1072,6 @@ local function Parts(rec)
 	return table.concat(list, ", ")
 end
 
--- The line about the art made on the button, for a kind of tracker that has some, or nil.
 local function ArtLine(rec, entry)
 	if type(ns.TrackerSlotParts[entry.kind]) ~= "function" then
 		return nil
@@ -1259,8 +1132,6 @@ local function Lines(entry)
 	return lines
 end
 
--- Asks the first slot that was built whether two of its parts are visible, during a fight. A plain answer is dropped
--- unread. A withheld one is handed to a frame of this file to see whether the game takes it.
 local function Probe()
 	local rec
 	for _, found in pairs(records) do
@@ -1298,7 +1169,6 @@ local function FightLines()
 	return { "Parts of the game's own icon: " .. word .. "." }
 end
 
--- No error leaves this file: one that does is a note with its text.
 local function Safe(fn)
 	return function(...)
 		local ok, result = pcall(fn, ...)
@@ -1310,7 +1180,6 @@ local function Safe(fn)
 	end
 end
 
--- Hid: true while the game's own icon hides the tracker's frame by an alpha it withholds (Hide), so the frame may not be seen and takes no mouse.
 ns.TrackerSlots = { Sync = Safe(Sync), Show = Safe(Show), Live = Safe(Live), InUse = Safe(Used), Flush = Safe(Flush), Lines = Safe(Lines), FightLines = Safe(FightLines),
 	Probe = Safe(Probe), LowTest = Safe(LowTest), Retarget = Safe(Retarget),
 	Hid = Safe(function(entry)

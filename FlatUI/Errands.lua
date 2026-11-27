@@ -1,18 +1,5 @@
 local _, ns = ...
 
--- Errands: small chores the game leaves to the player, done when the game asks for them. Selling grey items and repairing at a merchant
--- (ErrandsMerchant.lua), looting every slot at once and making room in full bags (ErrandsLoot.lua), training every spell a trainer offers
--- (ErrandsTrainer.lua), the release guard, summons, resurrections and the DELETE word of the game's popups (ErrandsPopups.lua), and group
--- invites, duels and the last mail recipient (ErrandsSocial.lua). On the Quests and levelling tab: accepting and handing in quests and picking gossip
--- options (ErrandsQuests.lua), new spell ranks on the bars and the lines about learned spells (ErrandsRanks.lua), and the reputation you
--- gain on Flat UI's bar, a reminder of talent points and the /way command (ErrandsLevelling.lua), and the game's in-game navigation
--- (ErrandsNavigation.lua). Each file is a part of this module: it adds its events with ns.AddEvent and names itself here with Errands.Part,
--- so /flatui status has a line for it and a refresh reaches it.
---
--- Nothing here restyles anything, so the module counts nothing, and its page is on by default. Every errand is out of combat unless it
--- says otherwise, and every call into the client goes through pcall: a client without the call leaves the errand undone and says so once.
--- Several of these errands follow the ways EnhanceQoL by Philipp Barth does them, adapted with his permission.
-
 local KEY = "errands"
 
 local Errands = { parts = {} }
@@ -22,12 +9,10 @@ function Errands.Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- True while the module is on and the row is ticked.
 function Errands.On(key)
 	return ns.Enabled(KEY) and Errands.Opt(key) == true
 end
 
--- Up to four values the client gives, each nil when the client withholds it (a secret); all nil when the call is missing or raises.
 function Errands.Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -48,7 +33,6 @@ function Errands.Ask(fn, ...)
 	return a, b, c, d
 end
 
--- Calls the client and says whether it took the call.
 function Errands.Call(fn, ...)
 	if type(fn) ~= "function" then
 		return false
@@ -61,7 +45,6 @@ function Errands.InCombat()
 	return fight == true
 end
 
--- An amount of copper as the game writes money ("1g 20s 5c" with coin icons), or plain text when the client has no money string.
 function Errands.Money(copper)
 	copper = math.floor(tonumber(copper) or 0)
 	local text = Errands.Ask(GetMoneyString, copper, true) or Errands.Ask(GetCoinTextureString, copper)
@@ -83,15 +66,12 @@ function Errands.Money(copper)
 	return table.concat(parts, " ")
 end
 
--- A line in the chat frame, when Messages in chat is ticked.
 function Errands.Say(text)
 	if Errands.Opt("chat") ~= false then
 		print("Flat UI: " .. text)
 	end
 end
 
--- Whether the game's tooltip is shown for a button and the cursor is still over it: only then is it drawn again, so an update never brings a
--- tooltip back after the cursor left.
 function Errands.TipOwned(button)
 	local tip = GameTooltip
 	if type(tip) ~= "table" or ns.Forbidden(tip) then
@@ -109,24 +89,16 @@ function Errands.TipOwned(button)
 	return not okOver or ns.IsSecret(over) or over ~= false
 end
 
--- A colour of the Background colour moved toward white by delta, for the plate of an own button.
 local function Shade(delta)
 	local r, g, b = ns.Colour("general.backdrop")
 	return math.min(1, math.max(0, r + delta)), math.min(1, math.max(0, g + delta)), math.min(1, math.max(0, b + delta))
 end
 
--- Whether the cursor is over a button when it is let go: a press let go elsewhere is no click, as with a button of the game's (BagSort.lua does
--- the same). A client that does not say counts as over.
 local function Over(button)
 	local ok, over = pcall(button.IsMouseOver, button)
 	return not ok or ns.IsSecret(over) or over ~= false
 end
 
--- A flat button of the addon's own, as Reload.lua makes them: a frame with an outline and a label, clicked when the left mouse button comes up
--- over it after going down on it, so the click is the player's own (a hardware click). button.SetUsable greys it and turns its click off, and
--- button.SetLabel changes its words, on one line that a long text cannot run out of. While the left button holds it down (usable), its label
--- sinks 1 px and its fill goes back to the resting tone, as the buttons of the options window do (Panel.lua, Press and Tone); the release, the
--- mouse leaving and a hide put it back before anything else runs.
 function Errands.Button(parent, text, width, onClick, onEnter)
 	local button = CreateFrame("Frame", nil, parent)
 	ns.Own[button] = true
@@ -135,7 +107,6 @@ function Errands.Button(parent, text, width, onClick, onEnter)
 	local label = ns.OwnText(button, "OVERLAY", "GameFontHighlightSmall")
 	if label then
 		label:SetPoint("CENTER", button, "CENTER", 0, 0)
-		-- One line inside the outline: a text too long for it is cut short with an ellipsis by the game.
 		label:SetWidth(width - 12)
 		label:SetWordWrap(false)
 		label:SetText(text)
@@ -150,7 +121,6 @@ function Errands.Button(parent, text, width, onClick, onEnter)
 			label:SetAlpha(usable and 1 or 0.45)
 		end
 	end
-	-- The pressed look: the label 1 px lower, and the resting fill.
 	local function Press(on)
 		if on == pressed then
 			return
@@ -178,7 +148,6 @@ function Errands.Button(parent, text, width, onClick, onEnter)
 			GameTooltip:Hide()
 		end
 	end)
-	-- A button hidden under the cursor takes its tooltip with it.
 	button:SetScript("OnHide", function()
 		hover, down = false, false
 		Press(false)
@@ -200,8 +169,6 @@ function Errands.Button(parent, text, width, onClick, onEnter)
 			onClick(button)
 		end
 	end)
-	-- A button that is no longer wanted hides itself while it shows (wanted() is asked every frame then), so a part that stopped, or an event
-	-- missed while the module was off, cannot leave a live button on a game window.
 	function button.Keep(wanted)
 		button:SetScript("OnUpdate", function()
 			local ok, keep = pcall(wanted)
@@ -226,18 +193,13 @@ function Errands.Button(parent, text, width, onClick, onEnter)
 	return button
 end
 
--- part: { label = name for /flatui status, Start = function, Refresh = function, Status = function returning lines }.
 function Errands.Part(part)
 	Errands.parts[#Errands.parts + 1] = part
 	return part
 end
 
--- The parts whose first error went to the game's error handler.
 local reported = {}
 
--- Runs fn as a part of the module. ns.EachPart counts each failure (a fresh key per call, since an event with no values would count once) and
--- stops the part alone after a few, with a line for /flatui status, while the other errands go on. The first error of a part also goes to the
--- game's error handler, so it is seen.
 function Errands.Run(part, fn, ...)
 	local ok, err = ns.EachPart(KEY, part.label, function(_, ...)
 		return fn(...)
@@ -252,15 +214,12 @@ function Errands.Run(part, fn, ...)
 	return ok
 end
 
--- Runs fn on an event while the module is on.
 function Errands.Listen(part, event, fn)
 	return ns.AddEvent(KEY, event, function(...)
 		Errands.Run(part, fn, ...)
 	end)
 end
 
--- The account's lists of items, by item ID: sell (always sold at a merchant) and keep (never sold, never deleted to make room). Kept in
--- FlatUIDB.errands, outside every profile. Nil before the saved variables are loaded.
 function Errands.Lists()
 	if type(FlatUIDB) ~= "table" then
 		return nil
@@ -277,8 +236,6 @@ function Errands.Kept(id)
 	return lists ~= nil and lists.keep[id] == true
 end
 
--- Whether the game shows the interface made for a gamepad: an own button on a game window could not be reached then (BagSort.lua leaves
--- its buttons out the same way).
 function Errands.Gamepad()
 	if type(InputUtil) ~= "table" or ns.IsSecret(InputUtil) or type(InputUtil.IsGamepadUIEnabled) ~= "function" then
 		return false
@@ -287,7 +244,6 @@ function Errands.Gamepad()
 	return ok and not ns.IsSecret(on) and on == true
 end
 
--- Whether a frame of the game is shown, asked with the widget call IsShown. False when it is missing, forbidden or does not say.
 function Errands.Shown(frame)
 	if type(frame) ~= "table" or ns.Forbidden(frame) or type(frame.IsShown) ~= "function" then
 		return false
@@ -296,8 +252,6 @@ function Errands.Shown(frame)
 	return ok and not ns.IsSecret(shown) and shown == true
 end
 
--- The shown popups of the game (StaticPopup1 to 4): { frame, name, which }. Read with the widget call IsShown and the field which; no popup code
--- is called.
 local POPUPS = 4
 
 local function PopupField(frame, key)
@@ -330,8 +284,6 @@ function Errands.Popups()
 	return list
 end
 
--- Hides a popup of the game with StaticPopup_Hide, only when it is the one popup shown: hiding it beside another one would leave values written by
--- Flat UI's code in the game's list of shown popups, which the game renews securely only once that list is empty. True when it was hidden.
 function Errands.HideAlone(which)
 	if type(StaticPopup_Hide) ~= "function" then
 		return false
@@ -343,7 +295,6 @@ function Errands.HideAlone(which)
 	return (pcall(StaticPopup_Hide, which))
 end
 
--- True in a fight: the lockdown, or the player in combat (UnitAffectingCombat), which can come a moment before it.
 function Errands.Fighting()
 	return Errands.InCombat() or Errands.Ask(UnitAffectingCombat, "player") == true
 end
@@ -370,7 +321,6 @@ local function Status()
 		return lines
 	end
 	for _, part in ipairs(Errands.parts) do
-		-- A stopped part has its note from ns.EachPart, and nothing it says about what it does is true any longer.
 		if type(part.Status) == "function" and not ns.PartStopped(KEY, part.label) then
 			local ok, more = pcall(part.Status)
 			if ok and type(more) == "table" then
@@ -383,7 +333,6 @@ local function Status()
 	return lines
 end
 
--- The slash words of the parts, gathered when the module registers below.
 Errands.slash, Errands.help = {}, {}
 
 ns.Register(KEY, {

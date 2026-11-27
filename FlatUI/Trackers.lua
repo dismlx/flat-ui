@@ -1,65 +1,23 @@
 local _, ns = ...
 
--- A row of flat square icons for the buffs on the player that the player picks: one icon for each, with
--- its charges, a sweep and countdown, an amber rim, count and countdown when it is low, a red icon when it is missing, and a
--- sound when it drops. In fights the game withholds aura values from addons, so a buff is checked only
--- while C_Secrets says its values are open. While they are not, the icon shows the game's own drawing
--- of the buff where ns.TrackerSlots has one, else what was known last. Nothing runs every frame: an
--- event marks the trackers dirty and one pass follows at most every 0.2 seconds, and a moment known
--- ahead (a buff turning low by its time) is one timer. Frames are made and laid out out of combat; a
--- pass is texture, text, alpha, Cooldown and animation calls, which are allowed in combat. Every value
--- from the game is tested with ns.IsSecret before it is compared, indexed, joined or kept, and a
--- withheld value is only ever handed on to a widget call that takes it. The test file reads this file
--- and TrackerSlots.lua as text and fails on a comparison of such a value that has no IsSecret before it.
--- What was known last is all there is to show while the values are withheld: a buff that was missing then
--- is drawn as missing only when the player can cast it, since only the player's own cast can end that.
--- A tracker that Show brings or takes away fades in over 0.2 seconds and out over 0.25 (K.Fade). Row direction lays the trackers out in a row,
--- or with Column, downward or upward, in a left-aligned column. Close up the gaps (off by default) puts the trackers that show together out of
--- combat, and in a fight nothing moves (K.Arrange). Hide while mounted or flying also hides them on a flight path (UnitOnTaxi). Show at a ready
--- check (on by default) shows every low or missing tracker for 12 seconds after a ready check, whatever Show and those rows say, and names them in
--- one chat line (K.ReadyCheck). Tracker tooltips (Out of combat only by default) shows, with the mouse over a
--- tracker on screen, its name, its state with the time left and charges, and a kind's own lines (a group buff: who lacks it); the frame takes no
--- click, so a click goes through to the world, and a tracker that cannot be seen (a proc that is down, one the game's own icon hides) takes no mouse. Sound when it turns low plays the kit of Sound once as a tracker goes from fine to low.
--- Out of combat, a change of a row of Look and position or of When missing shows every tracker that is on as its sample in the new look for 4
--- seconds after the last change, and a change of a tracker's own look in Edit a tracker shows that tracker alone (K.Preview), as do switching it
--- on and Clear own settings; adding, importing or moving a tracker shows the whole row in its new order (K.RowPreview). A tracker you fix,
--- low or missing to fine where the addon reads it, flashes green for 0.6 seconds and stays up for that time before Show takes it away (K.Fixed).
-
 local KEY = "trackers"
--- The name of the row among the saved spots of the movers.
 local MOVER = "FlatUITrackers"
 local CROP = 0.08
--- Units between the personal resource display and the row. The space between two icons is the Spacing setting.
 local GAP = 4
--- Seconds between two passes.
 local PASS = 0.2
 local UNKNOWN_ICON = 134400
--- ffd94040, the colour of a missing buff. A low one is K.AMBER.
 local RED = { 0.851, 0.251, 0.251 }
--- The bars of the personal resource display, highest first.
 local RESOURCE_BARS = { "HealthBarsContainer", "PowerBar", "AlternatePowerBar" }
 local TOTEMS = { "fire", "earth", "water", "air" }
 local NO_POSITION = "Trackers: the personal resource display cannot be used, so the row is beside the character."
 local NO_SOUND = "Trackers: the game played no sound, so Sound when it drops is silent."
 local SWEEP_REFUSED = "Trackers: the game refused to restart a time sweep, so the sweep shows the last known time."
--- The rest of the constants, in one table so the file stays under the limit of locals.
---   MAX_*: the most trackers, spells, names per tracker, characters of a name and the largest spell ID.
---   BESIDE: units from the middle of the screen to the left edge of the row beside the character.
---   RIM: the rim inside an icon, in screen pixels.
---   QUIET, LATE, STEP, TEST: seconds with no sound after login, before the second look of the probes, for each look of the test, and for a kind's own test.
---   SOUND_FILE: the file of sound kit 8959 in this build's SoundKitEntry table.
---   PULSE_LOW, PULSE_TIME: the lowest alpha of the pulse and its length in seconds.
---   SHOWN_AS: what each way of drawing says in the check.
---   HIDDEN: a reading for a buff the game is hiding, for drawing it at once.
 local K = {
 	MAX_TRACKERS = 40, MAX_SPELLS = 40, MAX_NAMES = 8, MAX_CHARS = 40, MAX_ID = 2147483647,
 	BESIDE = 150, RIM = 2, QUIET = 2, LATE = 5, STEP = 3, TEST = 5, SOUND_FILE = 567397,
-	-- LOW_MAX: the largest Low at of a tracker's own, by kind; 20 for the kinds that are not here. A durability tracker's is a percent.
 	LOW_MAX = { item = 1000, ammo = 2000, durability = 100 },
 	PULSE_LOW = 0.35, PULSE_TIME = 0.6, GREY = 0.6, ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789",
-	-- ffffb333, the colour of a low buff: its rim, count, bar and the Low of its tooltip. Missing stays RED.
 	AMBER = { 1, 0.7, 0.2 },
-	-- The countdown's colour while a tracker is not low.
 	WHITE_RGB = { 1, 1, 1 },
 	SHOWS = { always = true, low = true, combat = true },
 	MISSING_LOOKS = { red = true, pulse = true, word = true },
@@ -73,28 +31,18 @@ local K = {
 	},
 	NO_AURAS = "Trackers: the game gives no buff information, so buff trackers show a grey icon.",
 	NO_DEBUFFS = "Trackers: the game gives no information on the target's debuffs, so debuff trackers show a grey icon.",
-	-- The filter of the player's own debuffs on the target, for the reading and for the game's own icon.
 	DEBUFF_FILTER = "HARMFUL|PLAYER",
 	NO_PULSE = "Trackers: the game gave no animation, so the missing icon does not pulse.",
 	HIDDEN = { state = "unknown", hidden = true },
-	-- KITS: the sound kits a tracker can play, by their saved word: 8959 RAID_WARNING, 12889 ALARM_CLOCK_WARNING_3,
-	-- 37666 UI_RAID_BOSS_WHISPER_WARNING.
 	KITS = { spell = 23287, chimes = 316736, bell = 316773, warhorn = 316723, raid = 8959, alarm = 12889, whisper = 37666 },
-	-- The places a row can be at, in the order they are laid out.
 	ORDER = { "resource", "character", "own" },
-	-- The words of /flatui tracker set, and the saved key each one stands for.
 	WORDS = { place = "place", show = "show", low = "low", lowtime = "lowTime", missing = "missing", sound = "sound", kit = "kit",
 		size = "size", x = "x", y = "y", name = "name", on = "on", shape = "shape", colour = "colour", comes = "comes", stacks = "stacks",
 		lowsound = "lowSound" },
-	-- Where each place put its row at the last layout, in words.
 	where = {},
-	-- The rows other files add to the Tracker page's editor, each { key, kind }, in the order they were added.
 	extra = {},
-	-- The events the kinds of tracker listen for, by name, and which of them the watcher has registered.
 	events = {}, registered = {},
-	-- The unit an event of a kind is heard for, when it is not the player.
 	units = {},
-	-- The words of /flatui tracker that a kind of tracker adds, by word: ns.TrackerWord(word, fn).
 	commands = {},
 }
 local HELP = {
@@ -126,18 +74,13 @@ local HELP = {
 
 local IsSecret = ns.IsSecret
 
--- The kinds of tracker that are not a buff, by name: ns.TrackerKind(name, spec) stores a spec { Read, events, Clean, Add, Label, Icon,
--- Lines, what, hiddenAble }. A buff is the kind of an entry with no spec here.
 local KINDS = {}
 
--- The name of the part of the module that a kind of tracker isolates itself in: the kind's own word, or its part.
 local function Part(name)
 	local kind = KINDS[name]
 	return kind and type(kind.part) == "string" and kind.part or name
 end
 
--- The unit and the aura filter the game's own icon of a tracker is made for, or nil when the tracker has no icon of the game's: a buff on
--- the player, or the slot a kind of tracker names. An entry with no kind is a buff.
 local BUFF_SLOT = { unit = "player", filter = "HELPFUL" }
 local function SlotSpec(entry)
 	if entry.kind == nil or entry.kind == "buff" then
@@ -150,31 +93,17 @@ function ns.TrackerSlotSpec(entry)
 	return type(entry) == "table" and SlotSpec(entry) or nil
 end
 
--- The frames the rows hang from, by place. The holder of the page's place is "page", so it stays the same frame when the page's place
--- changes; a tracker with a place of its own has the holder of that place.
 local holders = {}
--- The record of each tracker on screen, by the id of its entry, the records waiting for the next tracker
--- and the records in row order. The waiting records are in a list for each pool: the unit and the filter of the slot an entry has, or "none" for a
--- kind with no slot. A frame keeps its aura container for good, and the container's unit is fixed when it is made.
 local records, free, shown = {}, {}, {}
--- What is known of each tracker, by the id of its entry: the last reading that was not unknown, the length
--- of the last buff that had one, the moment a drop was first seen, the moment a timer was set for, the
--- spell ID of the last own cast and the spell IDs found by name.
 local mem = { kept = {}, lengths = {}, drops = {}, woken = {}, cast = {}, found = {} }
--- Trackers the test is drawing.
 local testing = {}
--- The record of the last fight, and whether the player is in one.
 local fight
 local fighting = false
 local entered, lastPass = nil, -100
 local waiting, edited, layoutQueued = false, false, false
--- How many trackers are on, as the last layout counted them: with none, an event asks for nothing.
 local tracked = 0
 local watcher, scratch
--- Which units the watcher hears, "the player" or "all units", and the IDs of the spells the player can
--- cast as the last walk of the spell book found them, nil before a walk.
 local heard, bookIds
--- The ids of the game's sound for a buff ending, "refused" or nil.
 local gameSound
 local testRun = 0
 local Dirty, QueueLayout
@@ -183,7 +112,6 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- The first answer of a game call, or nil when the call is missing, fails or is withheld.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -195,7 +123,6 @@ local function Ask(fn, ...)
 	return nil
 end
 
--- A field of a table or frame, or nil when it is missing, cannot be read or is withheld.
 local function Field(object, key)
 	local ok, value = pcall(function()
 		return object[key]
@@ -237,7 +164,6 @@ local function SpellIcon(spellID)
 	return UNKNOWN_ICON
 end
 
--- "1 charge", "3 charges".
 local function Plural(number, noun)
 	return ("%d %s%s"):format(number, noun, number == 1 and "" or "s")
 end
@@ -250,9 +176,6 @@ local function Now()
 	return 0
 end
 
--- Runs a call of ns.TrackerSlots, the game's own icon, bar or text, when it has the table and the call.
--- The game's own icons are for the entries that have a slot spec, the buffs and the kinds that name one: a call about the entry of another kind
--- gives nothing, and Sync is given those entries alone.
 local function Slot(name, ...)
 	local slots = ns.TrackerSlots
 	local call = type(slots) == "table" and slots[name]
@@ -277,8 +200,6 @@ local function Slot(name, ...)
 	return call(...)
 end
 
--- The list --------------------------------------------------------------------------------------
-
 local function Chars(text)
 	return #(text:gsub("[\128-\191]", ""))
 end
@@ -293,7 +214,6 @@ local function CleanText(text)
 	return nil
 end
 
--- The own values an entry may hold, and what each may be. A kind of tracker may give its own test of a value in its spec, own = { key = fn }.
 local OWN = {
 	show = function(value)
 		return K.SHOWS[value] == true
@@ -302,7 +222,6 @@ local OWN = {
 		local top = entry and K.LOW_MAX[entry.kind] or 20
 		return Plain(value, "number") and value >= 0 and value <= top and value == math.floor(value)
 	end,
-	-- Up to 30 minutes, so a long buff or a poison can warn minutes ahead; still in steps of 5, so every value saved before stays valid.
 	lowTime = function(value)
 		return Plain(value, "number") and value >= 0 and value <= 1800 and value % 5 == 0
 	end,
@@ -368,7 +287,6 @@ local function NewId(taken)
 	return id
 end
 
--- True when the list holds exactly the values of the clean list.
 local function SameList(old, clean)
 	if type(old) ~= "table" or #old ~= #clean then
 		return false
@@ -386,8 +304,6 @@ local function SameList(old, clean)
 	return true
 end
 
--- Cleans the fields every kind of entry has: the id, which is new when it is not six characters, not unique or not there, the
--- switch, the count fields and the own values.
 local function CleanCommon(entry, taken)
 	local id = entry.id
 	if not (type(id) == "string" and #id == 6 and id:find("^[a-z0-9]+$") and not taken[id]) then
@@ -398,14 +314,12 @@ local function CleanCommon(entry, taken)
 	if entry.charged ~= true then
 		entry.charged = nil
 	end
-	-- Set while the count of the buff is in its charges field, which the game's own icon does not show.
 	if entry.chargesField ~= true then
 		entry.chargesField = nil
 	end
 	if not Whole(entry.seen) then
 		entry.seen = nil
 	end
-	-- The most charges seen, the full length of a bar filled by charges.
 	if not (Whole(entry.top) and entry.top <= 20) then
 		entry.top = nil
 	end
@@ -419,8 +333,6 @@ local function CleanCommon(entry, taken)
 	end
 end
 
--- Cleans the spells and the names of an entry that has an aura to find, in place. False when it has nothing to go by and is dropped. The
--- kinds that are read like a buff clean with it too (ns.TrackerCleanSpells).
 local function CleanSpells(entry)
 	local spells, seenSpell = {}, {}
 	if type(entry.spells) == "table" then
@@ -458,8 +370,6 @@ local function CleanSpells(entry)
 end
 ns.TrackerCleanSpells = CleanSpells
 
--- Cleans a buff entry in place. False when it has nothing to go by and is dropped. A kind of tracker that is a buff with more to it cleans its
--- spells and names with this and names its own kind; with no list of taken IDs the common fields are left to the list, which cleans them after.
 local function CleanBuff(entry, taken, kind)
 	if not CleanSpells(entry) then
 		return false
@@ -472,8 +382,6 @@ local function CleanBuff(entry, taken, kind)
 end
 ns.TrackerCleanBuff = CleanBuff
 
--- The saved entries of this character: tables of the kind buff and of the kinds that are registered cleaned, entries of any other
--- kind kept as they are, at most 40 in all. Written back only when an entry was dropped.
 local function List()
 	local saved = ns.Character()
 	if not saved then
@@ -514,8 +422,6 @@ local function List()
 	return list
 end
 
--- The trackers of every kind this build knows, in list order. An entry of a kind no build here knows stays in the saved list and is
--- not a tracker.
 local function Entries()
 	local entries = {}
 	for _, entry in ipairs(List()) do
@@ -526,7 +432,6 @@ local function Entries()
 	return entries
 end
 
--- The buff trackers alone, for what only a buff has: spells, names, an aura.
 local function Buffs()
 	local buffs = {}
 	for _, entry in ipairs(Entries()) do
@@ -537,8 +442,6 @@ local function Buffs()
 	return buffs
 end
 
--- The procs of your class that show without being added (Procs.lua: Procs of your class), which are not saved and have no number in the list:
--- the ones no proc of the list tracks. entries: the list, when the caller has it.
 function K.Auto(entries)
 	if type(ns.ProcAutoEntries) ~= "function" then
 		return {}
@@ -547,7 +450,6 @@ function K.Auto(entries)
 	return ok and type(auto) == "table" and auto or {}
 end
 
--- The trackers that are on, in list order, then the procs of your class that show without being added.
 local function OnEntries()
 	local on, entries = {}, Entries()
 	for _, entry in ipairs(entries) do
@@ -561,7 +463,6 @@ local function OnEntries()
 	return on
 end
 
--- The tracker's own value of a setting, else the page's.
 local function Value(entry, key)
 	local own = entry[key]
 	if own ~= nil then
@@ -572,16 +473,9 @@ end
 ns.TrackerValue = Value
 ns.TrackerKits = K.KITS
 
--- Low at ahead of a long buff in a dungeon or raid. LONG: the shortest full length, in seconds, of a buff or enchant that takes Low in dungeons and
--- raids; LASTING: the kinds that can (a buff, a group buff, a weapon enchant); TIMED: the kinds whose check says the Low at that applies. inside:
--- "party" or "raid" while the player is in a dungeon or raid, false outside one, nil until it is asked again after a loading screen. gap: the
--- trackers whose last reading was unknown, so a change seen next happened out of sight (K.Came).
 K.LONG, K.LASTING, K.TIMED, K.inside, K.gap = 600, { buff = true, weapon = true, group = true },
 	{ buff = true, debuff = true, weapon = true, totem = true, group = true }, nil, {}
 
--- The kind of instance the player is in: "party" or "raid" while IsInInstance says so (InstanceDocumentation.lua:170-177: plain answers, true and
--- the type), else false. Asked once after each loading screen, the one way into or out of a dungeon or raid, and only when a Low at needs it; asked
--- again after a Refresh, since a loading screen crossed while the page was off was not heard (Entered), and each time while the page is off.
 function K.Inside()
 	if K.inside == nil or not ns.Enabled(KEY) then
 		local ok, inside, kind = pcall(IsInInstance)
@@ -590,13 +484,6 @@ function K.Inside()
 	return K.inside
 end
 
--- The Low at (seconds left) of a tracker here: its own or the page's, and in a dungeon or raid the larger of that and Low in dungeons and raids for a
--- buff, a group buff or a weapon enchant whose full length is 10 minutes or more, so the warning comes while it can still be cast again between
--- pulls; Battle Shout, seals, Slice and Dice and a shaman's imbues of 5 minutes keep their own. length: the full length read now, else the one kept
--- at the last reading (mem.lengths). The second answer is "dungeon" or "raid" when the value of dungeons and raids applies. The editor, /flatui
--- tracker set, the exports and TrackerSlots.lua's Hide keep the stored value. Follows the expiration warnings of the Class Buff Reminder of
--- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLClassBuffReminder/ClassBuffReminder.lua:811-895, a warning for
--- the open world, dungeons and raids picked by the place).
 function K.LowTime(entry, length)
 	local own = Value(entry, "lowTime")
 	own = Plain(own, "number") and own or 0
@@ -630,7 +517,6 @@ local function Label(entry)
 end
 ns.TrackerLabel = Label
 
--- The icon of a tracker with nothing on screen to take it from.
 local function EntryIcon(entry)
 	local id = entry.seen or (entry.spells and entry.spells[1])
 	if id then
@@ -641,23 +527,17 @@ local function EntryIcon(entry)
 	return (Plain(icon, "number") or Plain(icon, "string")) and icon or UNKNOWN_ICON
 end
 
--- Forgets what was known of a tracker that is no longer on.
 local function Forget(id)
 	for _, memory in pairs(mem) do
 		memory[id] = nil
 	end
 end
 
--- Adding and removing ---------------------------------------------------------------------------
-
--- A spell ID or a spell link, without asking the game whether the spell exists.
 local function Parse(text)
 	local id = tonumber(text:match("^%d+$") or text:match("spell:(%d+)"))
 	return Whole(id) and id or nil
 end
 
--- The game's name for the player's class and the class token (UnitClass, UnitDocumentation.lua:911-928), each nil when the game gives none or
--- withholds it.
 local function ClassInfo()
 	if type(UnitClass) ~= "function" then
 		return nil, nil
@@ -669,7 +549,6 @@ local function ClassInfo()
 	return Plain(name, "string") and name ~= "" and name or nil, Plain(token, "string") and token ~= "" and token or nil
 end
 
--- The starting trackers of the character's class, in the order of the data: the class token picks the list, no token gives none.
 local function ClassList()
 	local _, token = ClassInfo()
 	local lists = ns.ClassTrackers
@@ -679,7 +558,6 @@ local function ClassList()
 	return {}
 end
 
--- The IDs of the class data that are this spell by its own name, for every rank of a spell the game was asked about by name.
 local function ClassIds(name)
 	local wanted, ids = name:lower(), {}
 	for _, row in ipairs(ClassList()) do
@@ -705,7 +583,6 @@ local function Resolve(text)
 		end
 	end
 	if not id and text ~= "" then
-		-- A name the game does not answer for, as the class data lists it: the first rank it has.
 		for _, listed in ipairs(ClassIds(text) or {}) do
 			if SpellName(listed) then
 				id = listed
@@ -721,7 +598,6 @@ end
 
 ns.TrackerResolve = Resolve
 
--- The spell book, or nil when the game lacks a call the walk through it needs.
 local function SpellBook()
 	local book = C_SpellBook
 	if book and book.GetNumSpellBookSkillLines and book.GetSpellBookSkillLineInfo and book.GetSpellBookItemInfo
@@ -731,7 +607,6 @@ local function SpellBook()
 	return nil
 end
 
--- Calls visit(slot, spellID, item, bank) for each spell of the player that the book lists.
 local function WalkBook(book, visit)
 	local bank, spellType = Enum.SpellBookSpellBank.Player, Enum.SpellBookItemType.Spell
 	local lines = Ask(book.GetNumSpellBookSkillLines)
@@ -752,9 +627,6 @@ local function WalkBook(book, visit)
 	end
 end
 
--- True when the player can cast a spell the tracker lists, as the last walk of the spell book found it. The walk is
--- made again after SPELLS_CHANGED, and a walk that finds no spell is not kept. A game with no spell book to walk
--- cannot say, which counts as no.
 local function Castable(entry)
 	if bookIds == nil then
 		local book, ids = SpellBook(), {}
@@ -790,8 +662,6 @@ local function Lists(entry, spellID, name)
 	return entry.name == name
 end
 
--- Adds an ID to a tracker's spells and asks for the new list to be passed on. False when it is there
--- already or the list is full.
 local function Learn(entry, spellID, byName)
 	for _, id in ipairs(entry.spells) do
 		if id == spellID then
@@ -811,9 +681,6 @@ local function Learn(entry, spellID, byName)
 	return true
 end
 
--- Class starting lists (ClassData.lua) ----------------------------------------------------------
-
--- True when the character knows one of the spells: the game's two known tests first, then the spell book walk.
 local function KnowsAny(ids)
 	local book = C_SpellBook
 	for _, id in ipairs(ids or {}) do
@@ -826,7 +693,6 @@ local function KnowsAny(ids)
 	return Castable({ spells = ids or {} })
 end
 
--- True when the bags hold one of the items.
 local function CarriesAny(ids)
 	for _, id in ipairs(ids or {}) do
 		local count = Ask(type(C_Item) == "table" and C_Item.GetItemCount, id, false, true)
@@ -837,7 +703,6 @@ local function CarriesAny(ids)
 	return false
 end
 
--- A copy of a data entry, with its own lists, for the saved list.
 local function CopyEntry(row, id)
 	local entry = { id = id }
 	for key, value in pairs(row) do
@@ -853,13 +718,10 @@ local function CopyEntry(row, id)
 	return entry
 end
 
--- The first ID a data entry has to go by: a spell, an item, else nothing.
 local function FirstOf(row)
 	return (row.spells or row.items or row.apply or row.summon or {})[1]
 end
 
--- True when a tracker on the list is this entry already: the same name, the same slot of a weapon or totem, the same single kind, or
--- the first spell or item of the entry in a tracker of its kind.
 local function OnList(list, row)
 	local first = FirstOf(row)
 	for _, entry in ipairs(list) do
@@ -879,8 +741,6 @@ local function OnList(list, row)
 	return false
 end
 
--- Why an entry is not added, or nil: a buff, a form and a totem need a spell the character knows, an item the bags. A weapon enchant, the
--- pet and the ammunition are added for every character of the class.
 local function Missing(row)
 	if row.kind == "item" then
 		if not CarriesAny(row.items) then
@@ -894,8 +754,6 @@ local function Missing(row)
 	return nil
 end
 
--- The lines of Add <class> trackers: All is 1 (the line Choose one has the value 0), then each starting tracker of the class by its place
--- in the data and one.
 function ns.TrackerClassCandidates()
 	local rows = {}
 	local list = ClassList()
@@ -908,9 +766,6 @@ function ns.TrackerClassCandidates()
 	return rows
 end
 
--- Adds the starting trackers of the class: all of them for 1, else the one the line names (its place in the data and one). Only what the
--- character knows or carries is added,
--- a tracker already on the list is left as it is, and the list stops at 40. Works in combat, like the other adds.
 function ns.TrackerAddClass(pick)
 	local data = ClassList()
 	local wanted = {}
@@ -963,8 +818,6 @@ function ns.TrackerAddClass(pick)
 	return added > 0, table.concat(parts, " ")
 end
 
--- All four work in combat and with the page off, since they change what is saved. Out of combat, with the page on, the row then shows every
--- tracker that is on as its sample for a moment, the new one in its place (K.RowPreview).
 function ns.TrackerAddBuff(spellID)
 	local name = Whole(spellID) and SpellName(spellID)
 	if not name then
@@ -988,14 +841,12 @@ function ns.TrackerAddBuff(spellID)
 	local entry = { id = NewId(taken), kind = "buff", name = name, names = { name }, spells = { spellID } }
 	local book = SpellBook()
 	if book then
-		-- Every rank of the spell has its own ID, and the buff may come from any of them.
 		WalkBook(book, function(_, id)
 			if SpellName(id) == name then
 				Learn(entry, id, false)
 			end
 		end)
 	end
-	-- The ranks the class data lists for this buff, which the spell book walk does not find when a rank is not learned yet.
 	for _, id in ipairs(ClassIds(name) or {}) do
 		Learn(entry, id, false)
 	end
@@ -1006,7 +857,6 @@ function ns.TrackerAddBuff(spellID)
 	return true, ("Added %s."):format(name)
 end
 
--- The IDs of a spell and of every rank of it that the spell book lists, by the spell's name, the spell's own ID first.
 function ns.TrackerRankIDs(spellID)
 	local ids, name = { spellID }, Whole(spellID) and SpellName(spellID)
 	local book = SpellBook()
@@ -1020,8 +870,6 @@ function ns.TrackerRankIDs(spellID)
 	return ids
 end
 
--- Adds a tracker of a kind that is registered. The kind's Add is given what was picked and the trackers there are, and gives the entry's
--- own fields and a message, or nil and the message that says why not. Works in combat, like the other adds.
 function ns.TrackerAddKind(kind, argument)
 	local spec = KINDS[kind]
 	if not spec or type(spec.Add) ~= "function" then
@@ -1050,7 +898,6 @@ function ns.TrackerAddKind(kind, argument)
 	return true, Plain(message, "string") and message or "Added."
 end
 
--- The known spells of the book that are helpful, highest rank only, that no tracker has by name, by name.
 function ns.TrackerBuffCandidates()
 	local rows = {}
 	local book = SpellBook()
@@ -1087,8 +934,6 @@ function ns.TrackerBuffCandidates()
 	return rows
 end
 
--- The known spells of the book that are harmful, highest rank only, that no debuff tracker has by name, by name: the lines of the Add a debuff on
--- the target row.
 function ns.TrackerDebuffCandidates()
 	local rows, named, book = {}, {}, SpellBook()
 	if not book then
@@ -1119,7 +964,6 @@ function ns.TrackerDebuffCandidates()
 	return rows
 end
 
--- The IDs of every rank of a spell that the book lists by its name, for a tracker whose aura may come from any of them.
 function ns.TrackerRanks(name)
 	local ids, book = {}, SpellBook()
 	if book then
@@ -1132,12 +976,10 @@ function ns.TrackerRanks(name)
 	return ids
 end
 
--- Forgets the reading kept for a tracker, when what it was a reading of is gone: a debuff on a target that is not the target now.
 function ns.TrackerUnkeep(id)
 	mem.kept[id], mem.drops[id] = nil, nil
 end
 
--- The trackers in list order, so opening the list also shows what is tracked.
 function ns.TrackerPicked()
 	local rows = {}
 	for position, entry in ipairs(Entries()) do
@@ -1162,13 +1004,11 @@ function ns.TrackerRemove(position)
 	return true, ("Removed %s."):format(Label(entry))
 end
 
--- What TrackerShare.lua needs: the own keys of an entry, and the layout asked for again after trackers are added.
 ns.TrackerOwnKeys = OWN
 function ns.TrackerLayout()
 	QueueLayout()
 end
 
--- The row of the page for a saved key of a tracker, for the kind of value and the choices it has.
 local function PageRow(key)
 	for _, page in ipairs(ns.PAGES) do
 		for _, item in ipairs(page) do
@@ -1179,7 +1019,6 @@ local function PageRow(key)
 	end
 end
 
--- A saved value as the page shows it: the name of a choice, on or off, or the number.
 local function Shown(key, value)
 	local row = PageRow(key)
 	if type(value) == "boolean" then
@@ -1195,8 +1034,6 @@ local function Shown(key, value)
 	return tostring(value)
 end
 
--- A value typed for a tracker, as the value it is saved as: a number, on or off, or the saved word of a choice, given by the word or
--- by the name the page shows. Nil when the text is none of them.
 local function Typed(key, text)
 	local row = PageRow(key)
 	local lower = text:lower()
@@ -1226,8 +1063,6 @@ local function Typed(key, text)
 	return nil
 end
 
--- Gives a tracker a value of its own for a setting, or takes it back with the text clear; with the text clear and no setting, takes back
--- every own value. The word is a key of K.WORDS. Works in combat: the row is laid out when combat ends.
 function ns.TrackerSet(index, word, text)
 	local entry = Whole(index) and Entries()[index]
 	if not entry then
@@ -1235,7 +1070,6 @@ function ns.TrackerSet(index, word, text)
 	end
 	word = Plain(word, "string") and word:lower() or ""
 	text = Plain(text, "string") and text:match("^%s*(.-)%s*$") or ""
-	-- look: the saved key of a value of the look that changed, for its preview (K.OwnPreview).
 	local function Done(message, look)
 		edited = true
 		QueueLayout()
@@ -1248,7 +1082,6 @@ function ns.TrackerSet(index, word, text)
 			entry[key] = nil
 		end
 		entry.happy, entry.health = nil, nil
-		-- The tracker takes its sample in the page's look (K.OwnPreview).
 		return Done(("Tracker %d: every setting follows the pages."):format(index), "shape")
 	end
 	if word == "clear" then
@@ -1267,7 +1100,6 @@ function ns.TrackerSet(index, word, text)
 		end
 		return false, ('Tracker %d: "%s" is not a value for happy.'):format(index, text)
 	end
-	-- A pet tracker's own Pet health minimum, 0 to 90 (TrackerKinds.lua's PetClean keeps it so), or clear for the page's.
 	if word == "health" then
 		local value = tonumber((text:gsub("%%$", "")))
 		if entry.kind ~= "pet" then
@@ -1306,10 +1138,6 @@ function ns.TrackerSet(index, word, text)
 	return Done(("Tracker %d: %s is %s."):format(index, word, text), key)
 end
 
--- The editor on the Tracker page -----------------------------------------------------------------
-
--- Adds a row to the editor of the Tracker page, after the rows of its template: key is the saved key of the tracker's own value and kind is
--- bool, number, choice, colour or text. The row takes its label and choices from the Trackers page row with the same key.
 function ns.TrackerEditorRow(key, kind)
 	if not (Plain(key, "string") and Plain(kind, "string")) then
 		return false
@@ -1327,7 +1155,6 @@ function ns.TrackerEditorRows()
 	return K.extra
 end
 
--- The trackers as the editor lists them: the id, the line of the list, the name and the largest Low at.
 function ns.TrackerEditorLines()
 	local lines = {}
 	for index, entry in ipairs(Entries()) do
@@ -1337,7 +1164,6 @@ function ns.TrackerEditorLines()
 	return lines
 end
 
--- The tracker's own value of a key, or nil when it has none.
 function ns.TrackerOwn(index, key)
 	local entry = Whole(index) and Entries()[index]
 	if entry and Plain(key, "string") then
@@ -1346,8 +1172,6 @@ function ns.TrackerOwn(index, key)
 	return nil
 end
 
--- Gives a tracker its own value for a key, or takes it back with nil. The keys are name, on, spells and the keys of OWN. Returns true, or false
--- and a sentence. Works in combat: the row is laid out when combat ends.
 function ns.TrackerSetOwn(index, key, value)
 	local entry = Whole(index) and Entries()[index]
 	if not entry then
@@ -1424,13 +1248,10 @@ function ns.TrackerSetOwn(index, key, value)
 	return Done()
 end
 
--- Takes back every own value of a tracker. The name, the spells and the switch stay.
 function ns.TrackerClear(index)
 	return ns.TrackerSet(index, "clear", "")
 end
 
--- Moves a tracker up (delta -1) or down (1) the list, past the next one that is a tracker here. Out of combat the row shows its samples in the
--- new order for a moment (K.RowPreview).
 function ns.TrackerMove(index, delta)
 	local entries = Entries()
 	local entry = Whole(index) and entries[index]
@@ -1460,9 +1281,6 @@ function ns.TrackerMove(index, delta)
 	return true
 end
 
--- The buff check ----------------------------------------------------------------------------------
-
--- True only when the game plainly says that aura queries by name are open.
 local function AurasOpen()
 	local call = type(C_Secrets) == "table" and C_Secrets.ShouldAurasBeSecret
 	if type(call) == "function" then
@@ -1472,8 +1290,6 @@ local function AurasOpen()
 	return not InCombatLockdown()
 end
 
--- True when the game would hand back withheld values for a listed ID. Without the call, in a fight. A tracker
--- with a name and no ID has nothing to ask about, so it is hidden whenever buffs are hidden at all.
 local function IsHidden(entry)
 	local call = type(C_Secrets) == "table" and C_Secrets.ShouldSpellAuraBeSecret
 	if type(call) ~= "function" then
@@ -1491,7 +1307,6 @@ local function IsHidden(entry)
 	return false
 end
 
--- The aura a call gave: the table, nil for none, and false when the call failed or gave nothing usable.
 local function Answer(ok, found)
 	if not ok or IsSecret(found) then
 		return false
@@ -1502,7 +1317,6 @@ local function Answer(ok, found)
 	return type(found) == "table" and found or false
 end
 
--- Asks for a time to be looked at again: a buff turning low by its time is the one moment known ahead.
 local function Wake(entry, at)
 	if mem.woken[entry.id] == at or not (C_Timer and C_Timer.After) then
 		return
@@ -1517,8 +1331,6 @@ end
 
 ns.TrackerWake = Wake
 
--- Whether a buff of the list is on the player: true, false, or nil when the game hides the answer or gives none. For a kind whose check
--- depends on a buff, such as the buffs that excuse a missing pet.
 function ns.TrackerBuffOn(ids)
 	local units = C_UnitAuras
 	if type(units) ~= "table" or type(units.GetPlayerAuraBySpellID) ~= "function" or type(ids) ~= "table" or IsHidden({ spells = ids }) then
@@ -1539,8 +1351,6 @@ function ns.TrackerBuffOn(ids)
 	return false
 end
 
--- The reading of the aura that was found, or of none: missing, and unknown when a call failed. The guards of every field are here, for a buff
--- on the player and a debuff on the target alike.
 local function Settle(entry, aura, auraID, failed)
 	if not aura then
 		return { state = failed and "unknown" or "missing", hidden = false }
@@ -1561,18 +1371,15 @@ local function Settle(entry, aura, auraID, failed)
 	if count and count > 1 and not entry.charged then
 		entry.charged = true
 		edited = true
-		-- A text tracker is as wide as the strings it shows, and now has a count.
 		if Value(entry, "shape") == "text" then
 			QueueLayout()
 		end
 	end
-	-- The game's own icon writes the stacks field alone. A count that is in the charges field is not shown there.
 	if count and (entry.chargesField == true) ~= (Positive(stacks) == nil) then
 		entry.chargesField = Positive(stacks) == nil or nil
 		edited = true
 	end
 	local state = "fine"
-	-- The Low at here: in a dungeon or raid a buff of 10 minutes or more, read by its full length, warns as Low in dungeons and raids says.
 	local low, lowTime = Value(entry, "low"), K.LowTime(entry, length)
 	if entry.charged and low > 0 and count and count <= low then
 		state = "low"
@@ -1587,8 +1394,6 @@ local function Settle(entry, aura, auraID, failed)
 		icon = icon, id = auraID }
 end
 
--- What one tracker's buff is now: { state = "fine" | "low" | "missing" | "unknown", hidden, count,
--- stacks, charges, expires, length, icon, id }. An unknown reading says nothing about the buff.
 function ns.AuraReading(entry)
 	local units = C_UnitAuras
 	if type(units) ~= "table" or type(units.GetPlayerAuraBySpellID) ~= "function" then
@@ -1608,7 +1413,6 @@ function ns.AuraReading(entry)
 			break
 		end
 	end
-	-- Another rank of the buff has an ID the tracker does not list yet.
 	if not aura and not failed and #entry.names > 0 and type(units.GetAuraDataBySpellName) == "function" and AurasOpen() then
 		for _, name in ipairs(entry.names) do
 			local found = Answer(pcall(units.GetAuraDataBySpellName, "player", name, "HELPFUL"))
@@ -1628,8 +1432,6 @@ function ns.AuraReading(entry)
 	return Settle(entry, aura, auraID, failed)
 end
 
--- What the target is to the player, from plain answers alone: "attackable"; "none" when nothing is targeted, it cannot be attacked or it is dead;
--- nil when the game withholds an answer or gives none.
 function ns.TrackerTarget()
 	local exists = Ask(UnitExists, "target")
 	if exists == nil then
@@ -1644,7 +1446,6 @@ function ns.TrackerTarget()
 	return (attack == true and dead ~= true) and "attackable" or "none"
 end
 
--- Another rank of a debuff has an ID the tracker does not list yet: the aura found by name on the target, its ID, and whether a call failed.
 function K.DebuffByName(entry)
 	for _, name in ipairs(entry.names) do
 		local found = Answer(pcall(C_UnitAuras.GetAuraDataBySpellName, "target", name, K.DEBUFF_FILTER))
@@ -1662,8 +1463,6 @@ function K.DebuffByName(entry)
 	return nil, nil, false
 end
 
--- What the player's own debuff on the target is now, as a buff on the player is read. With no target to attack the reading is unknown and absent,
--- and the tracker is not wanted.
 function ns.DebuffReading(entry)
 	local units, target = C_UnitAuras, ns.TrackerTarget()
 	if target == "none" then
@@ -1696,7 +1495,6 @@ function ns.DebuffReading(entry)
 			end
 		end
 	end
-	-- An element whose ID is withheld may be the debuff: with no match the reading is not a plain "missing".
 	failed = failed or (aura == nil and unread)
 	local named = false
 	if aura == nil and not failed and #entry.names > 0 and type(units.GetAuraDataBySpellName) == "function" and AurasOpen() then
@@ -1704,15 +1502,12 @@ function ns.DebuffReading(entry)
 		named = aura ~= nil
 	end
 	local reading = Settle(entry, aura, auraID, failed)
-	-- How the debuff was found and whose it is, for the check.
 	reading.found = aura == nil and "nothing" or (named and "name" or "id")
 	local source = aura and Field(aura, "sourceUnit")
 	reading.source = Plain(source, "string") and source or nil
 	return reading
 end
 
--- What one tracker shows of its own kind: a buff goes to ns.AuraReading, any other kind to its own Read. The table is the same for every
--- kind. A kind that raises is switched off alone, with a line in the status, and its trackers are unknown.
 local function Read(entry)
 	local kind = KINDS[entry.kind]
 	if not kind then
@@ -1725,7 +1520,6 @@ local function Read(entry)
 	if type(reading) ~= "table" or type(reading.state) ~= "string" then
 		return { state = "unknown", hidden = false }
 	end
-	-- A tracker that has a count shows it from the first time one was seen; a text tracker is as wide as the strings it shows.
 	if reading.count and not entry.charged then
 		entry.charged = true
 		local text = Value(entry, "shape") == "text"
@@ -1736,9 +1530,6 @@ local function Read(entry)
 	return reading
 end
 
--- Frames ------------------------------------------------------------------------------------------
-
--- The holder of a place: the one that is made, or nil when none was and make is not set.
 local function HolderFor(place, make)
 	local key = place == Opt("place") and "page" or place
 	local holder = holders[key]
@@ -1758,13 +1549,11 @@ local function Acquire(parent)
 	ns.Own[texture] = true
 	texture:SetAllPoints(frame)
 	texture:SetTexCoord(CROP, 1 - CROP, CROP, 1 - CROP)
-	-- A plain square sweep: the template's has no file, and no edge line or flash is drawn.
 	local cooldown = CreateFrame("Cooldown", nil, frame, "CooldownFrameTemplate")
 	ns.Own[cooldown] = true
 	cooldown:SetDrawEdge(false)
 	cooldown:SetDrawBling(false)
 	cooldown:SetSwipeColor(0, 0, 0, 0.7)
-	-- The count, the word and the rim sit on a frame above the sweep.
 	local top = CreateFrame("Frame", nil, frame)
 	ns.Own[top] = true
 	top:SetAllPoints(frame)
@@ -1788,10 +1577,8 @@ local function Acquire(parent)
 		edge:SetShown(false)
 		rim[index] = edge
 	end
-	-- shape is the way the record is drawn, parts the bar and the text made for it so far and refused the shapes the game refused.
 	local record = { frame = frame, parent = parent, texture = texture, cooldown = cooldown, top = top, count = count, word = word, rim = rim,
 		outline = ns.Outline(frame, frame), shape = "icon", parts = {}, refused = {}, groups = {}, tint = "red" }
-	-- Tracker tooltips: the frame never takes a click, so a click goes through to the world, and hears the mouse while K.Mouse lets it.
 	pcall(frame.SetMouseClickEnabled, frame, false)
 	pcall(frame.SetMouseMotionEnabled, frame, false)
 	record.motion = false
@@ -1801,13 +1588,10 @@ local function Acquire(parent)
 	frame:SetScript("OnLeave", function()
 		K.TipLeave(record)
 	end)
-	-- Show fades a tracker in and out (K.Fade); false when the game gives no animation, and the alpha is then set at once.
 	record.fade = K.MakeFade(frame)
 	return record
 end
 
--- The word fits inside the icon, and the rim is two screen pixels just inside its edges. For a bar or text the rim and the word are on the
--- bar or the plate.
 local function Fit(record, entry)
 	local anchor, size, wordHeight = ns.TrackerShapes.Fit(record, entry)
 	record.word:SetTextHeight(wordHeight)
@@ -1827,7 +1611,6 @@ local function Fit(record, entry)
 	rim[4]:SetWidth(thick)
 end
 
--- The pulse of the missing icon is an animation the game plays. False when the game gives none.
 local function MakePulse(texture)
 	local ok, group = pcall(function()
 		local made = texture:CreateAnimationGroup()
@@ -1841,9 +1624,6 @@ local function MakePulse(texture)
 	return ok and group or false
 end
 
--- Show fades a tracker in over 0.2 seconds and out over 0.25 (K.FADE_IN, K.FADE_OUT), as the reload notice does: one Alpha animation of the
--- frame, a frame of Flat UI's own, which the game allows in a fight. The frame's own alpha is set to the end value before the fade plays, so a
--- fade that stops or ends leaves the frame at it. False when the game gives none.
 K.FADE_IN, K.FADE_OUT = 0.2, 0.25
 function K.MakeFade(frame)
 	local ok, fade = pcall(function()
@@ -1858,7 +1638,6 @@ function K.MakeFade(frame)
 	return ok and fade or false
 end
 
--- A fade that runs stops, and the frame shows the alpha last set on it.
 function K.StopFade(record)
 	local fade = record.fade
 	if fade and fade.running then
@@ -1867,13 +1646,11 @@ function K.StopFade(record)
 	end
 end
 
--- The alpha of a tracker's frame now, with no fade: a fade that runs stops first, so the value set is the one that stays.
 function K.SetAlpha(record, alpha)
 	K.StopFade(record)
 	record.frame:SetAlpha(alpha)
 end
 
--- The alpha of a tracker's frame by a fade from where it is now to alpha, 0 or 1; at once when the game refused the animation.
 function K.Fade(record, alpha)
 	local fade = record.fade
 	if not fade then
@@ -1896,7 +1673,6 @@ function K.Fade(record, alpha)
 	end
 end
 
--- The pulse plays on the icon, or on the plate of a bar or text. A pulse on the other one stops.
 local function Pulse(record, on)
 	local target = ns.TrackerShapes.PulseTarget(record) or record.texture
 	if record.pulsing and record.pulseTarget ~= target then
@@ -1923,23 +1699,14 @@ local function Pulse(record, on)
 	end
 end
 
--- Drawing -----------------------------------------------------------------------------------------
-
--- How a tracker is shown: "live" from a reading, else "game" when ns.TrackerSlots draws the buff, else "hidden" when the page says a tracker
--- without the game's icon is hidden, else "last" from
--- the last reading that had a value, else "none". A buff that was missing at that reading is "last" only when the
--- player can cast it: nothing but the player's own cast tells that it is back, and a missing look that can never
--- end is worse than a grey icon. A kind with noLast has no last reading to show: it goes from "live" or "game" straight to "none".
 local function How(entry, reading)
 	local kind = KINDS[entry.kind]
-	-- A debuff with no target to attack has nothing for the game's own icon to show either.
 	if reading.absent == true then
 		return "live"
 	end
 	if reading.state ~= "unknown" or (kind and kind.hiddenAble == false) then
 		return "live"
 	end
-	-- The game's own icon, bar or text is drawn over the whole frame of a tracker, in the shape of the tracker.
 	local drawn = records[entry.id]
 	if Slot("Live", entry) == true and Opt("gameIcon") ~= false and drawn and drawn.shape == Value(entry, "shape") then
 		return "game"
@@ -1957,10 +1724,6 @@ local function How(entry, reading)
 	return "none"
 end
 
--- How full a bar is, 0 to 1: charges over the most charges seen when the bar is filled by charges and the tracker has them, else the
--- time left over the length, else full. The count of a kind that writes its own (Count) is no number of charges: the reading of
--- TrackerGroup.lua counts the members who lack a group buff, 0 while all have it, so its bar runs by the time left on the buff that ends
--- first, as the Bar fill row says a buff without charges does (Config.lua:878).
 local function Fill(entry, reading)
 	local top = reading.top or entry.top
 	local kind = KINDS[entry.kind]
@@ -1974,7 +1737,6 @@ local function Fill(entry, reading)
 	return 1
 end
 
--- The count a kind writes itself, while the page shows charges: text such as "2/5" for a group buff (TrackerGroup.lua), or nil.
 function K.KindCount(kind, entry, reading, how)
 	if not (kind and type(kind.Count) == "function" and Value(entry, "counts")) then
 		return nil
@@ -1983,8 +1745,6 @@ function K.KindCount(kind, entry, reading, how)
 	return ok and Plain(text, "string") and text ~= "" and text or nil
 end
 
--- What the frame of a tracker shows: icon, tint, count, sweep, rim, word and pulse, and for a bar or text the name, the fill and the
--- seconds left. A fill of nil keeps the fill drawn last.
 local function Looks(entry, reading, how)
 	local look = { sweep = "clear", name = Opt("names") and Label(entry) or nil }
 	if how == "hidden" then
@@ -2016,7 +1776,6 @@ local function Looks(entry, reading, how)
 		look.rim = true
 		look.pulse = Value(entry, "missing") == "pulse"
 		look.word = Value(entry, "missing") == "word"
-		-- A kind may count what is missing, such as the members who lack a group buff.
 		look.count = K.KindCount(kind, entry, reading, how)
 		look.countRed = look.count ~= nil
 		return look
@@ -2024,9 +1783,7 @@ local function Looks(entry, reading, how)
 	look.icon = reading.icon or EntryIcon(entry)
 	look.rim = state == "low"
 	look.countRed = state == "low"
-	-- Low is amber, so that it reads apart from the red of missing.
 	look.amber = state == "low"
-	-- A kind may tint the rim of a tracker that is up: its colour, in place of the amber of a low one.
 	if kind and type(kind.Rim) == "function" then
 		local ok, r, g, b = pcall(kind.Rim, entry, reading, how)
 		if ok and Plain(r, "number") and Plain(g, "number") and Plain(b, "number") then
@@ -2081,7 +1838,6 @@ local function Apply(record, entry, look)
 		record.file = look.icon
 	end
 	texture:SetDesaturated(look.desaturated and true or false)
-	-- A tracker a kind draws nothing for has a clear icon.
 	if (record.faded == true) ~= (look.none == true) then
 		texture:SetAlpha(look.none and 0 or 1)
 		record.faded = look.none == true
@@ -2095,7 +1851,6 @@ local function Apply(record, entry, look)
 	end
 	local border = Opt("iconBorder") ~= false
 	ns.SetOutline(record.outline, border, border)
-	-- A bar or text has its own count and time left, and no countdown of the sweep.
 	record.count:SetText(shape == "icon" and look.count or "")
 	if look.countRed then
 		local colour = look.amber and K.AMBER or RED
@@ -2107,8 +1862,6 @@ local function Apply(record, entry, look)
 		record.cooldown:SetHideCountdownNumbers(not (Value(entry, "numbers") and shape == "icon"))
 	end
 	ns.IconCountdownFont(record, Opt("numbersFont"))
-	-- The countdown is amber while low, as the game's own icon colours its time in fights, and white again once it is fine. It is set again
-	-- after a change of Countdown number size, whose new font may take the colour away.
 	local numbers = look.amber and "amber" or "white"
 	if record.cdTint ~= numbers or record.cdTintFont ~= record.cdFont then
 		local read, text = pcall(record.cooldown.GetCountdownFontString, record.cooldown)
@@ -2119,7 +1872,6 @@ local function Apply(record, entry, look)
 		end
 	end
 	Sweep(record, look)
-	-- The rim is amber when low, red when missing, or the colour a kind asked for; the colour is set again only when it changes.
 	local tint = look.rimColour and (look.rimColour[1] .. "," .. look.rimColour[2] .. "," .. look.rimColour[3]) or (look.amber and "amber" or "red")
 	if record.tint ~= tint then
 		local colour = look.rimColour or (look.amber and K.AMBER or RED)
@@ -2141,9 +1893,6 @@ local function Apply(record, entry, look)
 	end
 end
 
--- 1 when the tracker is wanted on screen now, else 0; and a second answer, the reason "fine", for the one 0 that comes from the state of a
--- tracker set to Only when low or missing alone: drawn live and fine. Draw hands it to a kind's Over, which may draw by it (the pet's health,
--- TrackerKinds.lua); every other 0, of the death, a kind's own Wanted, the three rows or Only in combat, has no reason.
 local function Wanted(entry, state, how)
 	local ok, dead = pcall(UnitIsDeadOrGhost, "player")
 	if ok and not IsSecret(dead) and dead == true then
@@ -2156,17 +1905,11 @@ local function Wanted(entry, state, how)
 			return alpha
 		end
 	end
-	-- Show at a ready check: for K.READY seconds after one, a tracker read low or missing shows whatever Show and the three rows say (K.ReadyCheck).
 	if K.readyUntil and how == "live" and (state == "low" or state == "missing") and Now() < K.readyUntil then
 		return 1
 	end
 	local show = Value(entry, "show")
 	if show == "low" then
-		-- Trackers that show only when low or missing are hidden on a mount or a flight path, in a city or an inn and in a fight, as the three rows
-		-- say; on a flight path by UnitOnTaxi, which IsMounted does not cover (heard by PLAYER_CONTROL_LOST and PLAYER_CONTROL_GAINED, which come as a
-		-- flight starts and ends), and in a fight by the trackers' own word for it, set at PLAYER_REGEN_DISABLED. Hide in combat follows the Only out of combat filter of EnhanceQoL's
-		-- Class Buff Reminder (ClassBuffReminder.lua:2667-2673), whose rested filter (2505-2510) Hide in cities and inns is. Its role filter
-		-- (2683-2764) is left out: groups on Forever often have no roles (HealerMana.lua), and its class rule alone would silence a mage in a raid.
 		if (Opt("mounted") and (Ask(IsMounted) == true or Ask(UnitOnTaxi, "player") == true)) or (Opt("resting") and Ask(IsResting) == true)
 			or (Opt("combatHide") and fighting) then
 			return 0
@@ -2181,9 +1924,6 @@ local function Wanted(entry, state, how)
 	return 1
 end
 
--- A kind whose reading can be hidden draws that reading itself when it has a Hidden(entry, record, reading) that gives true: "drawn" then,
--- else nil and the tracker is shown by How. The kind is asked on every look, so that it can take its parts away when the reading is not
--- hidden any more. The record is first drawn bare, once, so that the kind's parts are the only thing on it.
 local function Drawn(entry, reading)
 	local kind, record = KINDS[entry.kind], records[entry.id]
 	if not record or not kind or type(kind.Hidden) ~= "function" then
@@ -2203,16 +1943,10 @@ local function Drawn(entry, reading)
 	return drawn and "drawn" or nil
 end
 
--- Allowed in combat: only texture, text, alpha, Cooldown and animation calls.
--- A kind may draw over its tracker last, with Over(entry, record, how, reason): the pet kind's health (TrackerKinds.lua), which for the reason
--- fine of Wanted alone gives the frame an alpha the game withholds in place of the 0, marks the record curved and answers true. record.alpha
--- stays a plain number: whenever Over does not answer true, a curved record gets that alpha back at once, so a tracker that is dead, mounted,
--- missing, in a fight with Hide in combat or wanted for any other reason is drawn by the rules of Show again.
 local function Draw(entry, reading)
 	if testing[entry.id] then
 		return
 	end
-	-- Test mode paints a sample in place of the reading (K.HeldDraw).
 	if K.held and K.HeldDraw(entry) then
 		return
 	end
@@ -2228,7 +1962,6 @@ local function Draw(entry, reading)
 			Apply(record, entry, Looks(entry, reading, how))
 			alpha, reason = Wanted(entry, reading.state, how)
 		end
-		-- A tracker just fixed stays at full opacity while it flashes green (K.Fixed); the pass after the flash takes it away as Show says.
 		if alpha == 0 and record.alpha == 1 and how ~= "hidden" and record.fixedUntil then
 			if Now() < record.fixedUntil then
 				alpha = 1
@@ -2236,8 +1969,6 @@ local function Draw(entry, reading)
 				record.fixedUntil = nil
 			end
 		end
-		-- A tracker that comes or goes by Show fades in or out (K.Fade). Its first alpha, a curved one and one under the game's own icon it
-		-- takes at once: the game's icon may hide the frame by an alpha it withholds (TrackerSlots.lua's Hide), which a fade would cover.
 		local faded = false
 		if record.alpha ~= alpha then
 			if record.alpha == nil or record.curved or how == "game" then
@@ -2256,7 +1987,6 @@ local function Draw(entry, reading)
 				curved = kind.Over(entry, record, how, reason) == true
 			end)
 		end
-		-- The alpha a kind's Over set shows at once: a fade would hold the frame at its own.
 		if curved then
 			K.StopFade(record)
 		end
@@ -2264,25 +1994,19 @@ local function Draw(entry, reading)
 			record.curved = nil
 			K.SetAlpha(record, record.alpha)
 		end
-		-- Close up the gaps: the row is placed again as a tracker comes or goes (K.Packed).
 		K.Packed(record, faded)
 	end
 	Slot("Show", entry, how == "game", record and record.alpha)
-	-- After Show, which may hide the frame by the game's own icon (K.Visible).
 	if record then
 		K.Mouse(record, entry)
 	end
-	-- A border on the action button that fixes a low or missing tracker (TrackerMarks.lua).
 	if ns.TrackerMarkStep then
 		ns.TrackerMarkStep(entry, reading, how)
 	end
-	-- Out of combat, the secure button of a click that fixes the tracker (TrackerClicks.lua).
 	if ns.TrackerClickStep then
 		ns.TrackerClickStep(entry, reading, how, record, fighting)
 	end
 end
-
--- The fight and the probes -----------------------------------------------------------------------
 
 local function Open()
 	return fight ~= nil and fight.length == nil
@@ -2310,7 +2034,6 @@ local function Info(entry)
 	return info
 end
 
--- A short form of an error text.
 local function Brief(err)
 	if type(err) == "string" then
 		return err:sub(1, 60)
@@ -2318,7 +2041,6 @@ local function Brief(err)
 	return "an error"
 end
 
--- The one question about a hidden buff: only the kind of answer is kept.
 local function Question(entry)
 	local call = type(C_UnitAuras) == "table" and C_UnitAuras.GetPlayerAuraBySpellID
 	local id = entry.spells and entry.spells[1]
@@ -2336,7 +2058,6 @@ local function Question(entry)
 	return "an open answer"
 end
 
--- Whether a call raised, gave a withheld answer or gave a plain one: a word, never the answer.
 local function Kind(ok, answer)
 	if not ok then
 		return "refused"
@@ -2350,7 +2071,6 @@ local function Accepted(fn)
 	return pcall(fn) and "accepted" or "refused"
 end
 
--- The scratch frames the probes try the timer, sweep and move calls on, made out of combat.
 local function MakeScratch()
 	if scratch then
 		return
@@ -2368,7 +2088,6 @@ local function MakeScratch()
 	end
 end
 
--- A duration of 10 seconds from now, or nil.
 local function TenSeconds()
 	local ok, duration = pcall(function()
 		local made = C_DurationUtil.CreateDuration()
@@ -2378,7 +2097,6 @@ local function TenSeconds()
 	return ok and duration or nil
 end
 
--- The questions the game answers about what it hides now: the word in the check, the C_Secrets function and, for a cast, the unit.
 local PREDICATES = {
 	{ "auras", "auras", "ShouldAurasBeSecret" },
 	{ "cooldowns", "cooldowns", "ShouldCooldownsBeSecret" },
@@ -2386,8 +2104,6 @@ local PREDICATES = {
 	{ "group", "group casts", "ShouldUnitSpellCastBeSecret", "party1" },
 }
 
--- What one call answered, as a word: yes, no, refused (it raised or gave no boolean), hidden answer (withheld, never made readable) or
--- not known (the client has no such call).
 local function Word(call, ...)
 	if type(call) ~= "function" then
 		return "not known"
@@ -2405,8 +2121,6 @@ local function Word(call, ...)
 	return "refused"
 end
 
--- The answers for one tracker: each question of PREDICATES by its key, and for the first listed spell of the tracker whether the game hides
--- its buff (spell) and what level it gives it (level). A question about a cast needs a spell, so it is not known without one.
 local function Predicates(entry)
 	local secrets = type(C_Secrets) == "table" and C_Secrets or {}
 	local id = type(entry) == "table" and entry.spells[1] or nil
@@ -2438,7 +2152,6 @@ local function Predicates(entry)
 	return answers
 end
 
--- "auras yes, cooldowns no, own casts no, group casts no".
 local function PredicateText(answers)
 	local list = {}
 	for _, row in ipairs(PREDICATES) do
@@ -2465,9 +2178,6 @@ local function TotemProbe()
 	return slots, details
 end
 
--- Each weapon slot of the game's Enum.WeaponSlot, as the game's own buff frame loops over them (BuffFrame.lua:763-766): { name, word,
--- entries }. The word is open, hidden or refused, and each entry of an open slot is { hasEnchant, type, name, plain } from
--- C_Item.GetWeaponEnchantInfo (ItemDocumentation.lua:1141-1154), the name being the game's own for Enum.ItemEnchantType.
 local function WeaponProbe()
 	local call = type(C_Item) == "table" and C_Item.GetWeaponEnchantInfo
 	local slots, names, list = {}, {}, {}
@@ -2510,7 +2220,6 @@ local function WeaponProbe()
 	return list
 end
 
--- "main hand Imbue 1, off hand none, ranged none": the enchants that are on, by the game's name for their type.
 local function WeaponText(list)
 	if #list == 0 then
 		return "refused"
@@ -2540,8 +2249,6 @@ local function WeaponText(list)
 	return table.concat(parts, ", ")
 end
 
--- The calls the game's own icons and the later kinds of tracker depend on, tried once on the first pass of a fight and again 5
--- seconds into it. Each result is a word and the later one replaces the earlier.
 local function Probes()
 	local found = {}
 	found.totems, found.details = TotemProbe()
@@ -2583,15 +2290,10 @@ local function Probes()
 	Slot("Probe")
 end
 
--- The sound, the pass and the keeping --------------------------------------------------------------
-
--- True within 2 seconds after the player entered the world, when nothing is played.
 local function Quiet(at)
 	return entered ~= nil and at >= entered and at - entered < K.QUIET
 end
 
--- Plays a sound kit, the tracker kit when none is given. With a second kit, a kit the game refuses is tried once as that one. A refusal of
--- both is one note, and false.
 local function Ding(kit, fall, note)
 	local ok, played = pcall(PlaySound, kit or K.KITS.raid)
 	if ok and (IsSecret(played) or played ~= false) then
@@ -2611,7 +2313,6 @@ ns.TrackerQuiet = function()
 	return Quiet(Now())
 end
 
--- Asks the game's own sound for an aura ending (TrackerSound.lua) to match the trackers: none while the page is off.
 local function GameSound()
 	local call = ns.TrackerGameSound and ns.TrackerGameSound.Sync
 	if type(call) == "function" then
@@ -2619,20 +2320,11 @@ local function GameSound()
 	end
 end
 
--- True when the game plays the tracker's sound for a trigger itself, so its own is skipped: Removed (the drop, when none is given), Added or
--- ApplicationsIncreased (TrackerSound.lua).
 local function GameTaken(entry, trigger)
 	local call = ns.TrackerGameSound and ns.TrackerGameSound.Taken
 	return type(call) == "function" and call(entry, trigger) == true
 end
 
--- Sound when it comes and Sound when it stacks, in the kit of Sound, for a buff or debuff tracker: once when it goes from missing to fine or low,
--- and once when its count rises. old: the reading kept before this one; pending: a drop seen and not yet confirmed (Track). Nothing in the first
--- seconds after a loading screen, when every buff seems to come at once (Quiet); nothing for a change seen only after the tracker could not be
--- read (gap), since it happened out of sight, where the game plays its own sound when it is registered; nothing for a buff back before its drop
--- was confirmed, since it never left; and nothing where the game plays that sound itself (TrackerSound.lua). Follows the sounds for an aura
--- applied and for one that gains an application of the Cooldown Panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
--- (EnhanceQoLCooldownPanels/CooldownPanels.lua:2828-2859).
 function K.Came(entry, old, reading, pending)
 	local id = entry.id
 	local gap = K.gap[id]
@@ -2656,10 +2348,6 @@ function K.Came(entry, old, reading, pending)
 	end
 end
 
--- A tracker you fix flashes green, the Up colour of the tracker tooltips (K.TIP.fine), over 0.6 seconds (K.FIXED) as it goes from low or
--- missing to fine, and Draw holds it at full opacity for that time before Show takes it away (record.fixedUntil). Only where the addon read the
--- fix itself: a tracker drawn live and on screen, out of combat, and in a fight for the kinds the game never hides (weapon enchants, items,
--- ammunition); not for a sample of test mode or of /flatui tracker test. Texture and animation calls on Flat UI's own frame, allowed in fights.
 K.FIXED = 0.6
 function K.Fixed(entry)
 	local record = records[entry.id]
@@ -2689,7 +2377,6 @@ function K.Fixed(entry)
 		end)
 		record.fixGroup = ok and group or false
 	end
-	-- Over the whole tracker: the icon, or the bar with its icon, or the text.
 	fix:ClearAllPoints()
 	fix:SetAllPoints(record.frame)
 	local group = record.fixGroup
@@ -2699,7 +2386,6 @@ function K.Fixed(entry)
 	fix:SetAlpha(1)
 	fix:Show()
 	if not (group and pcall(group.Play, group)) then
-		-- No animation from the game: the green shows for the same time and goes.
 		C_Timer.After(K.FIXED, function()
 			if not (record.fixedUntil and Now() < record.fixedUntil) then
 				fix:Hide()
@@ -2707,13 +2393,9 @@ function K.Fixed(entry)
 		end)
 	end
 	record.fixedUntil = Now() + K.FIXED
-	-- The pass after the flash lets Show fade the tracker out, as it says.
 	C_Timer.After(K.FIXED + 0.02, Dirty)
 end
 
--- Keeps a reading and plays the sound for a drop: a tracker that goes from fine or low to missing, and
--- is still missing at the next pass 0.2 seconds later, outside the first 2 seconds after login; and with Sound when it turns low, the sound
--- for a tracker that goes from fine to low.
 local function Track(entry, reading)
 	local id, state = entry.id, reading.state
 	if state == "unknown" then
@@ -2721,7 +2403,6 @@ local function Track(entry, reading)
 		K.gap[id] = true
 		return
 	end
-	-- The kept state and count, and a drop that waits for its second pass, are read before this reading takes their place.
 	local old, pending = mem.kept[id], mem.drops[id]
 	local before = old and old.state
 	mem.kept[id] = reading
@@ -2732,14 +2413,10 @@ local function Track(entry, reading)
 		entry.top = math.min(20, math.max(1, math.floor(reading.count)))
 	end
 	K.Came(entry, old, reading, pending)
-	-- A kind is told of a change of the state it has shown, once, and does its own sounds: it has no sound for a drop when it says noDrop.
 	local kind = KINDS[entry.kind]
-	-- Sound when it turns low, in the kit of Sound: once as the tracker goes from fine to low, by its Low at rows, Item minimum, Ammunition
-	-- minimum or the pet rows. A buff the game hides in a fight is read again after it, so it turns low by sound between fights.
 	if before == "fine" and state == "low" and Value(entry, "lowSound") == true and not Quiet(Now()) and not (kind and kind.noDrop == true) then
 		Ding(K.KITS[Value(entry, "kit")] or K.KITS.raid)
 	end
-	-- A tracker that was low or missing and is fine again flashes green (K.Fixed).
 	if (before == "missing" or before == "low") and state == "fine" and not Quiet(Now()) then
 		K.Fixed(entry)
 	end
@@ -2779,7 +2456,6 @@ local function Update(entry, first)
 	Draw(entry, reading)
 end
 
--- Tells ns.TrackerSlots about a new ID, a first charge count or a first sighting.
 local function Resync()
 	if edited then
 		edited = false
@@ -2823,7 +2499,6 @@ local function TimedPass()
 	end
 end
 
--- One pass per 0.2 seconds at most, and none without an event.
 function Dirty()
 	if waiting or tracked == 0 then
 		return
@@ -2836,10 +2511,6 @@ function Dirty()
 	end
 end
 
--- Your own cast ----------------------------------------------------------------------------------
-
--- A tracker shown as last known or as nothing known has its sweep started again by the cast of its buff, and is
--- a buff that is on from then, with no end time when no length was ever known.
 local function Restart(entry)
 	local record, id = records[entry.id], entry.id
 	if not record or (record.how ~= "last" and record.how ~= "none") then
@@ -2849,7 +2520,6 @@ local function Restart(entry)
 	local length = old and old.length or mem.lengths[id]
 	local start = Now()
 	local reading = { state = "fine", hidden = false, icon = old and old.icon, id = old and old.id }
-	-- With no length ever known there is no sweep to start again, and one that is still drawn is cleared.
 	if not length then
 		mem.kept[id] = reading
 		Sweep(record, { sweep = "clear" })
@@ -2888,9 +2558,6 @@ local function OwnCast(spellID)
 	Resync()
 end
 
--- The watcher -------------------------------------------------------------------------------------
-
--- The trackers of every kind, and the sound of one of them, for a kind that sounds without a drop of its own reading.
 ns.TrackerEntries = Entries
 function ns.TrackerSound(entry)
 	if Value(entry, "sound") and not Quiet(Now()) and not GameTaken(entry) then
@@ -2898,8 +2565,6 @@ function ns.TrackerSound(entry)
 	end
 end
 
--- A watcher that hears every unit passes on the events of the player alone. A unit that is withheld cannot be told,
--- so an aura change of it still asks for a pass and a cast of it is dropped.
 local function Noticed(event, ...)
 	local unit = ...
 	local others = heard == "all units"
@@ -2925,7 +2590,6 @@ local function Noticed(event, ...)
 			OwnCast(spellID)
 		end
 	elseif K.events[event] then
-		-- An event of a kind: a unit event of another unit says nothing about the player, or the unit the kind asked for.
 		if event:sub(1, 5) == "UNIT_" and not IsSecret(unit) and unit ~= (K.units[event] or "player") then
 			return
 		end
@@ -2938,8 +2602,6 @@ local function Noticed(event, ...)
 	end
 end
 
--- True when the event is registered for the player alone, or for the units given (RegisterUnitEvent takes several in one call, as
--- CooldownViewer.lua:1736 registers UNIT_AURA for the player and the target).
 local function Listen(frame, event, unit, ...)
 	if frame.RegisterUnitEvent then
 		local ok, registered = pcall(frame.RegisterUnitEvent, frame, event, unit or "player", ...)
@@ -2951,7 +2613,6 @@ local function Listen(frame, event, unit, ...)
 	return false
 end
 
--- Registers an event of a kind on the watcher, once. UNIT_INVENTORY_CHANGED is heard for the player alone, the others have no unit.
 local function Subscribe(event)
 	if not watcher or K.registered[event] then
 		return
@@ -2984,26 +2645,10 @@ local function Watch()
 	end)
 end
 
--- Registers a kind of tracker that is not a buff, and the events it listens for on the watcher of the trackers. The spec is
--- { Read(entry) -> reading, Clean(entry) -> true when the entry is valid, events = { name, ... }, Add(argument, entries) -> fields, message,
--- Label(entry), Icon(entry), Lines(entry) -> { text }, Tip(entry) -> { text } for the tracker's tooltip (K.TipLines), what = the words after the
--- name in the list, hiddenAble = false for a kind the game never
--- hides, unitEvents = { EVENT = unit } for an event heard for a unit that is not the player, Event(event, ...) and Cast(spellID) called for each
--- event of the kind and each cast of the player, Hidden(entry, record, reading) -> true when the kind drew a hidden reading itself, and the
--- hooks of a kind that has more to show: slot = { unit, filter } for the game's own icon of the kind, noLast (no last reading is shown: "none"
--- in its place), noDrop (no sound for a drop), last (laid out after the other trackers), Hide(entry, reading, how) -> true to draw nothing,
--- Wanted(entry, state, how, fighting) -> 0 or 1 ahead of the rules of Show (fighting: whether the trackers are in a fight), Rim(entry, reading,
--- how) -> red, green, blue for the rim of a tracker that is up, Count(entry, reading, how) -> the text of its count in place of the number, drawn
--- on the missing look too (its bar fills by the time left, never by the count), Changed(entry, before, after) after a change of the state that
--- was kept, Gone(id)
--- when a tracker is no longer on, World() when the player enters the world or the spells change, Test(entry, on) -> a line, for a test of 5
--- seconds instead of the three looks, own = { key = fn } for the kind's own test of an own value, and part = the name of the part of the module
--- the kind's calls are isolated in }. A reading is { state = "fine" | "low" | "missing" | "unknown", hidden, count, expires, length, icon, id }.
 function ns.TrackerKind(name, spec)
 	if type(name) ~= "string" or name == "buff" or type(spec) ~= "table" or type(spec.Read) ~= "function" or type(spec.Clean) ~= "function" then
 		return false
 	end
-	-- A slot is { unit, filter }, both words, or none.
 	if spec.slot ~= nil and not (type(spec.slot) == "table" and type(spec.slot.unit) == "string" and type(spec.slot.filter) == "string") then
 		spec.slot = nil
 	end
@@ -3025,7 +2670,6 @@ function ns.TrackerKind(name, spec)
 	return true
 end
 
--- Adds a word to /flatui tracker: fn(text) is given what follows the word and gives the line to print. A kind of tracker adds its own.
 function ns.TrackerWord(word, fn)
 	if type(word) == "string" and type(fn) == "function" and word ~= "" then
 		K.commands[word:lower()] = fn
@@ -3034,7 +2678,6 @@ function ns.TrackerWord(word, fn)
 	return false
 end
 
--- True for the restrictions that hide aura values.
 local function Counted(kind)
 	local types = Enum and Enum.AddOnRestrictionType
 	if type(types) ~= "table" or kind == nil then
@@ -3043,7 +2686,6 @@ local function Counted(kind)
 	return kind == types.Combat or kind == types.Encounter or kind == types.ChallengeMode or kind == types.PvPMatch
 end
 
--- True when every listed ID is flagged as never hidden. A game that cannot say counts as hiding.
 local function NeverHidden(entry)
 	local kind = KINDS[entry.kind]
 	if kind and entry.kind ~= "debuff" then
@@ -3063,8 +2705,6 @@ local function NeverHidden(entry)
 	return true
 end
 
--- The game says a restriction is about to start, and enforces it only once this event is handled: the
--- last plain reading is taken at once, and every buff that will be hidden is drawn as hidden.
 local function Warn()
 	local current = StartFight()
 	local count = 0
@@ -3121,7 +2761,6 @@ local function FightEnds()
 	Slot("Flush")
 end
 
--- Tells the kinds that have a World() that the player entered the world or that the spells changed.
 local function World()
 	for name, kind in pairs(KINDS) do
 		if type(kind.World) == "function" then
@@ -3130,7 +2769,6 @@ local function World()
 	end
 end
 
--- New spells change what the player can cast, and the row may need a new layout for them.
 local function SpellsChanged()
 	bookIds = nil
 	World()
@@ -3139,8 +2777,6 @@ end
 
 local function Entered()
 	entered = Now()
-	-- A loading screen is the way into or out of a dungeon or raid: the place is asked again when a Low at next needs it (K.Inside), and the pass
-	-- and the flush below read every tracker, and the game's own icons, with it.
 	K.inside = nil
 	World()
 	Dirty()
@@ -3148,9 +2784,6 @@ local function Entered()
 	GameSound()
 end
 
--- Layout ------------------------------------------------------------------------------------------
-
--- The highest bar of the personal resource display that is shown. The display is as high as its bars.
 local function HighestBar(display)
 	for _, key in ipairs(RESOURCE_BARS) do
 		local bar = Field(display, key)
@@ -3161,7 +2794,6 @@ local function HighestBar(display)
 	return display
 end
 
--- The lowest bar of the personal resource display that is shown, for a row under it. Cooldowns.lua has the same walk.
 local function LowestBar(display)
 	for index = #RESOURCE_BARS, 1, -1 do
 		local bar = Field(display, RESOURCE_BARS[index])
@@ -3172,8 +2804,6 @@ local function LowestBar(display)
 	return display
 end
 
--- The Cooldown icons row when it hangs from the personal resource display and has icons: its holder and how far its icons reach below
--- the holder. Nothing when it is elsewhere, so a row below the display goes straight under the bars.
 local function CooldownsBelow()
 	if type(ns.CooldownRow) ~= "function" then
 		return nil
@@ -3191,8 +2821,6 @@ local function CooldownsBelow()
 	return holder, ns.Get("cooldowns.rows") == "up" and 0 or ((rows - 1) * (size + (ns.Get("cooldowns.spacing") or 0)) + size)
 end
 
--- The middle of a holder is the middle of its row. The row is 4 units above the display, or below it, 150 units right of the middle of
--- the screen, or at the spot the movers saved, with the offsets added. True when the display was wanted and cannot be used.
 local function Place(place, holder, total, tallest, grow)
 	local x, y = Opt("x"), Opt("y")
 	local refused = false
@@ -3220,8 +2848,6 @@ local function Place(place, holder, total, tallest, grow)
 				holder:SetPoint("CENTER", HighestBar(display), "TOP", x, y + GAP + tallest / 2)
 				K.where[place] = "above the personal resource display"
 			end
-			-- A frame anchored to one that has no position has no rectangle either. A client that cannot
-			-- say is taken to have one.
 			local ok, left = pcall(holder.GetLeft, holder)
 			anchored = not ok or IsSecret(left) or left ~= nil
 		end
@@ -3244,8 +2870,6 @@ local function Place(place, holder, total, tallest, grow)
 	return refused
 end
 
--- The record of a tracker, from the free list when a removed tracker left one. /flatui status counts the records
--- in use.
 local function Assign(entry, parent)
 	local record = records[entry.id]
 	if not record then
@@ -3253,7 +2877,6 @@ local function Assign(entry, parent)
 		local pool = spec and (spec.unit .. "|" .. spec.filter) or "none"
 		record = table.remove(free[pool] or {}) or Acquire(parent)
 		record.pool = pool
-		-- The tooltip finds the tracker by its id when the mouse comes (K.TipEnter).
 		record.entryId = entry.id
 		records[entry.id] = record
 		ns.Count(KEY)
@@ -3261,7 +2884,6 @@ local function Assign(entry, parent)
 	return record
 end
 
--- Tells every kind that has a Gone(id) that a tracker is no longer on, so that it can end what it started for it.
 local function Gone(id)
 	for name, kind in pairs(KINDS) do
 		if type(kind.Gone) == "function" then
@@ -3270,7 +2892,6 @@ local function Gone(id)
 	end
 end
 
--- The records of trackers that are no longer on wait for the next tracker.
 local function Release(wanted)
 	for id, record in pairs(records) do
 		if not wanted[id] then
@@ -3278,18 +2899,14 @@ local function Release(wanted)
 			records[id] = nil
 			ns.Count(KEY, -1)
 			Pulse(record, false)
-			-- The parts a kind drew over the record go with the tracker, and the record is drawn afresh by the next one.
 			if record.hid and record.hid.Leave then
 				pcall(record.hid.Leave)
 			end
 			record.how, record.sample = nil, nil
-			-- The next tracker on the record starts with a white countdown (Apply).
 			record.cdTint = nil
-			-- The next tracker on the record takes its first alpha at once (Draw), and a fade of this one ends with it.
 			record.alpha = nil
 			record.seen, record.leaving = nil, nil
 			K.StopFade(record)
-			-- A green flash of a fix ends with the tracker (K.Fixed).
 			record.fixedUntil = nil
 			if record.fix then
 				if record.fixGroup then
@@ -3309,15 +2926,12 @@ local function Release(wanted)
 	end
 end
 
--- Hides every holder, for a page that is off or no tracker on.
 local function HideHolders()
 	for _, holder in pairs(holders) do
 		holder:Hide()
 	end
 end
 
--- The page is off: every kind ends what it has up for a tracker (a proc's art and glow), at once, also in a fight, where the layout that frees
--- the records waits for its end. A kind that ended what it had up for a tracker shows it again from the start when the page comes back.
 function K.EndKinds()
 	for id in pairs(records) do
 		Gone(id)
@@ -3332,10 +2946,6 @@ function K.EndKinds()
 	end
 end
 
--- Close up the gaps ---------------------------------------------------------------------------------
-
--- True when a tracker's frame is seen, or may be: a record not drawn yet, an alpha a kind's Over withholds (curved) and one under the game's
--- own icon, which may hide it by an alpha it withholds, all count. A tracker a kind draws nothing for (a proc that is down) is not seen.
 function K.Seen(record)
 	if record.curved or record.how == "game" then
 		return true
@@ -3343,12 +2953,6 @@ function K.Seen(record)
 	return record.alpha ~= 0 and record.faded ~= true and record.how ~= "hidden"
 end
 
--- The frames of a place's row, from what Layout kept in K.rows, each at its own X and Y offset. In list order; with Close up the gaps the
--- trackers that are seen come first, so they sit together, centred on their own width or from the start of the row as Row direction says, a
--- column from its top (downward) or bottom (upward), and the hidden ones follow in list order, so that a tracker that shows in a fight, where
--- nothing moves, takes a place after them and no two overlap. One that fades out keeps its place until its fade is over (record.leaving), and
--- the row is placed again once the last such fade is over, so a second tracker that fades out just after another closes up too.
--- A proc of your class that shows without being added comes last and is not in the width. Out of combat only.
 function K.Arrange(place)
 	local row = K.rows and K.rows[place]
 	if not row or InCombatLockdown() then
@@ -3394,7 +2998,6 @@ function K.Arrange(place)
 		if grow == "left" then
 			x = x - width
 		end
-		-- An own X or Y offset replaces the page's: the holder is placed at the page's.
 		local ownX, ownY = Value(entry, "x") - Opt("x"), Value(entry, "y") - Opt("y")
 		if grow == "down" then
 			frame:SetPoint("TOPLEFT", holder, "CENTER", -widest / 2 + ownX, y + ownY)
@@ -3412,9 +3015,6 @@ function K.Arrange(place)
 	end
 end
 
--- One K.Arrange of a place after `delay` seconds, and out of combat: a fight's ask waits for its end, and two asks of the same delay are one.
--- A tracker still fading out when it runs asks again for the end of its fade (K.Arrange); the ask is cleared before K.Arrange runs, so that
--- ask is kept, and one dropped because another waits is made by that other as it runs.
 K.arranging = {}
 function K.QueueArrange(place, delay)
 	local key = place .. (delay > 0 and "+" or "")
@@ -3432,8 +3032,6 @@ function K.QueueArrange(place, delay)
 	end)
 end
 
--- Close up the gaps: a tracker of the row that comes or goes asks for its row to be placed again, at once when it comes and when it goes at
--- once, and once its fade is over when it fades out, so it keeps its place while it fades. faded: the alpha went by K.Fade.
 function K.Packed(record, faded)
 	if Opt("pack") ~= true or record.auto or not record.place then
 		return
@@ -3447,7 +3045,6 @@ function K.Packed(record, faded)
 	K.QueueArrange(record.place, record.leaving and K.FADE_OUT + 0.05 or 0)
 end
 
--- Runs out of combat. The trackers are grouped by their place, and each group is one row hung from the holder of its place.
 local function Layout()
 	K.rows = {}
 	if not ns.Enabled(KEY) then
@@ -3458,13 +3055,11 @@ local function Layout()
 		shown = {}
 		return
 	end
-	-- The procs of your class are built again first: a setting, the list or the spells known may have changed them.
 	if type(ns.ProcAutoBuild) == "function" then
 		ns.EachPart(KEY, "procs", ns.ProcAutoBuild)
 	end
 	local entries, wanted = OnEntries(), {}
 	tracked = #entries
-	-- The aura events of the target are listened to while a tracker reads it.
 	K.target = false
 	for _, entry in ipairs(entries) do
 		wanted[entry.id] = true
@@ -3481,7 +3076,6 @@ local function Layout()
 	HolderFor(Opt("place"), true)
 	MakeScratch()
 	local groups = { resource = {}, character = {}, own = {} }
-	-- The kinds that say last (a proc, which is nothing on screen while it is down) go after the others in their row, in list order.
 	for round = 1, 2 do
 		for _, entry in ipairs(entries) do
 			local kind = KINDS[entry.kind]
@@ -3504,9 +3098,6 @@ local function Layout()
 			end
 		else
 			holder:Show()
-			-- Each tracker has a record and a shape, and so a width and a height: the total of the widths and the tallest height place the row.
-			-- A proc of your class that shows without being added (entry.auto, Procs.lua) comes last, past the end of the row, and is not in its
-			-- width, so the row stays where it is without them; like every proc it is nothing on screen while it is down.
 			local sized, total, tallest, counted = {}, 0, 0, 0
 			for _, entry in ipairs(group) do
 				local record = Assign(entry, holder)
@@ -3519,8 +3110,6 @@ local function Layout()
 				tallest = math.max(tallest, height)
 			end
 			total = total + spacing * math.max(0, counted - 1)
-			-- A column (Row direction Column, downward or upward): the trackers under each other, left-aligned, the column as wide as the widest
-			-- and as tall as the heights of the counted ones and the spacing between them. It is placed as a row of that width and height, centred.
 			local column = grow == "down" or grow == "up"
 			local widest, depth = 0, 0
 			if column then
@@ -3534,8 +3123,6 @@ local function Layout()
 			if Place(place, holder, column and widest or total, column and depth or tallest, column and "center" or grow) then
 				refused = true
 			end
-			-- The holder is placed by the whole row, also with Close up the gaps, so it never moves as trackers come and go; K.Arrange places the
-			-- frames in it, now and again when a tracker comes or goes.
 			K.rows[place] = { sized = sized, holder = holder, total = total, widest = widest, depth = depth }
 			for _, item in ipairs(sized) do
 				local entry, record, width, height = item[1], item[2], item[3], item[4]
@@ -3563,16 +3150,12 @@ local function Layout()
 	Pass()
 end
 
--- Asks for a pass, for a kind that learns of a change by a call of its own.
 function ns.TrackerDirty()
 	Dirty()
 end
 
--- One layout at a time, when combat allows.
 function QueueLayout()
-	-- Every change of the list or of a tracker asks for a layout, and the game's own sounds follow the same changes.
 	GameSound()
-	-- Your buffs leaves out the buffs of the trackers that are on, when it is set to.
 	if type(ns.OwnBuffsTrackers) == "function" then
 		pcall(ns.OwnBuffsTrackers)
 	end
@@ -3590,12 +3173,10 @@ function QueueLayout()
 	end)
 end
 
--- A new layout, for Your buffs when the row it hangs from starts or stops being above or under the bars.
 function ns.TrackerPlaceAgain()
 	QueueLayout()
 end
 
--- The spell IDs of the buff trackers that are on, as a map, for Your buffs.
 function ns.TrackerSpellIDs()
 	local ids = {}
 	for _, entry in ipairs(OnEntries()) do
@@ -3610,14 +3191,11 @@ function ns.TrackerSpellIDs()
 	return ids
 end
 
--- The frames of the trackers on the row and the frame they hang from, for the handle of the movers.
--- Nothing while the page is off.
 function ns.TrackerRow()
 	local frames = {}
 	if not ns.Enabled(KEY) then
 		return frames
 	end
-	-- The row at its own position when a tracker has one, else the row of the page's place.
 	local place = Opt("place")
 	for _, record in ipairs(shown) do
 		if record.place == "own" then
@@ -3628,7 +3206,6 @@ function ns.TrackerRow()
 	if not holder then
 		return frames
 	end
-	-- The procs of your class past the end of the row are not in the row's box.
 	for _, record in ipairs(shown) do
 		if record.place == place and not record.auto then
 			frames[#frames + 1] = record.frame
@@ -3637,7 +3214,6 @@ function ns.TrackerRow()
 	return frames, holder
 end
 
--- The movers set or put back the spot of the row. A spot saved for the row is the Own position.
 function ns.TrackersMoved()
 	if ns.MoverSpot(MOVER, "CENTER") and Opt("place") ~= "own" then
 		ns.Set(KEY .. ".place", "own")
@@ -3645,24 +3221,16 @@ function ns.TrackersMoved()
 	QueueLayout()
 end
 
--- The frame of a tracker, or nil when it has none.
 function ns.TrackerFrame(entry)
 	local record = type(entry) == "table" and records[entry.id]
 	return record and record.frame or nil
 end
 
--- Tracker tooltips ------------------------------------------------------------------------------
-
--- TIP: the colours of the state line (Up green, Low amber, Missing red) and of the dim lines. TIP_FINE, TIP_MISSING: the word of the state line
--- for a kind whose fine or missing reads wrong as Up or Missing.
 K.TIP = { fine = { 0.3, 0.85, 0.4 }, low = K.AMBER, missing = RED, dim = { 0.7, 0.7, 0.7 } }
 K.TIP_FINE = { form = "In one of them", tracking = "On", durability = "Fine", pet = "Out" }
 K.TIP_MISSING = { item = "None in your bags", ammo = "None left", durability = "An item is broken", pet = "Gone or dead",
 	tracking = "No tracking on", form = "In none of them", totem = "Not down", debuff = "Not on your target", weapon = "No enchant on it" }
 
--- The dim line of a timed tracker's tooltip that says what counts as low: "Low at 2 charges or fewer or under 5:00 left (earlier in a raid)", by
--- the Low at rows that apply here (K.LowTime, with the larger Low in dungeons and raids), or nil when neither does. The other kinds say theirs in
--- their own Tip (TrackerKinds.lua).
 function K.TipRule(entry)
 	if not K.TIMED[entry.kind] then
 		return nil
@@ -3679,7 +3247,6 @@ function K.TipRule(entry)
 	return #parts > 0 and ("Low " .. table.concat(parts, " or ")) or nil
 end
 
--- The tracker of an id: one of the list, or a proc of your class that shows without being added.
 function K.EntryById(id)
 	if id == nil then
 		return nil
@@ -3695,13 +3262,6 @@ function K.EntryById(id)
 	return nil
 end
 
--- The frame hears the mouse while it is seen and Tracker tooltips lets its tooltip show now: never a click (Acquire), and nothing while it is
--- clear, hidden, or in a fight with Out of combat only, so the world under it keeps its own mouse (a unit's tooltip). A curved alpha (the pet's
--- health, TrackerKinds.lua) is withheld, so a tracker shown by it alone has no tooltip. Nor has one a kind draws nothing for (record.faded: a proc
--- that is down, also under the game's own icon), nor one the game's own icon hides by an alpha it withholds (TrackerSlots.lua's Hide, Only when
--- low or missing in a fight), since it may not be seen. Allowed in a fight: the frame is Flat UI's own, and the secure button of a click is off it
--- there (TrackerClicks.lua).
--- entry: the record's tracker, when the caller has it.
 function K.Visible(record, entry)
 	if record.how == "hidden" or record.alpha ~= 1 or record.faded == true then
 		return false
@@ -3721,7 +3281,6 @@ function K.Mouse(record, entry)
 	end
 end
 
--- "12:30 left" for a reading with a time, else nil.
 function K.TipTime(reading)
 	local expires = reading.expires
 	if not (Plain(expires, "number") and ns.Finite(expires)) then
@@ -3731,8 +3290,6 @@ function K.TipTime(reading)
 	return ("%d:%02d left"):format(math.floor(seconds / 60), math.floor(seconds % 60))
 end
 
--- The count of a reading in the words of its kind: charges, stacks, items in the bags, ammunition, durability. A group buff's count is who lacks
--- it, which its kind's Tip says.
 function K.TipCount(entry, reading)
 	local count = reading.count
 	if not (Plain(count, "number") and ns.Finite(count)) or entry.kind == "group" then
@@ -3749,8 +3306,6 @@ function K.TipCount(entry, reading)
 	return Plural(count, entry.kind == "debuff" and "stack" or "charge")
 end
 
--- The state line of the tooltip and its colour, and the state ("fine", "low", "missing" or nil when not known): a reading made now, else in a
--- fight what the tracker shows, the game's own icon or what was known last.
 function K.TipState(entry, record)
 	local reading, prefix = Read(entry), ""
 	local how = record and record.how
@@ -3770,7 +3325,6 @@ function K.TipState(entry, record)
 	return prefix .. text, colour, state
 end
 
--- The words of a reading that is known, its colour and its state: "Low, 0:18 left, 2 charges" in amber.
 function K.TipWords(entry, reading)
 	local state, words = reading.state, {}
 	if state == "missing" then
@@ -3783,18 +3337,12 @@ function K.TipWords(entry, reading)
 	return table.concat(words, ", "), K.TIP[state] or K.TIP.dim, K.TIP[state] and state or nil
 end
 
--- The lines of a tracker's tooltip, on a tooltip its owner was set for: the name, the state with the time left and charges, the kind's own lines
--- (a group buff: who lacks it), and where Click to apply takes the tracker's kind and it needs one, that a click fixes it out of combat. noClick
--- leaves that out, for the tooltip of the click's own button, which says what the click does (TrackerClicks.lua). Only GameTooltip's widget
--- calls; nothing of the game's is read but the tracker's own reading.
 function K.TipLines(entry, tip, noClick)
 	tip:SetText(Label(entry), 1, 1, 1)
 	local dim = K.TIP.dim
 	local kind = KINDS[entry.kind]
 	local what = kind and kind.what or "buff on you"
 	tip:AddLine((what:gsub("^%l", string.upper)), dim[1], dim[2], dim[3])
-	-- A sample says what it shows and where it comes from: test mode and the look preview paint theirs only out of combat (K.HeldDraw), and the
-	-- test of /flatui tracker test its own looks (Paint, Bare). A tracker with no sample drawn keeps its real lines.
 	if K.SampleTip(entry, tip) then
 		return
 	end
@@ -3816,7 +3364,6 @@ function K.TipLines(entry, tip, noClick)
 		tip:AddLine("Out of combat, a click fixes it.", dim[1], dim[2], dim[3], true)
 	end
 end
--- The lines of a tracker's sample, when one is drawn now: true then.
 function K.SampleTip(entry, tip)
 	local record = records[entry.id]
 	local sample, dim = record and record.sample, K.TIP.dim
@@ -3842,8 +3389,6 @@ function ns.TrackerTipLines(entry, tip, noClick)
 	end
 end
 
--- The tooltip of a tracker's frame, drawn again each second while the mouse stays: false when Tracker tooltips lets none show now or the tracker
--- is not on screen, and the tooltip is then hidden if it is the frame's.
 function K.TipShow(record)
 	local tip, tips = GameTooltip, Opt("tooltips")
 	if type(tip) ~= "table" or ns.Forbidden(tip) then
@@ -3900,8 +3445,6 @@ function K.TipLeave(record)
 	K.TipHide(record)
 end
 
--- The check -------------------------------------------------------------------------------------
-
 local function YesNo(name)
 	local call = type(C_Secrets) == "table" and C_Secrets[name]
 	if type(call) == "function" then
@@ -3917,8 +3460,6 @@ local function Number(value)
 	return value ~= nil and ("%d"):format(value) or "none"
 end
 
--- The reading in words. The count of a group buff is how many members lack the buff, and its total how many count (TrackerGroup.lua's Read),
--- so it is said in the words of the tracker's own line, not as charges.
 local function NowText(reading, entry)
 	local state = reading.state
 	if state == "missing" then
@@ -3966,7 +3507,6 @@ local function Join(ids)
 	return table.concat(ids, ", ")
 end
 
--- The own values of a tracker as text, sorted by key: "low 2, place own".
 local function Own(entry)
 	local list = {}
 	for key in pairs(OWN) do
@@ -3982,7 +3522,6 @@ local function EntryLines(index, entry)
 	local lines = {}
 	local reading = Read(entry)
 	local kind = KINDS[entry.kind]
-	-- A proc of your class that shows without being added has no number: it is marked Class.
 	lines[1] = ("%s. %s, %s%s"):format(Plain(index, "number") and ("%d"):format(index) or "Class", Label(entry), kind and kind.what or "buff on you",
 		entry.on == false and ", off" or "")
 	lines[2] = "   Now: " .. NowText(reading, entry) .. "."
@@ -3999,7 +3538,6 @@ local function EntryLines(index, entry)
 	if word ~= "icon" then
 		shownAs = (shownAs:gsub("the red missing icon", "the red missing " .. word):gsub("a grey icon,", (word == "text" and "grey text," or "a grey " .. word .. ",")):gsub("the game's own icon", "the game's own " .. word))
 	end
-	-- A kind that draws nothing for a reading says so: a proc that is not up, or whose icon is the game's.
 	if kind and type(kind.Hide) == "function" and how ~= "game" then
 		local ok, hide = pcall(kind.Hide, entry, reading, how)
 		if ok and not IsSecret(hide) and hide == true then
@@ -4029,14 +3567,12 @@ local function EntryLines(index, entry)
 			lines[#lines + 1] = "   " .. tostring(line)
 		end
 	end
-	-- The Low at (seconds left) that applies here, and the place when it is the one of dungeons and raids.
 	local lowTime, here = K.LowTime(entry)
 	if lowTime > 0 and K.TIMED[entry.kind] then
 		lines[#lines + 1] = ("   Low at %d s here%s."):format(lowTime, here and (": " .. here) or "")
 	end
 	local place = Value(entry, "place")
 	lines[#lines + 1] = ("   Place: %s, %s."):format(Shown("place", place), K.where[place] or "not laid out yet")
-	-- The shape the tracker is drawn in, and what the game refused of it.
 	local record, shape = records[entry.id], Value(entry, "shape")
 	if record and record.refused[shape] then
 		lines[#lines + 1] = ("   Shape: %s refused, drawn as an icon."):format(shape)
@@ -4054,7 +3590,6 @@ local function EntryLines(index, entry)
 	if ns.TrackerMarkLine then
 		lines[#lines + 1] = "   " .. ns.TrackerMarkLine(entry)
 	end
-	-- A kind that takes a click while Click to apply lets it says what a click does (TrackerClicks.lua); the others have no line.
 	local click = ns.TrackerClickLine and ns.TrackerClickLine(entry)
 	if Plain(click, "string") then
 		lines[#lines + 1] = "   " .. click
@@ -4127,7 +3662,6 @@ local function Check(number)
 			end
 		end
 	end
-	-- The procs of your class that show without being added, after the list, while the page is on.
 	local auto = ns.Enabled(KEY) and K.Auto(entries) or {}
 	if number == nil and #auto > 0 then
 		print(("Procs of your class: %d, shown without being added."):format(#auto))
@@ -4143,7 +3677,6 @@ local function Check(number)
 	print(SoundText())
 end
 
--- The game plays a sound of its own for each listed ID when its buff ends, until /reload.
 local function CheckSound()
 	if type(gameSound) == "table" then
 		local call = type(C_UnitAuras) == "table" and C_UnitAuras.RemoveAuraSound
@@ -4178,16 +3711,12 @@ local function CheckSound()
 	end
 end
 
--- The test -----------------------------------------------------------------------------------------
-
 local function SecretAuras()
 	local call = type(C_Secrets) == "table" and C_Secrets.ShouldAurasBeSecret
 	local ok, answer = pcall(call)
 	return ok and not IsSecret(answer) and answer == true
 end
 
--- A look for the test: the icon of the game's own drawing alone leaves the frame bare. Each sample takes the mouse as Tracker tooltips allows,
--- also on a tracker that was hidden before the test, so its tooltip shows; the Draw after the test gives the mouse back as the reading says.
 local function Bare(entry)
 	local record = records[entry.id]
 	if record then
@@ -4214,17 +3743,8 @@ local function Paint(entry, state, length)
 	end
 end
 
--- Test mode (TestMode.lua): while it is on, out of combat, with the page on, each tracker that is on and has a frame shows a sample in place of
--- its reading, fine, low and missing in turn, a step every 4 seconds while Moving is on (HeldStep), at full opacity whatever its Show says, so a
--- tracker set to Only when low or missing or Only in combat shows too. The sample has the widest numbers TrackerShapes.lua measures for, 20
--- charges and 10:00 left, and 2 charges and 0:20 left when low. Draw paints it at every pass, so a change of a row shows at once. A kind with a
--- test of its own (a proc) keeps its own drawing, but for the proc Procs.lua holds up (ns.ProcHeld), which shows fine; the look preview shows
--- every proc as its fine sample, with its rim, so its size and its place at the end of the row show too. The game's own drawing
--- (TrackerSlots.lua) stays off; the marks on the action buttons and the clicks keep what they had. Off and a fight end it, and the Refresh after
--- each draws every tracker from its reading again.
 K.HELD_STATES, K.HELD_LENGTH, K.HELD_LOW, K.HELD_COUNT, K.HELD_LOW_COUNT = { "fine", "low", "missing" }, 600, 20, 20, 2
 
--- True when the sample of a tracker was drawn.
 function K.HeldDraw(entry)
 	local held, record = K.held, records[entry.id]
 	if not held or not record or InCombatLockdown() or (held.only and held.only ~= entry.id) then
@@ -4232,7 +3752,6 @@ function K.HeldDraw(entry)
 	end
 	local kind = KINDS[entry.kind]
 	local own = kind ~= nil and type(kind.Test) == "function"
-	-- The look preview draws a proc too, as its fine sample with its rim and no art, glow or sound; test mode leaves it to Procs.lua.
 	if own and not held.preview and not (type(ns.ProcHeld) == "function" and ns.ProcHeld(entry) == true) then
 		return false
 	end
@@ -4242,7 +3761,6 @@ function K.HeldDraw(entry)
 		icon = EntryIcon(entry), count = entry.charged and state ~= "missing" and (low and K.HELD_LOW_COUNT or K.HELD_COUNT) or nil }
 	record.how = "live"
 	Apply(record, entry, Looks(entry, reading, "live"))
-	-- The tooltip says what the sample shows (K.TipLines).
 	record.sample = reading
 	record.curved = nil
 	if record.alpha ~= 1 then
@@ -4255,7 +3773,6 @@ function K.HeldDraw(entry)
 	return true
 end
 
--- Every tracker on screen takes its sample now.
 function K.HeldPaint()
 	for _, entry in ipairs(OnEntries()) do
 		if not testing[entry.id] then
@@ -4268,14 +3785,6 @@ function K.HeldStart()
 	K.held = { step = 1, at = Now() }
 end
 
--- The look preview: out of combat, with test mode off and no /flatui tracker test running, a change of a row of Look and position, or of When
--- missing, shows every tracker that is on as test mode's sample (K.HeldDraw), at full opacity, fine, or missing for When missing, in the new
--- look, the procs of your class among them as their fine sample with their rim (no art, glow or sound: nothing of Procs.lua runs); a change of
--- Shape, Icon size, Colour, Place, X, Y or When missing in Edit a tracker shows that tracker alone (only), and so do switching a tracker on and
--- Clear own settings. Adding a tracker, importing trackers or moving one up or down shows the whole row (K.RowPreview). The samples stay
--- until 4 seconds after the last change (K.PREVIEW): each change is a new hold, so the timer of an earlier one finds it replaced and leaves it,
--- and test mode's own hold (K.HeldStart) replaces it the same way. Draw's normal path then fades each tracker back to what it shows (K.Fade),
--- a proc that is down among them, and Close up the gaps closes the row again after the fade (K.Packed).
 K.PREVIEW = 4
 K.OWN_LOOK = { shape = true, size = true, colour = true, x = true, y = true, place = true, missing = true, on = true }
 
@@ -4296,16 +3805,12 @@ function K.Preview(only, step)
 	end)
 end
 
--- A tracker's own value of the look, set in Edit a tracker or by /flatui tracker set: that tracker alone takes its sample for a moment. A
--- tracker switched off shows nothing.
 function K.OwnPreview(entry, key)
 	if key and K.OWN_LOOK[key] and entry.on ~= false and K.CanPreview() then
 		K.Preview(entry.id, key == "missing" and 3 or 1)
 	end
 end
 
--- A tracker added, imported or moved: every tracker that is on takes its sample for a moment, or only that one (an id). The layout has run by
--- then, since out of combat QueueLayout lays the row out at once.
 function K.RowPreview(only)
 	if K.CanPreview() then
 		K.Preview(only, 1)
@@ -4326,7 +3831,6 @@ function K.HeldStep()
 	end
 end
 
--- Draws each look for 3 seconds and puts the real state back.
 local function Staged(entries, run)
 	local steps = {
 		function()
@@ -4343,8 +3847,6 @@ local function Staged(entries, run)
 			for _, entry in ipairs(entries) do
 				Paint(entry, "missing")
 			end
-			-- PlaySound may give no answer at all, which says nothing about whether the sound played.
-			-- Each kit the trackers use plays once.
 			local word, heard = "Sound: played.", {}
 			for _, entry in ipairs(entries) do
 				local kit = K.KITS[Value(entry, "kit")] or K.KITS.raid
@@ -4405,8 +3907,6 @@ local function Staged(entries, run)
 	Run(1)
 end
 
--- A kind with a Test(entry, on) is shown for K.TEST seconds with its icon up, Test(entry, true) at the start and Test(entry, false) at the end;
--- it gives the line to print when it has one.
 local function KindTest(entries, run)
 	for _, entry in ipairs(entries) do
 		local kind = KINDS[entry.kind]
@@ -4446,7 +3946,6 @@ local function Test(number)
 			group[#group + 1] = entry
 		end
 	end
-	-- The procs of your class are in the test of every tracker, with their art, glow and sound.
 	for _, entry in ipairs(number == nil and K.Auto() or {}) do
 		local kind = KINDS[entry.kind]
 		if records[entry.id] and kind ~= nil and type(kind.Test) == "function" then
@@ -4458,7 +3957,6 @@ local function Test(number)
 		return
 	end
 	testRun = testRun + 1
-	-- A test still running stops, and its trackers go back to their own thresholds and their real look.
 	for _, old in pairs(testing) do
 		Slot("LowTest", old, nil)
 		local kind = KINDS[old.kind]
@@ -4483,9 +3981,6 @@ local function Test(number)
 	end
 end
 
--- The commands -----------------------------------------------------------------------------------
-
--- A tracker by its number in the list or by its name.
 local function Find(text)
 	local entries = Entries()
 	if text:find("^%d+$") then
@@ -4590,8 +4085,6 @@ local function Slash(rest)
 	end
 end
 
--- The label of the row Add class trackers has the name of the class, which the page table cannot know when it loads: the game's own name
--- for the player's class, else the word class.
 local function ClassLabel()
 	local row = PageRow("addClass")
 	if row then
@@ -4603,15 +4096,9 @@ ClassLabel()
 
 local function Refresh()
 	ClassLabel()
-	-- The place is asked again when a Low at next needs it (K.Inside): the page may come back on after a loading screen it did not hear.
 	K.inside = nil
 	if ns.Enabled(KEY) then
 		Watch()
-		-- A fight that ended while the page was off, or while the module was stopped, was not heard: Core.lua gives PLAYER_REGEN_ENABLED only to
-		-- a module that is on, and Watch reads the fight only when it makes the watcher. Refresh runs while PLAYER_REGEN_DISABLED is handled, the
-		-- one moment of a fight before the lockdown (InCombatLockdown, RestrictedActionsDocumentation.lua:45-53), only from the pause of test mode,
-		-- whose frame hears that event before this module's (TestMode.lua), so fighting is still false then. Out of the lockdown a fight set here
-		-- is over: the trackers leave it here, a click is offered again (TrackerClicks.lua) and a tracker set to Only in combat hides.
 		if fighting and not InCombatLockdown() then
 			fighting = false
 			EndFight()
@@ -4623,7 +4110,6 @@ local function Refresh()
 		if ns.TrackerMarkSweep then
 			ns.TrackerMarkSweep()
 		end
-		-- The secure buttons of the clicks are freed out of combat (TrackerClicks.lua); in a fight they are off their trackers already.
 		if ns.TrackerClickSweep then
 			ns.OutOfCombat(function()
 				ns.TrackerClickSweep()
@@ -4639,9 +4125,6 @@ local function Refresh()
 	GameSound()
 end
 
--- Sound picked on the page: the page is refreshed, as without a changed function of the row (Core.lua's Changed), which also registers the
--- game's own sounds by the kit (GameSound), and out of combat the kit plays once, so the pick is heard. Only a pick in the options calls this.
--- It plays through ns.PlayKit, at most once a second, so the panel's own play of a pick right after it is not heard a second time over it.
 function ns.TrackerKitChanged()
 	ns.Try(KEY, Refresh)
 	if not InCombatLockdown() and type(ns.PlayKit) == "function" then
@@ -4649,8 +4132,6 @@ function ns.TrackerKitChanged()
 	end
 end
 
--- A row of Look and position, or When missing, changed on the page: the page is refreshed, as without a changed function of the row, and out of
--- combat every tracker that is on shows its sample in the new look for a few seconds (K.Preview), missing for When missing.
 function ns.TrackerLookChanged(path)
 	ns.Try(KEY, Refresh)
 	if K.CanPreview() then
@@ -4658,10 +4139,6 @@ function ns.TrackerLookChanged(path)
 	end
 end
 
--- Show at a ready check (on by default): out of combat, for K.READY seconds after READY_CHECK, every tracker read low or missing shows (Wanted),
--- also while mounted, in a city or with Only in combat, and one line in the chat names them, by the state each showed last (mem.kept); none
--- when all are fine. The procs (noDrop) and a tracker its kind hides now (an off hand with no weapon, a debuff with no target) are left out of
--- the line. The payload of the event, which may be withheld, is never read.
 K.READY = 12
 
 function K.ReadyCheck()
@@ -4713,7 +4190,6 @@ ns.Register(KEY, {
 		PLAYER_ALIVE = Dirty,
 		PLAYER_UNGHOST = Dirty,
 		PLAYER_MOUNT_DISPLAY_CHANGED = Dirty,
-		-- A flight path starts and ends (Hide while mounted or flying).
 		PLAYER_CONTROL_LOST = Dirty,
 		PLAYER_CONTROL_GAINED = Dirty,
 		PLAYER_UPDATE_RESTING = Dirty,
@@ -4727,7 +4203,6 @@ ns.Register(KEY, {
 	counted = "shown",
 })
 
--- Test mode: the samples of the trackers (K.HeldDraw), a step every 4 seconds.
 ns.TestMode.Register(KEY, {
 	module = KEY,
 	label = "Trackers",

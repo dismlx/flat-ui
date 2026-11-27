@@ -1,24 +1,9 @@
 local _, ns = ...
 
--- Proc triggers for a proc whose buff the game hides in a fight: your cast of the proc's spell (cast), a cast that has become instant or much
--- shorter (casttime) and an ability that has become usable (usable). Each is registered with ns.ProcTrigger (Procs.lua) and is read only while the
--- buff cannot be read, except usable, which says Either and is read also while the buff can be read and is missing, and alone for an ability the
--- class data watches by its use (Procs.lua, Raw): Overpower made usable by a dodge, Revenge by a block, dodge or parry and Execute by a target at
--- low health have no buff an addon can read (the game marks theirs not to be shown), and C_Spell.IsSpellUsable is plain in fights
--- (SpellDocumentation.lua:980-995) while the target's health is not. A cast of the spell ends its alert (Used). The frame of this file
--- hears the player's casts (UNIT_SPELLCAST_SUCCEEDED, which is withheld for some spells), a ping of UNIT_AURA that is never read,
--- SPELL_UPDATE_USABLE and ACTION_USABLE_CHANGED, the player's power, stance or form, the target and the target's health, and it is made when the
--- first proc with one of these triggers is in the list (the procs of the list and those of your class, ns.ProcEntries). C_Spell GetSpellInfo
--- gives castTime in milliseconds (Blizzard_CombatAudioAlertManager.lua:1150). Every value from the game is tested with ns.IsSecret before it is
--- compared, indexed or kept.
-
 local KEY = "trackers"
 local PART = "proctriggers"
 local IsSecret = ns.IsSecret
 
--- SHORTER: a cast time this share of the one at rest or less is clearly shorter. LOOK: the second look after an event, in seconds.
--- EVENTS: the events of the frame that have no unit. LOOKS: those of them that only ask for a look. UNITS: the events heard for one unit, by
--- the unit.
 local K = {
 	MAX_ID = 2147483647, SHORTER = 0.6, LOOK = 0.2,
 	EVENTS = { "SPELL_UPDATE_USABLE", "ACTION_USABLE_CHANGED", "UPDATE_SHAPESHIFT_FORM", "PLAYER_TARGET_CHANGED", "PLAYER_ENTERING_WORLD",
@@ -31,9 +16,6 @@ local K = {
 	NO_USABLE = "This client does not say when a spell is usable.",
 	INSTANT = "%s is instant already.",
 }
--- What is known: the frame and whether it hears the player alone, the casts heard, and by entry id the cast that started an alert, the alert a
--- cast time or a usable spell started, the cast time at rest, the last state of a usable spell and the rank it asks about. queued and late are
--- the looks waiting. units: by event of K.UNITS, true when it is heard for its unit alone.
 local T = { frame = nil, player = false, pending = false, casts = 0, queued = false, late = false, cast = {}, on = {}, rest = {}, last = {}, heard = {},
 	ask = {}, units = {} }
 
@@ -81,7 +63,6 @@ local function InCombat()
 	return not (ok and Plain(fighting, "boolean") and not fighting)
 end
 
--- The procs watched, in list order and then those of your class (ns.ProcEntries, Procs.lua), of one trigger or of all.
 local function Procs(trigger)
 	local found = {}
 	local all = type(ns.ProcEntries) == "function" and ns.ProcEntries() or {}
@@ -93,7 +74,6 @@ local function Procs(trigger)
 	return found
 end
 
--- The name of a spell, or nil.
 local function SpellName(spellID)
 	local call = type(C_Spell) == "table" and C_Spell.GetSpellName
 	if type(call) ~= "function" then
@@ -106,7 +86,6 @@ local function SpellName(spellID)
 	return nil
 end
 
--- The cast time of a spell in milliseconds with what is on the player now, or nil when the game gives none.
 local function CastTime(spellID)
 	local call = type(C_Spell) == "table" and C_Spell.GetSpellInfo
 	if type(call) ~= "function" then
@@ -123,7 +102,6 @@ local function CastTime(spellID)
 	return nil
 end
 
--- Whether the player knows a spell: true or false, nil when the game cannot say.
 local function KnownHere(spellID)
 	local book = C_SpellBook
 	if type(book) == "table" then
@@ -140,8 +118,6 @@ local function KnownHere(spellID)
 	return nil
 end
 
--- The rank of a usable proc's spell that is asked about: the highest the player knows (lights go from the lowest rank up), else the first. Kept
--- for the entry's list of lights until the spells change.
 local function Asked(entry)
 	local lights = type(entry.lights) == "table" and entry.lights or {}
 	local kept = T.ask[entry.id]
@@ -160,7 +136,6 @@ local function Asked(entry)
 	return light
 end
 
--- The icon of a spell, or nil.
 local function Texture(spellID)
 	local call = type(C_Spell) == "table" and C_Spell.GetSpellTexture
 	if type(call) ~= "function" or not Whole(spellID) then
@@ -173,7 +148,6 @@ local function Texture(spellID)
 	return nil
 end
 
--- Whether a spell is usable and whether power alone stops it: true or false, then true or false; nil when the game does not say.
 local function Usable(spellID)
 	local call = type(C_Spell) == "table" and C_Spell.IsSpellUsable
 	if type(call) ~= "function" then
@@ -190,13 +164,11 @@ local function Seconds(milliseconds)
 	return ("%g"):format(milliseconds / 1000)
 end
 
--- The first spell the proc is for, its name, or the name of the proc.
 local function LightName(entry)
 	local light = entry.lights and entry.lights[1]
 	return (Whole(light) and SpellName(light)) or entry.name or "This proc"
 end
 
--- An alert that starts: its time when it has one.
 local function Begin(entry)
 	local since, time = Now(), entry.time
 	local state = { since = since }
@@ -206,7 +178,6 @@ local function Begin(entry)
 	return state
 end
 
--- The reading of an alert: fine with its end while it is up, missing when it is down.
 local function Reading(state)
 	if not state then
 		return { state = "missing", hidden = false }
@@ -217,9 +188,6 @@ local function Reading(state)
 	return { state = "fine", hidden = false, expires = state.expires, length = state.length }
 end
 
--- Casts ---------------------------------------------------------------------------------------------------------------------------------
-
--- A cast of the player's: the proc's own spell starts the alert of a cast trigger, a spell it is for ends it, by its ID or by its name.
 local function Cast(spellID)
 	local name
 	for _, entry in ipairs(Procs("cast")) do
@@ -248,9 +216,6 @@ local function Cast(spellID)
 	end
 end
 
--- Looking ---------------------------------------------------------------------------------------------------------------------------
-
--- The cast time at rest of each cast time trigger, out of combat and with the buff off (a buff that makes the cast instant is not at rest).
 local function Rest()
 	if InCombat() then
 		return
@@ -266,7 +231,6 @@ local function Rest()
 	end
 end
 
--- A cast time that has become instant, or clearly shorter for an entry of kind shorter, starts the alert; the time at rest again ends it.
 local function LookTime(entry)
 	local id, light, rest = entry.id, entry.lights and entry.lights[1], T.rest[entry.id]
 	if not (rest and Whole(light)) then
@@ -287,10 +251,6 @@ local function LookTime(entry)
 	return false
 end
 
--- The highest rank known of a spell that was not usable and is: the alert starts, whether it was blocked or short of power (rage, energy or
--- mana for an ability the proc made usable, or the combo point of Overpower, which the game may count as power). Blocked again (the proc used or
--- gone, the wrong stance, a target above the health it needs): it ends. Short of power, it stays as it is: up while the proc lasts, down while it
--- does not. An alert whose time is out is over, so the next proc starts one again. The first answer after login starts nothing.
 local function LookUsable(entry)
 	local id, light = entry.id, Asked(entry)
 	if not Whole(light) then
@@ -331,7 +291,6 @@ local function Look()
 	end
 end
 
--- After an event: one look at once and one 0.2 seconds later, each asked for once however many events come.
 local function Schedule()
 	if not T.queued then
 		T.queued = true
@@ -355,8 +314,6 @@ local function Schedule()
 	end
 end
 
--- The frame ---------------------------------------------------------------------------------------------------------------------------
-
 local function Heard(event, ...)
 	if event == "UNIT_AURA" then
 		Schedule()
@@ -371,7 +328,6 @@ local function Heard(event, ...)
 		end
 		Schedule()
 	elseif K.UNITS[event] then
-		-- Heard for every unit when the game would not take the unit: only the one asked for is looked at.
 		local unit = ...
 		if not T.units[event] and (IsSecret(unit) or unit ~= K.UNITS[event]) then
 			return
@@ -380,7 +336,6 @@ local function Heard(event, ...)
 	elseif K.LOOKS[event] then
 		Schedule()
 	else
-		-- A new rank is asked about once the spells change.
 		if event == "SPELLS_CHANGED" or event == "PLAYER_ENTERING_WORLD" then
 			T.ask = {}
 		end
@@ -389,7 +344,6 @@ local function Heard(event, ...)
 	end
 end
 
--- True when the event is registered for the unit alone (the player when none is given).
 local function Listen(frame, event, unit)
 	if frame.RegisterUnitEvent then
 		local ok, registered = pcall(frame.RegisterUnitEvent, frame, event, unit or "player")
@@ -429,7 +383,6 @@ local function Make()
 	end)
 end
 
--- An entry with one of these triggers is in the list: the frame is made, out of combat.
 local function Seen()
 	if T.frame or T.pending then
 		return
@@ -445,8 +398,6 @@ local function Seen()
 	end
 end
 
--- The check ----------------------------------------------------------------------------------------------------------------------
-
 local function Noticed(entry)
 	return ("Your casts noticed: %d, %d for this proc."):format(T.casts, T.heard[entry.id] or 0)
 end
@@ -456,10 +407,6 @@ local function Time(entry)
 	return seconds > 0 and ("Time: %s seconds."):format(tostring(seconds)) or "Time: none, so a cast does not start an alert."
 end
 
--- The triggers -------------------------------------------------------------------------------------------------------------------------
-
--- A proc that is no longer on (Procs.lua, Gone): its alert and the last answer about it go, so it starts afresh if it comes back. The cast time
--- at rest is a measure of the spell and stays.
 local function Forget(id)
 	T.on[id], T.last[id], T.cast[id], T.ask[id] = nil, nil, nil, nil
 end
@@ -520,12 +467,9 @@ ns.ProcTrigger("casttime", {
 
 ns.ProcTrigger("usable", {
 	Text = "usable", Label = "usable", Seen = Seen, Either = true, Forget = Forget,
-	-- The spell was cast (Procs.lua, Cast): this alert is over, so the next time the spell becomes usable starts one, also while it is short of
-	-- power now (Overpower's combo point used) and within the time of this one.
 	Used = function(entry)
 		T.on[entry.id] = nil
 	end,
-	-- Up with the icon of the spell it is for, the rank asked about.
 	Read = function(entry)
 		if T.last[entry.id] == nil then
 			return nil

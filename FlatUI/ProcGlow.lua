@@ -1,55 +1,22 @@
 local _, ns = ...
 
--- Glow on the action button: while a proc is up, the button that casts the spell it is for gets the proc's border colour and a glow, in the look
--- the row Glow style gives it. Procs.lua calls ns.ProcGlowStart(entry, again) and ns.ProcGlowStop(entry), which tell the cooldown rows too
--- (ns.CooldownProcs, CooldownLooks.lua). The border is drawn by ns.SetButtonMark in ActionBars.lua. The glow is a frame of this addon next to the
--- button (a child of the button's parent, anchored to the button; on Flat UI's own buttons a child of the button itself, so it hides with a button
--- the layout hides past its bar's Number of icons), made out of combat and kept at alpha 0; in a fight only SetAlpha and SetScript
--- on its frames, the texture calls that colour its ring and halo, and the Play, Pause and Stop of its animation are run on it. A button the game
--- glows itself is left alone. This file is not a module.
--- Soft (the default): no burst; a ring of Flat UI's own (ns.Outline) 2 pixels wide just outside the button and a halo of Media/Shadow.tga 4 pixels
--- past it, in the proc's colour (gold when it has none), breathing from 25% to 60% and back, 1.2 s each way, so it hugs the button and leaves the
--- buttons beside it clear. As the game has it: as the game's alert does, the glow starts with the burst of its start flipbook (0.7 s, 150 units on
--- a button of 45) and then loops (1 s, 1.4 times the button, ActionButtonSpellAlerts.xml:3-33); without the game's atlas it is the soft one.
--- A proc that came again soon after it ended (again, Procs.lua) carries on: no burst, and the soft look breathes on from where it stopped.
--- A glow nothing wants any more (the proc ended or was used, Game glow on Flat UI's own buttons or the sample glow ended) fades out over 0.2 s, by
--- SetAlpha on its own frame, in a fight too; one that is wanted again meanwhile brightens again with no new burst. The game's own alert taking a
--- button over stops it at once.
--- A button Flat UI does not restyle glows too: Flat UI's own buttons, or the game's action bars unless Flat UI leaves them alone; it gets the
--- glow without the border. The glow frames of the buttons that hold the spells of the procs are made ahead, out of combat (ns.ProcGlowPrepare), so
--- the first proc of a fight glows at once. A proc whose entry says glow false (a proc any spell uses) lights no button. A change of Glow on the
--- action button or Glow style with the options window open shows the first proc of the class for 4 s (ns.ProcPreview, Procs.lua).
--- Whether or not the glow is on, the buttons that hold the spells of each proc that is up are kept (rec.up), so ns.ProcUpOn can say which bars hold
--- one: a bar faded on the Fading page or by the bar block comes back to full while a proc for a spell on it is up.
-
 local KEY = "trackers"
 local ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook"
 local START_ATLAS = "UI-HUD-ActionBar-Proc-Start-Flipbook"
--- The start flipbook is 150 units on the game's button of 45, and plays once in 0.7 seconds.
 local START_SIZE, START_SECONDS = 150 / 45, 0.7
 local SCALE = 1.4
 local GOLD = { 1, 0.82, 0 }
--- SOFT: the look Soft. RING: the ring's width and HALO how far the halo reaches past the button, in screen pixels; HALO_ALPHA: the halo's opacity.
--- LOW, HIGH, SECONDS: the breathing, from LOW to HIGH and back, SECONDS each way. FILE: white, its alpha rising over the outer quarter (EDGE) of
--- each side from clear to full, so a side and a corner of that quarter fade out away from the button.
 local SOFT = { RING = 2, HALO = 4, HALO_ALPHA = 0.8, LOW = 0.25, HIGH = 0.6, SECONDS = 1.2, EDGE = 0.25,
 	FILE = "Interface\\AddOns\\FlatUI\\Media\\Shadow.tga" }
 local REFUSED = "Proc glow: the game refused a call on an action button in a fight. The border is drawn without the glow."
 
--- active[entry.id] = { entry = entry, order = n, set = { [button] = true } }
 local active, seq = {}, 0
--- users[button][entry.id] = { r, g, b, order }: the procs that are up on a button
 local users = setmetatable({}, { __mode = "k" })
--- glows[button] = { frame, texture, start, soft, step, playing, look } once made, or false when it could not be made
 local glows = setmetatable({}, { __mode = "k" })
 local pending = setmetatable({}, { __mode = "k" })
--- gameAlert[button] = true while the game's own alert is up
 local gameAlert = setmetatable({}, { __mode = "k" })
--- drawn[button] = true while the border of a proc is drawn on it
 local drawn = setmetatable({}, { __mode = "k" })
 local hooked = false
--- ownGame[button] = true while the proc row asks for the game's glow on one of Flat UI's own buttons (ButtonEffects.lua). It shares the glow frame of
--- the tracker glow, so a button with both draws one glow.
 local ownGame = setmetatable({}, { __mode = "k" })
 
 local function Plain(value, kind)
@@ -60,12 +27,10 @@ local function Wanted()
 	return ns.Enabled(KEY) and ns.Get(KEY .. ".glow") == true
 end
 
--- The look the row Glow style asks for: "game" for As the game has it, else "soft".
 local function Style()
 	return ns.Get(KEY .. ".glowStyle") == "game" and "game" or "soft"
 end
 
--- The look a glow frame shows: the one Glow style asks for, else the other one the frame has, else none.
 local function LookOf(made)
 	if Style() == "game" and made.textured then
 		return "game"
@@ -97,12 +62,9 @@ local function SpellName(id)
 	return nil
 end
 
--- The game's action bars, for the buttons Flat UI does not restyle.
 local GAME_BARS = { "ActionButton", "MultiBarBottomLeftButton", "MultiBarBottomRightButton", "MultiBarLeftButton", "MultiBarRightButton",
 	"MultiBar5Button", "MultiBar6Button", "MultiBar7Button" }
 
--- Adds to the set the buttons Flat UI does not restyle that hold one of the names (lower case): Flat UI's own while they are built, else the
--- game's, unless Flat UI leaves the game's bars alone. What a button holds is only read (ns.ButtonAction, ActionBars.lua).
 local function Unstyled(names, set)
 	if type(ns.ButtonAction) ~= "function" or next(names) == nil then
 		return
@@ -133,7 +95,6 @@ local function Unstyled(names, set)
 	end
 end
 
--- The buttons that hold a spell the proc is for, as a set: the restyled ones, then the others. Names are asked, so every rank is found.
 local function Holders(entry)
 	local set, seen = {}, {}
 	if entry.glow == false or type(entry.lights) ~= "table" then
@@ -151,7 +112,6 @@ local function Holders(entry)
 			end
 		end
 	end
-	-- While Restyle action bars is on, the others are looked for only when no restyled button holds the spell.
 	if not ns.Enabled("actionbars") or next(set) == nil then
 		Unstyled(seen, set)
 	end
@@ -162,14 +122,9 @@ local function Refused()
 	ns.Note(KEY, REFUSED)
 end
 
--- The glow frame of a button: one texture with the game's flipbook, stepped from the frame's own OnUpdate. On a game's button the frame hangs from the
--- button's parent and is anchored to the button, so nothing is added under a protected button of the game's, and no animation group runs on a game
--- frame (EllesmereUI/EllesmereUIActionBars.lua:759-766, EllesmereUI/EUI_ActionBars_Glows.lua:114-120); on Flat UI's own button it hangs from the
--- button (ParentOf). Out of combat only.
 local ROWS, COLUMNS, FRAMES, SECONDS = 6, 5, 30, 1
 
 local function ParentOf(button)
-	-- Flat UI's own button (OwnBars.lua) is a frame of the addon's: its glow hangs from it, and shows and hides with it.
 	if type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button) then
 		return button
 	end
@@ -180,17 +135,14 @@ local function ParentOf(button)
 	return UIParent
 end
 
--- Shows one cell of a flipbook: the cell's rectangle inside the atlas's own (box: left, right, top, bottom).
 local function Cell(texture, box, index)
 	local column, row = index % COLUMNS, math.floor(index / COLUMNS)
 	local width, height = (box.right - box.left) / COLUMNS, (box.bottom - box.top) / ROWS
 	texture:SetTexCoord(box.left + column * width, box.left + (column + 1) * width, box.top + row * height, box.top + (row + 1) * height)
 end
 
--- FADE_OUT: the seconds a glow takes to fade out once nothing wants it, as the art beside the character fades out (ProcArt.lua).
 local FADE_OUT = 0.2
 
--- A glow stops for good: no more steps, alpha 0, the soft pulse held where it is for a proc that comes again (Play, carry).
 local function Stopped(made)
 	made.fadeLeft = nil
 	if not pcall(function()
@@ -205,9 +157,6 @@ local function Stopped(made)
 	end
 end
 
--- The glow shows while its button does: the container stays shown over an empty slot, so the button is asked each frame. In the game's look
--- the burst plays first, once, then the loop; the soft look breathes by its own animation. A glow that fades out (fadeLeft) goes down from
--- that to 0 over FADE_OUT seconds, still stepping, and then stops.
 local function Tick(made, seconds)
 	made.clock = made.clock + seconds
 	local ok, visible = pcall(made.button.IsVisible, made.button)
@@ -250,7 +199,6 @@ local function Tick(made, seconds)
 	Cell(made.texture, made, math.floor((clock % SECONDS) / SECONDS * FRAMES))
 end
 
--- The rectangle of an atlas in its file, or nil when the game does not have it.
 local function AtlasBox(name)
 	if not (C_Texture and C_Texture.GetAtlasInfo) then
 		return nil
@@ -268,8 +216,6 @@ local function AtlasBox(name)
 	return box
 end
 
--- The halo of the soft look: the outer quarter of the shadow file along each side of the frame and at each corner, reaching `spill` past it,
--- full at the frame's edge and clear at its far side. Nothing covers the frame itself.
 local function Halo(frame, spill)
 	local e, pieces = SOFT.EDGE, {}
 	local function Piece(left, right, top, bottom)
@@ -280,7 +226,6 @@ local function Halo(frame, spill)
 		pieces[#pieces + 1] = texture
 		return texture
 	end
-	-- Top, bottom, left and right: two points along the side, then its depth, as a height or a width.
 	for _, side in ipairs({
 		{ "BOTTOMLEFT", "TOPLEFT", "BOTTOMRIGHT", "TOPRIGHT", e, 1 - e, 0, e, "SetHeight" },
 		{ "TOPLEFT", "BOTTOMLEFT", "TOPRIGHT", "BOTTOMRIGHT", e, 1 - e, 1 - e, 1, "SetHeight" },
@@ -292,7 +237,6 @@ local function Halo(frame, spill)
 		piece:SetPoint(side[3], frame, side[4], 0, 0)
 		piece[side[9]](piece, spill)
 	end
-	-- The corners: top left, top right, bottom left, bottom right.
 	for _, corner in ipairs({
 		{ "BOTTOMRIGHT", "TOPLEFT", 0, e, 0, e }, { "BOTTOMLEFT", "TOPRIGHT", 1 - e, 1, 0, e },
 		{ "TOPRIGHT", "BOTTOMLEFT", 0, e, 1 - e, 1 }, { "TOPLEFT", "BOTTOMRIGHT", 1 - e, 1, 1 - e, 1 },
@@ -304,7 +248,6 @@ local function Halo(frame, spill)
 	return pieces
 end
 
--- The colour of a soft look: colour calls on its textures, so it may change in a fight.
 function ns.ProcGlowTint(look, r, g, b)
 	if type(look) ~= "table" or (look.r == r and look.g == g and look.b == b) then
 		return
@@ -318,15 +261,12 @@ function ns.ProcGlowTint(look, r, g, b)
 	end
 end
 
--- The soft look: a frame of the addon, a child of `parent` over all of `anchor` (the button), with the ring and the halo in gold, at alpha 0;
--- look.pulse breathes it from SOFT.LOW to SOFT.HIGH and back. Out of combat only. The setup drawing shows it too (SetupDrawTrackers.lua, mock-proc).
 function ns.ProcGlowSoft(parent, anchor)
 	local frame = CreateFrame("Frame", nil, parent)
 	ns.Own[frame] = true
 	frame:SetAllPoints(anchor)
 	frame:SetAlpha(0)
 	local look = { frame = frame, high = SOFT.HIGH }
-	-- An outline of Flat UI's own, its edges only, as the rings of the cooldown icons (CooldownLooks.lua, Ring).
 	look.ring = ns.Outline(frame, frame)
 	if look.ring then
 		ns.SetOutline(look.ring, true, false)
@@ -381,7 +321,6 @@ local function MakeGlow(button)
 			texture:Hide()
 		end
 	end
-	-- The burst of the start flipbook, larger than the button and centred on it; without it the loop starts at once.
 	local box = made.textured and AtlasBox(START_ATLAS)
 	if box then
 		local start = frame:CreateTexture(nil, "ARTWORK", nil, 1)
@@ -394,7 +333,6 @@ local function MakeGlow(button)
 			start:Hide()
 		end
 	end
-	-- The soft look, over the button itself; a client that refuses it keeps the game's.
 	local fine, soft = pcall(ns.ProcGlowSoft, frame, button)
 	if fine and type(soft) == "table" then
 		made.soft = soft
@@ -407,8 +345,6 @@ local function MakeGlow(button)
 	return made
 end
 
--- Shows a look of a glow frame and hides the other: alpha and animation calls on frames of the addon only, so it may run in a fight. carry: the
--- glow goes on where it was, so the soft look breathes on from where it stopped.
 local function SetLook(made, look, carry)
 	made.look, made.bursting = look, nil
 	local soft = made.soft
@@ -430,8 +366,6 @@ local function SetLook(made, look, carry)
 	end
 end
 
--- carry: a proc that came again soon after it ended (Procs.lua): the game's look goes on with its loop, without the burst. A glow that is
--- playing takes the look Glow style asks for now.
 local function Play(made, carry)
 	local look = LookOf(made)
 	if made.playing then
@@ -443,7 +377,6 @@ local function Play(made, carry)
 	if not look then
 		return
 	end
-	-- Still fading out: the same glow brightens again where it is, with no new burst.
 	if made.fadeLeft then
 		made.fadeLeft = nil
 		carry = true
@@ -456,15 +389,12 @@ local function Play(made, carry)
 		SetLook(made, look, carry)
 		made.frame:SetAlpha(1)
 		made.frame:SetScript("OnUpdate", made.step)
-		-- The first cell at once, so the loop's last cell never shows before the burst.
 		Tick(made, 0)
 	end) then
 		Refused()
 	end
 end
 
--- A glow nothing wants any more fades out over FADE_OUT seconds (Tick); now: it stops at once, as when the game's own alert takes the button over,
--- also a glow that was fading out.
 local function Halt(made, now)
 	if not made.playing then
 		if now and made.fadeLeft then
@@ -483,7 +413,6 @@ end
 
 local Refresh
 
--- The frame is made once, when the button has none and the fight is over.
 local function Want(button)
 	if glows[button] ~= nil or pending[button] then
 		return
@@ -505,8 +434,6 @@ local function Want(button)
 	end)
 end
 
--- What a button shows now: the border of the proc that came up first, and the glow unless the game glows it, in that proc's colour (gold for
--- the glow of the game's proc on one of Flat UI's own buttons alone). carry: the proc came again soon after it ended (Play).
 Refresh = function(button, carry)
 	local list, first = users[button], nil
 	for _, mark in pairs(list or {}) do
@@ -553,7 +480,6 @@ local function Release(button, id)
 	Refresh(button)
 end
 
--- The buttons of a proc are the set: the ones that held it before and are not in it lose it.
 local Sync
 
 local function Apply(rec, set, carry)
@@ -577,12 +503,10 @@ local function Apply(rec, set, carry)
 	rec.set = set
 end
 
--- The game's own alert on a button: one more thing to leave alone, and the glow of this addon comes back when the game's goes.
 function Sync(button)
 	if not Plain(button, "table") then
 		return
 	end
-	-- One of Flat UI's own buttons has no alert of the game's.
 	if type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button) then
 		gameAlert[button] = nil
 		return
@@ -601,9 +525,6 @@ function Sync(button)
 	end
 end
 
--- The game's call is never answered inside the call: ShowAlert and HideAlert run in the game's own pass for the button, so each one only
--- marks the button, and the next frame asks the manager what it holds (EllesmereUICooldownManager/EUI_CDM_Glows.lua:841-868 follows the
--- same two calls on the same table; ActionButtonSpellAlerts.lua:1 makes it a plain table, not a frame).
 local asked, waiting = {}, false
 
 local function Settle()
@@ -633,16 +554,13 @@ local function Ask(_, button)
 	end
 end
 
--- A hook on the manager table, which is a singleton: no frame gets a field, and taintLog does not hold it back.
 local function Hook()
 	if hooked or type(ActionButtonSpellAlertManager) ~= "table" or type(hooksecurefunc) ~= "function" then
 		return
 	end
-	-- Only Flat UI's own buttons are styled: the game's alert manager has nothing to say about them.
 	if type(ns.OwnLookOnly) == "function" and ns.OwnLookOnly() then
 		return
 	end
-	-- Nothing is hooked or registered in the game's action button code while Restyle action bars is off and Flat UI leaves the game's bars alone.
 	if ns.HandsOff() and not ns.Enabled("actionbars") then
 		return
 	end
@@ -655,11 +573,8 @@ local function Hook()
 	pcall(hooksecurefunc, manager, "HideAlert", Ask)
 end
 
--- The procs whose buttons get their glow frames ahead, kept for when the buttons hold something else.
 local prepared = {}
 
--- Out of combat, makes the glow frames of the buttons that hold the spells of the procs, so the first proc of a fight glows at once (a frame is
--- made only out of combat). entries: the procs watched (ns.ProcEntries), or nil for the ones given last.
 function ns.ProcGlowPrepare(entries)
 	if type(entries) == "table" then
 		prepared = entries
@@ -678,12 +593,10 @@ function ns.ProcGlowPrepare(entries)
 	end
 end
 
--- A proc came up. again: it came again soon after it ended (Procs.lua, Start), so its glow carries on without the burst.
 function ns.ProcGlowStart(entry, again)
 	if type(entry) ~= "table" or entry.id == nil then
 		return
 	end
-	-- The icons of its spells on the cooldown rows glow too, with Glow on procs (CooldownLooks.lua); not for a proc any spell uses.
 	if type(ns.CooldownProcs) == "function" and entry.glow ~= false then
 		pcall(ns.CooldownProcs, entry, true)
 	end
@@ -695,7 +608,6 @@ function ns.ProcGlowStart(entry, again)
 		active[entry.id] = rec
 	end
 	rec.entry = entry
-	-- The buttons that hold its spells, whether or not they glow: a faded bar that holds one comes back to full while it is up (ns.ProcUpOn).
 	rec.up = Holders(entry)
 	local set = Wanted() and rec.up or {}
 	for button in pairs(set) do
@@ -704,8 +616,6 @@ function ns.ProcGlowStart(entry, again)
 	Apply(rec, set, again == true)
 end
 
--- The glow of the game's proc on one of Flat UI's own buttons, given by the proc row of the Glows and animations page: on is true while the spell of the
--- button's slot glows.
 function ns.ProcGlowOwn(button, on)
 	if not Plain(button, "table") then
 		return
@@ -731,9 +641,6 @@ function ns.ProcGlowStop(entry)
 	end
 end
 
--- A row of the glow changed. Glow on the action button: the procs that are up take the border and the glow, or give them back. Glow style: every
--- glow that is playing takes the new look at once, and so do the art's pulse (ProcArt.lua) and the glow on the cooldown icons (CooldownLooks.lua).
--- Either way, with the options window open, out of combat and with test mode off, the first proc of the class then shows for 4 s (ns.ProcPreview).
 function ns.ProcGlowChanged(path)
 	for _, rec in pairs(active) do
 		rec.up = Holders(rec.entry)
@@ -751,20 +658,16 @@ function ns.ProcGlowChanged(path)
 			end
 		end
 	end
-	-- The first proc of the class shows for a moment in the new look (Procs.lua); ns.ProcArtChanged has already asked for it on Glow style.
 	if path ~= KEY .. ".glowStyle" and type(ns.ProcPreview) == "function" then
 		ns.ProcPreview()
 	end
 end
 
--- The game bar of a game button, by the name of the button without its number (as Blocks.lua names them), and that answer kept per button.
 local BAR_FRAMES = { ActionButton = "MainActionBar", MultiBarBottomLeftButton = "MultiBarBottomLeft", MultiBarBottomRightButton = "MultiBarBottomRight",
 	MultiBarRightButton = "MultiBarRight", MultiBarLeftButton = "MultiBarLeft", MultiBar5Button = "MultiBar5", MultiBar6Button = "MultiBar6",
 	MultiBar7Button = "MultiBar7" }
 local barOf = setmetatable({}, { __mode = "k" })
 
--- True when a button is on the bar of that game name: one of Flat UI's own buttons on the Flat UI bar that takes its place (own, ns.OwnBarOf), a
--- game's button by its name.
 local function OnBar(button, name, own)
 	local n = type(ns.OwnBar) == "function" and ns.OwnBar(button)
 	if n then
@@ -780,9 +683,6 @@ local function OnBar(button, name, own)
 	return bar == name
 end
 
--- True while a proc is up for a spell a button of the bar of this game name holds (MainActionBar, MultiBarBottomLeft and the rest), whether or not
--- Glow on the action button is on; never for a proc any spell uses. Fading (its row While a proc is up) and the bar block (Full opacity while a proc
--- is up) hold that bar at full while it is (Fade.lua, BarBlock.lua). Only reads.
 function ns.ProcUpOn(name)
 	if not Plain(name, "string") or next(active) == nil then
 		return false
@@ -798,7 +698,6 @@ function ns.ProcUpOn(name)
 	return false
 end
 
--- A line for /flatui tracker check.
 function ns.ProcGlowLine(entry)
 	if ns.Get(KEY .. ".glow") ~= true then
 		return "Glow: off"
@@ -825,7 +724,6 @@ function ns.ProcGlowLine(entry)
 		ns.Enabled("actionbars") and "" or " (no border while Restyle action bars is off)")
 end
 
--- The buttons hold something else: the buttons of every proc that is up are found again.
 if type(ns.OnButtonsChanged) == "function" then
 	ns.OnButtonsChanged(function()
 		for _, rec in pairs(active) do
@@ -835,8 +733,6 @@ if type(ns.OnButtonsChanged) == "function" then
 	end)
 end
 
--- Flat UI's buttons made after login, or the game's styled after them: the alert manager is followed once a game button is among them and a proc is up.
--- The glow frames of the buttons that now hold a proc's spell are made ahead.
 if type(ns.OnButtonsChanged) == "function" then
 	ns.OnButtonsChanged(function()
 		if next(active) ~= nil then

@@ -1,55 +1,11 @@
 local _, ns = ...
 
--- Setup drawings of steps 23 to 27: mock-cast-bar (cast bar look, size, text and icon), mock-resource (personal resource display) and mock-swing
--- (swing timers). Each is { build(stage), draw(stage), parts = { [path] = region } } as research/flatui-wizard/design.md 4.2 says. build makes the
--- frames once per stage, draw reads the settings only through ns.Get and sets what they decide, so under a draft view it draws the draft.
--- A drawing has the real size in interface units: the first child of the stage is its root, anchored at the middle of the stage, and
--- drawing.size(stage) gives its width and height for the window to scale. drawing.outlines lists the outlines it made.
---
--- What each look is built from, so it matches what the module paints (Bars.lua):
---   cast bars: the border and background of ApplyCastBar (Bars.lua:597-622), the plate behind the spell name, the spark, the shield, the icon and
---   the spell name of ApplyCastParts and ns.CastText (Bars.lua:707-816), the cover colour of CastColour (956-972), the marks of Marks (1020-1088),
---   the sizes and the place of the spell name of CastBarSize.lua:92-150, the rank after the spell name of CastRank.lua, the tick marks of a
---   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks) in Channel tick colour (0.5.42), dim where the channel has
---   passed them, the pushback past
---   the right end of the player bar of CastTime.lua (+0.4 on the first row), the whole cast after the seconds left while Total cast time too is
---   on (1.0 / 2.5 on the first row), and the interrupt colours of Interrupt.lua on the Target row (ready), the Focus row (on cooldown) and the
---   Target, out of range row (Frostbolt, ready but out of range, 0.5.39) while Interrupt readiness is on: on the fill with Flat fill, else on the
---   strip along the bar's bottom edge, Interrupt strip height thick; the name of the cast's target ("> Jon", in a warrior's class colour, 0.5.41)
---   past the end of the Target row while Target of enemy casts is on, a sample "4" inside the left end of the Focus row in Interrupt on cooldown
---   colour while Seconds until your interrupt is ready is on (0.5.42), the pushback in Pushback colour, and the latency zone (in Latency zone
---   colour, 0.5.41) and the spell icon of the player and pet bars while their rows are on, with or without Flat fill (0.5.39; with Flat fill only before).
---   resource display: ApplyResourceBar, JoinBar, ApplyResourceFill, ApplyResourceText (Bars.lua:78-165), the custom colours (Bars.lua:195-250).
---   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530), and the
---   Queued ability colour of Q over the first main hand timer in the second half of each of its swings.
--- Sizes and places of the game's own parts come from the client's interface source:
---   Blizzard_UIPanels_Game/Mainline/CastingBarFrame.xml:198-204, 241-252, 313-318, 326-331 (player and pet bar: plate 12 below the bar, shield 29 by 33 at
---   -27, 4, icon 16 by 16 at -5, spell name at the top -10, spark 8 by 20), CastingBarFrame.xml:399-452 (small bar: icon 20 by 20 at -2, -5, spark 6 by 16,
---   spell name at the top -8), Blizzard_UnitFrame/Mainline/TargetFrame.xml:543-548 (target bar 150 by 10);
---   Blizzard_SwingTimer/Blizzard_SwingTimer.xml:12-56 (the bar sits 5 and 4 inside its frame, the name shadow is 171 wide, the labels 10 from each end),
---   Blizzard_SwingTimer.lua:265-276, 340-377, 425-448 (the fill grows from 0 to 1, the pip is at its end, the time left has one decimal, the dimmed
---   timer and red text out of range).
--- The client has no personal resource display source in the public mirror, so the size and the colours of the game's own look of those bars are
--- fixed samples here.
--- A part left to the game is its atlas when C_Texture answers for the atlas, else plain grey; while a shown part is grey the drawing shows a Game look
--- label at the bottom right (drawing.gameLook(stage) says whether). Besides the shared functions the brief names, the drawing calls their companions
--- ns.OwnText, ns.SetOutline, ns.SetOutlineColour, ns.Pixels and ns.IsSecret.
--- Fixed samples: the part of each bar that is filled, the sample numbers, the latency zone (5 percent of the player bar), the swing times.
--- ns.DrawCasts gives test mode's stand-ins (TestHud.lua) the same painters for one bar: DC.Cast and DC.PaintCast for a cast bar in a state (cast,
--- channel, interrupted or shield, the interrupted one in Interrupted colour or the game's interrupted fill) at a share of its run, an enemy's in
--- the interrupt colour its kick names (ready, cooling or far), DC.Swing and DC.PaintSwing for a swing timer (the main hand of a warrior, druid or
--- hunter with Queued ability colour over the second half of each swing), and DC.CastProgress and DC.SwingProgress for the parts that move (the
--- player bar's pushback, +0.4 over the second half of a cast and through the Interrupted hold, and -0.8 of a channel). The player and pet icon,
--- the pushback and the name of the cast's target stay while the cast is interrupted, as the live bars keep them through that hold (0.5.42).
-
 ns.SetupDrawings = ns.SetupDrawings or {}
 
--- The width of the personal resource display at Bar width 100 (Blizzard_PersonalResourceDisplay.xml:41): the width of a matched cast bar and swing timer.
 local DISPLAY_WIDTH = 200
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local SPELL_ICON = "Interface\\Icons\\Spell_Shadow_ShadowBolt"
--- Class colour when the client does not answer for the player: a warrior.
 local SAMPLE_CLASS = { 0.78, 0.61, 0.43 }
 local JUSTIFY = { left = "LEFT", center = "CENTER", right = "RIGHT" }
 local GREY = { 0.72, 0.72, 0.72 }
@@ -62,7 +18,6 @@ local function Max(a, b)
 	return a > b and a or b
 end
 
--- Frames and regions of the drawing are the addon's own, so no module restyles them.
 local function NewFrame(parent)
 	local frame = CreateFrame("Frame", nil, parent)
 	ns.Own[frame] = true
@@ -79,7 +34,6 @@ local function NewText(parent, fontObject)
 	return ns.OwnText(parent, "OVERLAY", fontObject or "GameFontHighlightSmall")
 end
 
--- The player's class colour, or a fixed one when the client does not say.
 local function ClassRGB()
 	local r, g, b = ns.ClassColour()
 	if r then
@@ -93,8 +47,6 @@ local function Place(region, point, relativeTo, relativePoint, x, y)
 	region:SetPoint(point, relativeTo, relativePoint, x or 0, y or 0)
 end
 
--- A colour or an image file in a colour as the fill of a bar that is cut at `part` of its width, the way a status bar cuts its texture.
--- reverse puts it at the right end.
 local function FillBar(fill, bar, width, part, reverse, file, r, g, b, atlas)
 	local w = width * part
 	fill:ClearAllPoints()
@@ -120,8 +72,6 @@ local function FillBar(fill, bar, width, part, reverse, file, r, g, b, atlas)
 	end
 end
 
--- Whether the client has an atlas, asked the way Core.lua asks for a class icon, once for each atlas: the client's atlases do not change in a session,
--- and test mode's stand-ins ask on every frame they move (TestHud.lua).
 local atlasKnown = {}
 local function AtlasExists(name)
 	if name == nil then
@@ -143,8 +93,6 @@ local function AtlasExists(name)
 	return exists
 end
 
--- A part the game draws: its atlas when the client answers for it, else a plain grey version, which the drawing labels Game look
--- (research/flatui-wizard/design.md 4.4). Returns whether the atlas was used.
 local GAME_GREY = { 0.5, 0.5, 0.5, 1 }
 local function GameTexture(inst, region, atlas, colour)
 	colour = colour or GAME_GREY
@@ -159,8 +107,6 @@ local function GameTexture(inst, region, atlas, colour)
 	return false
 end
 
--- The game's own frame art of a bar: a back and a border. kind has the atlas of each and the border's anchors (nil: the whole frame); with no atlas
--- the back is plain grey and the border is four grey edges outside the frame.
 local function NewArt(inst, frame, kind)
 	local art = { inst = inst, kind = kind or {}, back = NewTexture(frame, "BACKGROUND", -7), border = NewTexture(frame, "BORDER", 1), edges = {} }
 	art.back:SetAllPoints(frame)
@@ -193,7 +139,6 @@ local function ShowArt(art, shown)
 	shown = shown and true or false
 	local inst, kind = art.inst, art.kind
 	local atlasFrame = kind.frame and AtlasExists(kind.frame)
-	-- Painted whether or not it shows, so a hidden bar looks the same as one that never showed.
 	GameTexture(inst, art.back, kind.back, { 0.15, 0.15, 0.15, 0.9 })
 	GameTexture(inst, art.border, atlasFrame and kind.frame or nil)
 	for _, texture in ipairs(art.edges) do
@@ -204,16 +149,12 @@ local function ShowArt(art, shown)
 	art.border:SetShown(shown and atlasFrame and true or false)
 end
 
--- Size, shown state and colour of a text. percent is the share of the size the game gave the font; a colour is nil for the game's.
--- outline is the id of a text outline row, or nil for the game's flags.
 local function Look(text, percent, r, g, b, outline)
 	if text then
 		ns.TextStyle(text, { percent = percent, r = r, g = g, b = b, flags = outline and ns.OutlineFlags(outline) or nil })
 	end
 end
 
--- The colour of the health left at a fixed share. The curve is the three colours of the Colours page, low at 0, half at 0.5, full at 1
--- (HealthColour.lua:47-56); ns.HealthLeftColour answers when the build has it.
 local function HealthLeft(part)
 	if ns.HealthLeftColour then
 		return ns.HealthLeftColour(part)
@@ -229,8 +170,6 @@ local function HealthLeft(part)
 	return r1 + (r2 - r1) * at, g1 + (g2 - g1) * at, b1 + (b2 - b1) * at
 end
 
--- A drawing keeps one instance per stage.
--- drawing.parts and drawing.outlines stay those of the first stage; tiles and other stages are asked with drawing.partsOf(stage) and outlinesOf(stage).
 local function Instance(made, stage, drawing, build)
 	local inst = made[stage]
 	if not inst then
@@ -252,7 +191,6 @@ local function Instance(made, stage, drawing, build)
 	return inst
 end
 
--- Shows the Game look label while a shown part is grey for want of the game's atlas.
 local function ShowGameLook(inst)
 	local any = false
 	for region in pairs(inst.grey) do
@@ -280,10 +218,6 @@ local function SizeOf(made, stage)
 	return inst.root:GetWidth(), inst.root:GetHeight()
 end
 
--- Cast bars ---------------------------------------------------------------------------------------------------
-
--- time: the seconds left; total: the whole cast, after them while Total cast time too is on (CastTime.lua); aim: the name of the cast's target past
--- the bar's end while Target of enemy casts is on (CastTime.lua), in the class colour of aimClass (the player's own class when it has none).
 local CAST_ROWS = {
 	{ opt = "player", label = "Player", name = "Shadow Bolt", rank = "Rank 3", state = "cast", part = 0.6, game = { 208, 11 }, time = "1.0", total = "2.5",
 		push = "+0.4" },
@@ -299,15 +233,11 @@ local CAST_ROWS = {
 	{ opt = "player", label = "Player, channel", name = "Drain Life", state = "channel", part = 0.55, game = { 208, 11 }, ticks = 5, time = "2.7",
 		total = "5.0" },
 }
--- The game's size of each bar (the rows above, and the boss bars of TargetFrame.xml:543-548, small bars as the target's).
 local CAST_GAME = { player = { 208, 11 }, pet = { 195, 13 }, target = { 150, 10 }, focus = { 150, 10 }, boss = { 150, 10 } }
 local CAST_COLOURS = { cast = "castbars.castColour", channel = "castbars.channelColour", shield = "castbars.shieldColour",
 	interrupted = "castbars.interruptedColour" }
--- The atlas of the fill the game draws, by state (CastingBarFrame.xml:189, CastingBarFrame.lua:21-30 for the type names; the interrupted one as Bars.lua
--- reads it).
 local CAST_ATLAS = { cast = "ui-castingbar-filling-standard", channel = "ui-castingbar-filling-channel", shield = "ui-castingbar-uninterruptable",
 	interrupted = "ui-castingbar-interrupted" }
--- The border and the back of a cast bar (CastingBarFrame.xml:218-224, 253-258, 409-436) and the plate behind the spell name (xml:198, 403).
 local CAST_ART = { frame = "ui-castingbar-frame", back = "ui-castingbar-background", inset = { -1, 2, 1, -2 } }
 local GAME_PLATE, GAME_SHIELD, GAME_PIP = "ui-castingbar-textbox", "ui-castingbar-shield", "ui-castingbar-pip"
 local CAST_TEXT_WIDTH = 185
@@ -316,10 +246,6 @@ local CAST_LEFT, CAST_LABEL_GAP = 44, 30
 local castMade = setmetatable({}, { __mode = "k" })
 local castDrawing = {}
 
--- One cast bar on `parent`: its frame, the game's art, the plate behind the spell name, the fill, the spark, the icon, the latency zone of the player
--- bar, the shield of a bar that may show one (spec.shield), the outline, the spell name, the time of a bar with spec.time, the tick marks of a
--- channel of spec.ticks ticks (CastTicks.lua) and the pushback of a player bar (CastTime.lua), spec.push on a setup row. inst holds the grey parts
--- and the outlines of the drawing it belongs to.
 local function NewCastBar(inst, parent, spec)
 	local row = { spec = spec, inst = inst }
 	local bar = NewFrame(parent)
@@ -346,7 +272,6 @@ local function NewCastBar(inst, parent, spec)
 			row.ticks[k] = mark
 		end
 	end
-	-- The interrupt strip of the small bars with Flat fill off (Bars.lua): Interrupt strip height (2 screen pixels at first) along the bottom edge.
 	if spec.small then
 		row.kickStrip = NewTexture(bar, "OVERLAY", 3)
 		row.kickStrip:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
@@ -373,7 +298,6 @@ local function NewCastBar(inst, parent, spec)
 			row.time:SetText(spec.time)
 		end
 	end
-	-- The seconds until the player's interrupt is ready, inside the left end of an enemy cast it is on cooldown for (CastTime.lua, 0.5.42).
 	if spec.kick == "cooling" then
 		row.kickTime = NewText(bar)
 		if row.kickTime then
@@ -416,7 +340,6 @@ local function BuildCast(stage)
 		end
 		inst.rows[index] = row
 	end
-	-- The first row of each place stands for the setting rows of that place.
 	local p, rows = inst.parts, inst.rows
 	for _, row in ipairs(rows) do
 		local opt = row.spec.opt
@@ -425,7 +348,6 @@ local function BuildCast(stage)
 		end
 	end
 	local player, target, focus = rows[1], rows[3], rows[4]
-	-- The rows found by what they show: the cast out of the interrupt's range and the one that cannot be interrupted.
 	local far, shielded = focus, nil
 	for _, row in ipairs(rows) do
 		if row.spec.kick == "far" then
@@ -455,13 +377,10 @@ local function BuildCast(stage)
 	p["castbars.targetOwn"] = target.fill
 	p["castbars.targetCast"] = target.fill
 	p["castbars.targetChannel"] = focus.fill
-	-- The interrupt colours: the Target row is ready, the Focus row on cooldown and the Target, out of range row ready but out of its range, on the
-	-- fill with Flat fill and on the strip without.
 	p["castbars.interrupt"], p["castbars.interruptReady"] = target.bar, target.bar
 	p["castbars.interruptCooling"], p["castbars.interruptFar"] = focus.bar, far.bar
 	p["castbars.interruptStrip"] = target.bar
 	p["castbars.playerText"] = player.text
-	-- Spell rank on the player bar writes the rank after the name (CastRank.lua).
 	p["castbars.rank"] = player.text
 	for _, path in ipairs({ "textSize", "textOutline", "textShow", "textAlign", "textOwn", "textColour" }) do
 		p["castbars." .. path] = player.text
@@ -477,10 +396,6 @@ local function BuildCast(stage)
 	return inst
 end
 
--- The colour of the fill of a state on a place, as CastColour gives it (Bars.lua): an enemy's cast or channel takes the colour of the player's
--- interrupt (kick: "ready" or true, "cooling" for on cooldown, "far" for ready while the caster is out of its range) while Interrupt readiness on
--- enemy casts is on, the player bar its class colour with Class colour, the target and focus bars their own colours, else the cast colours of the
--- Flat UI page.
 local KICK_COLOURS = { ready = "castbars.interruptReady", cooling = "castbars.interruptCooling", far = "castbars.interruptFar" }
 local function CastFillColour(opt, state, kick)
 	if kick and (state == "cast" or state == "channel") and G("castbars.interrupt") == true then
@@ -493,8 +408,6 @@ local function CastFillColour(opt, state, kick)
 	return ns.Colour(CAST_COLOURS[state] or CAST_COLOURS.cast)
 end
 
--- Where the spell name goes on a bar. The player and pet bars have a name 185 wide at the top, 10 down (CastingBarFrame.xml:313-318); the small bars
--- stretch it across the bar, 8 down (xml:449-455). The player bar with a size of its own puts it below or inside, centred (CastBarSize.lua:60-70).
 local function PlaceCastText(text, bar, mode)
 	text:ClearAllPoints()
 	if mode == "top8" then
@@ -512,7 +425,6 @@ local function PlaceCastText(text, bar, mode)
 	end
 end
 
--- What the rows of the page say for every bar, read once for a paint. game: the look the game gives a bar Flat UI does not style (the boss bars).
 local function CastLook(game)
 	local look = { enabled = not game and G("castbars.enabled") == true }
 	local enabled = look.enabled
@@ -531,8 +443,6 @@ local function CastLook(game)
 	return look
 end
 
--- The width and height of a bar of a place: the game's, the place's own size, or the width of the personal resource display at Bar width 100
--- (Blizzard_PersonalResourceDisplay.xml:41) for the player bar matched to it, whose height stays the game's or the chosen one.
 local function CastSize(look, opt, game)
 	local w, h = game[1], game[2]
 	if look.enabled and G("castbars." .. opt .. "Size") then
@@ -545,8 +455,6 @@ local function CastSize(look, opt, game)
 	return w, h
 end
 
--- The fill of a bar at `part` of its width in the colour of its state, the spark at its end and the shield of a cast that cannot be interrupted.
--- The game's own fill is its atlas, or grey. Returns the colour of the fill.
 local function CastFill(row, look, opt, state, part, w, kick)
 	local inst, enabled = row.inst, look.enabled
 	local r, g, b
@@ -565,7 +473,6 @@ local function CastFill(row, look, opt, state, part, w, kick)
 		row.shield:SetShown(state == "shield" and not (enabled and not G("castbars.shield")))
 		GameTexture(inst, row.shield, GAME_SHIELD, { 0.62, 0.64, 0.7, 1 })
 	end
-	-- With Flat fill off, the colour of the player's interrupt goes on the strip along the bottom of an enemy's cast or channel.
 	if row.kickStrip then
 		local strip = kick and enabled and not look.flat and G("castbars.interrupt") == true and (state == "cast" or state == "channel") or false
 		if strip then
@@ -579,7 +486,6 @@ local function CastFill(row, look, opt, state, part, w, kick)
 	return r, g, b
 end
 
--- The spell name of a bar: `name`, else its own, with the rank after it on the player bar while Spell rank on the player bar is on.
 local function CastName(row, look, name)
 	local spec = row.spec
 	if name then
@@ -588,8 +494,6 @@ local function CastName(row, look, name)
 	return spec.rank and look.enabled and G("castbars.rank") == true and (spec.name .. " (" .. spec.rank .. ")") or spec.name or ""
 end
 
--- Dims the tick marks a channel at `part` of its width (the share left: the fill ends there) has passed, those right of the end of the fill, as
--- CastTicks.lua dims a mark once its tick has landed; the next one stays bright. On the Drain Life row, at 0.55, the marks at 0.6 and 0.8 are dim.
 local function DimTicks(row, part)
 	local list = row.ticks
 	if not (list and ns.Finite(part)) then
@@ -601,8 +505,6 @@ local function DimTicks(row, part)
 	end
 end
 
--- The tick marks of a channel on a bar that has them, at even steps of its width, while Channel ticks on the player bar is on (CastTicks.lua), the
--- ones the channel has passed dimmed, in Channel tick colour at 60% (0.5.42).
 local function PaintTicks(row, look, state, w, part)
 	local list = row.ticks
 	if not list then
@@ -633,9 +535,6 @@ local function PaintTicks(row, look, state, w, part)
 	end
 end
 
--- The latency zone of the player bar: at the right end of a cast, at the left end of a channel, where it drains to, as Marks of Bars.lua has it
--- (and its set of marks without Flat fill); shown while Latency zone is on, with or without Flat fill, and not while the cast is interrupted, in
--- Latency zone colour at 60% (0.5.41).
 local function PlaceLatency(row, look, state, w)
 	local latency = row.latency
 	if not latency then
@@ -654,8 +553,6 @@ local function PlaceLatency(row, look, state, w)
 	latency:SetShown(look.enabled and G("castbars.latency") == true and state ~= "interrupted")
 end
 
--- The time of a bar: the row of Cast time on your bars for the player's and the pet's, Cast time on target and focus bars for the others, and none
--- while the cast is interrupted, as CastTime.lua empties it when the cast ends.
 local function ShowTime(row, look, opt, state)
 	if row.time then
 		local timeRow = (opt == "player" or opt == "pet") and "castbars.playerTime" or "castbars.ownTime"
@@ -663,16 +560,12 @@ local function ShowTime(row, look, opt, state)
 	end
 end
 
--- The name of an enemy cast's target past the end of a bar that has one (spec.aim) while Target of enemy casts is on, as CastTime.lua writes it,
--- also while the cast is interrupted, as it stays through the bar's Interrupted hold (0.5.42).
 local function ShowAim(row, look)
 	if row.aim then
 		row.aim:SetShown(look.enabled and G("castbars.castTarget") == true)
 	end
 end
 
--- The class colour of the sample target's name, as CastTime.lua colours the name (0.5.41): of spec.aimClass, else the player's own class (test
--- mode's "> You"); the warrior's fixed colour when the client does not answer.
 local function AimRGB(spec)
 	if spec.aimClass and type(C_ClassColor) == "table" then
 		local ok, colour = pcall(C_ClassColor.GetClassColor, spec.aimClass)
@@ -684,7 +577,6 @@ local function AimRGB(spec)
 	return ClassRGB()
 end
 
--- Paints one bar of a place (opt) in a state at `part` of its width, w by h. kick: an enemy cast the player's interrupt is ready for.
 local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	local inst, spec, bar = row.inst, row.spec, row.bar
 	local enabled, flat = look.enabled, look.flat
@@ -701,7 +593,6 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	else
 		ns.SetOutlineColour(row.outline, nil, nil, nil)
 	end
-	-- The spark: 8 by 20 on the player and pet bars (higher by 9 than the bar with a size of its own on the player bar), 6 by 16 on the small ones.
 	local sparkW, sparkH = 8, 20
 	if spec.small then
 		sparkW, sparkH = 6, 16
@@ -712,7 +603,6 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	row.spark:SetShown(not (enabled and not G("castbars.spark")))
 	GameTexture(inst, row.spark, GAME_PIP, { 0.9, 0.9, 0.9, 0.9 })
 	PlaceLatency(row, look, state, w)
-	-- The icon: left of the small bars unless the row says right or hidden; on the player and pet bars only with the row on.
 	if spec.small then
 		local place = enabled and G("castbars.iconPos") or "game"
 		row.icon:SetSize(20, 20)
@@ -722,7 +612,6 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 			Place(row.icon, "RIGHT", bar, "LEFT", -2, -5)
 		end
 		row.icon:SetShown(place ~= "hidden")
-		-- The name of the cast's target: past the bar's end, or past the icon while it is right of the bar, in the spell name's size and outline.
 		if row.aim then
 			if place == "right" then
 				Place(row.aim, "LEFT", row.icon, "RIGHT", 4, 0)
@@ -737,19 +626,15 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 	else
 		row.icon:SetSize(h, h)
 		Place(row.icon, "RIGHT", bar, "LEFT", -5, 0)
-		-- Also while the cast is interrupted, as Bars.lua keeps the icon through the Interrupted hold (0.5.42).
 		row.icon:SetShown(enabled and G("castbars.playerIcon") == true)
 	end
 	PaintTicks(row, look, state, w, part)
-	-- The seconds until the player's interrupt is ready on an enemy cast it is on cooldown for, while Seconds until your interrupt is ready and
-	-- Interrupt readiness on enemy casts are on, in Interrupt on cooldown colour and the spell name's size and outline.
 	if row.kickTime then
 		row.kickTime:SetShown(enabled and kick == "cooling" and G("castbars.kickTime") == true and G("castbars.interrupt") == true
 			and (state == "cast" or state == "channel"))
 		local kr, kg, kb = ns.Colour("castbars.interruptCooling")
 		Look(row.kickTime, look.percent, kr, kg, kb, look.outline)
 	end
-	-- The spell name.
 	if row.text then
 		local mode = "top10"
 		if spec.small then
@@ -763,18 +648,13 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 		row.text:SetShown(not look.hideName)
 		Look(row.text, look.percent, look.r, look.g, look.b, look.outline)
 	end
-	-- The time: Cast time on your bars for the player's and the pet's, Cast time on target and focus bars for the small ones, in the spell name's
-	-- size and outline (CastTime.lua copies the font of the bar's spell name).
 	if row.time then
 		ShowTime(row, look, opt, state)
-		-- A setup row's sample seconds, with the whole cast after them while Total cast time too is on.
 		if spec.time ~= nil and spec.time ~= "" then
 			row.time:SetText((spec.total and enabled and G("castbars.timeTotal") == true) and (spec.time .. " / " .. spec.total) or spec.time)
 		end
 		Look(row.time, look.percent, nil, nil, nil, look.outline)
 	end
-	-- The pushback past the right end of a player bar while Pushback on your bar is on: the setup row's sample, in Pushback colour in the spell
-	-- name's size, also while the cast is interrupted, as CastTime.lua keeps the total through the Interrupted hold (0.5.41).
 	if row.push then
 		row.pushOn = enabled and G("castbars.pushback") == true
 		row.push:SetText(spec.push or "")
@@ -832,19 +712,13 @@ end
 castDrawing.parts = {}
 ns.SetupDrawings["mock-cast-bar"] = castDrawing
 
--- The painters of the drawings, for test mode's stand-ins (TestHud.lua): one cast bar or one swing timer on a frame of the caller's, painted from the
--- rows as the setup drawings paint theirs, at a share of its run (`part`, 0 to 1) and in a state (cast, channel, interrupted or shield).
 local DC = {}
 ns.DrawCasts = DC
 
--- A cast bar on `parent`. spec: opt (player, pet, target, focus or boss), small (the small bars), shield (it may show one), time (it has a time text),
--- name (the spell name). The caller anchors row.bar.
 function DC.Cast(parent, spec)
 	return NewCastBar({ grey = {}, outlines = {} }, parent, spec)
 end
 
--- Paints a bar of `opt` in `state` at `part`, w by h (the size the rows give when nil), with the spell name `name` (else its own) and kick for an
--- enemy cast: the state of the player's interrupt, "ready" (or true), "cooling" or "far", whose colour it takes. Returns its width and height.
 function DC.PaintCast(row, opt, state, part, w, h, name, kick)
 	local look = CastLook(opt == "boss")
 	if not (ns.Finite(w) and ns.Finite(h)) then
@@ -855,10 +729,6 @@ function DC.PaintCast(row, opt, state, part, w, h, name, kick)
 	return w, h
 end
 
--- The moving parts of a painted bar: its fill and spark at `part`, its state's colour, the spell name of a new state, the seconds left (and the
--- whole cast, `total` seconds, after them while Total cast time too is on), and on a player bar a sample pushback over the second half of a cast
--- (+0.4) or a channel (-0.8, the share left under a half), and the +0.4 of the interrupted cast through its Interrupted hold, as CastTime.lua keeps
--- the total on the live bar (0.5.42).
 function DC.CastProgress(row, state, part, left, name, total)
 	if not row.look then
 		return
@@ -868,7 +738,6 @@ function DC.CastProgress(row, state, part, left, name, total)
 		row.text:SetText(CastName(row, row.look, name))
 	end
 	if state ~= row.state then
-		-- A new state: the ticks, the side of the latency zone and whether the time shows, as PaintCastBar sets them.
 		PaintTicks(row, row.look, state, row.w, part)
 		PlaceLatency(row, row.look, state, row.w)
 		ShowTime(row, row.look, row.opt, state)
@@ -894,15 +763,12 @@ function DC.CastProgress(row, state, part, left, name, total)
 	end
 end
 
--- Personal resource display -----------------------------------------------------------------------------------
-
 local RES_WIDTH, RES_LEFT, RES_TOP = 150, 14, 12
 local RES_BARS = {
 	{ opt = "health", label = "Health", height = 14 },
 	{ opt = "power", label = "Power", height = 11 },
 	{ opt = "alt", label = "Alternate power", height = 7 },
 }
--- The game's gap between two bars (Bars.lua:98-100 reads it from the bar) and the fixed samples: 70 percent of 10,000 health, 70 percent of 6,000 power.
 local RES_GAP, RES_PART = 4, 0.7
 local RES_VALUES = { health = "7,000", power = "4,200" }
 
@@ -963,7 +829,6 @@ local function BuildResource(stage)
 	return inst
 end
 
--- The player's power: its token when the client says, else mana.
 local function PowerToken()
 	local ok, _, token = pcall(UnitPowerType, "player")
 	if ok and type(token) == "string" and not ns.IsSecret(token) then
@@ -984,8 +849,6 @@ function resDrawing.draw(stage)
 	if not flat then
 		file = ns.BarFile("game")
 	end
-	-- The colours of the health and power fill: the game's, a colour of the row, and the health left over the health colour.
-	-- The client has no source for the game's personal resource display, so a colour it does not give is plain grey, labelled Game look.
 	local token = PowerToken()
 	local pr, pg, pb = ns.PowerColour(token)
 	local powerGrey = not pr
@@ -1028,8 +891,6 @@ function resDrawing.draw(stage)
 		local spec = bar.spec
 		local on = enabled and G("resource." .. spec.opt) == true
 		shown[index] = on
-		-- Two bars share one border only when both have it and Join bars is on: the lower bar sits one border thickness below the upper one
-		-- (Bars.lua:114-116), so the upper bar's bottom edge and the lower bar's top edge fill the same strip. Otherwise the game's gap.
 		local gap = RES_GAP
 		if index > 1 then
 			local above = shown[index - 1]
@@ -1087,17 +948,12 @@ end
 resDrawing.parts = {}
 ns.SetupDrawings["mock-resource"] = resDrawing
 
--- Swing timers ------------------------------------------------------------------------------------------------
-
--- A timer is 190 by 22 with its bar 5 and 4 inside, so the bar is 180 by 14 (Blizzard_SwingTimer.xml:21-27).
 local SWING_FRAME_W, SWING_FRAME_H, SWING_BAR_W, SWING_BAR_H = 190, 22, 180, 14
 local SWING_LEFT, SWING_TOP, SWING_GAP, SWING_SHADOW = 14, 10, 6, 171
--- The game's range colours (Blizzard_SwingTimer.lua:440-447) and its atlases (Blizzard_SwingTimer.xml:12-56, 62-100).
 local GAME_IN, GAME_OUT, GAME_RANGE_ALPHA = { 1, 1, 1 }, { 1, 0.1, 0.1 }, 0.4
 local SWING_FILL_ATLAS = { main = "ui-swingtimerbar-filling-mainhand", off = "ui-swingtimerbar-filling-offhand", ranged = "ui-swingtimerbar-filling-ranged" }
 local SWING_ART = { frame = "ui-swingtimerbar-frame", back = "ui-swingtimerbar-background" }
 local SWING_PIP, SWING_SHADOW_ATLAS = "ui-swingtimerbar-pip", "ui-swingtimerbar-textshadow-left"
--- The names the game gives the hands, in the client's language (Blizzard_SwingTimer.xml:62, 75, 88).
 local function HandName(hand)
 	if hand == "main" then
 		return SWING_TIMER_MAIN_HAND or "Main hand"
@@ -1106,8 +962,6 @@ local function HandName(hand)
 	end
 	return SWING_TIMER_RANGED or "Ranged"
 end
--- Fixed samples: how far each timer has run at the start, and how long a swing lasts in seconds. The first main hand timer has a next melee
--- ability queued over the second half of each swing (QUEUED_FROM of it), which lands with the swing.
 local QUEUED_FROM = 0.5
 local SWING_ROWS = {
 	{ hand = "main", note = "In range", part = 0.64, period = 2.6, queued = true },
@@ -1120,8 +974,6 @@ local SWING_ROWS = {
 local swingMade = setmetatable({}, { __mode = "k" })
 local swingDrawing = {}
 
--- One timer of `spec.hand` on `parent`: its frame with the game's art, the bar inside it with the fill, the Auto Shot window of a ranged one, the
--- shadow of the name, the pip, the two outlines and the name and time texts. inst holds the grey parts and the outlines of its drawing.
 local function NewSwingTimer(inst, parent, spec)
 	local row = { spec = spec, inst = inst }
 	row.timer = NewFrame(parent)
@@ -1131,11 +983,9 @@ local function NewSwingTimer(inst, parent, spec)
 	row.bar:SetPoint("TOPLEFT", row.timer, "TOPLEFT", 5, -4)
 	row.bar:SetPoint("BOTTOMRIGHT", row.timer, "BOTTOMRIGHT", -5, 4)
 	row.fill = NewTexture(row.bar, "ARTWORK", 0)
-	-- The Auto Shot window on the ranged timer: the last half second of its swing, over the fill (Bars.lua, ApplyAutoShot).
 	if spec.hand == "ranged" then
 		row.band = NewTexture(row.bar, "ARTWORK", 7)
 	end
-	-- Queued ability colour over the fill of a main hand timer with spec.queued (Bars.lua, Q).
 	if spec.queued then
 		row.queued = NewTexture(row.bar, "ARTWORK", 6)
 		row.queued:SetPoint("TOPLEFT", row.fill, "TOPLEFT", 0, 0)
@@ -1207,7 +1057,6 @@ local function BuildSwing(stage)
 	end
 	p["swing.time"] = main.time
 	p["swing.rangeTextColour"] = out.type
-	-- The timers move on sample times, only while the drawing is shown.
 	inst.root:SetScript("OnUpdate", function(_, elapsed)
 		inst.clock = inst.clock + (elapsed or 0)
 		if inst.clock > 3600 then
@@ -1220,7 +1069,6 @@ local function BuildSwing(stage)
 	return inst
 end
 
--- Where each timer is: the share of its swing run, and the seconds left.
 local function SwingProgress(spec, clock)
 	if spec.idle then
 		return 0, 0
@@ -1229,11 +1077,9 @@ local function SwingProgress(spec, clock)
 	return run, spec.period * (1 - run)
 end
 
--- The parts of a timer that move: the fill at `run` of the bar, the spark at its end and the seconds left.
 local function SwingFill(row, look, run, left)
 	local spec, colour = row.spec, look.colour[row.spec.hand]
 	FillBar(row.fill, row.bar, look.barW or SWING_BAR_W, run, look.reverse, look.file, colour[1], colour[2], colour[3], look.atlas[spec.hand])
-	-- The pip sits on the fill's end: its side on the fill's side (Bars.lua:507-509).
 	local side = look.reverse and "LEFT" or "RIGHT"
 	row.pip:ClearAllPoints()
 	row.pip:SetPoint(side, row.fill, side, 0, 0)
@@ -1256,7 +1102,6 @@ local function PaintSwing(inst)
 	end
 end
 
--- What the rows of the page say for every timer, read once for a paint. frameW: the width of a timer (the rows' when nil).
 local function SwingLook(frameW)
 	local enabled = G("swing.enabled") == true
 	local flat = enabled and G("swing.flat") == true
@@ -1301,13 +1146,11 @@ local function SwingLook(frameW)
 	return look
 end
 
--- Paints the parts of one timer that the rows set: its size, borders, art, Auto Shot window, shadow and text looks.
 local function PaintSwingTimer(row, look)
 	local inst, spec = row.inst, row.spec
 	row.timer:SetSize(look.frameW, SWING_FRAME_H)
 	local on = look.enabled and G("swing." .. spec.hand) == true
 	local idle = look.idleHide and spec.idle
-	-- The border: around the bar or around the whole timer; the game's own border and background go when it is on.
 	ns.SetOutline(row.barOutline, on and not look.whole, G("swing.backdrop"))
 	ns.SetOutline(row.wholeOutline, on and look.whole and not idle, G("swing.backdrop"))
 	ShowArt(row.art, not on)
@@ -1330,7 +1173,6 @@ local function PaintSwingTimer(row, look)
 		row.band:SetShown(shown)
 	end
 	if row.queued and look.queued then
-		-- The swing texture, else the Flat UI page's, else white, in Queued ability colour.
 		local file = ns.BarTexture(G("swing.texture"))
 		if file then
 			row.queued:SetTexture(file)
@@ -1399,7 +1241,6 @@ end
 swingDrawing.parts = {}
 ns.SetupDrawings["mock-swing"] = swingDrawing
 
--- True for a class whose next melee ability waits for the swing (Bars.lua, Q.Wanted): a warrior, a druid or a hunter. Only a plain class counts.
 local QUEUE_CLASSES = { WARRIOR = true, DRUID = true, HUNTER = true }
 local function Queues()
 	if type(UnitClassBase) ~= "function" then
@@ -1409,13 +1250,10 @@ local function Queues()
 	return ok and not ns.IsSecret(class) and type(class) == "string" and QUEUE_CLASSES[class] == true
 end
 
--- A swing timer of `hand` (main, off or ranged) on `parent`, for test mode. period: the seconds of its swing. The caller anchors row.timer. The main
--- hand of a class that queues a next melee ability takes Queued ability colour over the second half of each swing, as the first setup row does.
 function DC.Swing(parent, hand, period)
 	return NewSwingTimer({ grey = {}, outlines = {} }, parent, { hand = hand, part = 0, period = period or 2.6, queued = hand == "main" and Queues() })
 end
 
--- Paints a timer from the rows, w wide (the rows' width when nil), and gives its width and height.
 function DC.PaintSwing(row, w)
 	local look = SwingLook(ns.Finite(w) and w > 0 and w or nil)
 	row.look = look
@@ -1424,7 +1262,6 @@ function DC.PaintSwing(row, w)
 	return look.frameW, SWING_FRAME_H
 end
 
--- The moving parts of a painted timer: its fill at `run` of its swing and the seconds left.
 function DC.SwingProgress(row, run, left)
 	if row.look then
 		SwingFill(row, row.look, run, left)

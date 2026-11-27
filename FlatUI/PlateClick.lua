@@ -1,19 +1,5 @@
 local _, ns = ...
 
--- The clickable area of a nameplate (added to the plates as a part of Nameplates.lua, ns.PlateExtra): click through, and extra width and height.
--- The area is set for a kind of plate (friendly, enemy) with C_NamePlateManager.SetNamePlateHitTestInsets, out of combat
--- (Blizzard_APIDocumentationGenerated/NamePlateManagerDocumentation.lua:46-62). The plate itself is never resized: the unit frame is anchored to
--- the plate's whole size and the bars hang on it (Blizzard_NamePlateBase.lua:20, Blizzard_NamePlateUnitFrame.lua:699-715), so a bigger plate
--- stretches the game's bars; EllesmereUI shrinks the hit rectangle and leaves the plate alone for that reason
--- (EllesmereUINameplates/EllesmereUINameplatesFriendly.lua:1813-1818). Hit testing is clamped to the plate (NamePlateManagerDocumentation.lua:51),
--- so extra width and height reach only as far as the plate. Nothing is hooked on a plate: the game's own per-plate area (UpdateHitTestArea)
--- stays as it is, and the insets widen, narrow or remove it. A row at its default makes no call the game did not make.
--- The insets are the game's, set per kind of plate, and no part of the look, so the rows work on friendly plates whether or not Restyle friendly
--- nameplates is on. With Where friendly nameplates are clicked through at In dungeons and raids, friendly plates are clicked through only while
--- IsInInstance says a party or raid instance; PLAYER_ENTERING_WORLD and ZONE_CHANGED_NEW_AREA set the area again as you zone (after the fight when
--- you zone in one, as every change of the area waits for). A change of a click row in the options window in a fight says so in chat once a fight,
--- while the window shows.
-
 local KEY = "nameplates"
 local PART = "nameplate click area"
 local EXTRA = ns.PlateExtra
@@ -21,20 +7,16 @@ if type(EXTRA) ~= "table" then
 	return
 end
 
--- An inset larger than a plate leaves nothing to click: hit testing is clamped to the plate (NamePlateManagerDocumentation.lua:51).
 local NONE = 10000
 
--- The kinds of plate, with the row that clicks through them.
 local KINDS = {
 	{ type = "Friendly", through = "clickThroughFriendly", friendly = true },
 	{ type = "Enemy", through = "clickThroughEnemy" },
 }
 
--- What is set for each kind (a key of its four insets), so the next pass skips a kind that already has them.
 local done = {}
 local queued, forced = false, false
 local note
--- rows: the values of the click rows at the last refresh, as one string; told: the chat line was said this fight.
 local rows, told
 
 local function Opt(key)
@@ -58,7 +40,6 @@ local function Say(text)
 	end
 end
 
--- True while the player is in a dungeon or a raid (IsInInstance: a plain true and the instance type party or raid).
 local function Inside()
 	if type(IsInInstance) ~= "function" then
 		return false
@@ -67,7 +48,6 @@ local function Inside()
 	return ok and Plain(inside, "boolean") and inside and Plain(kind, "string") and (kind == "party" or kind == "raid") or false
 end
 
--- Sets the area of both kinds. Out of combat only.
 local function Apply(force)
 	local types = Plain(Enum, "table") and Plain(Enum.NamePlateType, "table") and Enum.NamePlateType
 	local manager = C_NamePlateManager
@@ -95,7 +75,6 @@ local function Apply(force)
 		if row.through then
 			left, top = NONE, NONE
 		else
-			-- 0 - n and not -n: minus zero would be written as -0 on a client that keeps it.
 			left, top = 0 - row.dx, 0 - row.dy
 		end
 		local key = left .. "|" .. top
@@ -116,13 +95,10 @@ local function Run()
 	queued, forced, told = false, false, nil
 	local ok = ns.EachPart(KEY, PART, Apply, f)
 	if not ok and ns.PartStopped(KEY, PART) then
-		-- The part stopped: the game's area goes back.
 		pcall(Apply, true)
 	end
 end
 
--- A click row changed in the options window in a fight: one chat line a fight says the change lands as the fight ends. A refresh that changed no
--- click row, or zoning, says nothing.
 local function Tell()
 	local now = ("%s|%s|%s|%s|%s|%s"):format(tostring(ns.Enabled(KEY)), tostring(Opt("clickThroughFriendly")), tostring(Opt("clickThroughEnemy")),
 		tostring(Opt("clickThroughFriendlyWhere")), tostring(Opt("clickExtraX")), tostring(Opt("clickExtraY")))
@@ -134,7 +110,6 @@ local function Tell()
 	end
 end
 
--- Sets the area now, or when combat ends. force sets what is already set again.
 local function Queue(force)
 	forced = forced or force == true
 	pcall(Tell)
@@ -147,7 +122,6 @@ end
 
 EXTRA.refresh[#EXTRA.refresh + 1] = Queue
 
--- Zoning in or out: friendly plates take the area of the place while friendly plates are clicked through only in dungeons and raids.
 local function Zoned()
 	if Opt("clickThroughFriendly") == true and Opt("clickThroughFriendlyWhere") == "instances" then
 		Queue()

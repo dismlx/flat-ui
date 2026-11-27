@@ -1,117 +1,18 @@
 local _, ns = ...
 
--- Avoidance in the gear comparison, part of Chat and tooltips with no switch of its own, as GearModel.lua is: how often an enemy's melee swing misses
--- the player, is dodged, parried or blocked, crits or crushes, and what armor and block value take off, now and with an item, for the item tooltips
--- of GearLines.lua and the Avoidance view of GearWindow.lua. The owner asked for it beside the spell rows ("also avoidance"): a tank's gear is mostly
--- defense, dodge, parry, block and armor, which the spell rows pass over. Nothing is drawn, written on a frame or hooked here, no frame is made and
--- no event is heard; it adds one line to /flatui status (ns.AddStatus, Core.lua).
---
--- The snapshot. Every character stat call is SecretWhenUnitStatsRestricted, so the defensive stats are read in the plain moment of SpellModel.lua's
--- read (M.AfterRead: right after each plain read of its stats, in the same frame; it reads only while C_Secrets.ShouldUnitStatsBeSecret() is false,
--- SpellModel.lua:52), each call under pcall, never at compare time. A withheld answer (a call that raises, or a secret value) keeps the whole last
--- snapshot, never a mix of two reads; a missing call or a nil answer is none, as HitTableCalc.lua's Call tells them apart (HitTableCalc.lua:70-81).
--- In a fight the snapshot is the one from before it, as the spell lines say. The reads, as the character sheet makes them: the level (UnitLevel); the
--- defense skill, base plus modifier and at least 0 (UnitDefenseSkill, UnitDocumentation.lua:1069-1084, the sheet's GetEffectiveDefenseSkill,
--- Camelot/PaperDollFrameStats.lua:52-55; UnitDefense on a client that has that name instead); the chances to dodge, parry and block against an
--- attacker of the player's level (GetDodgeChance, GetParryChance and GetBlockChance, PlayerScriptDocumentation.lua:414, 747, 275, as the sheet reads
--- them, Camelot/PaperDollFrame.lua:787-845); the effective armor, UnitArmor's second answer (UnitDocumentation.lua:645, as
--- Camelot/PaperDollFrameStats.lua:486-488 reads it); the block value (GetShieldBlock, PlayerScriptDocumentation.lua:1040), none without a shield
--- (C_PaperDollInfo.OffhandHasShield, PaperDollInfoDocumentation.lua:267-273); strength and agility, UnitStat's effective value that SpellModel read
--- in the same moment (its stats.stat); and the dodge a point of agility gives: GetDodgeChanceFromAttribute (PlayerScriptDocumentation.lua:424-432)
--- answers the dodge all of the effective agility adds, a fraction the sheet shows times 100 (Camelot/PaperDollFrameStats.lua:316), so a point gives
--- that times 100 over the agility.
---
--- The table: one roll of an enemy's melee swing, in this order, each row cut to what is left of 100%: missed, dodged, parried, blocked, critical,
--- crushing, and a normal hit for the rest. The attacker's weapon skill is 5 a level (SKILL_RANKS_PER_SKILL_LEVEL, Camelot/PaperDollFrameStats.lua:10,
--- 56-60) and its level the one Against names (chat.gearAgainst: a boss three levels above the player, an enemy of the player's level, or at its first
--- choice a boss from level 60 on and an enemy of the player's level before, as GearModel.lua's Spec maps it). The client's own sheet holds the rules
--- of three rows (Camelot/PaperDollFrameStats.lua:7-10, 46-82; its defense tooltip, :117-128, no longer shows them, but the functions are there):
--- missed is 5% + (defense - attacker skill) x 0.04% and critical 5% + (attacker skill - defense) x 0.04%, both kept between 0 and 100 (0 is immune:
--- "At 440 Defense, cannot be Critically Hit by Raid Bosses", DEFAULT_STATDEFENSE_TOOLTIP, GlobalStrings enUS.lua:5767); crushing is (attacker skill -
--- defense, at most 5 a level of the player's) x 2% - 15% from 15 skill on ("Creatures 3+ levels above you can land Crushing Blows", the same string),
--- so defense above the cap does not lower it, and defense below it raises it. Those three are not estimates. Two rules are Classic's and not in
--- Forever's client data, so a figure that rests on them is marked ~: an attacker above the player's level is dodged, parried and blocked 0.04% less
--- for each point of its skill above 5 a level of the player's (the sheet gives these chances against an attacker of the player's level only), and the
--- one roll that cuts each row to what is left (the sheet gives each chance alone), so a row cut that way is ~, and the normal hit is ~ whenever a row
--- above it is. Parry and block are 0 where the sheet gives 0 (no weapon, no shield). Crushing blows come from melee mobs; a boss that casts or shoots
--- rolls no such table.
---
--- With an item: the slots GearModel.lua's G.Candidates gives, the choice of slot the spell rows use. The stat change is the item's stats
--- (C_Item.GetItemStats, ItemDocumentation.lua:1004-1018, with the full link) less those of the items it replaces, each key turned into what it
--- changes by the data (SpellData.lua's D.STATS: avoid with its rating index, armor, and Strength and Agility): defense, dodge, parry and block rating
--- into defense points and percent with the client's own conversion, GetCombatRatingBonusForCombatRatingValue (PlayerScriptDocumentation.lua:335-349,
--- no secret mark) with CR_DEFENSE_SKILL 2, CR_DODGE 3, CR_PARRY 4 and CR_BLOCK 5 (Camelot/PaperDollFrame.lua:5-8); a point of defense also adds 0.04%
--- to dodge, parry and block (STAT_PER_DEFENSE, Camelot/PaperDollFrameStats.lua:348, 364, and the same string); agility adds dodge by the point read
--- above and 2 armor a point (ARMOR_PER_AGILITY, :6); the item's armor (RESISTANCE0_NAME, which holds its bonus armor too) adds armor, 2.8 and 4.6
--- times as much in Bear Form and Dire Bear Form, whose spells raise the armor of items by 180% and 360% (K.FORM_ARMOR), as the armor read in the form
--- holds it. The block value with the item is GearModel.lua's (G.With, for the spell rows that count it): the shield's own block, a block value stat
--- and a point a 20 Strength (BLOCK_VALUE_PER_STRENGTH, :2, 313); its state says whether a shield is worn with the item, and its form whether the
--- armor of items counts more. A shield put on where none is worn turns block on at Classic's 5% plus 0.04% a point of defense over the cap plus its
--- block rating (~); one taken off turns it off, and the block value with it. Where the client gives no conversion, that stat is named as not counted.
--- Stats the game refused or withheld for the item or one it replaces are never read as none: the item is not worked out, nor kept, until the game
--- gives them. Armor takes off what C_PaperDollInfo.GetArmorEffectiveness(armor, attacker level) gives, the client's own formula
--- (PaperDollInfoDocumentation.lua:56-70, which marks no secret answer; the sheet's PaperDollFrame_GetArmorReduction,
--- Camelot/PaperDollFrame.lua:2392-2393), asked at compare time with the snapshot's plain armor; with no answer, an item that changes armor names it
--- as not counted. A worn item (the Character window) is the table with it against the table with its slot empty (G.Without), so the change is what it
--- gives. A total that rests on an estimate is marked ~, its change is not: the change of a row the roll does not cut is the client's own sum.
---
--- Against (opts.base, an item link: the window's second item box, GearWindow.lua): each candidate's slot holds that item instead of what is worn,
--- where it goes (GearModel.lua's G.BaseSlots: the candidate's first slot, both hands for a two-hander), so the table with it is the candidate's now
--- and the change is the item instead of it; G.With puts it there as it puts the item. A worn item with Against: the table with that item in its
--- slot against the table now. The header then names it, from its link's own colour and name, else the game's name (C_Item.GetItemInfo,
--- ItemDocumentation.lua:626-657).
---
--- Damage taken (item 3 of the 0.5.20 brief), so one number says what the rows mean together: the expected damage of one enemy swing after the
--- table (missed, dodged and parried 0; blocked 1 - min(1, block value / the enemy's hit); critical 2; crushing 1.5; a normal hit 1), times what
--- armor leaves, as a share of a plain hit; with an item, its change is with / now - 1, negative being better. The enemy's hit before armor that block
--- value is measured against is the row Enemy hit for block value (chat.gearSwing, 1,500), an estimate, so a figure with a block is marked ~; so is
--- one where the game gave no armor reduction (armor then counts none). Crit 2 and crushing 1.5 are the brief's; the game's data does not show them.
---
--- A.Compare(link or slot, opts) gives { header, attacker, boss, now, base, candidates = { { label, slots, empty, offEmpty, game, notCounted, base,
--- baseSlots, taken, avoided, rows = { { key, label, now, with, nowEstimate, withEstimate, estimate, better } } } }, notCounted, why, quiet, old },
--- kept by the link (or the slot and the link worn there), base, M.Version(), the snapshot's version, the attacker's level and the enemy's hit, 64 at
--- most and the oldest first out; in a fight, the last result for the item and base, marked old. opts: data (the post call's, for its lines and guid),
--- guid and base. A.Totals(candidate) gives { taken = { now, with, pct, estimate }, avoided = { now, with } } (a candidate's taken and avoided are
--- these), A.Now() the table now, A.Wanted() whether avoidance shows (Avoidance, chat.gearAvoid, at Always, or at For tanks, its first choice, while
--- ns.PlayerRole's first answer is tank), A.TipLines and A.Window(link, base) the lines of GearLines.lua and the view of GearWindow.lua, and A.Stamp a
--- text that changes with what they are built from. The lines follow the one style of the spell and gear lines (SpellModel.lua's M.Fmt.Style, looked
--- up when they are built): a gold header only where more than one line follows, a double line a figure (the label light grey, the change green or
--- red with its sign, the total white, ~ before an estimate), and the notes dim, joined in one line at Compact (chat.tipDetail) and one a line at
--- Full; the table to two decimals, armor's share and damage taken to one, block value whole with commas.
---
--- For the stat tooltips of the Character window (StatTips.lua, 0.5.35), three small calls on the same snapshot and rules, which change nothing
--- above: A.Sheet() gives { snap (a copy of the snapshot), cap (5 defense a level of the player's), level (the table of an enemy of the player's
--- level, as Work makes it), boss (the table of the boss Against names, three levels above, or nil while Against names none), old } or nil and why;
--- it asks SpellModel for a plain read first (M.Stats, whose read runs AfterRead), so the snapshot is the last plain one, and old is true in a
--- fight, while the stats SpellModel holds are from before one, or while C_Secrets.ShouldUnitStatsBeSecret() answers true. A.Against(level) gives
--- the level of the enemy Against names and whether it is a boss (Attacker), and A.ArmorPct(armor, attacker level) the share armor takes off, in
--- percent (C_PaperDollInfo.GetArmorEffectiveness), or nil.
-
 local A = {}
 ns.GearAvoid = A
 
 local IsSecret, Finite = ns.IsSecret, ns.Finite
 
--- The constants of the file, in one table so its functions stay under the client's count of upvalues.
 local K = {
 	KEY = "chat",
-	-- CR_DEFENSE_SKILL, CR_DODGE, CR_PARRY and CR_BLOCK (Camelot/PaperDollFrame.lua:5-8), and the words a stat with no conversion is named by.
 	DEFENSE = 2, DODGE = 3, PARRY = 4, BLOCK = 5,
 	RATING_NAMES = { [2] = "Defense", [3] = "Dodge", [4] = "Parry", [5] = "Block chance" },
-	-- The sheet's rules (header): 5% to miss and to crit at an even skill, 0.04% a point, 5 skill a level, crushing from 15 skill at 2% a point less
-	-- 15%, 2 armor a point of agility; and Classic's 5% block of a shield before defense.
 	MISS = 5, CRIT = 5, PER_SKILL = 0.04, PER_LEVEL = 5, CRUSH_FROM = 15, CRUSH_PER = 2, CRUSH_LESS = 15, ARMOR_PER_AGILITY = 2, BASE_BLOCK = 5,
-	-- Against: a boss three levels above the player, at its first choice from this level on (GearModel.lua, K.MAX_LEVEL).
 	BOSS = 3, MAX_LEVEL = 60,
-	-- What a point of an item's armor counts in Bear Form and Dire Bear Form (GetShapeshiftFormID 5 and 8, as GearModel.lua's K.FORMS has them):
-	-- their spells raise the armor contribution from items by 180% and 360% (5487 and 9634, "Armor contribution from items by $1178s1%" and
-	-- "$9635s1%", tools/dev/spelltips/client_spells.json:229, 445, which the game's tooltips of 1.60.1 show as 180% and 360%). UnitArmor's armor of
-	-- the snapshot has it already, so an item's armor counts with it too.
 	FORM_ARMOR = { [5] = 2.8, [8] = 4.6 },
-	-- The results kept; the changes under which a row counts as none, half the last digit each shows (a hundredth of a percent for the table, a
-	-- tenth for armor's share, a whole point of block value), so a change that shows as none is none.
 	CACHE = 64, STILL = 0.005, STILL_ARMOR = 0.05, STILL_VALUE = 0.5,
-	-- The rows, in the order of the roll, then armor and block value: key, the window's words, and whether more is better for the player.
 	ROWS = {
 		{ "missed", "Missed", true }, { "dodged", "Dodged", true }, { "parried", "Parried", true }, { "blocked", "Blocked", true },
 		{ "crit", "Critical hit", false }, { "crush", "Crushing blow", false }, { "hit", "Normal hit", false },
@@ -119,25 +20,16 @@ local K = {
 	},
 	ROLL = { "missed", "dodged", "parried", "blocked", "crit", "crush" },
 	AVOIDED = { "missed", "dodged", "parried", "blocked" },
-	-- The reads of the snapshot that answer one number, by the field they fill.
 	READS = { { "dodge", "GetDodgeChance" }, { "parry", "GetParryChance" }, { "block", "GetBlockChance" }, { "blockValue", "GetShieldBlock" },
 		{ "fromAgility", "GetDodgeChanceFromAttribute" } },
-	-- The slots by number (INVSLOT_AMMO to INVSLOT_TABARD), as GearModel.lua's K.LABEL names them.
 	SLOTS = { [0] = "Ammo", "Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Finger 1", "Finger 2",
 		"Trinket 1", "Trinket 2", "Back", "Main hand", "Off hand", "Ranged", "Tabard" },
-	-- The one style of the spell and gear lines is SpellModel.lua's (M.Fmt.Style); these stand in for a colour it does not have: the gold of a header
-	-- (the client's NORMAL_FONT_COLOR, as ChatConfigFrame.lua:2048 reads it), the light grey of a label, the white of a value, the green and red of
-	-- a change for the better and the worse (GREEN_FONT_COLOR, RED_FONT_COLOR), and the dim of a note, the hit table's (HitTable.lua:79).
 	STYLE = { header = { 1, 0.82, 0 }, label = { 0.82, 0.82, 0.82 }, value = { 1, 1, 1 }, good = { 0.1, 1, 0.1 }, bad = { 1, 0.1, 0.1 },
 		dim = { 0.66, 0.68, 0.62 } },
-	-- Damage taken (A.Totals): one swing of the table after armor and block value as a share of a plain hit, a crit doing 2 hits and a crushing blow
-	-- 1.5 (the 0.5.20 brief); block value measured against an enemy's hit before armor of chat.gearSwing (Enemy hit for block value: 200 to 6,000,
-	-- 1,500 when it has none), an estimate. Its change shows to one decimal, so one under half of that is none.
 	CRIT_TAKEN = 2, CRUSH_TAKEN = 1.5, SWING = 1500, SWING_LEAST = 200, SWING_MOST = 6000, STILL_TAKEN = 0.05,
 	TAKEN_ROWS = { "missed", "dodged", "parried", "blocked", "crit", "crush", "hit" },
 }
 
--- The words, English as all of Flat UI's lines are.
 local T = {
 	HEADER = "Avoidance against %s (level %d)",
 	GIVES = "What it gives your avoidance against %s (level %d)",
@@ -182,13 +74,10 @@ local T = {
 	STATUS_NO_DEFENSE = "Avoidance: the game gave no defense skill, so there is no attack table to work out.",
 }
 
--- Reading the game ---------------------------------------------------------------------------------------------------------------------------------
-
 local function Index(t, key)
 	return t[key]
 end
 
--- A field of a table the client or another part gave, or nil when the table or the field is withheld, or reading it raises.
 local function Field(t, key)
 	if t == nil or IsSecret(t) or type(t) ~= "table" then
 		return nil
@@ -221,7 +110,6 @@ local function Table(value)
 	return nil
 end
 
--- A global function of the client, or one of its tables', or nil when the client has none.
 local function Global(name)
 	local fn = Field(_G, name)
 	if type(fn) == "function" then
@@ -242,7 +130,6 @@ local function Pack(ok, ...)
 	return ok, select("#", ...), { ... }
 end
 
--- The answers of a call of the game as a list, or nil and why: "missing" (no such function), "refused" (it raised) or "withheld" (a secret answer).
 local function Call(fn, ...)
 	if type(fn) ~= "function" then
 		return nil, "missing"
@@ -259,7 +146,6 @@ local function Call(fn, ...)
 	return answers
 end
 
--- One answer of a call for the snapshot: a number, nil for none (a missing call or no number), or false when the game withheld it.
 local function First(fn, at, ...)
 	local answers, why = Call(fn, ...)
 	if answers then
@@ -270,7 +156,6 @@ local function First(fn, at, ...)
 	return false
 end
 
--- The first answer of another part's function, or nil when it is missing or raises.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -299,7 +184,6 @@ local function Gear()
 	return nil
 end
 
--- A fight, as InCombatLockdown answers; a withheld answer counts as one.
 local function InCombat()
 	local answers, why = Call(Global("InCombatLockdown"))
 	if not answers then
@@ -329,12 +213,8 @@ local function LinkAt(state, slot)
 	return Text(Field(Field(state, "links"), slot))
 end
 
--- The snapshot ----------------------------------------------------------------------------------------------------------------------------------
-
--- version changes with each snapshot that differs from the last; cache, kept and last hold the results (A.Compare), now the table now (A.Now).
 local held = { registered = false, snap = nil, version = 0, cache = {}, kept = {}, last = {}, now = nil, nowKey = nil }
 
--- The snapshot of the defensive stats (header), or nil when the game withheld one of them. stats: SpellModel's of the same moment.
 local function ReadSnapshot(stats)
 	local s = {}
 	local level = First(Global("UnitLevel"), 1, "player")
@@ -391,7 +271,6 @@ local function Same(a, b)
 	return true
 end
 
--- Called by SpellModel.lua right after each plain read of the stats, in the same frame (M.AfterRead), which catches and reports a fault here.
 local function AfterRead(stats)
 	local s = ReadSnapshot(stats)
 	if s and not Same(held.snap, s) then
@@ -411,8 +290,6 @@ local function Register()
 	return held.registered
 end
 
--- The snapshot of the last plain read. With none yet (this file registered after SpellModel's last read), SpellModel is asked to read the stats again
--- (M.Mark, M.Stats), which runs AfterRead in that plain moment; the defensive stats are never read at another moment than SpellModel's.
 local function Snapshot()
 	Register()
 	local M = not held.snap and Model() or nil
@@ -423,7 +300,6 @@ local function Snapshot()
 	return held.snap
 end
 
--- The level of the enemy Against names, and whether it is a boss (header; GearModel.lua's Spec).
 local function Attacker(level)
 	local against = ns.Get("chat.gearAgainst") or "auto"
 	if against == "auto" then
@@ -435,7 +311,6 @@ local function Attacker(level)
 	return level, false
 end
 
--- The size of an enemy's hit before armor that block value is measured against (chat.gearSwing, Enemy hit for block value), between its bounds.
 local function Swing()
 	local value = Num(ns.Get("chat.gearSwing"))
 	if value and value >= K.SWING_LEAST then
@@ -444,8 +319,6 @@ local function Swing()
 	return K.SWING
 end
 
--- The name of the item compared against (Against, opts.base) in its quality's colour, from its link's own colour and name, else the game's name of
--- it (C_Item.GetItemInfo), else words.
 local function BaseName(link)
 	local colour, name = link:match("^|c(%x%x%x%x%x%x%x%x)"), link:match("|h%[(.-)%]|h")
 	if not name then
@@ -458,13 +331,10 @@ local function BaseName(link)
 	return colour and ("|c" .. colour .. name .. "|r") or name
 end
 
--- The table -------------------------------------------------------------------------------------------------------------------------------------
-
 local function Clamp(value)
 	return math.max(0, math.min(100, value))
 end
 
--- The share of physical damage armor takes off against an attacker of a level, in percent (C_PaperDollInfo.GetArmorEffectiveness), or nil.
 local function ArmorPct(armor, attacker)
 	if not armor then
 		return nil
@@ -474,8 +344,6 @@ local function ArmorPct(armor, attacker)
 	return value and value * 100 or nil
 end
 
--- The table of an enemy of the attacker's level against a snapshot (header): each row in percent, armor's share and the block value, which rows are
--- estimates, and the defense from which the player is immune to its crits.
 local function Work(s, attacker)
 	local cap, skill = s.level * K.PER_LEVEL, attacker * K.PER_LEVEL
 	local diff, fall = skill - s.defense, (skill - cap) * K.PER_SKILL
@@ -508,8 +376,6 @@ local function Work(s, attacker)
 	return t
 end
 
--- The percent a rating gives the player, with its sign (GetCombatRatingBonusForCombatRatingValue; for defense, points), or nil with no conversion:
--- no call, no number, or none for a rating the item has, which is a client that does not convert that rating, not a stat worth nothing.
 local function Rating(rating, amount)
 	local sign, value = amount < 0 and -1 or 1, math.abs(amount)
 	local answers = Call(Global("GetCombatRatingBonusForCombatRatingValue"), rating, value)
@@ -517,8 +383,6 @@ local function Rating(rating, amount)
 	return got and got > 0 and sign * got or nil
 end
 
--- The stats of an item by the game's keys (C_Item.GetItemStats), each a plain number: empty for none (no item, no such call, no stats), nil when the
--- game refused or withheld them, which says nothing of the item's stats.
 local function ItemStats(link)
 	local out = {}
 	if not link then
@@ -539,7 +403,6 @@ local function ItemStats(link)
 	return out
 end
 
--- The item's stats less those of the items worn in the slots (link nil: the slots emptied), or nil when the game withheld the stats of one of them.
 local function Delta(link, slots, state)
 	local delta = ItemStats(link)
 	for _, slot in ipairs(slots) do
@@ -554,8 +417,6 @@ local function Delta(link, slots, state)
 	return delta
 end
 
--- The snapshot with a stat change (header): delta by the game's keys; state2 and stats2 as G.With or G.Without gave them, for the shield and its block
--- value; notes gets the stats the client gave no conversion for.
 local function Apply(s, delta, state2, stats2, notes)
 	local D = ns.SpellData
 	local defs = Table(D and D.STATS) or {}
@@ -572,7 +433,6 @@ local function Apply(s, delta, state2, stats2, notes)
 			agility = agility + amount
 		end
 	end
-	-- The ratings in the order of their index, so the notes read the same each time.
 	local pct = {}
 	for rating = K.DEFENSE, K.BLOCK do
 		local amount = ratings[rating]
@@ -617,8 +477,6 @@ local function Apply(s, delta, state2, stats2, notes)
 	return w
 end
 
--- The rows of a candidate: each now and with (with nil: the table now alone), whether each of the two is an estimate and whether either is, and
--- whether more is better.
 local function Rows(now, with)
 	local rows = {}
 	for _, def in ipairs(K.ROWS) do
@@ -638,9 +496,6 @@ local function ByKey(rows)
 	return out
 end
 
--- One swing's expected damage as a share of a plain hit from one side of the rows ("now" or "with"), and whether it rests on an estimate: a row of the
--- roll that is one, a block (the size of an enemy's hit is chat.gearSwing's), or no armor reduction from the game. Nil when a row of the roll has no
--- figure there.
 local function Taken(by, side, swing)
 	local at, estimate = {}, false
 	for _, key in ipairs(K.TAKEN_ROWS) do
@@ -663,11 +518,6 @@ local function Taken(by, side, swing)
 	return hits / 100 * (1 - (armor or 0) / 100), estimate
 end
 
--- What the rows of a candidate (A.Compare's) or of the table now (A.Now's) come to (item 3 of the 0.5.20 brief): { taken = { now, with, pct,
--- estimate, nowEstimate, withEstimate }, avoided = { now, with } }. taken is the expected damage of one enemy swing after the table (missed,
--- dodged and parried 0, blocked 1 - min(1, block value / chat.gearSwing), critical 2, crushing 1.5, a normal hit 1) times what armor leaves, as a
--- share of a plain hit (0.62 is 62%), and pct with / now - 1 as a fraction (negative is better); avoided is the share missed, dodged, parried or
--- blocked, in percent as the rows are. with and pct are nil with no item; an empty table when there are no rows.
 function A.Totals(candidate)
 	local out = {}
 	local rows = Table(Field(candidate, "rows"))
@@ -701,14 +551,12 @@ function A.Totals(candidate)
 	return out
 end
 
--- A candidate with what its rows come to (A.Totals), as A.Compare's candidates carry it.
 local function Carry(candidate)
 	local totals = A.Totals(candidate)
 	candidate.taken, candidate.avoided = totals.taken, totals.avoided
 	return candidate
 end
 
--- The table of a slot with a stat change (Apply, then Work); armor is named as not counted where it changes and the client gave no reduction.
 local function Changed(s, delta, state2, stats2, notes, attacker)
 	local w = Apply(s, delta, state2, stats2, notes)
 	local t = Work(w, attacker)
@@ -718,7 +566,6 @@ local function Changed(s, delta, state2, stats2, notes, attacker)
 	return t
 end
 
--- The header of the block: against whom, and with Against the item compared against.
 local function Header(boss, attacker, gives, base)
 	local who = boss and T.BOSS or T.LEVEL
 	if base then
@@ -727,8 +574,6 @@ local function Header(boss, attacker, gives, base)
 	return (gives and T.GIVES or T.HEADER):format(who, attacker)
 end
 
--- The table with the item compared against (Against) in a candidate's slots, the now of that candidate: G.With put it there (its fourth and fifth
--- answers) and info.baseSlots says which slots it took; nil when the game withheld the stats of it or of what it replaces.
 local function BaseTable(s, base, state, stateB, statsB, info, notes, attacker)
 	local baseSlots = Table(Field(info, "baseSlots"))
 	local delta = stateB and baseSlots and Delta(base, baseSlots, state)
@@ -738,9 +583,6 @@ local function BaseTable(s, base, state, stateB, statsB, info, notes, attacker)
 	return Changed(s, delta, stateB, statsB, notes, attacker)
 end
 
--- An item to wear: each slot G.Candidates gives, the table with the item there, against the table now or with Against (base) against the table with
--- that item in the candidate's slots (a candidate where it does not go is left out, G.BaseSlots). False when nothing should be kept: no slot to
--- compare with, which may be an item the client has not loaded yet, or an item G.With could not read, so the next ask works it out again.
 local function Instead(result, link, opts, state, stats, s, now)
 	local G = Gear()
 	local data = Table(opts.data)
@@ -782,8 +624,6 @@ local function Instead(result, link, opts, state, stats, s, now)
 	return true
 end
 
--- A worn item: the table with its slot empty against the table now, so the change is what it gives; with Against (base), the table with that item
--- in its slot (G.With with it as the item, in the slots G.BaseSlots gives: a two-hander takes both hands) against the table now.
 local function Gives(result, slot, state, stats, s, now, base)
 	local G = Gear()
 	if not LinkAt(state, slot) then
@@ -822,7 +662,6 @@ local function Gives(result, slot, state, stats, s, now, base)
 	return true
 end
 
--- Keeps a result, K.CACHE at most, the oldest forgotten first.
 local function Remember(key, result)
 	if held.cache[key] == nil then
 		held.kept[#held.kept + 1] = key
@@ -833,7 +672,6 @@ local function Remember(key, result)
 	held.cache[key] = result
 end
 
--- The comparison of an item to wear (its link) or of a worn item (its slot number) for avoidance (header).
 function A.Compare(itemOrSlot, opts)
 	opts = Table(opts) or {}
 	local result = { candidates = {}, notCounted = {} }
@@ -849,8 +687,6 @@ function A.Compare(itemOrSlot, opts)
 		return result
 	end
 	local state = Table(Ask(M.State)) or {}
-	-- A worn item is kept by its slot and the link worn there, so a fight never shows what another item in that slot gave; with Against, by the item
-	-- compared against too.
 	local base = Text(opts.base)
 	local subject = (slot and ("slot " .. slot .. " " .. (LinkAt(state, slot) or "")) or link) .. "|" .. (base or "")
 	local stats = Table(Ask(M.Stats))
@@ -893,8 +729,6 @@ function A.Compare(itemOrSlot, opts)
 	return result
 end
 
--- The table now against the enemy Against names: { attacker, boss, table, rows (as A.Compare's, with nil), taken, avoided (A.Totals'), old }, or nil
--- and why.
 function A.Now()
 	local s = Snapshot()
 	if not s then
@@ -914,8 +748,6 @@ function A.Now()
 	return held.now
 end
 
--- The sheet's numbers for the stat tooltips of the Character window (header): { snap, cap, level, boss, old }, or nil and why. The stats are read
--- anew first where the game gives them plainly, so the snapshot is the last plain read, never one of this moment's secret answers.
 function A.Sheet()
 	Register()
 	local M = Model()
@@ -936,7 +768,6 @@ function A.Sheet()
 	return out
 end
 
--- The level of the enemy Against names for a player of this level, and whether it is a boss (Attacker); nil for no level.
 function A.Against(level)
 	if not Num(level) then
 		return nil, false
@@ -944,7 +775,6 @@ function A.Against(level)
 	return Attacker(level)
 end
 
--- The share of physical damage an armor takes off against an attacker of a level, in percent, or nil (ArmorPct).
 function A.ArmorPct(armor, attacker)
 	if not (Num(armor) and Num(attacker)) then
 		return nil
@@ -952,7 +782,6 @@ function A.ArmorPct(armor, attacker)
 	return ArmorPct(armor, attacker)
 end
 
--- Whether avoidance shows: Avoidance (chat.gearAvoid) at Always, or at For tanks while ns.PlayerRole's first answer is tank.
 function A.Wanted()
 	local choice = ns.Get("chat.gearAvoid")
 	if choice == "on" then
@@ -964,16 +793,11 @@ function A.Wanted()
 	return ok and Text(role) == "tank"
 end
 
--- A text that changes with what the lines and the view are built from: the snapshot, whether avoidance shows, Against, the enemy's hit for block
--- value and how much the tooltips say (chat.tipDetail).
 function A.Stamp()
 	return table.concat({ held.version, A.Wanted() and "on" or "off", tostring(ns.Get("chat.gearAgainst")), Swing(),
 		tostring(ns.Get("chat.tipDetail")) }, "|")
 end
 
--- Text -------------------------------------------------------------------------------------------------------------------------------------------
-
--- A colour of the style as { r, g, b }, from a list or the fields r, g and b (a colour of the client's), or nil.
 local function Colour(value)
 	local t = Table(value)
 	if not t then
@@ -986,8 +810,6 @@ local function Colour(value)
 	return nil
 end
 
--- The colours of the lines: SpellModel.lua's one style of the spell and gear lines (M.Fmt.Style), looked up when the lines are built; K.STYLE stands
--- in for a colour it does not have.
 local function Style()
 	local M = Model()
 	local style = Table(Field(Table(Field(M, "Fmt")), "Style"))
@@ -1002,7 +824,6 @@ local function Hex(colour)
 	return ("|cff%02x%02x%02x"):format(math.floor(colour[1] * 255 + 0.5), math.floor(colour[2] * 255 + 0.5), math.floor(colour[3] * 255 + 0.5))
 end
 
--- A whole number with its thousands broken by commas, its minus kept.
 local function Whole(value)
 	local digits = ("%d"):format(math.floor(math.abs(value) + 0.5))
 	local broken = digits:reverse():gsub("(%d%d%d)", "%1,"):reverse()
@@ -1013,8 +834,6 @@ local function Whole(value)
 	return broken
 end
 
--- A row's value in the style of the lines: two decimals for the table, one for armor's share and damage taken, whole with commas for block value;
--- a sign on a change only; "-" for none, "none" for a block value with no shield.
 local function Value(row, value, signed)
 	if not Finite(value) then
 		return row.key == "blockValue" and T.NONE or "-"
@@ -1034,8 +853,6 @@ local function Still(row)
 	return row.key == "armor" and K.STILL_ARMOR or row.key == "blockValue" and K.STILL_VALUE or row.key == "taken" and K.STILL_TAKEN or K.STILL
 end
 
--- The change of a row (a block value or armor share none is 0; damage taken's relative, in percent of now), and its tone: "gain" when better for
--- the player, "loss" when worse, else "none".
 local function Change(row, with)
 	local now = Num(row.now)
 	with = Num(with)
@@ -1056,8 +873,6 @@ local function Change(row, with)
 	return delta, ((delta > 0) == (row.better == true)) and "gain" or "loss"
 end
 
--- A row's value now or with the item, ~ first when it rests on an estimate (header); a change of the table is not marked, since the change of a row
--- the roll does not cut is the client's own sum, but damage taken's is, since an estimate is in both of its sides.
 local function Total(row, now)
 	if now then
 		return (row.nowEstimate and "~" or "") .. Value(row, row.now)
@@ -1065,7 +880,6 @@ local function Total(row, now)
 	return (row.withEstimate and "~" or "") .. Value(row, row.with)
 end
 
--- Damage taken (A.Totals) as a row of the lines and the window: in percent of a plain hit, lower being better.
 local function TakenRow(taken)
 	if not Table(taken) then
 		return nil
@@ -1077,9 +891,6 @@ local function TakenRow(taken)
 		withEstimate = taken.withEstimate == true, estimate = taken.estimate == true }
 end
 
--- A figure of the tooltip as GearLines.lua adds it with AddDoubleLine: its label left in the style's label colour, its value right in white, the
--- change first in the colour of its direction, its sign saying the same, and the total after it; key is its row's, so GearLines.lua can leave out
--- Damage taken where its Overall line says it already.
 local function Double(style, row, delta, tone, total)
 	local change = Value(row, delta, true)
 	if row.key == "taken" and row.estimate then
@@ -1089,8 +900,6 @@ local function Double(style, row, delta, tone, total)
 	return { key = row.key, left = row.label, right = right, colour = style.value, leftColour = style.label, text = row.label .. "  " .. right }
 end
 
--- The figures of a candidate that change, in the order of damage taken, the roll, armor and block value, and the notes of the figures whose
--- meaning wants one (damage taken, critical immunity, crushing blows).
 local function Figures(rows, attacker, taken, style)
 	local by, figures, notes = ByKey(rows), {}, {}
 	local takenRow = TakenRow(taken)
@@ -1133,15 +942,6 @@ local function SameSlots(a, b)
 	return true
 end
 
--- The lines of the item tooltip block (GearLines.lua), for the candidate whose slots the spell rows show, else the first, in the one style of the
--- spell and gear lines (the 0.5.20 brief, item 2): a gold header (against whom) only where more than one line follows; a double line for each
--- figure that changes (damage taken, missed, dodged, parried, blocked, critical, crushing, armor reduction, block value: the label left, the change
--- in green or red and the total in white right, ~ before an estimate); and the notes, dim and wrapped: in Compact (chat.tipDetail) one line of them
--- joined with "; ", in Full one line each. Entries as GearLines.lua adds them: { text, colour, wrap } (header = true on the header, note = true on
--- a note) and { key, left, right, colour, leftColour, text } for a figure (key its row's, colour the right's, text both together for a caller that
--- adds one line). The second answer is the words of the spell rows' "no change" line while avoidance shows. A stat not counted is named also when
--- nothing else changes, so "no change to your avoidance" is said only when all of the item was counted. Nil while avoidance does not show or has
--- nothing to say.
 function A.TipLines(subject, slots, opts)
 	if not A.Wanted() then
 		return nil
@@ -1162,7 +962,6 @@ function A.TipLines(subject, slots, opts)
 	if #figures == 0 and #notCounted == 0 then
 		return {}, T.NO_CHANGE_ALL
 	end
-	-- What is not counted first, since it says what the figures leave out, then the figures' notes.
 	local notes = {}
 	if ns.Get("chat.tipDetail") == "full" then
 		for _, text in ipairs(notCounted) do
@@ -1200,11 +999,6 @@ function A.TipLines(subject, slots, opts)
 	return lines, T.NO_CHANGE
 end
 
--- The window -------------------------------------------------------------------------------------------------------------------------------------
-
--- A row of the window: its texts and tones by column (name, now, with, change1, change2), from the row of each slot compared (rows), with and the
--- changes only while an item is compared. Each slot's own row gives its change, so a with of none (a block value with the shield taken off) has
--- one too.
 local function WindowRow(rows, compared)
 	local first = rows[1]
 	local texts, tones = { name = first.label, now = Total(first, true) }, {}
@@ -1213,7 +1007,6 @@ local function WindowRow(rows, compared)
 		for index, row in ipairs(rows) do
 			local delta, tone = Change(row, row.with)
 			local column = "change" .. index
-			-- A change under the last digit shown is none, never "-0.00%".
 			local text = delta and Value(row, tone == "none" and 0 or delta, true) or "-"
 			if delta and row.key == "taken" and row.estimate then
 				text = "~" .. text
@@ -1224,7 +1017,6 @@ local function WindowRow(rows, compared)
 	return { texts = texts, tones = tones }
 end
 
--- A candidate's rows for the window: damage taken first (A.Totals), then the table, armor and block value.
 local function WindowRows(c)
 	local rows, taken = {}, TakenRow(c.taken)
 	if taken then
@@ -1236,9 +1028,6 @@ local function WindowRows(c)
 	return rows
 end
 
--- The Avoidance view of the Gear comparison window (GearWindow.lua): { layout, cands, rows = { { texts, tones } }, heads, foot, notes, why, base },
--- with an item the table in each slot it can take (the first two), else the table now; damage taken is the first row. base (Against, an item
--- link): the item set against it in those slots (A.Compare's opts.base), else what is worn.
 function A.Window(link, base)
 	base = Text(base)
 	local view = { layout = "none", cands = {}, rows = {}, notes = {}, heads = { name = T.HEAD }, foot = {}, base = base }
@@ -1262,7 +1051,6 @@ function A.Window(link, base)
 	end
 	if #view.cands > 0 then
 		view.layout = #view.cands == 2 and "two" or "one"
-		-- A row of each slot by its key, so damage taken one slot has and the other lacks shows for neither rather than beside another row.
 		local lists = {}
 		for which, c in ipairs(view.cands) do
 			lists[which] = WindowRows(c)
@@ -1298,14 +1086,11 @@ function A.Window(link, base)
 	return view
 end
 
--- /flatui status --------------------------------------------------------------------------------------------------------------------------------
-
 local function Short(value)
 	local text = ("%.1f"):format(value)
 	return (text:gsub("%.0$", "")) .. "%"
 end
 
--- One line while avoidance shows: the table now against the enemy Against names, from the snapshot, said old in a fight.
 local function Status()
 	if not (ns.Enabled(K.KEY) and not ns.IsStopped(K.KEY) and A.Wanted()) then
 		return {}
@@ -1331,7 +1116,6 @@ if type(ns.AddStatus) == "function" then
 	ns.AddStatus(K.KEY, Status)
 end
 
--- The snapshot follows each read of the stats from the start of Chat and tooltips on, so the first tooltip has it.
 if type(ns.AddStart) == "function" then
 	ns.AddStart(K.KEY, Register)
 end

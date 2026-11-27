@@ -1,92 +1,36 @@
 local ADDON_NAME, ns = ...
 
--- Glow on the nearest object (general.sparkleGlow on the World and cursor page, under World; on, with Quest item sparkle): a strong golden sparkle of Flat
--- UI's own on the object the game's Interact Key would use, while its cursor marks a herb, a vein, a quest object or loot. The game tracks that
--- object as the unit softinteract and, while it gives it a nameplate, puts the plate over the object; its own nameplate code finds that plate the
--- same way, by UnitIsUnit with softinteract (Blizzard_NamePlates/Blizzard_NamePlates.lua:187-219). The game gives a game object that plate only
--- while the player's Interact Key is on (Enable Interact Key in its Controls options, Controls.lua:72-86, or a gamepad) and its interact icons take
--- in objects (Interact Key Icons at Show All in Accessibility, Accessibility.lua:175-222, or a gamepad, Blizzard_Gamepad/Core.lua:28); without the
--- icons a world object gets no nameplate, as ForeverLootSparkles and NodeSight Sparkles found in the client. The glow's row changes neither: they
--- are the player's choices, the Interact Key's variable is secure (cvars.yaml of build 70790:3866), and a plate for every object would change
--- what the player sees of the key. So this row writes no game setting, and the sparkle shows only where the game already shows such a plate.
--- Turn on what the glow needs (general.sparkleSetup, a list row) sets both when the player picks it, out of a fight, as the game's own options
--- write them: softTargetInteract to Enum.SoftTargetEnableFlags.Any unless the key is on already (Controls.lua:78-80), and the four variables of
--- Interact Key Icons at Show All to 1 (Accessibility.lua:196-201), with C_CVar.SetCVar; a line in chat says what it changed. Once for the
--- account (FlatUIDB.sparkleHint), at the first look of a session while the glow is on and the Interact Key is off, one line in chat points to it.
--- The plate is found among the nameplates the game shows (C_NamePlate.GetNamePlates, and C_NamePlate.GetNamePlateForUnit for the unit of
--- NAME_PLATE_UNIT_ADDED: NamePlateDocumentation.lua:11-25) by UnitIsGameObject and UnitIsUnit(unit, "softinteract") (UnitDocumentation.lua:
--- 1993-2006), looked at again at NAME_PLATE_UNIT_ADDED, NAME_PLATE_UNIT_REMOVED, PLAYER_SOFT_INTERACT_CHANGED (UnitDocumentation.lua:3909-3919),
--- PLAYER_ENTERING_WORLD and the end of a fight. What kind of object it is comes from its cursor: SetUnitCursorTexture puts it on a hidden texture
--- of Flat UI's own (UnitDocumentation.lua:595-612), whose file or atlas names Mine, GatherHerbs, a Quest cursor, LootAll, Pickup or PickLock
--- (Interface\Cursor, the same with Unable in front while the player cannot use it yet; the names Forever's client has, as Lueur read them from it,
--- and a file ID is looked up with and without .blp, as Lueur does), or C_QuestLog.UnitIsRelatedToActiveQuest says it belongs to a quest of the
--- player's (QuestLogDocumentation.lua:1287-1300). A chair, a door or a mailbox gets nothing, and so does a chest the game gives a lever's cursor,
--- as Lueur saw one get on Forever. An answer the game withholds counts as no.
--- The sparkle is one frame of Flat UI's own that takes no mouse, parented to that plate at the plate's frame level, under the game's unit frame,
--- and anchored under it (SetParent, SetFrameLevel, SetPoint on its own frame), so it follows the object, its distance and its fade, and hides with
--- it. It is put on a plate and taken off one only out of combat, as Flat UI does with every frame on a plate that may be protected: in a fight it
--- stays on the object it was on, it hides when that plate goes, and a new object gets it when the fight ends. Inside are textures of its own,
--- drawn with the ADD blend in gold: Media/Glow.tga, a soft round glow, and Media/Star.tga, a four-pointed glint (both 64 by 64 and white), and
--- Media/Ring.tga, the cursor ring's. The glow swells and brightens and back, a ring grows out of the object and fades, and four stars twinkle as
--- they turn a quarter, each an AnimationGroup of its own texture (Alpha, Scale and Rotation animations, SimpleAnimAlphaAPIDocumentation.lua,
--- SimpleAnimScaleAPIDocumentation.lua, SimpleAnimRotationAPIDocumentation.lua), played only while the sparkle shows. With Glow colour at By what
--- it is (general.sparkleGlowColour; Gold, the look above, by default), the cursor that told the object's kind also gives its colour (COLOURS):
--- herbs green, ore copper, quest objects gold, loot, things to pick up and locked chests white; the stars are that colour, lighter. The
--- textures are tinted again (SetVertexColor) only when the colour changes. Each time the sparkle lands on an object (it was hidden, or it moves to
--- another plate) the whole frame fades in over FADE_IN seconds (an Alpha animation of its own frame) and, with Glow sound at anything but None
--- (general.sparkleGlowSound, the Jump sound's choices of ns.SOUNDS, IconRow.lua), plays that sound once on the Gameplay SFX channel, out of a
--- fight only and at most once every SOUND_EVERY seconds, so a herb that comes into reach rings softly. Picking a sound in the options plays it
--- once (ns.SparkleGlowSoundPicked), as the combat sounds do.
--- Nothing of the game's is written: the plate gets no field, no method call of its Lua and no hook, and its frame level and unit are only read.
--- While the row is off no event is heard, and the frame, once made, is hidden and taken off its plate. An error stops the sparkle until /reload,
--- with a line for /flatui status. Not a module: Sparkle.lua's ns.SparkleChanged calls ns.SparkleGlowChanged at login, at a change of profile and
--- when one of the rows changes. The idea of a sparkle of an addon's own on that plate is Lueur's, and ForeverLootSparkles 1.2.0 to 1.3.1 and
--- NodeSight Sparkles have it too; none of their code is used, and their writes of the Interact Key's variables are left out.
-
 local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
 local GLOW, STAR, RING = MEDIA .. "Glow.tga", MEDIA .. "Star.tga", MEDIA .. "Ring.tga"
--- The size of the sparkle, and how far its middle is under the bottom of the plate, in the plate's units: the plate stands over the object.
 local SIZE, BELOW = 128, -40
 local GOLD, LIGHT = { 1, 0.78, 0.22 }, { 1, 0.93, 0.62 }
--- Glow colour By what it is: the colour of each cursor of CURSORS (quest, the object of a quest of the player's, is gold), and how far the stars
--- go from it towards white, as LIGHT does from GOLD.
 local COLOURS = {
 	Mine = { 1, 0.55, 0.25 }, GatherHerbs = { 0.45, 0.95, 0.35 }, Quest = GOLD, QuestRepeatable = GOLD, QuestTurnIn = GOLD, QuestInteract = GOLD,
 	quest = GOLD, LootAll = { 0.95, 0.95, 1 }, Pickup = { 0.95, 0.95, 1 }, PickLock = { 0.95, 0.95, 1 },
 }
 local STAR_WHITE = 0.55
--- The stars: where each is from the middle, its size, the time of one twinkle and the way it turns.
 local STARS = {
 	{ x = -34, y = 12, size = 40, time = 1.5, turn = 90 },
 	{ x = 30, y = 24, size = 30, time = 1.9, turn = -90 },
 	{ x = -10, y = -28, size = 34, time = 1.7, turn = -90 },
 	{ x = 26, y = -14, size = 24, time = 2.2, turn = 90 },
 }
--- The cursor files of the objects that get the sparkle (Interface\Cursor): ore, herbs, quest objects, loot, things to pick up and locked chests.
 local CURSORS = { "Mine", "GatherHerbs", "Quest", "QuestRepeatable", "QuestTurnIn", "QuestInteract", "LootAll", "Pickup", "PickLock" }
 local KINDS = {}
 for _, name in ipairs(CURSORS) do
 	KINDS[name:lower()] = name
 end
 local EVENTS = { "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_SOFT_INTERACT_CHANGED", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }
--- The fade of the sparkle as it lands on an object, and the least time between two of its sounds.
 local FADE_IN, SOUND_EVERY = 0.25, 2
--- The choices of Glow sound, as the Jump sound's (LavaWalk.lua), by their place in ns.SOUNDS (IconRow.lua).
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 local SOUND_CHANNEL = "Gameplay SFX"
 
--- The frame of the sparkle (made the first time it shows) and its animations; the plate it is on and the unit of that plate. Its textures for
--- the colour: tinted.main (the glow and the ring) and tinted.light (the stars), and tinted.colour, the colour they have now.
--- fadeIn: the fade of the whole frame as it lands; landed: the plate it last landed on; lastSound: when its sound last played.
 local holder, groups, fadeIn, landed
 local lastSound = -math.huge
 local tinted = { main = {}, light = {} }
 local anchor, anchorUnit
--- The frame that hears the events while the row is on, whether it hears them, and the hidden texture that takes an object's cursor.
 local listener, hearing, probe
--- The cursor files of CURSORS by file ID (their names), read the first time a cursor comes as a file ID.
 local cursorIDs
--- True once the sparkle has been on an object in this session. The error that stopped it, or nil.
 local seen, broken
 local Stop
 
@@ -94,7 +38,6 @@ local function Wanted()
 	return ns.Get("general.questSparkle") == true and ns.Get("general.sparkleGlow") == true
 end
 
--- The answer of a call, or nil when the client lacks the function, it raises or the answer is withheld.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -106,7 +49,6 @@ local function Ask(fn, ...)
 	return nil
 end
 
--- The nameplate of a unit, or nil when there is none, the game withholds it or it is forbidden.
 local function PlateOf(unit)
 	local plates = _G.C_NamePlate
 	local plate = type(plates) == "table" and Ask(plates.GetNamePlateForUnit, unit) or nil
@@ -116,7 +58,6 @@ local function PlateOf(unit)
 	return plate
 end
 
--- The name of a cursor of CURSORS, from a file ID, a path or an atlas name, or nil.
 local function Glows(texture)
 	if type(texture) == "number" then
 		if cursorIDs == nil then
@@ -143,7 +84,6 @@ local function Glows(texture)
 	if KINDS[file] then
 		return KINDS[file]
 	end
-	-- An atlas of the gamepad's cursors names the cursor inside a longer name; the longest name found wins, so QuestTurnIn is not Quest.
 	local found
 	for kind, name in pairs(KINDS) do
 		if text:find(kind, 1, true) and (not found or #name > #found) then
@@ -153,8 +93,6 @@ local function Glows(texture)
 	return found
 end
 
--- What an object that gets the sparkle is: "quest" for one of a quest of the player's, else the name of its cursor of CURSORS (ore, herbs, a
--- quest or loot); nil for any other.
 local function Sparkles(unit)
 	local quests = _G.C_QuestLog
 	if type(quests) == "table" and Ask(quests.UnitIsRelatedToActiveQuest, unit) == true then
@@ -171,7 +109,6 @@ local function Sparkles(unit)
 	return Glows(Ask(probe.GetTexture, probe)) or Glows(probe.GetAtlas and Ask(probe.GetAtlas, probe) or nil)
 end
 
--- The plate of a unit when the unit is the game object the Interact Key would use and gets the sparkle, and what it is (Sparkles), else nil.
 local function Match(unit)
 	if type(unit) ~= "string" or ns.IsSecret(unit) then
 		return nil
@@ -187,7 +124,6 @@ local function Match(unit)
 	return nil
 end
 
--- The plate, unit and kind of that object among the shown nameplates, or nil.
 local function Find()
 	local plates = _G.C_NamePlate
 	local shown = type(plates) == "table" and Ask(plates.GetNamePlates) or nil
@@ -198,7 +134,6 @@ local function Find()
 		if not ns.Forbidden(plate) then
 			local unitFrame = plate.UnitFrame
 			if not ns.Forbidden(unitFrame) then
-				-- Match tests the unit with ns.IsSecret before anything else.
 				local unit = unitFrame.unit
 				local found, kind = Match(unit)
 				if found == plate then
@@ -210,7 +145,6 @@ local function Find()
 	return nil
 end
 
--- A texture of the sparkle: white art in a colour, added to what is under it.
 local function Art(frame, file, layer, size, colour)
 	local texture = frame:CreateTexture(nil, layer)
 	ns.Own[texture] = true
@@ -227,7 +161,6 @@ local function Build()
 	frame:SetSize(SIZE, SIZE)
 	frame:Hide()
 	local made = {}
-	-- The glow swells and brightens, and back.
 	tinted.main, tinted.light, tinted.colour = {}, {}, GOLD
 	local glow = Art(frame, GLOW, "BACKGROUND", SIZE, GOLD)
 	tinted.main[#tinted.main + 1] = glow
@@ -245,7 +178,6 @@ local function Build()
 	swell:SetSmoothing("IN_OUT")
 	pulse:SetLooping("BOUNCE")
 	made[#made + 1] = pulse
-	-- A ring grows out of the object and fades, again and again.
 	local ring = Art(frame, RING, "BORDER", SIZE / 2, GOLD)
 	tinted.main[#tinted.main + 1] = ring
 	ring:SetPoint("CENTER", frame, "CENTER", 0, 0)
@@ -262,7 +194,6 @@ local function Build()
 	fade:SetSmoothing("IN")
 	wave:SetLooping("REPEAT")
 	made[#made + 1] = wave
-	-- Each star comes up as it turns an eighth and goes out as it turns another, at its own pace; turned a quarter it looks as it began.
 	for _, spot in ipairs(STARS) do
 		local star = Art(frame, STAR, "ARTWORK", spot.size, LIGHT)
 		tinted.light[#tinted.light + 1] = star
@@ -283,7 +214,6 @@ local function Build()
 		twinkle:SetLooping("REPEAT")
 		made[#made + 1] = twinkle
 	end
-	-- The whole sparkle fades in as it lands on an object; it is not in groups, so it plays once and does not loop.
 	local landing = frame:CreateAnimationGroup()
 	local rise = landing:CreateAnimation("Alpha")
 	rise:SetFromAlpha(0)
@@ -293,7 +223,6 @@ local function Build()
 	holder, groups, fadeIn = frame, made, landing
 end
 
--- The sound of a choice of Glow sound on the Gameplay SFX channel; nothing for None.
 local function Sound(choice)
 	local sound = ns.SOUNDS and ns.SOUNDS[KITS[choice] or 0]
 	if type(sound) == "table" and type(PlaySound) == "function" then
@@ -301,7 +230,6 @@ local function Sound(choice)
 	end
 end
 
--- The sound of a landing, out of a fight and at most once every SOUND_EVERY seconds.
 local function Chime()
 	local choice = ns.Get("general.sparkleGlowSound")
 	if type(choice) ~= "string" or not KITS[choice] or InCombatLockdown() then
@@ -315,7 +243,6 @@ local function Chime()
 	Sound(choice)
 end
 
--- The colour of the sparkle: gold, or with Glow colour By what it is, the colour of what the object is. Written only when it changes.
 local function Tint(kind)
 	local colour = ns.Get("general.sparkleGlowColour") == "kind" and COLOURS[kind] or GOLD
 	if not holder or colour == tinted.colour then
@@ -353,7 +280,6 @@ local function Hide()
 	end
 end
 
--- Shows the sparkle on its plate. A landing (it was hidden, or it is on another plate now) fades it in and plays the Glow sound.
 local function Show()
 	if not holder then
 		return
@@ -371,7 +297,6 @@ local function Show()
 	end
 end
 
--- Puts the sparkle under a plate. Out of combat only.
 local function Attach(plate, unit)
 	if not holder then
 		Build()
@@ -386,7 +311,6 @@ local function Attach(plate, unit)
 	anchor, anchorUnit, seen = plate, unit, true
 end
 
--- Takes the sparkle off its plate. Out of combat only.
 local function Detach()
 	if holder and anchor then
 		Hide()
@@ -396,7 +320,6 @@ local function Detach()
 	anchor, anchorUnit = nil, nil
 end
 
--- Brings the sparkle in line with the object the Interact Key would use, or with its absence.
 local function Evaluate()
 	if broken or not Wanted() then
 		return
@@ -426,14 +349,12 @@ local function OnEvent(_, event, unit)
 		return
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" then
-		-- Only the new plate is looked at: the others did not change.
 		local plate, kind = Match(unit)
 		if plate == nil then
 			return
 		end
 		if plate ~= anchor then
 			if InCombatLockdown() then
-				-- The object the sparkle is on is no longer the one the Interact Key would use.
 				Hide()
 				return
 			end
@@ -485,7 +406,6 @@ local function Off()
 	end
 end
 
--- An error stops the sparkle until the next /reload, with a line for /flatui status.
 function Stop(err)
 	if broken then
 		return
@@ -520,7 +440,6 @@ local function Apply()
 	Evaluate()
 end
 
--- One of the rows changed, the player logged in, or the profile changed.
 function ns.SparkleGlowChanged()
 	local ok, err = pcall(Apply)
 	if not ok then
@@ -528,7 +447,6 @@ function ns.SparkleGlowChanged()
 	end
 end
 
--- The number in the text of one of the game's variables, or nil.
 function Setting(name)
 	local cvar = _G.C_CVar
 	if type(cvar) ~= "table" or type(cvar.GetCVar) ~= "function" then
@@ -539,16 +457,11 @@ function Setting(name)
 	return ns.Finite(number) and number or nil
 end
 
--- Turn on what the glow needs --------------------------------------------------------------------------------------------------------------
-
--- Enum.SoftTargetEnableFlags: Kbm 2 and Any 3 (SoftTargetConstantsDocumentation.lua:5-17): from Kbm up the key works with the keyboard and mouse.
 local KEY_ON, KEY_ANY = 2, 3
--- The four variables the game's Interact Key Icons sets to 1 at Show All (Accessibility.lua:196-201).
 local SHOW_ALL = { "SoftTargetIconEnemy", "SoftTargetIconInteract", "SoftTargetIconGameObject", "SoftTargetLowPriorityIcons" }
 local HINT_LINE = "Flat UI: Glow on the nearest object shows only with the game's Interact Key on. Turn on what the glow needs, on the World and "
 	.. "cursor page, sets it up."
 
--- Whether the key is on and the icons take in objects; nil on a client without the Interact Key.
 local function Ready()
 	local key = Setting("SoftTargetInteract")
 	if key == nil then
@@ -557,7 +470,6 @@ local function Ready()
 	return key >= KEY_ON and Setting("SoftTargetIconGameObject") ~= 0
 end
 
--- The one line in chat, once for the account, at the first look of a session while the glow is on and the key is off.
 local hintLooked = false
 function Hint()
 	if hintLooked then
@@ -573,7 +485,6 @@ function Hint()
 	print(HINT_LINE)
 end
 
--- Picking a Glow sound plays it once, so it can be chosen by ear, only while the options window shows and out of a fight; None plays nothing.
 function ns.SparkleGlowSoundPicked(path)
 	if type(path) ~= "string" or InCombatLockdown() or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
 		return
@@ -585,7 +496,6 @@ function ns.SparkleGlowSoundPicked(path)
 	end
 end
 
--- The lines of the row: what a pick does, or that it is done.
 function ns.SparkleGlowSetupLines()
 	local ready = Ready()
 	if ready == nil then
@@ -605,7 +515,6 @@ local function Write(name, value)
 	return ok and done ~= false
 end
 
--- Sets what the glow needs, out of a fight, and says what it changed.
 function ns.SparkleGlowSetup(id)
 	if id == 2 then
 		return true, "Flat UI: Enable Interact Key and Interact Key Icons are on already."
@@ -649,7 +558,6 @@ function ns.SparkleGlowSetup(id)
 	return true, ("Flat UI: %s on. The glow shows on the next herb, vein or quest object near you."):format(table.concat(changed, " and "))
 end
 
--- The line of /flatui status, or nil while the row is off or the client has no Interact Key.
 function ns.SparkleGlowStatus()
 	if broken then
 		return "Glow on the nearest object: stopped. " .. broken
@@ -657,7 +565,6 @@ function ns.SparkleGlowStatus()
 	if not Wanted() then
 		return nil
 	end
-	-- Enum.SoftTargetEnableFlags: None 0, Gamepad 1, Kbm 2, Any 3 (SoftTargetConstantsDocumentation.lua:5-17).
 	local key = Setting("SoftTargetInteract")
 	if key == nil then
 		return nil

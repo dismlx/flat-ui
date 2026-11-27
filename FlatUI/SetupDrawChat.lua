@@ -1,28 +1,13 @@
 local _, ns = ...
 
--- The setup drawings of chat, tooltips and combat text: mock-chat (chat windows and chat text), mock-tooltip, mock-combat-text and
--- mock-combat-alerts (No target, Low health, Low mana, +Combat and -Combat of CombatCues.lua). Each is a
--- table { build(stage), draw(stage), parts } as the drawing library of the setup wizard takes it. build makes the frames once, all marked
--- ns.Own; draw reads the settings only through ns.Get, so under the draft view of the wizard it draws the draft, and it lays everything
--- out again each time it runs. Sample text and numbers are fixed. The look of a frame, a fill, a face and a colour comes from the same
--- functions the modules paint with (ns.Outline, ns.SetOutlineFill, ns.TipShades, ns.FontFile, ns.OutlineFlags, ns.FlatFill, ns.BarTexture,
--- ns.CombatOffsets, ns.CombatPopHeight, ns.CombatOwnEdge, ns.CombatColour, ns.CombatFont, and for the two scroll areas ns.ScrollLane, ns.ScrollPath,
--- ns.ScrollAlpha and ns.ScrollSize). mock-combat-text draws the numbers over an enemy plate and over friendly units, the Incoming area's numbers
--- on you and, right of them, the Outgoing area's column of your hits, kept whole inside the picture; it shows in setup and in the options
--- window's preview band above every Combat text tab but You and warnings, which shows mock-combat-alerts (PanelPreview.lua), each stage with its
--- own marks (partsOf).
-
 ns.SetupDrawings = ns.SetupDrawings or {}
 
 local U = {}
 
--- Standard class colours, for a client that does not give RAID_CLASS_COLORS.
 U.CLASS = { HUNTER = { 0.67, 0.83, 0.45 }, PRIEST = { 1, 1, 1 }, ROGUE = { 1, 0.96, 0.41 }, MAGE = { 0.41, 0.8, 0.94 }, WARRIOR = { 0.78, 0.61, 0.43 } }
--- The colour of a unit's name by reaction: hostile red and friendly green, as the game gives them (GameTooltip.lua:120-167).
 U.RED, U.GREEN, U.WHITE = { 0.8, 0.3, 0.22 }, { 0, 0.6, 0.1 }, { 1, 1, 1 }
 U.FRIZ, U.GAME_FLAGS = "Fonts\\FRIZQT__.TTF", ""
 
--- A frame of the addon's own.
 function U.frame(parent, w, h)
 	local f = CreateFrame("Frame", nil, parent)
 	ns.Own[f] = true
@@ -38,7 +23,6 @@ function U.tex(parent, layer, sub)
 	return t
 end
 
--- A font string of the addon's own, left aligned. The size and face are set by U.font.
 function U.text(parent)
 	local t = ns.OwnText(parent, "OVERLAY", "GameFontHighlightSmall")
 	if t then
@@ -53,7 +37,6 @@ function U.at(region, point, relative, relativePoint, x, y)
 	region:SetPoint(point, relative, relativePoint or point, x or 0, y or 0)
 end
 
--- A face, a size, flags and a shadow on a font string, and a colour. A face the client refuses is drawn in Friz Quadrata.
 function U.font(fs, file, size, flags, shadow, colour)
 	local ok, done = pcall(fs.SetFont, fs, file, size, flags or "")
 	if not ok or done == false then
@@ -70,7 +53,6 @@ function U.font(fs, file, size, flags, shadow, colour)
 	end
 end
 
--- The plain look the game gives a part this addon leaves alone: a dark fill and thin grey edges, drawn on the frame itself.
 function U.art(frame)
 	local a = { fill = U.tex(frame, "BACKGROUND", -7), edges = {} }
 	a.fill:SetAllPoints(frame)
@@ -98,7 +80,6 @@ function U.art(frame)
 	return a
 end
 
--- Shows or hides the plain look, with its fill { r, g, b, a } and edge colour { r, g, b }.
 function U.artShow(a, shown, fill, edge)
 	a.fill:SetColorTexture(fill[1], fill[2], fill[3], fill[4])
 	a.fill:SetShown(shown)
@@ -108,7 +89,6 @@ function U.artShow(a, shown, fill, edge)
 	end
 end
 
--- The label under a part drawn as the game's plain plate, so a stand-in is not taken for the real look.
 function U.gameLook(parent, point, relative, relativePoint, x, y)
 	local t = U.text(parent)
 	t:SetText("Game look")
@@ -121,20 +101,16 @@ function U.gameLookShow(label, shown)
 	U.font(label, U.FRIZ, 10, "", true, { 0.6, 0.6, 0.6 })
 end
 
--- An outline of the addon's own on a frame, following the border and background rows of a page. prefix is "look" or "tip".
 function U.outlined(frame, area, prefix)
 	local o = ns.Outline(frame, frame, nil, prefix)
 	return ns.SetOutlineArea(o, area)
 end
 
--- Paints an outline again from the settings in force now. Painting reads the border and background rows only when something about the outline
--- changes, so a change of those rows alone needs this.
 function U.repaint(o)
 	ns.SetOutlineBare(o, true)
 	ns.SetOutlineBare(o, false)
 end
 
--- The name, the class name and the class colour of the player, which the client gives for "player". A client that withholds them gets a mage.
 function U.player()
 	local name, class = "Priestly", "Mage"
 	if type(UnitName) == "function" then
@@ -156,7 +132,6 @@ function U.player()
 	return name, class, { r, g, b }
 end
 
--- The colour of a class by its token.
 function U.classColour(token)
 	local c = type(RAID_CLASS_COLORS) == "table" and not ns.IsSecret(RAID_CLASS_COLORS) and RAID_CLASS_COLORS[token]
 	if type(c) == "table" and not ns.IsSecret(c) and type(c.r) == "number" and type(c.g) == "number" and type(c.b) == "number" then
@@ -165,23 +140,16 @@ function U.classColour(token)
 	return U.CLASS[token] or U.WHITE
 end
 
--- Text in a colour, for a name inside a line.
 function U.coloured(colour, text)
 	return ("|cff%02x%02x%02x%s|r"):format(math.floor(colour[1] * 255 + 0.5), math.floor(colour[2] * 255 + 0.5), math.floor(colour[3] * 255 + 0.5), text)
 end
 
--- Chat ----------------------------------------------------------------------------------------------------------------------------
-
 do
 	local instances = setmetatable({}, { __mode = "k" })
-	-- The game's chat font is Arial Narrow 14 with a shadow (Mainline/Fonts.xml:775-781, Shared/Fonts.xml:1373).
 	local GAME_FACE, SIZE = "Fonts\\ARIALN.TTF", 14
 	local WIDTH, HEIGHT, TAB, BOX, GAP, LEFT = 360, 112, 22, 26, 2, 40
-	-- 3:27:32 in the afternoon, written as each choice of Timestamps writes it (the formats of Config.lua).
 	local STAMP = { none = "", hhmm = "03:27 ", hhmmss = "03:27:32 ", hhmmAm = "03:27 PM ", hhmmssAm = "03:27:32 PM ", hhmm24 = "15:27 ", hhmmss24 = "15:27:32 " }
 	local PARTY, GUILD, GENERAL = { 0.67, 0.67, 1 }, { 0.25, 1, 0.25 }, { 1, 0.75, 0.75 }
-	-- Per line: the channel label, its colour, who speaks and in which class, the message, and whether Per channel colours the name (the
-	-- legacy setting of that channel, ChatFrameUtil.lua:906-909).
 	local LINES = {
 		{ label = "[1. General]", colour = GENERAL, who = "Hunterly", class = "HUNTER", text = "any healer for Deadmines?", legacy = false },
 		{ label = "[Party]", colour = PARTY, who = false, class = false, text = "on my way", legacy = true },
@@ -243,7 +211,6 @@ do
 		local frames, tabsOn, buttonsOn, boxOn = on and ns.Get("chat.frames") == true, on and ns.Get("chat.tabs") == true,
 			on and ns.Get("chat.buttons") == true, on and ns.Get("chat.editbox") == true
 		local place = on and ns.Get("chat.inputPlace") or "below"
-		-- Layout: the input box below the window, or above the tabs.
 		local y0 = 20
 		local windowY, tabsY, boxY = y0 + BOX + GAP, y0 + BOX + GAP + HEIGHT + GAP, y0
 		if place == "above" then
@@ -253,7 +220,6 @@ do
 		U.at(S.buttons, "BOTTOMLEFT", S.root, "BOTTOMLEFT", 8, windowY + HEIGHT - 74)
 		U.at(S.box.frame, "BOTTOMLEFT", S.root, "BOTTOMLEFT", LEFT, boxY)
 		U.at(S.typing.frame, "BOTTOMLEFT", S.root, "BOTTOMLEFT", LEFT + WIDTH + 24, y0 + 60)
-		-- The window: the background at the chosen opacity and the thin border, or the game's plain plate.
 		local alpha = ns.Get("chat.opacity") / 100
 		local r, g, b = ns.Colour("general.backdrop")
 		ns.SetOutlineFill(S.windowOutline, r, g, b, alpha)
@@ -261,7 +227,6 @@ do
 		ns.SetOutline(S.windowOutline, frames and alpha > 0, frames and alpha > 0)
 		U.artShow(S.windowArt, not frames, { 0, 0, 0, 0.4 }, { 0.45, 0.45, 0.45 })
 		U.repaint(S.windowOutline)
-		-- The tabs.
 		local x = LEFT
 		for _, tab in ipairs(S.tabs) do
 			U.at(tab.frame, "BOTTOMLEFT", S.root, "BOTTOMLEFT", x, tabsY)
@@ -279,9 +244,7 @@ do
 			U.font(tab.label, U.FRIZ, 12, "", true, tab.own or (tab.selected and U.WHITE or { 0.78, 0.78, 0.78 }))
 			U.repaint(tab.outline)
 		end
-		-- The buttons beside the window: the game's plate behind them unless Chat button background hides it.
 		U.artShow(S.buttonsArt, not buttonsOn, { 0.2, 0.2, 0.2, 0.85 }, { 0.45, 0.45, 0.45 })
-		-- The input box, idle, and while typing in the party channel.
 		S.box.frame:SetAlpha((on and ns.Get("chat.inputIdle") or 35) / 100)
 		ns.SetOutline(S.box.outline, boxOn, boxOn)
 		ns.SetOutlineColour(S.box.outline, nil, nil, nil)
@@ -299,7 +262,6 @@ do
 		U.artShow(S.typing.art, not boxOn, { 0.1, 0.1, 0.1, 0.9 }, PARTY)
 		U.repaint(S.typing.outline)
 		U.gameLookShow(S.gameLook, not frames or not tabsOn or not buttonsOn or not boxOn)
-		-- The text: the face, the outline and the shadow, which the game's own chat font has when Flat UI leaves it alone.
 		local file, flags, shadow = GAME_FACE, U.GAME_FLAGS, true
 		if on then
 			file = ns.FontFile(ns.Get("chat.font")) or GAME_FACE
@@ -332,8 +294,6 @@ do
 	end
 
 	local drawing = { draw = Draw, parts = {} }
-	-- The marks of each stage: setup's chat cards and its Your screen draw the chat on stages of their own besides the page's, so a row of a page
-	-- marks the page's window, not the window of the stage built last.
 	local partsOf = setmetatable({}, { __mode = "k" })
 	function drawing.partsOf(stage)
 		return partsOf[stage]
@@ -355,17 +315,13 @@ do
 	ns.SetupDrawings["mock-chat"] = drawing
 end
 
--- Tooltips ------------------------------------------------------------------------------------------------------------------------
-
 do
 	local instances = setmetatable({}, { __mode = "k" })
-	-- The sizes of the game's tooltip fonts: the title 14 and the text 12 (Shared/Fonts.xml:1273-1275, 1385-1387).
 	local TITLE, TEXT = 14, 12
 	local LABEL = 16
 	local WIDTH, PAD, GAP, BAR_FILE = 190, 8, 14, "Interface\\TargetingFrame\\UI-TargetingFrame-BarFill"
 	local EPIC = { 0.64, 0.21, 0.93 }
 	local GREY, YELLOW = { 0.8, 0.8, 0.8 }, { 1, 0.82, 0 }
-	-- The green the game gives a tooltip's health bar (HealthBar.lua).
 	local GAME_GREEN = { 0, 1, 0 }
 	local DEFS
 
@@ -404,7 +360,6 @@ do
 		return S
 	end
 
-	-- The lines of a tooltip: { text, colour }, with the rare line and the extra lines the settings add.
 	local function Lines(def)
 		local list = {}
 		for _, line in ipairs(def.lines) do
@@ -424,7 +379,6 @@ do
 		return list
 	end
 
-	-- The colour of the border a tooltip takes from what it shows, or nothing for the plain border.
 	local function Border(def)
 		if def.id == "item" then
 			return ns.Get("chat.quality") and def.colour or nil
@@ -470,7 +424,6 @@ do
 			U.at(tip.frame, "BOTTOMLEFT", S.root, "BOTTOMLEFT", x, LABEL)
 			x = x + width + GAP
 			high = math.max(high, height)
-			-- The box: the chosen colour, opacity and shading and the thin border, or the game's plain plate.
 			ns.SetOutlineFill(tip.outline, colour[1], colour[2], colour[3], ns.Get("chat.tipOpacity") / 100)
 			ns.SetOutlineShade(tip.outline, top, bottom)
 			local r, g, b
@@ -485,7 +438,6 @@ do
 			U.artShow(tip.art, not on, { 0.06, 0.06, 0.12, 0.9 }, { 0.5, 0.5, 0.6 })
 			U.repaint(tip.outline)
 			U.gameLookShow(tip.label, not on)
-			-- The title, in the class colour when the row says so, and the lines.
 			local name = def.colour
 			if def.unit == "player" then
 				name = (mod and ns.Get("chat.nameClass") == true) and def.mine or U.WHITE
@@ -502,7 +454,6 @@ do
 					U.at(fs, "TOPLEFT", tip.frame, "TOPLEFT", pad, -(pad + titleSize + 4 * share + (n - 1) * (textSize + 3 * share)))
 				end
 			end
-			-- The health bar of a unit: the game's fill, or the flat one in the chosen texture, with a thin border.
 			if bar then
 				bar:SetShown(barOn)
 				bar:SetSize(width - pad * 2, barHeight)
@@ -517,7 +468,6 @@ do
 				else
 					ns.RestoreFill(bar)
 				end
-				-- Health bar colour: the enemy's reaction red and your class colour, or the game's green.
 				local tint = mod and ns.Get("chat.barColour") == "class" and (def.mine or def.health) or GAME_GREEN
 				bar:SetStatusBarColor(tint[1], tint[2], tint[3])
 				ns.SetOutline(tip.barOutline, health and barOn, health and barOn)
@@ -548,17 +498,11 @@ do
 	ns.SetupDrawings["mock-tooltip"] = drawing
 end
 
--- Combat text ---------------------------------------------------------------------------------------------------------------------
-
 do
 	local instances = setmetatable({}, { __mode = "k" })
 	local SHAPE = ns.CombatShape
 	local WIDE, HIGH, PLATE_X, PLATE_Y, OWN_X = 650, 204, 150, 44, 430
-	-- The age a Burst critical hit is drawn at: 0.03 s, 2.06 times its settled height.
 	local BURST_AGE = 0.03
-	-- Over an enemy, in the order they appeared: the text, the kind of hit the game reports, the school of magic mask, whether it is a
-	-- healing number, and how long ago it showed. The last is a critical hit still in its pop. name: the spell written after the number while
-	-- Spell names is After every spell and Whose hits is Yours, on Flat UI numbers (CombatText.lua, Ability).
 	local ENEMY = {
 		{ text = "412", school = 1, age = 1.3 },
 		{ text = "412", flag = "GLANCING", school = 1, age = 1.05 },
@@ -567,10 +511,6 @@ do
 		{ text = "Dodge", word = true, age = 0.4 },
 		{ text = "824", flag = "CRITICAL", school = 1, crit = true, age = 0.12 },
 	}
-	-- For the player, as the module's own samples: the report, the text with its sign, whether it is a critical hit, whether it shows
-	-- from Damage and healing you take, the colour, and whether it starts a few units to one side. The last is a Frost spell's hit: the game's
-	-- purple, or light blue with Colour by school of magic on (school, ns.CombatColour). A physical hit (damage) takes Damage on you colour and
-	-- the heal Healing on you colour, which shows only while Healing on you is on (CombatText.lua, DescribeOwn).
 	local OWN = {
 		{ text = "-412", level = "take", colour = { 1, 0.1, 0.1 }, side = true, damage = true },
 		{ text = "-824", level = "take", colour = { 1, 0.1, 0.1 }, crit = true, damage = true },
@@ -579,9 +519,7 @@ do
 		{ text = "+20", level = "more", colour = { 0.41, 0.8, 0.94 } },
 		{ text = "-510", level = "take", colour = { 0.79, 0.3, 0.85 }, school = 16 },
 	}
-	-- Where the sample numbers for the player start, and how far the mock Incoming area reaches.
 	local OWN_TOP, OWN_LENGTH = 150, 120
-	-- Over a friendly unit: the number, what it is, and how long ago it showed. The healing you do shows on the target plate alone.
 	local FRIEND = {
 		{ text = "350", kind = "damage", age = 1, school = 1 },
 		{ text = "520", kind = "heal", age = 0.7 },
@@ -589,10 +527,6 @@ do
 		{ text = "Miss", kind = "word", age = 0.25 },
 	}
 	local FRIEND_X, FRIEND_FRAME_Y, FRIEND_PLATE_Y = 330, 150, 44
-	-- In the Outgoing scroll area, right of the numbers on you, from the oldest: a swing with the icon of Attack, a critical Fire spell hit with its
-	-- icon and a Dodge, a steady run of hits OUT_GAP seconds apart. The column is OUT_X from the left; it starts OUT_LOW from the bottom of the mock
-	-- area when it moves up (from OUT_LOW + OUT_LENGTH when it moves down) and reaches OUT_LENGTH. The icon of a swing when the client gives none.
-	-- The Fire crit reads 824 Fireball while Spell names is After every spell and Whose hits is Yours, as the module writes it.
 	local OUT = {
 		{ text = "412", school = 1, icon = "swing" },
 		{ text = "824", school = 4, crit = true, icon = "spell", name = "Fireball" },
@@ -600,7 +534,6 @@ do
 	}
 	local OUT_X, OUT_LOW, OUT_LENGTH, OUT_GAP = 545, 18, 168, 0.85
 	local SWING_ICON, SPELL_ICON = "Interface\\Icons\\INV_Sword_04", "Interface\\Icons\\Spell_Fire_FlameBolt"
-	-- An icon in the text of a number, as the Outgoing area writes it (ScrollText.lua, INLINE): as high as the text, its edge trimmed.
 	local INLINE = "|T%s:0:0:0:0:64:64:5:59:5:59|t "
 
 	local function Build(stage)
@@ -609,7 +542,6 @@ do
 		S.root = U.frame(stage, WIDE, HIGH)
 		S.root:SetPoint("CENTER", stage, "CENTER", 0, 0)
 		S.root:SetClipsChildren(true)
-		-- A nameplate: the name and a health bar at 70 percent.
 		S.plate = U.frame(S.root, 120, 30)
 		S.plate:SetPoint("CENTER", S.root, "BOTTOMLEFT", PLATE_X, PLATE_Y)
 		S.plateName = U.text(S.plate)
@@ -627,7 +559,6 @@ do
 		S.barFill:SetPoint("BOTTOMLEFT", S.bar, "BOTTOMLEFT", 0, 0)
 		S.barFill:SetWidth(84)
 		S.barFill:SetColorTexture(0.8, 0.18, 0.18, 1)
-		-- The numbers are on frames of their own, above the plate or under it.
 		S.front = U.frame(S.root, 1, 1)
 		S.front:SetPoint("BOTTOMLEFT", S.root, "BOTTOMLEFT", 0, 0)
 		for i = 1, #ENEMY do
@@ -642,7 +573,6 @@ do
 			S.out[i] = U.text(S.front)
 			S.out[i]:SetWordWrap(false)
 		end
-		-- Two friendly units, a party frame and a friendly plate, each with its own numbers.
 		S.friends = {}
 		for index, spec in ipairs({ { "frames", FRIEND_FRAME_Y, 100, 30 }, { "plates", FRIEND_PLATE_Y, 100, 12 } }) do
 			local unit = { where = spec[1], frame = U.frame(S.root, spec[3], spec[4]), numbers = {} }
@@ -658,7 +588,6 @@ do
 		return S
 	end
 
-	-- The height a sample number settles at, and the height it has this long after it showed.
 	local function Height(base, crit, age, pops, burst)
 		local settle = base * (crit and SHAPE.pop.crit or 1)
 		if burst and crit then
@@ -677,7 +606,6 @@ do
 		return math.max(0, 1 - (age - fade) / (life - fade))
 	end
 
-	-- The icon of Attack, as the module takes it (C_Spell.GetSpellTexture of 6603, CombatText.lua), else a sword.
 	local function SwingIcon()
 		if type(C_Spell) == "table" and type(C_Spell.GetSpellTexture) == "function" then
 			local ok, file = pcall(C_Spell.GetSpellTexture, 6603)
@@ -688,13 +616,6 @@ do
 		return SWING_ICON
 	end
 
-	-- The numbers of the Outgoing scroll area, while Where your hits show is not Over enemies: moved by Outgoing style, up or down as Outgoing
-	-- direction says, as big as Size of the Outgoing area makes them (ns.ScrollSize), with the icon Spell icons gives a swing (All) or a spell (All
-	-- or Spells only) while Whose hits is Yours, and none on a word, for the life Speed gives them (an old one has gone at Fast). Straight and Arc
-	-- numbers take their lanes by the rule of the game (ns.ScrollLane), the lanes to the right, away from the character; Horizontal and Static
-	-- numbers take a row each. look: file, flags, shadow, pops, palette and bySchool of the drawing. The column stays inside the picture at any
-	-- style and size: a lane is at most half the room right of OUT_X, the whole column moves left as far as its widest number crosses the right edge,
-	-- so it keeps its shape, and each number is held inside the top and bottom edges.
 	local function DrawOut(S, look)
 		local shown = ns.Get("combattext.enabled") ~= false and ns.Get("combattext.where") ~= "over"
 		local scroll, style = SHAPE.scroll, ns.Get("combattext.outStyle")
@@ -769,16 +690,12 @@ do
 		local movement, loose, higher = ns.Get("combattext.movement"), ns.Get("combattext.spread") == "loose", ns.Get("combattext.crit") == "higher"
 		local word, bySchool = ns.Get("combattext.partial") == "word", ns.Get("combattext.school") == true
 		local kinds = ns.Get("combattext.partial") == "smaller"
-		-- As the game has them: the enemy numbers are the game's own, in its face and colours. Only the height, size, spread and movement reach
-		-- them (CombatText.lua:172-205), so the font, outline, shadow, kind of hit and school colours are for the numbers over you alone.
 		local game = ns.Get("combattext.source") == "game"
 		local enemyFile, enemyFlags, enemyShadow = file, flags, shadow
 		if game then
 			enemyFile, enemyFlags = ns.CombatFont("friz", "none")
 			enemyShadow, word, bySchool, kinds = true, false, false, false
 		end
-		-- Classic: the numbers move and stack the way the module's do (the game's own numbers are not Classic). The sample numbers are placed
-		-- by ns.CombatClassicStart in the order they appeared, as the module places a number when its hit report comes.
 		local chosen = ns.Get("combattext.style") == "classic"
 		local classic = chosen and not game
 		local cls = SHAPE.classic
@@ -790,20 +707,15 @@ do
 		S.front:SetFrameLevel(S.plate:GetFrameLevel() + (game and -1 or 3))
 		ns.SetOutline(S.barOutline, true, true)
 		U.repaint(S.barOutline)
-		-- Over the enemy: each number sits on the centre of the plate, a lane to the side, the height above it, and has moved as far as its age.
-		-- The lane and the row of each sample are the ones Keep apart gives, the samples taken in the order they appeared with the age each had
-		-- when the next one showed.
 		local grow = ns.CombatGrow(SHAPE.text * size)
 		local lanes = ns.CombatLanes(loose and ns.Get("combattext.spreadWidth") or 0, grow)
 		local apart, rows = ns.Get("combattext.overlap") == "apart", ns.Get("combattext.rows")
 		local placed = {}
-		-- Spell names After every spell writes the name after the number of your spell, on Flat UI numbers under Whose hits Yours.
 		local named = not game and ns.Get("combattext.whose") == "one" and ns.Get("combattext.abilityName") == "every"
 		for i, sample in ipairs(ENEMY) do
 			local fs = S.enemy[i]
 			local after = (named and sample.name) and (" " .. sample.name) or ""
 			local move = ns.CombatMove(movement, sample.crit and not game and not classic and pops)
-			-- A Burst critical hit is drawn young enough for the slam to show.
 			local age = move == "burst" and BURST_AGE or sample.age
 			local settle = Height(SHAPE.text * size, sample.crit, age, false)
 			local turn = (i - 1) % #lanes + 1
@@ -873,7 +785,6 @@ do
 				U.at(mate.text, "CENTER", S.plate, "CENTER", mate.x, mate.y + dy)
 			end
 		end
-		-- Over friendly units: on the party frame, the friendly plate or both, every unit or the target (the plate) only.
 		local where, units = ns.Get("combattext.friend"), ns.Get("combattext.friendUnits")
 		local healing, signs, pets, words = ns.Get("combattext.friendHeal"), ns.Get("combattext.friendSigns") == true, ns.Get("combattext.friendPet") == true, ns.Get("combattext.friendWords") == true
 		local fsize, lift = ns.Get("combattext.friendSize") / 100, ns.Get("combattext.friendHeight")
@@ -916,12 +827,6 @@ do
 				end
 			end
 		end
-		-- Over the character: the numbers of the Incoming scroll area, moved by Incoming style, up or down as Incoming direction says (from the
-		-- bottom of the mock area when up). They come a quarter of a second apart, as
-		-- /flatui combat test sends them. Straight and Arc numbers take their lanes by the rule of the game (ns.ScrollLane, ScrollText.lua): one
-		-- that would start within a line of a number still near the start takes the next free lane, the same path a lane to the left (away from
-		-- the character) first and then to the right, so they lie side by side and none starts lower; one that waits for a lane is not seen
-		-- yet. Horizontal and Static numbers take a row each.
 		local level, style, scroll = ns.Get("combattext.own"), ns.Get("combattext.inStyle"), SHAPE.scroll
 		local dir = ns.Get("combattext.inDir") == "up" and 1 or -1
 		local top = dir == 1 and OWN_TOP - OWN_LENGTH or OWN_TOP
@@ -964,13 +869,10 @@ do
 				U.at(fs, "CENTER", S.root, "BOTTOMLEFT", OWN_X + rx + dx, top + ry + dy)
 			end
 		end
-		-- The Outgoing area colours its hits as the module does, by the rows themselves, whichever numbers show over enemies.
 		DrawOut(S, { file = file, flags = flags, shadow = shadow, pops = pops, palette = chosen and ns.Get("combattext.classicColour") or nil,
 			bySchool = ns.Get("combattext.school") == true })
 	end
 
-	-- Each stage (setup's and the options window's preview band) keeps its own marks, so neither outlines the other's numbers; drawing.parts
-	-- stays those of the first stage built.
 	local drawing = { draw = Draw }
 	function drawing.partsOf(stage)
 		local S = instances[stage]
@@ -994,7 +896,6 @@ do
 			p["combattext." .. key] = S.out[1]
 		end
 		p["combattext.missWords"] = S.enemy[5]
-		-- Spell names: the 510 sample over the enemy, named Fireball while Spell names is After every spell.
 		p["combattext.abilityName"] = S.enemy[4]
 		for _, key in ipairs({ "friend", "friendUnits", "friendDamage", "friendHeal", "friendPet", "friendWords", "friendSigns", "friendDamageColour", "friendHealColour", "friendSize", "friendHeight" }) do
 			p["combattext." .. key] = S.friends[key == "friendHeight" and 1 or 2].frame
@@ -1004,33 +905,16 @@ do
 	ns.SetupDrawings["mock-combat-text"] = drawing
 end
 
--- Combat alerts ---------------------------------------------------------------------------------------------------------------------
-
--- mock-combat-alerts: the lines of CombatCues.lua as the real frame lays them out, round a middle line: +Combat above it, No target under it,
--- and Low health and Low mana under that, a line of No target's size apart; -Combat with a sample fight length to the right of +Combat, as the
--- same line shows the two in turn. Each shows while its row is on, in the colour and size of its rows (a size of 100% is 25 units,
--- CombatCues.lua), on the game's combat font (CombatTextFont, else its large number font) with a thin outline. No target names the key bound to
--- Target Nearest Enemy while Name the key to target an enemy is on, read as the module reads it. The whole is kept inside the picture at any size:
--- it shrinks as one, so the sizes keep their proportions. Low mana is drawn only for a class that has mana (not a warrior or a rogue), as test
--- mode shows it only for a mana user. While Share on Low health and Low mana is on (0.5.41) the two read Low health  15% and Low mana  12%, as
--- the live lines write the share. At the left, an "On you" column (0.5.39) shows the numbers on you of the Incoming area, still: -412 in
--- Damage on you colour and +300 in Healing on you colour (while Healing on you is on) with Combat text for you on, and (Dodge) and +20 with Also
--- misses, dodges and gains, at Size of your text in the combat text's font, outline and shadow (CombatText.lua), so the rows of Your character on
--- the You and warnings tab have a number to point at; it goes while Combat text for you is Off, and shrinks as one to fit its room.
 do
 	local instances = setmetatable({}, { __mode = "k" })
 	local WIDE, HIGH, EDGE, GAP, SIDE, HEIGHT = 620, 190, 8, 2, 30, 25
-	-- The On you column: its room at the left, the height of its caption, and its numbers (kind: damage, heal, word or gain), as the samples of
-	-- mock-combat-text; the gain in the colour of a portrait's gain (CombatText.lua, DescribeOwn).
 	local COL_W, CAPTION = 140, 14
 	local ON_YOU = { { text = "-412", kind = "damage" }, { text = "+300", kind = "heal" }, { text = "Dodge", kind = "word" }, { text = "+20", kind = "gain" } }
 	local GAIN, CAPTION_GREY = { 0.41, 0.8, 0.94 }, { 0.72, 0.72, 0.72 }
 	local KINDS = { "enter", "leave", "warn", "health", "mana" }
 	local FALLBACK = { enter = "+Combat", leave = "-Combat", health = "Low health", mana = "Low mana" }
-	-- The colour row of each line.
 	local COLOUR = { enter = "combatEnterColour", leave = "combatLeaveColour", warn = "noTargetColour", health = "lowColour", mana = "lowManaColour" }
 
-	-- The file of the game's combat font, read from the font object, else of its large number font, else Friz Quadrata.
 	local function AlertFile()
 		local ok, file = pcall(function()
 			local font = _G.CombatTextFont or _G.NumberFontNormalHuge
@@ -1042,7 +926,6 @@ do
 		return U.FRIZ
 	end
 
-	-- No target, with the key of Target Nearest Enemy while its row is on and a key is bound.
 	local function WarnWords()
 		local text = "No target"
 		if ns.Get("combattext.noTargetKey") ~= true then
@@ -1088,7 +971,6 @@ do
 		return S
 	end
 
-	-- Whether the player's class has mana: not a warrior or a rogue. A class the client does not plainly give counts as one with mana.
 	local function HasMana()
 		local ok, _, class = pcall(UnitClass, "player")
 		if not ok or ns.IsSecret(class) or type(class) ~= "string" then
@@ -1097,7 +979,6 @@ do
 		return class ~= "WARRIOR" and class ~= "ROGUE"
 	end
 
-	-- The On you column, still, in its room at the left; false when Combat text for you is Off or the page is, so the alerts take the whole width.
 	local function DrawYou(S, on)
 		local level = on and ns.Get("combattext.own") or "off"
 		local heal = ns.Get("combattext.ownHeal") == true
@@ -1130,7 +1011,6 @@ do
 		end
 		U.font(S.caption, U.FRIZ, 10, "", true, CAPTION_GREY)
 		U.at(S.caption, "TOP", S.root, "BOTTOMLEFT", EDGE + COL_W / 2, HIGH - EDGE)
-		-- Set whole first and measured, then shrunk as one to fit the room, both high and wide.
 		local colours = { damage = { ns.Colour("combattext.ownDamageColour") }, heal = { ns.Colour("combattext.ownHealColour") }, word = U.WHITE, gain = GAIN }
 		local function Set(fs, sample, size)
 			fs:SetText(sample.kind == "word" and type(ns.CombatParen) == "function" and ns.CombatParen(sample.text) or sample.text)
@@ -1160,7 +1040,6 @@ do
 		return true
 	end
 
-	-- Sets the words, face and size of a line and gives its width.
 	local function Set(fs, text, file, size, kind)
 		fs:SetText(text)
 		U.font(fs, file, size, "OUTLINE", false, { ns.Colour("combattext." .. COLOUR[kind]) })
@@ -1182,14 +1061,12 @@ do
 		local mana = low and HasMana()
 		local shown = { enter = flash, leave = flash, warn = warn, health = low, mana = mana }
 		local left = DrawYou(S, on) and COL_W or 0
-		-- Share on Low health and Low mana writes a sample share after the words, as the live lines write yours (CombatCues.lua).
 		local share = ns.Get("combattext.lowShare") == true
 		local texts = {
 			enter = Words("enter"), warn = Words("warn"), health = share and Words("health") .. "  15%" or Words("health"),
 			mana = share and Words("mana") .. "  12%" or Words("mana"),
 			leave = ns.Get("combattext.combatLength") == true and Words("leave") .. "  1:24" or Words("leave"),
 		}
-		-- Measured whole first; then the whole shrinks as one to fit, both high and wide.
 		local widths = {}
 		for _, kind in ipairs(KINDS) do
 			widths[kind] = Set(S.lines[kind], texts[kind], file, (kind == "enter" or kind == "leave") and hFlash or hWarn, kind)
@@ -1239,7 +1116,6 @@ do
 		p["combattext.lowShare"] = lines.health
 		p["combattext.combatState"], p["combattext.combatEnterColour"], p["combattext.combatStateSize"] = lines.enter, lines.enter, lines.enter
 		p["combattext.combatLeaveColour"], p["combattext.combatLength"] = lines.leave, lines.leave
-		-- The rows of Your character, on the same tab: the On you column.
 		local you = S.you
 		p["combattext.own"], p["combattext.ownSize"], p["combattext.ownDamageColour"] = you[1], you[1], you[1]
 		p["combattext.ownHeal"], p["combattext.ownHealColour"], p["combattext.gainSize"] = you[2], you[2], you[4]

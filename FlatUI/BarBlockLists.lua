@@ -1,31 +1,11 @@
 local _, ns = ...
 
--- The bars of the bar blocks (BarBlock.lua): up to three blocks, each a list of bars in order, first bar first, saved in the profile as text
--- (barblock.bars1 to bars3: the ids main and bar2 to bar8 joined by commas). A bar is in one block only: a bar a list names again, in the same
--- block or in a later one, is left out. Block 1 holds the main bar and action bars 2, 4 and 3 by default, in that order, so stacked upward
--- they are 3, 4, 2, main from the top (in 0.5.28 bar 4, the main bar and bars 2 and 3; before, the main bar and bars 2 to 4); blocks 2 and 3
--- hold none and are off until they are given a bar. The rows of the Bar block page move a bar up or down in its block, take it out, or add
--- a bar, which leaves the block it was in.
--- In /flatui move a bar dragged by its tab (BarBlock.lua) is dropped at a place of a block, its own or another (ns.BarBlockPlace), which writes
--- the same lists, so the page and the tabs show the same order. Before 0.5.27 the page had six fixed rows (barblock.slot1 to slot6); a profile
--- that saved one of them has their bars moved into block 1 once, as the settings load (Core.lua).
--- At login and when the bars of a block change, out of combat, each of bars 2 to 8 a block holds that the game's options have off is turned on
--- with the game's own setting for that bar (Settings.SetValue of PROXY_SHOW_ACTIONBAR_2 to 8, Blizzard_SettingsDefinitions_Frame/ActionBars.lua:
--- 29-35; the game's own code does the same for bar 2, ActionBarController.lua:98-107), once the game has made its settings (the setting is
--- there, or SETTINGS_LOADED came), so the toggles it reads are the ones the server sent. A client without those settings gets SetActionBarToggles with the other bars as
--- GetActionBarToggles gives them. A bar no block holds is left alone, and nothing is turned off. Nothing is turned on while the game forces the
--- bars (C_GameRules.IsMultiActionBarVisibilityForced).
-
 local KEY = "barblock"
 local COUNT = 3
 local IDS = { "main", "bar2", "bar3", "bar4", "bar5", "bar6", "bar7", "bar8" }
--- The six rows of before 0.5.27 and the bars they held while no choice was saved.
 local OLD = { "main", "bar2", "bar3", "none", "none", "none" }
--- The variable of the game's setting that shows the bar with this place in GetActionBarToggles, plus one (bars 2 to 8).
 local SHOW = "PROXY_SHOW_ACTIONBAR_%d"
 
--- texts: the saved text of each block when the lists were last made. lists: those lists. turn: queued, the turn-on waits for the end of a fight;
--- waiting, it waits for the game's settings; loaded, the game has made them; sig, the bars it last looked at; done, the bars it turned on.
 local cache = { texts = {} }
 local turn = { queued = false, waiting = false, loaded = false, done = {} }
 
@@ -38,7 +18,6 @@ local function Label(id)
 	return bar and bar.label or tostring(id)
 end
 
--- The bars of a text, in order, with the ones in `seen` left out and added to it.
 local function Parse(text, seen)
 	local list, bars = {}, Bars()
 	if type(text) ~= "string" then
@@ -53,7 +32,6 @@ local function Parse(text, seen)
 	return list
 end
 
--- The bars of each block, block 1 first, as the profile in use (or the view of setup) says. The tables are shared: copy before a change.
 function ns.BarBlockLists()
 	local texts, same = cache.texts, cache.lists ~= nil
 	for n = 1, COUNT do
@@ -73,7 +51,6 @@ function ns.BarBlockLists()
 	return lists
 end
 
--- The block (1 to 3) that holds the bar of this frame name, nil for none or while the Bar block page is off.
 function ns.BarBlockHolds(name)
 	if type(name) ~= "string" or not ns.Enabled(KEY) then
 		return nil
@@ -104,7 +81,6 @@ local function Write(n, list)
 	ns.Set(KEY .. ".bars" .. n, table.concat(list, ","))
 end
 
--- The lines of a block's Bars row: each bar, numbered from the first, with move up, move down and remove.
 local function Lines(n)
 	local list, lines = ns.BarBlockLists()[n], {}
 	for index, id in ipairs(list) do
@@ -152,7 +128,6 @@ local function Pick(n, id)
 	return true, ("Flat UI: %s %s block %d."):format(Label(bar), text, n)
 end
 
--- The lines of a block's Add a bar row: every bar not in it, with the block a bar would leave.
 local function Free(n)
 	local where, lines = {}, {}
 	for m, list in ipairs(ns.BarBlockLists()) do
@@ -194,8 +169,6 @@ local function Add(n, id)
 	return true, ("Flat UI: %s added to block %d."):format(Label(id), n)
 end
 
--- Puts a bar at a place of block n, out of the block it was in: just before the bar `anchor` of that block, just after it with `after`, or last
--- with no anchor (or one the block does not hold). Only the lists that change are written. True when one did, and the line for chat.
 function ns.BarBlockPlace(id, n, anchor, after)
 	if not Bars()[id] or type(n) ~= "number" or n < 1 or n > COUNT or anchor == id then
 		return false, nil
@@ -227,7 +200,6 @@ function ns.BarBlockPlace(id, n, anchor, after)
 	if not changed then
 		return false, nil
 	end
-	-- The lists are all made before the first is written: each write reads the lists again (ns.BarBlockLists).
 	for m = 1, COUNT do
 		if table.concat(lists[m], ",") ~= texts[m] then
 			Write(m, lists[m])
@@ -236,7 +208,6 @@ function ns.BarBlockPlace(id, n, anchor, after)
 	return true, ("Flat UI: %s is bar %d of block %d."):format(Label(id), at, n)
 end
 
--- The rows of the page name these: BarBlockLines1, BarBlockPick1, BarBlockFree1, BarBlockAdd1, and the same for blocks 2 and 3.
 for n = 1, COUNT do
 	ns["BarBlockLines" .. n] = function()
 		return Lines(n)
@@ -252,8 +223,6 @@ for n = 1, COUNT do
 	end
 end
 
--- The saved options of a profile as they load: the six rows of before 0.5.27 become the list of block 1, once (the old rows are then dropped
--- as no setting of this build). A profile that saved none of them, or already has a list, is left as it is.
 function ns.MigrateBarBlock(options)
 	if type(options) ~= "table" or options[KEY .. ".bars1"] ~= nil then
 		return
@@ -279,7 +248,6 @@ function ns.MigrateBarBlock(options)
 	options[KEY .. ".bars1"] = table.concat(list, ",")
 end
 
--- Shown (true), hidden (false) or unknown (nil) in the game's options, for a bar's place in GetActionBarToggles.
 local function Shown(toggle)
 	if type(GetActionBarToggles) ~= "function" then
 		return nil
@@ -315,7 +283,6 @@ local function TurnOn()
 	if not ns.Enabled(KEY) or Forced() then
 		return
 	end
-	-- The game's own test of whether its settings are made is whether the setting is there (ActionBarController.lua:103).
 	turn.loaded = turn.loaded or Registered(SHOW:format(2))
 	if not turn.loaded then
 		turn.waiting = true
@@ -371,7 +338,6 @@ local function Queue()
 	end)
 end
 
--- Called as the Bar block page starts or changes (BarBlock.lua): the bars are looked at once a session and again when the bars of a block change.
 function ns.BarBlockTurnOn()
 	local parts = {}
 	if ns.Enabled(KEY) then
@@ -400,7 +366,6 @@ events:SetScript("OnEvent", function()
 	end
 end)
 
--- /flatui status names a bar this file turned on in the game's options in this session: the game's setting was written by Flat UI's code.
 ns.ClickPathReporter(function()
 	if #turn.done > 0 then
 		return "Click path: Flat UI turned on " .. table.concat(turn.done, ", ") .. " in the game's options."

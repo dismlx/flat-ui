@@ -36,6 +36,8 @@ import sys
 import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import strip_lua
 ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(ROOT, 'FlatUI', 'ItemIndex.lua')
 MAX_BYTES = 600000
@@ -249,6 +251,7 @@ def main():
         build = export_build(db, path)
         kept, left = read_items(db)
         text, count = lua_text(build, kept)
+        text = strip_lua.strip(text)
         read_back(text, kept, count)
         size = len(text.encode('utf-8'))
         if size >= MAX_BYTES:

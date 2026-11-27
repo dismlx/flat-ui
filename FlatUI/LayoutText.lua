@@ -1,17 +1,8 @@
 local _, ns = ...
 
--- The Flat UI layout as Edit Mode import text, for a player whose game does not keep the layout this addon writes. A list row on the Movers
--- page opens a small window holding the text; the player copies it, opens Edit Mode, chooses Import in the layout list and pastes it.
--- Nothing is saved or activated on this path: the layout table is read (ns.LayoutSpots.FlatEntry) and handed to
--- C_EditMode.ConvertLayoutInfoToString, which only makes the text (EditModeManagerDocumentation.lua:11-23, its argument is
--- AllowedWhenUntainted, so an addon-built table is accepted and the answer is a plain string). The check is the call itself: where the game
--- returns no string, a line says so and no window opens. The same call, with the text copied the same way, is EllesmereUI's profile export
--- (EllesmereUI/EllesmereUI_Profiles.lua:4660-4667, which selects the text on a short timer after setting it).
-
 local TITLE = "Flat UI layout"
 local HELP = "Copy this, open Edit Mode, choose Import in the layout list, paste it and name it Flat UI."
 
--- The window, in one table: frame, scroll, edit. Built once, out of combat.
 local win = nil
 
 local function Say(text)

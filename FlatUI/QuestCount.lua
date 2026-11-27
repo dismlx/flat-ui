@@ -1,61 +1,25 @@
 local _, ns = ...
 
--- Quest count: how many quests the quest log holds and the most it can, as 12/20, at the right of the Quests heading of the objective tracker
--- (QuestObjectiveTracker.Header, a heading of the modern tracker that Hud.lua styles). The numbers are the game's: the quests of
--- C_QuestLog.GetNumQuestLogEntries (its second answer, the count the game itself compares with MAX_QUESTS before an escort's question) and
--- C_QuestLog.GetMaxNumQuestsCanAccept, else MAX_QUESTLOG_QUESTS or MAX_QUESTS; with no most known, the count alone. The text is a font string
--- of the addon's own on the heading, in the font of the heading's text and its colour, red while the log is full. With Warn as the log fills
--- (hud.trackerCountWarn, on by default) the count is amber with one free slot, and when the log becomes full in play (from the second read after
--- login or a reload) it pulses twice and chat says once "Flat UI: your quest log is full (20/20).". A jump of more than two quests between two
--- reads never warns, nor does a first read of 0 quests just after entering the world, so a log that loads late stays quiet. Nothing of the heading is
--- changed: its Text is read for the font and the colour (GetFont and GetTextColor), and its MinimizeButton for the place. The text is made and
--- placed out of combat, or on a heading the game does not protect; in a fight only its text, colour and font are set, and it is shown or hidden.
--- It is redrawn on the next frame after the quest log changes, and only while a count can be shown, so a client without the quest log calls
--- has no text and nothing waiting. It hides with the heading, so there is no count while no quest is tracked. Its row is Quest count on the
--- Quests and loot page (hud.trackerCount), part "quest count" of the module, which stops alone after a few failures.
--- Over the count lies a button of the addon's own, a child of the heading the size of the count's text, made with the text (out of combat, or
--- on a heading the game does not protect) and shown and hidden with it; the heading itself takes no mouse (ObjectiveTrackerModuleHeaderTemplate,
--- Blizzard_ObjectiveTrackerModule.xml:13-19), so no click of the game's is taken. Pointing at the count, also in a fight, shows the tooltip of
--- the Quest log data panel (ns.DataPanels.TipAt with its stream "quests": the quests of the most, "Your quest log is full.", those ready to hand
--- in and their experience) with a dim "Click: open the quest log"; GameTooltip is hidden on leave only while IsOwned says the button owns it. A
--- click opens the quest log (ToggleQuestLog), in a fight as it ends: chat says once "Flat UI: the quest log opens when the fight ends."
--- (ns.OpenAfterFight, MapText.lua), and the hint says "after the fight". Under the mouse the count has a faint light, as a data panel's slot has
--- (HOVER_LIGHT, a texture of the button's own).
--- It follows EnhanceQoL's quest count on the tracker, adapted with the permission of its author.
-
 local KEY, PART = "hud", "quest count"
--- Between the count and the heading's minimize button; from the heading's right edge when it has none (the button is 16 wide at x 1:
--- Blizzard_ObjectiveTrackerModule.xml:46-53).
 local GAP, EDGE = 4, -22
 local FULL = { 1, 0.3, 0.3 }
 local GOLD = { 1, 0.82, 0 }
--- Warn as the log fills: the count with one free slot, the pulse as the log becomes full (its seconds, its pulses and the lowest opacity), and
--- the chat line then.
 local AMBER = { 1, 0.6, 0.15 }
 local PULSE = { time = 0.6, count = 2, low = 0.35 }
 local FILLED = "Flat UI: your quest log is full (%d/%d)."
--- The most quests one read may add and still count as the log filling (an accept adds one, a shared chain two), and the seconds after entering
--- the world in which a read of 0 quests is taken as a log that loads.
 local FILL_STEP, LOAD_WAIT = 2, 2
 local NOTE = "Quest count: the objective tracker has no Quests heading here, so there is no count."
 local ANCHOR = "ANCHOR_LEFT"
 local HINT, FIGHT_HINT = { "Click: open the quest log" }, { "Click: open the quest log, after the fight" }
 local LATER = "Flat UI: the quest log opens when the fight ends."
--- The faint light over the count while it is under the mouse, as the data panels' slots have (DataPanels.lua), and how far it reaches past the
--- text.
 local HOVER_LIGHT, LIGHT_OUT = { 1, 1, 1, 0.07 }, 2
 
--- text: the font string; button: the button over it; header: the heading it is on; queued: a redraw waits for the next frame; waiting: a make
--- waits for the end of a fight; last: the quests of the last read, nil before the first after login or a reload and while the row is off;
--- pulse: the frame of Flat UI's own that runs the pulse, shown only while it runs, and pulsed: its seconds so far; entered: when the player last
--- entered the world (PLAYER_ENTERING_WORLD); seen: a read has seen a quest since login or a reload.
 local S = {}
 
 local function Wanted()
 	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and ns.Get(KEY .. ".trackerCount") == true
 end
 
--- The client's quest log calls, or nil on a client without them.
 local function QuestLog()
 	local log = C_QuestLog
 	if type(log) ~= "table" or ns.IsSecret(log) or type(log.GetNumQuestLogEntries) ~= "function" then
@@ -86,7 +50,6 @@ local function Header()
 	return not ns.Forbidden(header) and header or nil
 end
 
--- The quests of the log by walking it, as EnhanceQoL counts them: each entry that is no header, not hidden and has a quest ID above 0.
 local function Walk(log, entries)
 	if type(log.GetInfo) ~= "function" or not ns.Finite(entries) then
 		return nil
@@ -102,8 +65,6 @@ local function Walk(log, entries)
 	return count
 end
 
--- The quests in the log and the most it holds (nil when the game does not say), or nil when the count is not known. The count is the second
--- answer of GetNumQuestLogEntries, which leaves the headers out, else the walk.
 local function Numbers()
 	local log = QuestLog()
 	if not log then
@@ -131,7 +92,6 @@ end
 
 local Queue
 
--- True while GameTooltip is the button's.
 local function Owns(button)
 	local tip = _G.GameTooltip
 	if tip == nil or ns.Forbidden(tip) or not button then
@@ -147,7 +107,6 @@ local function Unowned(button)
 	end
 end
 
--- The tooltip of the Quest log data panel on the button, and its hint; fresh is false when a tooltip that shows is written again.
 local function Tip(_, button, fresh)
 	local panels = ns.DataPanels
 	if type(panels) == "table" and type(panels.TipAt) == "function" then
@@ -163,7 +122,6 @@ local function Open()
 	end
 end
 
--- The button over the count's text, made with it; nil when the client refuses it.
 local function MakeButton(header, text)
 	local ok, button = pcall(CreateFrame, "Button", nil, header)
 	if not ok or type(button) ~= "table" then
@@ -172,7 +130,6 @@ local function MakeButton(header, text)
 	ns.Own[button] = true
 	button:SetAllPoints(text)
 	button:EnableMouse(true)
-	-- A texture of the button's own: nothing is drawn on the heading.
 	local light = button:CreateTexture(nil, "BACKGROUND")
 	ns.Own[light] = true
 	light:SetPoint("TOPLEFT", button, "TOPLEFT", -LIGHT_OUT, LIGHT_OUT)
@@ -197,8 +154,6 @@ local function MakeButton(header, text)
 	return button
 end
 
--- Makes the font string on the heading, once. False while it cannot be made now: in a fight on a heading the game may protect, the make
--- waits for the end of the fight.
 local function Make(header)
 	if S.text then
 		return true
@@ -229,8 +184,6 @@ local function Make(header)
 	return true
 end
 
--- The font and the colour of the heading's text, as Flat UI's Heading size and the game left them. The text is the game's: only its two widget
--- getters are called, each in a pcall, and an answer the game withholds is not used.
 local function Look(text, header)
 	local label = Read(header, "Text")
 	if type(label) ~= "table" then
@@ -261,8 +214,6 @@ local function Hide()
 	end
 end
 
--- The count dips to PULSE.low and back PULSE.count times over PULSE.time seconds, from a frame of Flat UI's own. Only Flat UI's own font string
--- changes, so it goes on in a fight too.
 local function Pulse()
 	if not S.text then
 		return
@@ -287,8 +238,6 @@ local function Pulse()
 	S.pulse:Show()
 end
 
--- True when the log became full since the last read, with Warn as the log fills on: the first read after login or a reload never warns, and
--- neither does a log that grows by more than FILL_STEP quests in one read, which is a log that loads, not quests accepted.
 local function Filled(quests, most)
 	local last = S.last
 	S.last = quests
@@ -297,7 +246,6 @@ local function Filled(quests, most)
 end
 
 local function Update()
-	-- Nothing is made, and nothing noted, while the game gives no count: a client without the quest log calls has no text at all.
 	local quests, most
 	if Wanted() then
 		quests, most = Numbers()
@@ -308,9 +256,6 @@ local function Update()
 		ns.ClearNote(KEY, NOTE)
 		return
 	end
-	-- Warn as the log fills: one line in chat as the log becomes full, also while the heading is not there, and a pulse of the count below. A read
-	-- of 0 quests within LOAD_WAIT seconds of entering the world, before any read has seen a quest, may be a log still loading: it is not taken
-	-- as the first read (S.last stays nil).
 	local loading = quests == 0 and S.last == nil and not S.seen and ns.Finite(S.entered) and GetTime() - S.entered < LOAD_WAIT
 	if quests > 0 then
 		S.seen = true
@@ -345,14 +290,12 @@ local function Update()
 	end
 	if S.button then
 		S.button:Show()
-		-- A tooltip that shows follows the new count, while it is still the button's.
 		if Owns(S.button) then
 			ns.EachPart(KEY, PART, Tip, {}, S.button, false)
 		end
 	end
 end
 
--- Runs the part. Each run has a key of its own, so every failure counts toward stopping the part; a stopped part takes its text away.
 local function Draw()
 	if not ns.PartStopped(KEY, PART) and ns.EachPart(KEY, PART, Update, {}) then
 		return
@@ -375,7 +318,6 @@ Queue = function()
 	end)
 end
 
--- A change of the quest log is looked at on the next frame, only while a count can be shown or the text is there to hide.
 local function Changed()
 	if S.text ~= nil or (Wanted() and QuestLog() ~= nil) then
 		Queue()
@@ -392,7 +334,6 @@ ns.AddEvent(KEY, "ADDON_LOADED", Changed, function(name)
 	return not ns.IsSecret(name) and name == "Blizzard_ObjectiveTracker"
 end)
 
--- Hud.lua calls this at the end of RefreshTracker: a changed row, Heading size, the page or the profile.
 function ns.QuestCountRefresh()
 	Draw()
 end

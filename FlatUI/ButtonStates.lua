@@ -1,41 +1,5 @@
 local _, ns = ...
 
--- Button colours and cooldowns on the main and extra action bars: own colours for not enough power and cannot use, a tint on the icon when out of
--- range, and the cooldown sweep (on or off, its colour and opacity, an edge line in its own colour), its numbers (size, colour and tenths below a
--- number of seconds, each put back at once when set to the game's again) and a grey icon on cooldown. The restyled pet, stance and totem buttons
--- keep the game's colours and grey, but their cooldowns take the sweep, its colour and opacity and the numbers too (SweepLook); not the edge line,
--- which the game's CooldownFrame_Set turns off at each cooldown (Cooldown.lua:2-9). Nothing here hooks a
--- button method. The game's own handlers run first (ActionButton.lua:415-428 for ACTION_USABLE_CHANGED, UpdateUsable at 721-735); this file
--- only marks buttons and paints them one frame later. The two hooks are on global functions, ActionButton_UpdateRangeIndicator (1289-1307)
--- and ActionButton_ApplyCooldown (897-913), and their bodies only record. Every answer is used only when it is plain; a withheld answer leaves
--- the game's colour and gives one line in /flatui status. A row at its default makes no call. This file is not a module.
--- Flat UI's own buttons and the pet, stance and totem buttons are looked at only on a pass that follows a change of a row, their build, a change of
--- the buttons or a new world (lookDirty): their cooldown frames keep the sweep, the edge and the numbers between passes, and OwnPaint.lua paints Flat
--- UI's buttons itself per slot as their usability, range and cooldowns change, so a power tick costs nothing on them.
--- Flash when ready (off by default) is for Flat UI's own buttons: when a cooldown longer than the global cooldown ends on one that shows (ns.OnOwnReady,
--- OwnPaint.lua), a flash in Flash colour (white by default) goes over its icon, from clear to 60% and back in 0.35 s. Each button has one frame of this
--- file's own for it, a child of the button's bar over the icon, made out of combat once the buttons are built and the row is on; in a fight only its
--- animation plays, and a change of Flash colour colours the frames made. Shortest cooldown that flashes (actionbars.readyMinimum, 0 s by default)
--- lets a cooldown shorter than it end without a flash: OwnPaint.lua measures each cooldown from its start on its own clock (a plain number). One
--- already running when a button first holds it (after a stance, form, Stealth or page change, a drag or a reload) takes the start seen for its spell
--- on another slot, or else its spell's base cooldown, so short ones end quietly in every stance; only an item's of unknown length still flashes.
--- Sound when ready (actionbars.readySound, None by default) plays as such a flash plays, through ns.PlayKit, so at most once a second; the sweep
--- sample plays it once each time test mode is turned on, and the page plays a sound as it is picked.
--- The sweep sample (ns.ButtonStatesSample, out of combat): one Cooldown frame of this file's own (CooldownFrameTemplate) over a Flat UI button, a
--- child of its bar one level above it, runs a 4 s sweep in the looks of the rows above (sweep, Sweep colour and opacity, Edge line, the numbers
--- as the game's Show numbers on cooldowns says) and ends with the button's Flash when ready while that row is on. Test mode plays it every 5 s on
--- the fourth shown button of the main bar (ActionBars.lua); with test mode off, a change of one of those rows with the options window open plays it
--- once on the first, and a change while it still runs gives it the new look without starting it again, so a dragged slider plays it once.
--- Moving off on the bar of test mode holds it at 2 s of its 4 (ns.ButtonStatesSampleHold, Cooldown:Pause), with its edge and numbers, until Moving
--- on resumes it and its end moves on by the time held. With Grey out icon on cooldown on, the button's icon is grey while the sample sweeps
--- (SampleGrey), and a change of that row plays it too. With test mode off, a change of Own usability colours, Not enough power colour, Cannot use
--- colour, Tint icon when out of range or Out of range colour (while its row is on) paints the icon of the first sample button in that colour for
--- 2 s instead (TintSample, through the icon painter), a change meanwhile giving it the 2 s again.
--- Cooldown numbers (actionbars.cdNumbers) is the game's Show numbers on cooldowns, which this file writes out of combat (ns.ButtonNumbersSet; a
--- choice made in a fight waits for its end); its change plays the sweep sample with or without its numbers. In test mode too, a change of a
--- usability or range row paints the first sample button in its colour for 2 s and leaves the sweep alone (ns.ButtonStatesTint, ActionBars.lua).
--- While a sample of this file plays with test mode off, the faded action bars and bar blocks are at full (ns.ButtonStatesPreviewing).
-
 local KEY = "actionbars"
 local BARS = {
 	{ "ActionButton", 12, "main" },
@@ -49,9 +13,6 @@ local BARS = {
 }
 local FONTS = { small = "NumberFontNormalSmall", normal = "NumberFontNormal", large = "NumberFontNormalLarge", huge = "NumberFontNormalHuge" }
 local EVENTS = { "ACTION_USABLE_CHANGED", "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR", "SPELL_UPDATE_USABLE", "PLAYER_MOUNT_DISPLAY_CHANGED", "PLAYER_ENTERING_WORLD" }
--- The colours the game gives an icon (ActionButton.lua:728-733), and the opacity of the swipe: the button template's black at 0.64
--- (ActionButtonTemplate.xml:116-118), which the game also puts back when a cast animation ends (ActionButton.lua:1843-1844 with
--- Camelot/ActionButtonOverrides.lua:1-3).
 local GAME = { usable = { 1, 1, 1 }, mana = { 0.5, 0.5, 1 }, unusable = { 0.4, 0.4, 0.4 }, swipe = 0.64 }
 local LINES = {
 	usable = "Own usability colours: the game withholds whether an action can be used, so those buttons keep the game's colours.",
@@ -64,48 +25,30 @@ local LINES = {
 	size = "Cooldown number size: the game refused the change.",
 	edge = "Edge line: the game refused the change.",
 }
--- The groups of the restyled buttons the game keeps whose cooldowns take the sweep and number rows (ActionBars.lua).
 local SIDE = { pet = true, stance = true, totem = true }
 
--- name[button]: "main" or "extra", for the buttons this file may paint. The list is made again when the bars change.
 local eligible
--- out[button]: true out of range, false in range, from a plain answer of the game's range call.
 local out = setmetatable({}, { __mode = "k" })
--- cdInfo[cooldown]: the cooldown info the game last gave that cooldown.
 local cdInfo = setmetatable({}, { __mode = "k" })
--- What this file changed, so that a row put back to its default puts the button back.
 local painted = setmetatable({}, { __mode = "k" })
 local tinted = setmetatable({}, { __mode = "k" })
 local greyed = setmetatable({}, { __mode = "k" })
 local swipeOff = setmetatable({}, { __mode = "k" })
 local swipeSet = setmetatable({}, { __mode = "k" })
--- edgeSet[cooldown]: the Edge colour last written while Edge line is on.
 local edgeSet = setmetatable({}, { __mode = "k" })
--- numbers[cooldown]: the look this file gave the countdown of a cooldown, { font = the game's font { file, size, flags } read before the first size
--- change (false when it could not be read), sized = true while a size is set, colour = the colour set, tenths = the tenths set }.
 local numbers = setmetatable({}, { __mode = "k" })
 local WHITE = "ffffffff"
 local dirty = setmetatable({}, { __mode = "k" })
 local all, queued, hooked, touched = false, false, false, false
--- True until the next pass of every button has given Flat UI's buttons and the pet, stance and totem buttons their looks.
 local lookDirty = true
--- refused.sweep, refused.swipe, refused.size: a call the game refused; the row stops making it.
 local refused = {}
 local watcher
--- The flash of Flash when ready: by button, { frame, group, texture } once made, or false when it could not be made. RISE and FALL are its two
--- halves in seconds, PEAK its opacity at the top.
 local readyFlash = setmetatable({}, { __mode = "k" })
 local READY = { PEAK = 0.6, RISE = 0.1, FALL = 0.25, pending = false }
--- The sweep sample: its Cooldown frame once made, the button it lies over, when it and its flash are over (ends), busy while this file sets or clears
--- it (its OnCooldownDone then does not count), running while its sweep runs, the button whose icon it greys (grey, while Grey out icon on cooldown
--- is on) and TIME, the sample cooldown in seconds. LOOKS: the rows a change of which plays it.
 local SAMPLE = { frame = nil, button = nil, ends = nil, busy = false, running = false, grey = nil, TIME = 4 }
--- The colour sample: a change of a usability or range row paints the first sample button in the colour of TINTS[row] until ends (TIME seconds after
--- the last change).
 local TINT = { button = nil, path = nil, ends = 0, TIME = 2 }
 local TINTS = { usableOwn = "manaColour", manaColour = "manaColour", unusableColour = "unusableColour", rangeTint = "rangeColour",
 	rangeColour = "rangeColour" }
--- The places of the Sound when ready choices in ns.SOUNDS (IconRow.lua), as Party cooldowns has them; TEST: the sound test mode plays once.
 READY.SOUNDS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 READY.TEST = "actionbars.ready"
 local LOOKS = { sweep = true, sweepOwn = true, sweepColour = true, sweepAlpha = true, sweepEdge = true, sweepEdgeColour = true, cdFont = true,
@@ -123,13 +66,11 @@ local function Say(which)
 	ns.Note(KEY, LINES[which])
 end
 
--- True while the button is drawn: a button the layout hid (fewer icons on its bar in Edit Mode) keeps its place, and its effects are not shown.
 local function Visible(button)
 	local ok, shown = pcall(button.IsVisible, button)
 	return ok and not ns.IsSecret(shown) and shown == true
 end
 
--- The group ActionBars.lua gives a restyled button ("pet", "stance", "totem" and the rest), or nil.
 local function Group(button)
 	if type(ns.ActionButtonGroup) ~= "function" then
 		return nil
@@ -138,8 +79,6 @@ local function Group(button)
 	return ok and group or nil
 end
 
--- One of Flat UI's own buttons (OwnBars.lua) is painted through the icon painter of OwnPaint.lua, which gets the state of the slot, and the hooks on
--- the game's range and cooldown functions are not made for it.
 local function IsOwn(button)
 	return type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button) == true
 end
@@ -179,7 +118,6 @@ local function Wanted()
 	return ns.Enabled(KEY)
 end
 
--- The colour for a button: out of range wins over usability. Nil leaves the game's colour.
 local function IconColour(button)
 	local own, tint = Opt("usableOwn") == true, Opt("rangeTint") == true
 	if not (own or tint or painted[button]) then
@@ -274,19 +212,16 @@ local function Grey(button, cooldown)
 	end
 end
 
--- Tenths below, a whole number of seconds from 0 (never).
 local function Tenths()
 	local tenths = Opt("cdTenths")
 	return Plain(tenths, "number") and tenths > 0 and tenths or 0
 end
 
--- True when a cooldown row is off its default or this file changed a cooldown before, so the game's cooldown call is worth a pass.
 local function CooldownWork()
 	return touched or Opt("sweep") ~= true or Opt("sweepOwn") == true or Opt("sweepEdge") == true or FONTS[Opt("cdFont")] ~= nil
 		or Opt("cdGrey") == true or Opt("cdColour") ~= WHITE or Tenths() ~= 0
 end
 
--- The countdown's font string of a cooldown (Cooldown:GetCountdownFontString, FrameAPICooldownDocumentation.lua:78-89), or nil.
 local function Countdown(cooldown)
 	if type(cooldown.GetCountdownFontString) ~= "function" then
 		return nil
@@ -298,7 +233,6 @@ local function Countdown(cooldown)
 	return nil
 end
 
--- The game's font of the countdown, read before the first size change (SimpleFont GetFont), as Cooldowns.lua reads it for the cooldown icons.
 local function GameFont(cooldown)
 	local fs = Countdown(cooldown)
 	if fs == nil then
@@ -311,10 +245,6 @@ local function GameFont(cooldown)
 	return false
 end
 
--- Cooldown number size, colour and Tenths below on the countdown of a button's cooldown. The size is set at each pass, as before; As the game has it
--- puts back the font read before the first change, at once. The colour is written when it changes and again after each font change (a font object
--- brings its own colour), the tenths when they change (SetCountdownMillisecondsThreshold, FrameAPICooldownDocumentation.lua:379-386); at the
--- defaults (white, 0) nothing is written on a countdown this file never changed, as Cooldowns.lua does for the cooldown icons (Looks.Numbers).
 local function Numbers(cooldown)
 	local record = numbers[cooldown]
 	local size, fresh = FONTS[Opt("cdFont")], false
@@ -377,9 +307,6 @@ local function Numbers(cooldown)
 	end
 end
 
--- The look of a cooldown, for every restyled button: the sweep on or off and, with Own sweep opacity, its Sweep colour at Sweep opacity, then the
--- numbers. back is the opacity the game's swipe goes back to, or false for the game's own SetSwipeColor(0, 0, 0) of the pet and stance buttons
--- (PetActionBar.lua:208, StanceBar.lua:115).
 local function SweepLook(cooldown, back)
 	if not refused.sweep then
 		local off = Opt("sweep") ~= true
@@ -417,8 +344,6 @@ local function SweepLook(cooldown, back)
 	Numbers(cooldown)
 end
 
--- Edge line: the bright line along the edge of the sweep in Edge colour (Cooldown:SetDrawEdge and SetEdgeColor, FrameAPICooldownDocumentation.lua),
--- each written when it changes; off again, the template's drawEdge false comes back (ActionButtonTemplate.xml:111).
 local function Edge(cooldown)
 	if refused.edge then
 		return
@@ -455,15 +380,11 @@ local function Sweep(button)
 	end
 	SweepLook(cooldown, GAME.swipe)
 	Edge(cooldown)
-	-- The grey of an own button is given by the icon painter, from the state the cooldown has.
 	if not IsOwn(button) then
 		Grey(button, cooldown)
 	end
 end
 
--- A restyled pet, stance or totem button: the look of its cooldown, without colours or grey. A totem button is an action button of the game's, whose
--- cast animation puts its swipe back to black at 0.64 (ActionButton.lua:1840-1845), so it is left alone while one plays and goes back as for the
--- main bars.
 local function SideLook(button)
 	local cooldown = button.cooldown
 	if cooldown == nil or ns.IsSecret(cooldown) or button.actionButtonCastType ~= nil then
@@ -473,8 +394,6 @@ local function SideLook(button)
 	SweepLook(cooldown, group == "totem" and GAME.swipe or false)
 end
 
--- The icon painter: the colour of the icon of one of Flat UI's buttons, or nil for the game's own (OwnPaint.lua gives white, blue or grey by usability).
--- The grey of a cooldown is set on the icon here; the answers are the state's, which is plain or nil.
 local function IconPainter(button, shown)
 	if type(shown) ~= "table" then
 		return nil
@@ -484,7 +403,6 @@ local function IconPainter(button, shown)
 	if icon ~= nil and not ns.IsSecret(icon) then
 		local want = wanted and Opt("cdGrey") == true and shown.cdActive == true and shown.cdOnGCD ~= true
 		if SAMPLE.grey == button then
-			-- The sweep sample greys the icon while it runs; greyed keeps the real state for its end (SampleGrey).
 			greyed[button] = want or nil
 		elseif want or greyed[button] then
 			pcall(icon.SetDesaturated, icon, want)
@@ -494,7 +412,6 @@ local function IconPainter(button, shown)
 	if not wanted then
 		return nil
 	end
-	-- The colour sample of a usability or range row (TintSample).
 	if TINT.button == button and GetTime() < TINT.ends then
 		return ns.Colour(KEY .. "." .. TINT.path)
 	end
@@ -546,13 +463,11 @@ local function Pass()
 				PaintIcon(button)
 				Sweep(button)
 			elseif looks then
-				-- Flat UI's buttons only after a change (lookDirty): a pass of a power tick or a slot event leaves them to OwnPaint.lua.
 				ownSeen = true
 				Sweep(button)
 			end
 		end
 	end
-	-- The pet, stance and totem buttons: all of them after a change, else a totem button whose cooldown the game just set.
 	if looks then
 		for _, button in ipairs(type(ns.ActionButtons) == "function" and ns.ActionButtons() or {}) do
 			if list[button] == nil and SIDE[Group(button)] then
@@ -569,7 +484,6 @@ local function Pass()
 	if looks then
 		lookDirty = false
 	end
-	-- Flat UI's buttons are painted again, so the icon painter reads the rows as they are.
 	if ownSeen and type(ns.OwnRepaint) == "function" then
 		pcall(ns.OwnRepaint)
 	end
@@ -602,11 +516,9 @@ local function Hook()
 	if hooked then
 		return
 	end
-	-- Nothing is hooked or registered in the game's action button code while Restyle action bars is off and Flat UI leaves the game's bars alone.
 	if ns.HandsOff() and not ns.Enabled("actionbars") then
 		return
 	end
-	-- Only Flat UI's own buttons are styled: the game's range and cooldown functions have nothing to say about them.
 	if type(ns.OwnLookOnly) == "function" and ns.OwnLookOnly() then
 		return
 	end
@@ -635,7 +547,6 @@ local function Hook()
 			return
 		end
 		if Eligible()[button] == nil then
-			-- A restyled totem button is an action button of the game's: its cooldown takes the look again after the game set it.
 			if SIDE[Group(button)] and CooldownWork() then
 				Ask(button)
 			end
@@ -649,7 +560,6 @@ local function Hook()
 	hooked = range == true or cooldown == true
 end
 
--- One flash frame: a child of the button's bar, over its icon and above its cooldown, clear until its animation plays. Out of combat only.
 local function MakeReady(button)
 	local icon = button.icon
 	if icon == nil or ns.IsSecret(icon) then
@@ -685,7 +595,6 @@ local function MakeReady(button)
 	return { frame = frame, group = group, texture = texture }
 end
 
--- Flash colour on the flash frames made: a colour of Flat UI's own textures, allowed in a fight.
 local function ReadyColour()
 	local r, g, b = ns.Colour(KEY .. ".readyColour")
 	for _, made in pairs(readyFlash) do
@@ -695,7 +604,6 @@ local function ReadyColour()
 	end
 end
 
--- The flash frames of Flat UI's buttons that have none yet, made once the fight is over; nothing while the row is off.
 local function PrepareReady()
 	if READY.pending or Opt("readyFlash") ~= true or type(ns.OwnOn) ~= "function" or not ns.OwnOn() then
 		return
@@ -712,7 +620,6 @@ local function PrepareReady()
 	end)
 end
 
--- Sound when ready, through ns.PlayKit, so at most once a second however many buttons flash at once; nothing at None.
 local function ReadySound()
 	local sounds = ns.SOUNDS
 	local sound = type(sounds) == "table" and sounds[READY.SOUNDS[Opt("readySound")] or 0] or nil
@@ -721,9 +628,6 @@ local function ReadySound()
 	end
 end
 
--- A cooldown longer than the global one ended on one of Flat UI's buttons: its flash plays, from the start, with Sound when ready. A button the
--- layout hid has no flash, nor a cooldown shorter than Shortest cooldown that flashes; seconds, the length OwnPaint.lua measured, is nil when it
--- does not know it.
 local function OnReady(button, seconds)
 	if Opt("readyFlash") ~= true or not Wanted() or Eligible()[button] == nil or not Visible(button) then
 		return
@@ -742,7 +646,6 @@ local function OnReady(button, seconds)
 	end
 end
 
--- The game's Show numbers on cooldowns as a plain answer: true to hide the numbers, nil when it cannot be read.
 local function NumbersOff()
 	local read = C_CVar and C_CVar.GetCVarBool or GetCVarBool
 	if type(read) ~= "function" then
@@ -755,7 +658,6 @@ local function NumbersOff()
 	return on ~= true
 end
 
--- The looks of the rows on the sample's cooldown; what it changes does not count as a change of a button's (touched).
 local function SampleLook(frame)
 	local was = touched
 	SweepLook(frame, GAME.swipe)
@@ -767,8 +669,6 @@ local function SampleLook(frame)
 	end
 end
 
--- Grey out icon on cooldown on the icon of the sample's button while its sweep runs (Flat UI's own icon, SetDesaturated), and the icon it greyed
--- before put back as its real state has it (greyed). button nil puts it back only.
 local function SampleGrey(button)
 	local want = button ~= nil and Opt("cdGrey") == true and Wanted()
 	local was = SAMPLE.grey
@@ -786,8 +686,6 @@ local function SampleGrey(button)
 	end
 end
 
--- The sample's sweep ended: its grey goes, and the button's Flash when ready plays while the row is on, its frame made first when it has none.
--- Sound when ready plays with it only in test mode, once each time test mode is turned on (TM.Sound), not on each loop of 5 s.
 local function SampleDone()
 	if SAMPLE.busy then
 		return
@@ -814,7 +712,6 @@ local function SampleDone()
 	end
 end
 
--- The sample's frame over the button: a child of the button's bar, one level above the button, on the button's own cooldown frame.
 local function SampleStart(frame, button)
 	local okParent, parent = pcall(button.GetParent, button)
 	frame:SetParent(okParent and Plain(parent, "table") and parent or UIParent)
@@ -836,7 +733,6 @@ local function SampleStart(frame, button)
 	SAMPLE.running = true
 end
 
--- The sweep sample on a Flat UI button, out of combat. Without force, a sample that still runs on that button takes the looks of now and goes on.
 function ns.ButtonStatesSample(button, force)
 	if InCombatLockdown() or not Wanted() or not Plain(button, "table") then
 		return
@@ -844,7 +740,6 @@ function ns.ButtonStatesSample(button, force)
 	local frame = SAMPLE.frame
 	if frame and not force and SAMPLE.button == button and (SAMPLE.heldAt or (SAMPLE.ends and GetTime() < SAMPLE.ends)) then
 		SampleLook(frame)
-		-- Grey out icon on cooldown changed while the sweep runs, before its end (ends also covers the flash after it).
 		if SAMPLE.running then
 			SampleGrey(button)
 		end
@@ -875,8 +770,6 @@ function ns.ButtonStatesSample(button, force)
 	SAMPLE.ends = GetTime() + SAMPLE.TIME + READY.RISE + READY.FALL
 end
 
--- Moving on the bar of test mode (ActionBars.lua): held true holds the sweep still at half its time, its edge and numbers with it (Cooldown:Pause),
--- and a sample started meanwhile the same way; false carries on from there (Resume), its end moved on by the time it was held.
 function ns.ButtonStatesSampleHold(held)
 	local frame, now = SAMPLE.frame, GetTime()
 	if not held then
@@ -904,7 +797,6 @@ function ns.ButtonStatesSampleHold(held)
 	SAMPLE.busy = false
 end
 
--- Test mode ends or pauses: the sample goes.
 function ns.ButtonStatesSampleOff()
 	local frame = SAMPLE.frame
 	if frame then
@@ -918,8 +810,6 @@ function ns.ButtonStatesSampleOff()
 	SAMPLE.button, SAMPLE.ends, SAMPLE.heldAt = nil, nil, nil
 end
 
--- The colour sample on button: its icon takes the colour of the row just changed for TINT.TIME seconds, a change meanwhile giving it the time
--- again, and the button it was on before takes its own colour back. OwnPaint.lua paints it through the icon painter (IconPainter).
 local function TintSample(button, path)
 	local was = TINT.button
 	TINT.button, TINT.path, TINT.ends = button, path, GetTime() + TINT.TIME
@@ -941,10 +831,6 @@ local function TintSample(button, path)
 	end
 end
 
--- A look row changed with the options window open, out of combat and out of test mode (which plays the sample itself): the sample plays once on the
--- first sample button (ns.ButtonSamples: Flat UI's main bar first, then bars 2 to 8), or the one that runs takes the new look. A usability or
--- range row that is on paints that button in its colour for TINT.TIME seconds instead (TintSample): Own usability colours and Not enough power
--- colour in the power colour, Cannot use colour in its own, Tint icon when out of range and Out of range colour in the range colour.
 local function Preview(path)
 	local row = type(path) == "string" and path:match("^" .. KEY .. "%.(.+)$")
 	local mode = ns.TestMode
@@ -964,7 +850,6 @@ local function Preview(path)
 	end
 end
 
--- The Config rows of the page Colours and cooldowns call this.
 function ns.ButtonStatesChanged(path)
 	if refused.look and (path == KEY .. ".cdColour" or path == KEY .. ".cdTenths") then
 		refused.look = nil
@@ -985,8 +870,6 @@ function ns.ButtonStatesChanged(path)
 	Preview(path)
 end
 
--- Cooldown numbers (actionbars.cdNumbers), a row the game holds: its Show numbers on cooldowns. The row's value is true while the numbers show, nil
--- when it cannot be read; in a fight it is the choice that waits for the fight's end (NUMBERS.pending), so the switch follows a click at once.
 local NUMBERS = { pending = nil }
 function ns.ButtonNumbersGet()
 	local hide = NumbersOff()
@@ -999,8 +882,6 @@ function ns.ButtonNumbersGet()
 	return not hide
 end
 
--- The write, out of combat. Flat UI's buttons follow it on CVAR_UPDATE (OwnPaint.lua) and the game's through its own callback; the sweep sample
--- plays with or without its numbers.
 local function WriteNumbers(on)
 	local write = C_CVar and C_CVar.SetCVar or SetCVar
 	if type(write) ~= "function" then
@@ -1010,7 +891,6 @@ local function WriteNumbers(on)
 	Preview(KEY .. ".cdFont")
 end
 
--- The row was changed. Nothing is written in combat: the last choice made in a fight is written when it ends.
 function ns.ButtonNumbersSet(_, value)
 	local on = value == true
 	if InCombatLockdown() then
@@ -1031,9 +911,6 @@ function ns.ButtonNumbersSet(_, value)
 	WriteNumbers(on)
 end
 
--- Test mode on: a change of a usability or range row paints the first sample button in its colour for TINT.TIME seconds, as with test mode off
--- (Preview), in place of the sweep (ActionBars.lua, SampleChanged). True for every such row, so the sweep is left alone; it paints only while the
--- row's switch is on (Tint icon when out of range for its colour, Own usability colours for the others), out of combat.
 function ns.ButtonStatesTint(button, path)
 	local row = type(path) == "string" and path:match("^" .. KEY .. "%.(.+)$")
 	local tint = row and TINTS[row]
@@ -1046,8 +923,6 @@ function ns.ButtonStatesTint(button, path)
 	return true
 end
 
--- True while the sweep sample (and its flash) or a colour sample of this file plays with test mode off: Fading and the bar block hold the action
--- bars at full meanwhile, so the new look is seen at full (Fade.lua, BarBlock.lua). Only reads.
 function ns.ButtonStatesPreviewing()
 	local mode = ns.TestMode
 	if mode and mode.IsOn() then
@@ -1062,7 +937,6 @@ if type(ns.OnOwnReady) == "function" then
 end
 if type(ns.OnOwnBuilt) == "function" then
 	ns.OnOwnBuilt(PrepareReady)
-	-- Flat UI's buttons are built: they take the looks on the next pass.
 	ns.OnOwnBuilt(function()
 		lookDirty = true
 		Ask(nil)
@@ -1087,7 +961,6 @@ if CreateFrame then
 	end
 end
 
--- The buttons hold something else: Flat UI's buttons made after login, or the game's styled after them, are looked at again.
 if type(ns.OnButtonsChanged) == "function" then
 	ns.OnButtonsChanged(function()
 		lookDirty = true

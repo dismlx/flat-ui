@@ -37,6 +37,8 @@ import sys
 import textwrap
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import strip_lua
 DATA = os.path.join(HERE, 'rotations', 'data.json')
 ROOT = os.path.dirname(os.path.dirname(HERE))
 SPELLDATA = os.path.join(ROOT, 'FlatUI', 'SpellData.lua')
@@ -459,7 +461,7 @@ def main():
         if not entries.get(cls):
             P.fail('SpellData.lua: no entries for %s' % cls)
     classes = build(data, entries)
-    text = write_lua(data, classes)
+    text = strip_lua.strip(write_lua(data, classes))
     for cls in CLASSES:
         c = classes.get(cls) or {}
         print('%s: %s' % (cls, ', '.join('%s (%d abilities%s)' % (

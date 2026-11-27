@@ -1,27 +1,13 @@
 local _, ns = ...
 
--- Setup drawing for the Movers, Tooltip, Trackers and Cooldown icons position steps: mock-screen.
--- A screen outline in the proportions of the game's screen with frames at their places, the handles of the movers, the middle line, the Tooltip
--- and the two rows of icons, and beside it the Movers panel. The settings come from ns.Get only, so the same code draws the draft under the
--- setup view. Positions of the addon's own frames come from ns.MoverSpot (Movers.lua:570), the places of the game's frames are the defaults.
---
--- Contract: ns.SetupDrawings["mock-screen"] = { build(stage), draw(stage), parts = { [path] = region } }.
--- build(stage) makes the frames once for a stage and returns their root frame, its width and its height; draw(stage) places them from the
--- settings and returns the same width and height. stage.focus (or the id in stage.step) picks what is drawn: "movers", "tooltip", "trackers"
--- or "cooldowns". With neither, everything is drawn.
-
 ns.SetupDrawings = ns.SetupDrawings or {}
 
--- The drawing fits an area of AREA_W by SCREEN_H: the screen box has the real proportions of UIParent, as wide as the area leaves beside the panel.
 local SCREEN_H, AREA_W, PANEL_W, PANEL_GAP, PANEL_MIN_H = 204, 658, 270, 12, 112
 local SCREEN_W_MAX = AREA_W - PANEL_GAP - PANEL_W
--- The tooltip's own spot and the game's place for it (Movers.lua:121): the middle of its handle is where the game puts the box.
 local TOOLTIP, TRACKERS, COOLDOWNS = "FlatUITooltip", "FlatUITrackers", "FlatUICooldowns"
 local TIP_GAME_X, TIP_GAME_Y = -9, 85
--- Trackers.lua:22 and :45 (GAP, BESIDE), Cooldowns.lua:22 (SCREEN_Y), Movers.lua:81 (a handle snaps within 8 units of the middle, so the sample drag is closer than that).
 local GAP, BESIDE, SCREEN_Y = 4, 150, -160
 local SQUARE, MIN_ICON = 9, 8
--- The sample the drawing holds: a drag that has come within SNAP of the middle (UI units), a cursor (fractions of the screen) and a tooltip box (pixels).
 local DRAG_OFFSET, TIP_PX_W, TIP_PX_H, CURSOR_X, CURSOR_Y = 7, 40, 22, 0.60, 0.42
 local SAMPLE_ICONS = 3
 
@@ -32,7 +18,6 @@ local LOOKS = {
 	grey = { { 0.6, 0.6, 0.6 }, { 0.3, 0.3, 0.3, 0.25 }, 2 },
 }
 
--- The frames drawn at the game's places, as fractions of the screen from its bottom left: left, bottom, width, height.
 local FRAMES = {
 	{ key = "player", label = "Player", rect = { 0.02, 0.86, 0.18, 0.10 } },
 	{ key = "target", label = "Target", rect = { 0.22, 0.86, 0.18, 0.10 } },
@@ -74,7 +59,6 @@ local function Text(parent, template, percent, colour)
 	return text
 end
 
--- A frame with the outline of a tool: a border, a fill and a thickness of its own, which the look settings do not change.
 local function Box(parent, level, look)
 	local frame = Frame(parent, level)
 	local outline = ns.Outline(frame, frame, true)
@@ -96,7 +80,6 @@ local function LookOf(item, look)
 	end
 end
 
--- The square of the centre button and of the tick box on a handle (Movers.lua:1980-2035).
 local function Square(parent, picture)
 	local square = Frame(parent, 2)
 	square:SetSize(SQUARE, SQUARE)
@@ -133,7 +116,6 @@ local function Button(parent, label, width)
 	return button
 end
 
--- The size of UIParent, the units ns.MoverSpot answers in (Movers.lua:403-409), and the pixels for each unit that fit the screen box in the area.
 local function Geometry()
 	local width, height = 1920, 1080
 	local ok, wide, high = pcall(UIParent.GetSize, UIParent)
@@ -143,7 +125,6 @@ local function Geometry()
 	return width, height, math.min(SCREEN_H / height, SCREEN_W_MAX / width)
 end
 
--- The height of a wrapped text: the client's answer, or a line of 11 pixels for each 5.5 pixels per character where it cannot say.
 local function TextHeight(text, string, width)
 	local ok, height = pcall(text.GetStringHeight, text)
 	if ok and Number(height) and height > 0 then
@@ -157,13 +138,11 @@ local function Place(frame, point, relative, relativePoint, x, y)
 	frame:SetPoint(point, relative, relativePoint, x, y)
 end
 
--- A frame of `w` by `h` UI units with its bottom left at `l`, `b` from the bottom left of the screen.
 local function Rect(S, frame, l, b, w, h)
 	frame:SetSize(math.max(1, w * S.k), math.max(1, h * S.k))
 	Place(frame, "BOTTOMLEFT", S.screen, "BOTTOMLEFT", l * S.k, b * S.k)
 end
 
--- The frame with its middle at `x`, `y` UI units, `w` by `h` pixels.
 local function Centre(S, frame, x, y, w, h)
 	frame:SetSize(w, h)
 	Place(frame, "CENTER", S.screen, "BOTTOMLEFT", x * S.k, y * S.k)
@@ -180,7 +159,6 @@ local function Shows(focus, what)
 	return focus == nil or focus == what
 end
 
--- The screen, the game's frames at their places and the Tooltip handle.
 local function BuildScreen(S, root)
 	local screen, outline = Box(root, 1, "game")
 	ns.SetOutlineColour(outline, 0.7, 0.7, 0.7)
@@ -203,7 +181,6 @@ local function BuildScreen(S, root)
 		end
 		S.items[spec.key] = item
 	end
-	-- The Tooltip handle of the movers: a box of its own at the spot, with the same button and tick box.
 	local tipHandle, tipOutline = Box(screen, 3, "handle")
 	S.tipHandle = { frame = tipHandle, outline = tipOutline, look = "handle" }
 	S.tipHandle.label = Text(tipHandle, "GameFontHighlightSmall", 80)
@@ -215,7 +192,6 @@ local function BuildScreen(S, root)
 	S.tipHandle.box:SetPoint("TOPLEFT", tipHandle, "TOPLEFT", 2, -2)
 end
 
--- The character and the personal resource display under it, which the two rows of icons hang from.
 local function BuildCharacter(S)
 	local figure = Frame(S.screen, 3)
 	local body = Fill(figure, { 0.5, 0.5, 0.52, 1 })
@@ -228,7 +204,6 @@ local function BuildCharacter(S)
 	S.figure, S.health, S.power = figure, health, power
 end
 
--- A row of sample icons on a holder with a small label over it.
 local function BuildRow(S, name)
 	local holder = Frame(S.screen, 5)
 	local row = { holder = holder, icons = {} }
@@ -246,7 +221,6 @@ local function BuildRow(S, name)
 	return row
 end
 
--- The mouse cursor: a small cross.
 local function Cursor(S)
 	local cursor = Frame(S.screen, 7)
 	cursor:SetSize(9, 9)
@@ -287,8 +261,6 @@ local function BuildLine(S)
 	S.line = line
 end
 
--- The Movers panel, with the line that says how to centre and the button that centres what is ticked (Movers.lua:3517-3584). The three texts hang
--- from each other as there, and the panel is as tall as they are.
 local HINT = "Drag to move. Scroll or Shift and scroll to nudge. Ctrl and scroll to scale. Right-click to reset."
 local EVERY_FRAME = "Every frame can be moved here. A grey box moves with the frame it hangs from. A hidden frame the game has not placed yet has no box."
 local TEXT_W = PANEL_W - 24
@@ -314,7 +286,6 @@ local function BuildPanel(S, root)
 	how:SetWidth(TEXT_W)
 	how:SetJustifyH("LEFT")
 	how:SetPoint("TOPLEFT", every, "BOTTOMLEFT", 0, -6)
-	-- Four buttons on one row of the 246 pixels of the panel: 12 + 64 + 6 + 52 + 6 + 76 ends at 216, and Done starts at 222.
 	local pick = Button(panel, "Pick a frame", 64)
 	pick:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 12, 10)
 	local reset = Button(panel, "Reset all", 52)
@@ -329,7 +300,6 @@ end
 local D = { parts = {} }
 ns.SetupDrawings["mock-screen"] = D
 
--- The part of the drawing that each setting marks, for the stage built or asked for last.
 local function Parts(S)
 	local parts = D.parts
 	parts["movers.snap"] = S.items.bar.frame
@@ -373,8 +343,6 @@ function D.build(stage)
 	return root, S.width, S.height
 end
 
--- The game's frames at their places, as handles of the movers or as plain frames. The action bar is the frame being dragged: with Snap on it
--- is on the middle of the screen, with Snap off it is DRAG_OFFSET units from it.
 local function DrawFrames(S, focus, uw)
 	local handles = Shows(focus, "movers")
 	local snap = ns.Get("movers.snap") == "middle"
@@ -399,7 +367,6 @@ local function DrawFrames(S, focus, uw)
 	end
 end
 
--- The middle line and what is being dragged: the cursor on the action bar, the line and the word that says why it is shown.
 local function DrawLine(S, focus, uw)
 	local mode = ns.Get("movers.middleLine")
 	local handles = Shows(focus, "movers")
@@ -411,8 +378,6 @@ local function DrawLine(S, focus, uw)
 	Place(S.dragCursor, "CENTER", S.items.bar.frame, "CENTER", 0, -2)
 end
 
--- The Movers panel: shown with the handles. The line about centring follows Centre a handle with, and the button follows Centre everything.
--- Its height is that of the three texts with the buttons under them.
 local function DrawPanel(S, focus)
 	local handles = Shows(focus, "movers")
 	S.panel:SetShown(handles)
@@ -432,7 +397,6 @@ local function DrawPanel(S, focus)
 	S.panel:SetHeight(math.max(PANEL_MIN_H, math.ceil(height)))
 end
 
--- The screen box in the proportions of UIParent, the panel beside it and the root frame around both. Sets the size of the root.
 local function Layout(S, uw, uh)
 	local width, height = uw * S.k, uh * S.k
 	S.screen:SetSize(width, height)
@@ -443,7 +407,6 @@ local function Layout(S, uw, uh)
 	S.root:SetSize(S.width, S.height)
 end
 
--- The tooltip: at the game's place while it is not placed, at the sample cursor with the offsets, or hanging from the Tooltip handle.
 local function DrawTooltip(S, focus, uw, uh)
 	local used = ns.Get("tooltip.enabled") == true
 	local fixed = used and ns.Get("tooltip.mode") == "fixed"
@@ -495,7 +458,6 @@ local function LayRow(S, row, x, y, size, spacing)
 	end
 end
 
--- Where the Cooldown icons row is, as Cooldowns.lua:769-794 places it: at its spot, under the personal resource display, or low on the screen.
 local function CooldownSpot(S, uw, uh)
 	local x, y = ns.Get("cooldowns.x"), ns.Get("cooldowns.y")
 	local spotX, spotY = ns.MoverSpot(COOLDOWNS, "CENTER")
@@ -508,7 +470,6 @@ local function CooldownSpot(S, uw, uh)
 	return uw / 2 + x, uh / 2 + y + SCREEN_Y, false
 end
 
--- Where the Trackers row is, as Trackers.lua:2781-2829 places it.
 local function TrackerSpot(S, uw, uh, cooldownX, cooldownY, cooldownSpot)
 	local x, y, place = ns.Get("trackers.x"), ns.Get("trackers.y"), ns.Get("trackers.place")
 	local size, spacing = ns.Get("trackers.size"), ns.Get("trackers.spacing")

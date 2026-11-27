@@ -1,32 +1,9 @@
 local _, ns = ...
 
--- Proc alerts: the kind of tracker called proc. A proc shows nothing until the buff of the proc is up, then its icon with the time left, a
--- sound once, and it ends when the buff ends, when the spell it is for is cast or when its time is up. A proc that starts again within 3 seconds
--- of its end (a reactive ability after each dodge, Execute as rage refills) is the same alert going on: no sound, and its art and glow carry on
--- without fading in or bursting again (Start). Where the game hides the buff in a fight, the game's own icon for the buff (TrackerSlots.lua)
--- shows the proc. The game's overlay events and IsSpellOverlayed are a second
--- way to know that a proc is up, for the trigger overlay: SpellActivationOverlay.lua loads only for the game types cata, mists and mainline
--- (Blizzard_FrameXML.toc:109-110), so on this client no event is expected, and the check says how many came. The art and the glow of a
--- proc are other files that provide ns.ProcArtShow, ns.ProcArtHide, ns.ProcGlowStart and ns.ProcGlowStop; each is called here only when it
--- is there. Every value from the game is tested with ns.IsSecret before it is compared, indexed or kept.
--- Procs of your class (on by default): every row of the class data that is automatic (ProcData.lua) and has a spell you know is a proc too,
--- without being added. These are not saved: ns.ProcAutoEntries gives them to the trackers that are on (Trackers.lua), each with the id "auto:"
--- and its name, one table kept for good so what the trackers know of it stays. One added by hand takes its place, with its own colour, time
--- and sound, and Remove a proc turns one off for the character (FlatUICharDB.procsOff, by name) until Bring back a proc.
--- The preview (ns.ProcPreview): with the options window open, out of combat and with test mode off, a change of a row of the art, the glow or
--- Colour shows the first proc of the class for 4 s in the new look, its art and glow with no sound, held while a slider is dragged. While it shows,
--- faded action bars and bar blocks are at full (ns.ProcPreviewing).
-
 local KEY = "trackers"
 local PART = "procs"
 local IsSecret = ns.IsSecret
 
--- MAX_SPELLS, MAX_TIME, SIZE: the most spell IDs in a list of an entry, the most seconds of a proc's time and its icon size.
--- KITS: the sound choices of the page by their saved word, the sound kit each stands for. The first five are the kits of ns.SOUNDS in
---   IconRow.lua; alarm is ALARM_CLOCK_WARNING_3 and whisper UI_RAID_BOSS_WHISPER_WARNING (SoundKitConstants.lua:95, 136).
--- FALL: the kit the game's own overlay plays (SpellActivationOverlay.lua:134), tried when the game refuses a kit.
--- COUNT: the counter of each event of the game's overlay. AGAIN: the seconds after the end of an alert within which the same proc starting again
--- carries it on (Start).
 local K = {
 	MAX_SPELLS = 40, MAX_TIME = 120, SIZE = 48, MAX_ID = 2147483647, AGAIN = 3,
 	KITS = { spell = 23287, chimes = 316736, bell = 316773, warhorn = 316723, raid = 8959, alarm = 12889, whisper = 37666 },
@@ -35,15 +12,9 @@ local K = {
 	COUNT = { SPELL_ACTIVATION_OVERLAY_SHOW = "show", SPELL_ACTIVATION_OVERLAY_HIDE = "hide", SPELL_ACTIVATION_OVERLAY_GLOW_SHOW = "glowShow",
 		SPELL_ACTIVATION_OVERLAY_GLOW_HIDE = "glowHide" },
 	USAGE = "Usage: /flatui tracker proc colour 1 ffd100, proc time 1 10 or proc trigger 1 aura.",
-	-- AUTO_KINDS: the kinds of the class data that are automatic when a row does not say. AUTO_LINE: the lines of Remove a proc for the automatic
-	-- procs start above it, clear of the numbers of the list of trackers.
 	AUTO_KINDS = { proc = true, reactive = true }, AUTO_LINE = 1000,
 }
--- The automatic procs: the list built last, every entry ever built by its id, and whether the list is built again when next asked.
 local A = { list = {}, byId = {}, stale = true }
--- What is known of each proc, by the id of its entry: the entry while its alert is up, the moment the alert started, the overlay signal and the
--- glow signal, an alert ended by a cast or by its time until the buff is gone, the last sound in words and the moment the alert last ended
--- (stopped). seen counts the events heard. triggers are the ways a proc is known to be up, by name.
 local P = { up = {}, since = {}, signalled = {}, glow = {}, ended = {}, played = {}, stopped = {}, triggers = {},
 	seen = { show = 0, hide = 0, glowShow = 0, glowHide = 0 } }
 
@@ -63,7 +34,6 @@ local function Now()
 	return 0
 end
 
--- The first answer of a game call, or nil when the call is missing, fails or is withheld.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -81,7 +51,6 @@ local function Call(fn, ...)
 	end
 end
 
--- The same IDs in the same order.
 local function Same(old, new)
 	if type(old) ~= "table" or #old ~= #new then
 		return false
@@ -103,7 +72,6 @@ local function Lists(list, id)
 	return false
 end
 
--- The proc trackers, in list order, with their numbers in the list of trackers: { number, entry }.
 local function Procs()
 	local found = {}
 	for number, entry in ipairs(ns.TrackerEntries()) do
@@ -114,7 +82,6 @@ local function Procs()
 	return found
 end
 
--- Every proc that is watched: the proc trackers in list order, then the automatic ones (ns.ProcAutoEntries, below).
 local function All()
 	local found, saved = {}, ns.TrackerEntries()
 	for _, entry in ipairs(saved) do
@@ -129,8 +96,6 @@ local function All()
 end
 ns.ProcEntries = All
 
--- The class data ------------------------------------------------------------------------------------------------------------------
-
 local function ProcList()
 	local ok, _, class = pcall(UnitClass, "player")
 	if not ok or IsSecret(class) or type(class) ~= "string" then
@@ -140,7 +105,6 @@ local function ProcList()
 	return type(data) == "table" and data or {}
 end
 
--- The class data row of a proc tracker, by the IDs of its buff; a row with no buff (Execute) by its name, for an entry with no buff either.
 local function RowOf(entry)
 	local list = ProcList()
 	for _, row in ipairs(list) do
@@ -160,7 +124,6 @@ local function RowOf(entry)
 	return nil
 end
 
--- The names of the procs of the class turned off on this character, as a set (FlatUICharDB.procsOff), made when make is set.
 local function OffSet(make)
 	local saved = ns.Character()
 	if type(saved) ~= "table" then
@@ -175,13 +138,10 @@ local function OffSet(make)
 	return saved.procsOff
 end
 
--- True for a proc of your class that is turned off, or for all of them while Procs of your class is off. Until the next layout takes it away
--- (after the fight, in one) it is read as down, so its icon, art and glow go at once.
 local function Off(entry)
 	return entry.auto == true and (ns.Get(KEY .. ".procAuto") == false or OffSet(false)[entry.name] == true)
 end
 
--- A spell of the player's, or true when the game cannot say.
 local function Known(spellID)
 	local book = C_SpellBook
 	if type(book) == "table" then
@@ -195,7 +155,6 @@ local function Known(spellID)
 	return true
 end
 
--- The colour of an entry as red, green and blue: its own, else the page's, else ffd100.
 local function Rgb(hex)
 	if Plain(hex, "string") and #hex == 8 and hex:find("^%x+$") then
 		return tonumber(hex:sub(3, 4), 16) / 255, tonumber(hex:sub(5, 6), 16) / 255, tonumber(hex:sub(7, 8), 16) / 255
@@ -215,7 +174,6 @@ function ns.ProcColour(entry)
 	return 1, 0.82, 0
 end
 
--- The sound kit of an alert: the entry's own (false is none), else the page's Sound.
 local function KitOf(entry)
 	local own = entry.sound
 	if own == false then
@@ -226,8 +184,6 @@ local function KitOf(entry)
 	return K.KITS[ns.Get(KEY .. ".procSound")]
 end
 
--- The art of an alert: the payload of the game's overlay when it came, else the art of the class data with its place, size, opacity, colour,
--- turn, pulse and time, else nothing (the plain arc). False for a proc of the class data that has no art, only the glow (noArt).
 local function ArtData(entry)
 	local signal = P.signalled[entry.id]
 	if signal then
@@ -245,7 +201,6 @@ local function ArtData(entry)
 	return nil
 end
 
--- Shows the art of a proc that is up, unless it has none. again: at once, with no fade-in (Start).
 local function ShowArt(entry, again)
 	local art = ArtData(entry)
 	if art ~= false then
@@ -253,11 +208,8 @@ local function ShowArt(entry, again)
 	end
 end
 
--- The art of the alert as ProcArt.lua draws it, for the pieces it makes on the game's own icon.
 ns.ProcArtData = ArtData
 
--- The game's own icon of a proc carries the art too (TrackerSlots.lua runs this while it builds the slot). ProcArt.lua is loaded after this file,
--- so the function is looked up when the slot is built.
 if type(ns.TrackerSlotParts) == "table" then
 	ns.TrackerSlotParts.proc = function(...)
 		local make = ns.ProcArtParts
@@ -268,9 +220,6 @@ if type(ns.TrackerSlotParts) == "table" then
 	end
 end
 
--- Starting and ending an alert -----------------------------------------------------------------------------------------------------
-
--- The sound once. A refused kit is tried as the sound of the game's own overlay; a refusal of both is one note. The word goes to the check.
 local function Sound(entry, always)
 	local kit = KitOf(entry)
 	if not kit then
@@ -285,13 +234,9 @@ local function Sound(entry, always)
 	return word
 end
 
--- An alert starts: the sound once, the art and the glow. A proc that starts again within K.AGAIN seconds of the end of its alert, or while it is
--- up, is the same alert going on (Overpower after each dodge, Revenge, Execute as rage refills): no sound, the art is there at
--- once with no fade-in, and the glow carries on without its burst.
 local function Start(entry)
 	local id, now = entry.id, Now()
 	local ended = P.stopped[id]
-	-- A real proc that comes while the preview of a row shows it (ns.ProcPreview) takes the alert over as a new one, with its sound.
 	local previewed = P.preview ~= nil and P.preview.entry == entry
 	if previewed then
 		P.preview = nil
@@ -312,8 +257,6 @@ local function Stop(entry)
 	Call(ns.ProcGlowStop, entry)
 end
 
--- The proc is no longer a tracker that is on: removed, switched off, or the page off. A trigger with a Forget(id) forgets it too, so a proc
--- that comes back (Bring back a proc, Procs of your class on again) is not up from an answer of before.
 local function Gone(id)
 	local entry = P.up[id]
 	if entry then
@@ -327,7 +270,6 @@ local function Gone(id)
 	end
 end
 
--- Called when the state the proc shows changes: fine is up, missing is down. low is fine.
 local function Changed(entry, before, after)
 	local was = before == "fine" or before == "low"
 	local now = after == "fine" or after == "low"
@@ -338,14 +280,10 @@ local function Changed(entry, before, after)
 	end
 end
 
--- Reading ----------------------------------------------------------------------------------------------------------------------------
-
 local function Number(value)
 	return Plain(value, "number") and value or 0
 end
 
--- The overlay trigger: the proc is up while the game's overlay or glow says so and its time is not out. Before the game has sent any
--- event this session the proc is not known; after, with no signal, it is not up.
 local function OverlayRead(entry)
 	local id = entry.id
 	local signal, glow = P.signalled[id], P.glow[id]
@@ -363,18 +301,11 @@ local function OverlayRead(entry)
 	return nil
 end
 
--- True for a proc known by its trigger alone: an ability the class data watches by its use (watch usable: Overpower, Revenge, Execute) with the
--- trigger usable, and a proc with no buff. The buff a row names may not be the one that comes and goes (Overpower's, 1289681, is named
--- Bloodthrill like the talent), and a proc with no buff (Execute) has none to look for by name, where an aura of the same name (the one Execute
--- leaves on you for a second after each cast) would be taken for it.
 local function ByUse(entry, row)
 	row = row or RowOf(entry)
 	return row ~= nil and ((row.watch == "usable" and entry.trigger == "usable") or #row.buffs == 0)
 end
 
--- The reading of the buff, else the reading of the entry's trigger when the buff is hidden. A trigger that says Either (usable) is asked also
--- while the buff can be read and is missing: an ability the game makes usable without the buff is up. A proc known by its trigger alone (ByUse)
--- has the trigger's reading, and is down until its first answer.
 local function Raw(entry)
 	local trigger = P.triggers[entry.trigger]
 	if ByUse(entry) then
@@ -433,7 +364,6 @@ local function Read(entry)
 	return reading
 end
 
--- Nothing is drawn while the proc is down, or when the game's own icon draws it.
 local function Hide(_, reading, how)
 	return how == "none" or how == "game" or (how == "live" and reading.state == "missing")
 end
@@ -445,8 +375,6 @@ local function Wanted(entry, state, how)
 	return 1
 end
 
--- The spell a proc is for is cast: the alert ends, and starts again with the next proc. One that stays (Execute) lasts while it is usable.
--- A trigger with a Used(entry) hears it, so the next proc starts an alert even within the time of this one (usable: a second dodge).
 local function Cast(spellID)
 	for _, entry in ipairs(All()) do
 		if Lists(entry.lights, spellID) and (P.up[entry.id] or P.signalled[entry.id] or P.glow[entry.id]) then
@@ -463,9 +391,6 @@ local function Cast(spellID)
 	end
 end
 
--- The game's overlay ---------------------------------------------------------------------------------------------------------------
-
--- The name of a screen location the game gave as a number.
 local function Place(number)
 	local names = type(Enum) == "table" and type(Enum.ScreenLocationType) == "table" and Enum.ScreenLocationType
 	if names and Plain(number, "number") then
@@ -478,7 +403,6 @@ local function Place(number)
 	return nil
 end
 
--- At login and when the spells change (World): a spell the game says is overlaid counts as a glow.
 local function Overlayed()
 	local call = type(C_SpellActivationOverlay) == "table" and C_SpellActivationOverlay.IsSpellOverlayed
 	if type(call) ~= "function" then
@@ -527,7 +451,6 @@ local function Event(event, ...)
 	end
 end
 
--- Tells the entry's trigger that the entry is there, for a trigger that listens for events of its own: def.Seen(entry).
 local function Touch(entry)
 	local trigger = P.triggers[entry.trigger]
 	if trigger and type(trigger.Seen) == "function" then
@@ -535,10 +458,6 @@ local function Touch(entry)
 	end
 end
 
--- Cleaning --------------------------------------------------------------------------------------------------------------------------
-
--- True when the entry is a proc: a buff by spells and names, the spells it is for, how it is known, its time. A value that is not valid is
--- taken away; an entry with no buff is dropped.
 local function Clean(entry)
 	if not ns.TrackerCleanBuff(entry, nil, "proc") then
 		return false
@@ -566,8 +485,6 @@ local function Clean(entry)
 	return true
 end
 
--- Adding -----------------------------------------------------------------------------------------------------------------------------
-
 local function Tracked(entries, name, buffs)
 	for _, entry in ipairs(entries) do
 		if entry.kind == "proc" then
@@ -584,14 +501,12 @@ local function Tracked(entries, name, buffs)
 	return false
 end
 
--- The fields of a new proc: its buff, the spells it is for, the icon size and Show Always, since a proc that is down is not on screen.
 local function Fields(name, buffs, lights, seconds, trigger, kind2)
 	local time = Plain(seconds, "number") and seconds > 0 and seconds <= K.MAX_TIME and seconds or nil
 	return { name = name, names = { name }, spells = buffs, lights = lights, trigger = P.triggers[trigger] and trigger or "aura", kind2 = kind2 == "shorter" and kind2 or nil,
 		time = time, size = K.SIZE, show = "always" }
 end
 
--- The message of a trigger that does not fit the entry, or nil when it fits.
 local function Refused(entry)
 	local trigger = P.triggers[entry.trigger]
 	if trigger and type(trigger.Valid) == "function" then
@@ -603,7 +518,6 @@ local function Refused(entry)
 	return nil
 end
 
--- The IDs of the spells a proc is for that the player knows, at most 40; the first 40 when none is known.
 local function KnownLights(lights)
 	local own = {}
 	for _, id in ipairs(lights) do
@@ -621,8 +535,6 @@ local function KnownLights(lights)
 	return own
 end
 
--- add proc <buff> [for <spell>]: the buff by name or ID, and the spell it is for by name or ID with every rank in the spell book. A table is
--- a row of the class data picked on the page.
 local function Add(argument, entries)
 	if type(argument) == "table" and type(argument.row) == "table" then
 		local row = argument.row
@@ -668,7 +580,6 @@ local function Add(argument, entries)
 	return Fields(name, { buff }, lights, nil), ("Added %s."):format(name)
 end
 
--- The procs of the class that the player can use and that are not tracked, by name: { number in the class list, name }.
 function ns.ProcCandidates()
 	local rows, entries = {}, ns.TrackerEntries()
 	for number, row in ipairs(ProcList()) do
@@ -703,9 +614,6 @@ function ns.ProcAdd(number)
 	return ns.TrackerAddKind("proc", { row = row })
 end
 
--- Procs of your class ----------------------------------------------------------------------------------------------------------------
-
--- True when a row of the class data shows without being added: its own auto, else its kind.
 local function Automatic(row)
 	if row.auto ~= nil then
 		return row.auto == true
@@ -713,8 +621,6 @@ local function Automatic(row)
 	return K.AUTO_KINDS[row.kind] == true
 end
 
--- The IDs of a row's spells that the player knows, or nil when none is. Not saved, so not held to the 40 of an entry of the list: every spell
--- that uses Clearcasting ends its alert.
 local function Ranks(lights)
 	local own = {}
 	for _, id in ipairs(lights) do
@@ -725,9 +631,6 @@ local function Ranks(lights)
 	return #own > 0 and own or nil
 end
 
--- Builds the automatic procs again: each automatic row of the class with a spell the player knows that is not turned off, while Procs of your
--- class is on. An entry keeps its table: its buffs follow the row (an ID the trackers found by name since stays), its lights the ranks known
--- now, so a rank learned later is in them, and its trigger, time and glow the row. A trigger that does not fit (Valid) leaves the buff alone.
 local function Build()
 	A.stale = false
 	local list = {}
@@ -753,7 +656,6 @@ local function Build()
 				entry.trigger = P.triggers[row.trigger] and row.trigger or "aura"
 				entry.kind2 = row.kind2 == "shorter" and "shorter" or nil
 				entry.time = Plain(row.seconds, "number") and row.seconds > 0 and row.seconds <= K.MAX_TIME and row.seconds or nil
-				-- An if, since an and/or that ends in false or nil always gives nil.
 				if row.glow == false then
 					entry.glow = false
 				else
@@ -770,7 +672,6 @@ local function Build()
 	A.list = list
 end
 
--- The ids of the automatic procs built, as one text.
 local function Ids()
 	local ids = {}
 	for index, entry in ipairs(A.list) do
@@ -779,14 +680,10 @@ local function Ids()
 	return table.concat(ids, "|")
 end
 
--- The automatic procs that no proc of the list tracks (by name or buff), in the order of the class data. saved: the list of trackers, when the
--- caller has it. The list is built again first when something it depends on changed.
 function ns.ProcAutoEntries(saved)
 	if A.stale then
 		Build()
 	end
-	-- Procs of your class or one of them turned off in a fight: the list stays as it is until the layout after the fight builds it again, and
-	-- each one that is off reads as down from now on (Off), so nothing of it is left on screen.
 	if #A.list == 0 then
 		return {}
 	end
@@ -800,13 +697,11 @@ function ns.ProcAutoEntries(saved)
 	return out
 end
 
--- Builds the automatic procs again (Trackers.lua runs it at each layout, out of combat), and has the glow frames of their buttons made ahead.
 function ns.ProcAutoBuild()
 	Build()
 	Call(ns.ProcGlowPrepare, All())
 end
 
--- At login and when the spells change: the overlay is asked, and the automatic procs are built again, with a new layout when they changed.
 local function World()
 	Overlayed()
 	local before = Ids()
@@ -816,7 +711,6 @@ local function World()
 	end
 end
 
--- The place in the class data of the row with this name, and the row.
 local function Line(name)
 	for number, row in ipairs(ProcList()) do
 		if row.name == name then
@@ -826,7 +720,6 @@ local function Line(name)
 	return nil
 end
 
--- The proc trackers by their number in the list of trackers, then the automatic procs by their place in the class data above AUTO_LINE.
 function ns.ProcPicked()
 	local rows = {}
 	for _, found in ipairs(Procs()) do
@@ -841,8 +734,6 @@ function ns.ProcPicked()
 	return rows
 end
 
--- Removes a proc tracker, or turns an automatic proc off for this character. A proc of the class removed from the list is turned off too, so it
--- does not come back on its own; Bring back a proc turns it on again.
 function ns.ProcRemove(position)
 	if Whole(position) and position > K.AUTO_LINE then
 		local row = ProcList()[position - K.AUTO_LINE]
@@ -850,8 +741,6 @@ function ns.ProcRemove(position)
 			return false, ("No proc numbered %s."):format(tostring(position))
 		end
 		OffSet(true)[row.name] = true
-		-- An alert that is up ends now, even in a fight, where it reads as down (Off) until the layout after the fight builds the list again
-		-- and frees its icon; out of a fight that layout is now.
 		Gone("auto:" .. row.name)
 		ns.TrackerDirty()
 		ns.TrackerLayout()
@@ -878,7 +767,6 @@ function ns.ProcRemove(position)
 	return false, ("No proc numbered %s."):format(tostring(position))
 end
 
--- The procs of the class turned off on this character, by their place in the class data: the lines of Bring back a proc.
 function ns.ProcTurnedOff()
 	local rows, off = {}, OffSet(false)
 	for number, row in ipairs(ProcList()) do
@@ -904,12 +792,6 @@ function ns.ProcRestore(number)
 	return true, ("%s is on again."):format(row.name)
 end
 
--- Triggers ---------------------------------------------------------------------------------------------------------------------------
-
--- Registers a way a proc is known to be up: def.Read(entry) gives a reading or nothing, def.Text the words after the proc's name where it is
--- listed, def.Lines(entry) the lines of the check and def.Valid(entry) true or false and a message, asked when a trigger is chosen. def.Either
--- true: Read is asked also while the buff can be read and is missing (Raw). def.Used(entry): the spell the proc is for was cast and ended the alert.
--- def.Forget(id): the proc is no longer on (Gone).
 function ns.ProcTrigger(name, def)
 	if type(name) ~= "string" or name == "" or type(def) ~= "table" then
 		return false
@@ -925,9 +807,6 @@ ns.ProcTrigger("overlay", { Text = "the game's overlay", Read = OverlayRead,
 		return { seconds > 0 and ("Time: %s seconds."):format(tostring(seconds)) or "Time: none, so an overlay signal is not shown." }
 	end })
 
--- The check -----------------------------------------------------------------------------------------------------------------------------
-
--- How hidden the game keeps the buff: every ID must agree.
 local function Level(entry)
 	local call = type(C_Secrets) == "table" and C_Secrets.GetSpellAuraSecrecy
 	local levels = type(Enum) == "table" and Enum.SecrecyLevel
@@ -1022,15 +901,8 @@ local function Lines(entry)
 	return lines
 end
 
--- The preview of a row (ns.ProcPreview) -----------------------------------------------------------------------------------------------
--- A change of Art beside the character, Art size, Art opacity, Art height, Glow on the action button, Glow style or Colour, made with the options
--- window open, out of combat and with test mode off, shows the first proc of the class (as test mode picks it) for PREVIEW seconds in the new look:
--- its art and its glow, with no sound and no icon in the row. Each change bumps the token and arms the timer again, so a dragged slider keeps it
--- up until PREVIEW seconds after its last step. An alert of that proc that is really up is only drawn again. A real proc coming meanwhile takes
--- the alert over (Start); a fight (PLAYER_REGEN_DISABLED), test mode turned on and a test of the proc end the preview.
 P.PREVIEW = 4
 
--- The first proc of the class that is on, else the first of the list that is on.
 local function First()
 	for _, list in ipairs({ ns.ProcAutoEntries(), All() }) do
 		for _, entry in ipairs(list) do
@@ -1042,8 +914,6 @@ local function First()
 	return nil
 end
 
--- The preview ends: its art and glow go, unless test mode holds the same proc. The moment of its end is not one of a real alert, so a real proc
--- soon after still sounds (Start).
 local function PreviewEnd()
 	local preview = P.preview
 	if not preview then
@@ -1070,7 +940,6 @@ function ns.ProcPreview()
 		return
 	end
 	if P.up[entry.id] ~= nil and not P.preview then
-		-- Really up: drawn again in the new look.
 		ShowArt(entry, true)
 		Call(ns.ProcGlowStart, entry, true)
 		return
@@ -1092,13 +961,10 @@ function ns.ProcPreview()
 	end
 end
 
--- True while the preview shows its proc (with test mode off): Fading and the bar block hold the action bars at full meanwhile, so the glow is seen at
--- full on its button (Fade.lua, BarBlock.lua). Only reads.
 function ns.ProcPreviewing()
 	return P.preview ~= nil and not (ns.TestMode and ns.TestMode.IsOn())
 end
 
--- Colour of the page: the trackers are refreshed as without a changed function of the row (Core.lua's Changed), then the preview shows it.
 function ns.ProcColourChanged()
 	ns.RefreshModule(KEY)
 	ns.ProcPreview()
@@ -1114,7 +980,6 @@ P.fight:SetScript("OnEvent", function()
 	end
 end)
 
--- The test: the icon is in the row, the sound plays once, and the art and glow start. Test(entry, false) ends them.
 local function Test(entry, on)
 	if on then
 		PreviewEnd()
@@ -1122,7 +987,6 @@ local function Test(entry, on)
 	P.before = P.before or {}
 	if not on then
 		Stop(entry)
-		-- The one test mode holds up carries on (what was up before it is kept for its end), and so does an alert that was up before the test.
 		if P.held == entry and ns.TestMode.IsOn() then
 			P.up[entry.id] = entry
 			ShowArt(entry, true)
@@ -1145,13 +1009,6 @@ local function Test(entry, on)
 	return ("Sound: %s."):format(word or "none")
 end
 
--- Test mode (TestMode.lua) ------------------------------------------------------------------------------------------------------------
--- While it is on, out of combat, with the page on, the first proc of the class (Procs of your class, else the first proc of the list that is on) is
--- held up as the test holds one: its icon fine in the row (Trackers.lua asks ns.ProcHeld), its art and its glow, and its sound once each time test
--- mode is turned on (TM.Sound; not again after a fight), when the proc has one. After each change of a row of the page or of the profile the proc
--- is picked again (a change of the list or of Procs of your class may take it away) and its art drawn again, since Art off takes every art away
--- (ns.ProcArtChanged); the glow keeps itself up through ns.ProcGlowChanged. Off and a fight let it go as the test does, and an alert that was up
--- before carries on.
 P.TEST_SOUND = "procs"
 
 local function Pick()
@@ -1183,7 +1040,6 @@ local function Release()
 	end
 end
 
--- True for the proc test mode holds up.
 function ns.ProcHeld(entry)
 	return entry ~= nil and P.held == entry
 end
@@ -1196,7 +1052,6 @@ local function HeldStart()
 	end
 end
 
--- A row of this page or a new profile ("*"); a row of another page changes nothing here.
 local function HeldChanged(path)
 	if path ~= "*" and not (type(path) == "string" and path:find("^" .. KEY .. "%.")) then
 		return
@@ -1213,9 +1068,6 @@ local function HeldChanged(path)
 	ns.TrackerDirty()
 end
 
--- Commands ---------------------------------------------------------------------------------------------------------------------------
-
--- A proc by its number in the list of trackers or by its name.
 local function Find(text)
 	local wanted = text:lower()
 	for _, found in ipairs(Procs()) do
@@ -1279,7 +1131,6 @@ local function Word(text)
 	return K.USAGE
 end
 
--- The proc of test mode: the trackers' own entry (Trackers.lua) draws its icon; this one holds its alert.
 ns.TestMode.Register("procs", {
 	module = KEY,
 	label = "Proc alerts",
@@ -1297,7 +1148,6 @@ if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("proc", {
 		Read = Read, Clean = Clean, Add = Add, Lines = Lines, Hide = Hide, Wanted = Wanted, Changed = Changed, Gone = Gone, Cast = Cast, Event = Event,
 		Test = Test, Rim = ns.ProcColour, World = World, Label = function(entry) return entry.name end,
-		-- A proc with no buff (Execute) has the icon of the spell it is for.
 		Icon = function(entry)
 			local light = type(entry.lights) == "table" and entry.lights[1]
 			local file = Whole(light) and Ask(C_Spell and C_Spell.GetSpellTexture, light)

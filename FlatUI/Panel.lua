@@ -1,38 +1,8 @@
 local ADDON_NAME, ns = ...
 
--- A window of the addon's own with every page of ns.PAGES, a search over all settings, and the profiles. It is made of frames,
--- textures and font strings of the addon's own and is built the first time it is opened. None of its frames is protected, so it
--- works in combat. It is only built out of combat, since UIParent is protected.
---
--- It fades in with the game's window sounds (Build). Its keys (BuildKeys, out of combat): Ctrl+F for Search, Ctrl+Z to put back the newest change of
--- Home's Recent changes (a whole Reset page in one press), Ctrl+Y or Ctrl+Shift+Z to make it again, each showing the row it changed on the tab shown
--- (its card opens, it scrolls into view and flashes) or naming the row's place in the strip (ui.ShowChange), Escape for the colour picker (Cancel), an open
--- list or a question before the window, Enter for the picker's Apply or a question's first button, but not for a careful question (Delete, Reset,
--- Copy from, Replace, setup's Start over); setup has the same Enter (ns.PanelKit.Enter). A long list's filter field has the cursor as it opens. The
--- question box fades in and grows with its question, its first button in the accent, or red with "Enter does not answer this." under a careful
--- question (Ask). A message of the strip holds for SAY_HOLD seconds whatever the mouse crosses, fading in, then the strip shows its count again (Say).
--- A press counts as a click only when it is let go over what it pressed, as with the game's buttons, and a button's label sinks 1 px while it is
--- held (Clickable, Button).
--- The title bar names the profile in use, which a click opens, with a second line in the accent for a profile that waits for the fight's end
--- (BuildProfileName), and the strip's Reload counts the changes that wait for a reload (BuildFoot). The strip's "3 changed on this tab" takes a
--- click, which goes to each changed row in turn (ui.NextChanged), and a tab holding changes has a dot (PanelTabs.lua), as a module of the sidebar
--- does (PanelNav.lua). The Search box has a cross that clears it while words are typed (BuildLeft), and /flatui with words that are no command opens
--- the window with them in it (ns.OpenPanelSearch). Reset profile and Delete profile have Bring back while what they took can come back, until a
--- reload (BuildProfiles; Core.lua, ns.BringBackProfile and ns.BringBackDeleted). Every switch plays the game's checkbox sound on a click and its
--- knob slides (SwitchClick, Slider).
--- The wheel scrolls a page over a slider too, and Shift and the wheel step the slider (AddNumber). A sound row plays a line once as it is picked and
--- has a Play button (AddChoice). Search lights the typed words in its results and counts them, and a Profiles
--- result opens its row (view.byLabel of BuildProfiles). Reset page says what it did, and is dimmed while nothing on the tab is changed.
--- It lies in the strata HIGH at level LEVEL, above the frames of the HUD in that strata, which are made at the level UIParent gives
--- them: the combat alerts (CombatCues.lua), the cooldown pulse (Pulse.lua) and the combat text, and the stand-ins of test mode, which
--- TestMode.lua keeps under it there. At the level UIParent gave it too, the samples of test mode drew inside it over its rows (0.5.32).
--- The welcome screen lies above it (SetupWelcome.lua), and its own lists and the colour picker above its rows.
-
 local NAME = "FlatUIOptionsFrame"
 local WIDTH, HEIGHT, LEVEL = 1040, 680, 500
 local TITLE = 36
--- LEFT, HEADER and RIGHT_W are the measures Setup builds its pages for (ns.PanelKit). The options pages use SIDE and CW, which follow Sidebar, and
--- HEAD, the header with the line under the title and the module switch.
 local LEFT = 210
 local STRIP = 40
 local HEADER = 48
@@ -55,19 +25,15 @@ local TRACK = 176
 local SEARCH = 28
 local REFRESH = 0.5
 local DIM = 0.4
--- How long the window takes to fade in as it opens, and the question box as it shows, in seconds.
 local FADE_IN, CONFIRM_FADE = 0.12, 0.08
 local Look = ns.PanelLook
 local PROFILE_CALLS = { "Profile", "Profiles", "UseProfile" }
 
 local POINTS = { TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true, RIGHT = true, BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true }
 
--- The parts of the window, and what it is showing.
 local ui = { views = {}, nav = {}, lines = {}, paints = {}, tip = "" }
 
 local OpenList, CloseList, Ask, HideConfirm, ShowStrip, RefreshAll, ShowPage, Arrive
-
--- Helpers ---------------------------------------------------------------------------------------
 
 local function Number(value)
 	return not ns.IsSecret(value) and type(value) == "number" and value == value and value > -math.huge and value < math.huge
@@ -81,7 +47,6 @@ local function Clamp(value, low, high)
 	return math.max(low, math.min(high, value))
 end
 
--- Units of a frame for each unit of UIParent, and the scale of UIParent.
 local function Ratio(frame)
 	local ok, scale = pcall(frame.GetEffectiveScale, frame)
 	local okBase, base = pcall(UIParent.GetEffectiveScale, UIParent)
@@ -91,7 +56,6 @@ local function Ratio(frame)
 	return nil
 end
 
--- Left, bottom, width and height of a frame in the units of UIParent.
 local function Rect(frame)
 	local k = Ratio(frame)
 	if not k then
@@ -112,7 +76,6 @@ local function ScreenSize()
 	return nil
 end
 
--- The cursor in the units of UIParent, or nil when the client will not say.
 local function Cursor()
 	if type(GetCursorPosition) ~= "function" then
 		return nil
@@ -133,9 +96,6 @@ local function ButtonUp()
 	return ok and not ns.IsSecret(down) and down == false
 end
 
--- Colours --------------------------------------------------------------------------------------
-
--- Every colour of the window is a token of PanelLook.lua: a name such as "card" or "text-dim", or a step of grey for the drawings of setup.
 local function Shade(spec)
 	return Look.Colour(spec)
 end
@@ -144,7 +104,6 @@ local function Accent()
 	return Look.Colour("accent")
 end
 
--- Runs fn now and again when the look of the window changes.
 local function Painted(fn)
 	ui.paints[#ui.paints + 1] = fn
 	fn()
@@ -162,8 +121,6 @@ end
 
 local Solid, Backing = Look.Solid, Look.Backing
 
--- Frames, textures and text ----------------------------------------------------------------------
-
 local function Frame(parent, kind)
 	local frame = CreateFrame(kind or "Frame", nil, parent)
 	ns.Own[frame] = true
@@ -176,7 +133,6 @@ local function Fill(frame, layer)
 	return texture
 end
 
--- The token each text takes: Label gives "text" and Dim "text-dim", and a change of tone sets them again.
 local tints = setmetatable({}, { __mode = "k" })
 
 local function Tint(text, token)
@@ -207,9 +163,6 @@ local function Dim(text)
 	return Tint(text, "text-dim")
 end
 
--- A frame that takes clicks: onClick runs when the left button goes down on it and is let go over it, as with a button of the game's. The game sends
--- the release to the frame the press began on, wherever the cursor is, so a press slid off before it is let go is not a click (DataPanels.lua and
--- Errands.lua keep the same rule); a client that will not say whether the cursor is over counts as over.
 local function Clickable(frame, onClick)
 	local down = false
 	frame:EnableMouse(true)
@@ -229,7 +182,6 @@ local function Clickable(frame, onClick)
 	end)
 end
 
--- Calls follow on the press and on every frame until the left button is up.
 local function Drag(frame, follow)
 	local function Stop()
 		frame:SetScript("OnUpdate", nil)
@@ -250,7 +202,6 @@ local function Drag(frame, follow)
 	frame:SetScript("OnMouseUp", Stop)
 end
 
--- Four short bars that make a triangle pointing down.
 local function Chevron(parent)
 	for index = 1, 4 do
 		local bar = Fill(parent, "ARTWORK")
@@ -262,8 +213,6 @@ local function Chevron(parent)
 	end
 end
 
--- The click of a switch: the game's own checkbox sounds, a higher one for on and a lower one for off, as the game's Settings play them. Only a
--- click of the player plays it; a switch that changes by itself (a profile switch, Reset page, Ctrl+Z) slides with no sound (Slider).
 local function SwitchClick(on)
 	if type(PlaySound) == "function" and type(SOUNDKIT) == "table" then
 		local sound = on and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF
@@ -273,9 +222,6 @@ local function SwitchClick(on)
 	end
 end
 
--- The knob of a switch 32 wide, at the left of its track (2) while off and the right (18) while on. The function it gives, Place(on, instant), puts
--- the knob at its end: at once the first time, when told (a switch that now shows another setting) and while the switch is not on screen, else
--- sliding there over SLIDE seconds with an OnUpdate of `frame`, a frame of the switch that has none of its own.
 local SLIDE = 0.08
 local function Slider(knob, track, frame)
 	local x, from, to, spent
@@ -305,11 +251,6 @@ local function Slider(knob, track, frame)
 	end
 end
 
--- A flat button. A primary button is in the accent. The third result, SetTone(tone), gives it another tone after it is made: "accent", "danger"
--- (red, for the first button of a careful question) or nil for the plain one; the label of a coloured one is in the colour that reads on the accent.
--- While the left button holds it down its label sinks 1 px and its fill goes back to the resting tone; the press counts only when it is let go over
--- the button (Clickable). The pressed look is hooked, so a caller's own scripts stay as they are, and a frame over the button that takes its mouse
--- (the secure /reload button of Reload.lua) gives it the look with ns.PanelKit.Press(button, down) (ui.presses).
 local function Button(parent, text, width, onClick, primary)
 	local button = Frame(parent)
 	button:SetSize(width, BUTTON)
@@ -331,7 +272,6 @@ local function Button(parent, text, width, onClick, primary)
 		end
 		return lit and "hover" or "raised"
 	end
-	-- Red has no lighter token of its own, so under the mouse its fill lets a little of the card through.
 	local function Paint()
 		Backing(outline, Tone(), (tone == "danger" and hover and not pressed) and 0.85 or 1, "line-strong")
 	end
@@ -375,9 +315,6 @@ local function Button(parent, text, width, onClick, primary)
 	return button, label, SetTone
 end
 
--- A box to type in, with a thin border that takes the highlight colour while it has the cursor. onLost runs when it loses the cursor. With a hint,
--- a dim line says what goes in it while it is empty (the second result, to change it later); it follows every change of the text, a SetText("")
--- too, through a hook, so a caller's own OnTextChanged must be hooked as well.
 local function Field(parent, width, limit, onLost, hint)
 	local box = Frame(parent, "EditBox")
 	box:SetSize(width, BUTTON)
@@ -419,7 +356,6 @@ local function Field(parent, width, limit, onLost, hint)
 	return box, note
 end
 
--- A scrolling area with a thin bar of its own. The content hangs from `child`.
 local function Scroller(parent, width, height)
 	local scroll = Frame(parent, "ScrollFrame")
 	scroll:SetSize(width, height)
@@ -481,10 +417,6 @@ local function Scroller(parent, width, height)
 	return object
 end
 
--- Rows -----------------------------------------------------------------------------------------
-
--- The ticks a setting needs before its control works: the settings named by "needs", and the switch of the owner of the page it is shown on.
--- A row that acts at once has no switch.
 local function Needed(page, item)
 	local list = {}
 	local owner = page.owner or page.switch or page.key
@@ -504,7 +436,6 @@ local function Needed(page, item)
 	return list
 end
 
--- The first setting a row needs that is off, or nil.
 local function Unmet(page, item)
 	for _, needed in ipairs(Needed(page, item)) do
 		if not ns.NeedMet(item, needed) then
@@ -513,8 +444,6 @@ local function Unmet(page, item)
 	end
 end
 
--- True while something else takes a row over (overIf: the name of a function of ns that says so, as for Width of the experience bar while
--- block 1 of the Bar block page holds the bar at its width): the row is greyed, and a number row shows its overText in place of its value.
 local function Over(item)
 	local call = IsText(item.overIf) and ns[item.overIf]
 	if type(call) ~= "function" then
@@ -528,9 +457,6 @@ local function IsOpen(page, item)
 	return Unmet(page, item) == nil and not Over(item)
 end
 
--- A message of the strip holds for SAY_HOLD seconds, whatever the mouse crosses on the options pages (a row's tip is a tooltip there), and then the
--- strip goes back to its tip or the count of changes (ShowStrip, and the window's OnUpdate). A new message fades in over SAY_FADE from SAY_FROM, so
--- a second Ctrl+Z reads as a new line; the same message said again only holds longer, so setup's fight line, said at each refresh, does not flicker.
 local SAY_HOLD, SAY_FADE, SAY_FROM = 6, 0.15, 0.4
 
 local function Now()
@@ -549,11 +475,9 @@ local function Say(message)
 	end
 end
 
--- A box that holds text to copy (Export): a click in it selects all of it again, and Ctrl+C there says in the strip that it was copied.
 local function CopyField(box)
 	box:HookScript("OnEditFocusGained", function(self)
 		self:HighlightText()
-		-- Once more on the next frame, after the click has put the cursor where it landed.
 		if C_Timer and C_Timer.After then
 			C_Timer.After(0, function()
 				if self:HasFocus() then
@@ -570,15 +494,12 @@ local function CopyField(box)
 	end)
 end
 
--- How far the rows hung from a parent stand in from its edges: a page of cards sets it, any other parent has the margin PAD.
 local insets = setmetatable({}, { __mode = "k" })
 
--- A row: the label on the left, room for a control on the right. The tip shows in the strip while the mouse is over it.
 local function NewRow(parent, y, text, tip)
 	local row = { active = true, tip = tip or "" }
 	local inset = insets[parent] or PAD
 	local frame = Frame(parent)
-	-- Its width is the width of what it hangs from, less the two margins: the options pages and setup have different columns.
 	frame:SetHeight(ROW)
 	frame:EnableMouse(true)
 	row.frame = frame
@@ -598,8 +519,6 @@ local function NewRow(parent, y, text, tip)
 	local label = Label(frame, "GameFontHighlight", "LEFT", LABEL)
 	label:SetPoint("LEFT", frame, "LEFT", 0, 0)
 	label:SetText(text)
-	-- Search lights the typed words in the label of a result. While the Profiles page is built, its rows are kept by their label (ui.collect), so a
-	-- search result can open the row.
 	row.label = label
 	if ui.collect and IsText(text) and not ui.collect[text] then
 		ui.collect[text] = row
@@ -613,8 +532,6 @@ local function NewRow(parent, y, text, tip)
 	function row.Changed()
 		RefreshAll()
 	end
-	-- Every control of the row shows the tip too, since the game gives the mouse to the control and not to the row. A control that already
-	-- has a hover of its own, such as the fill of a button, keeps it: it runs first on the way in and last on the way out.
 	function row.Hover(target, enter, leave)
 		local ownEnter, ownLeave = target:GetScript("OnEnter"), target:GetScript("OnLeave")
 		target:SetScript("OnEnter", function()
@@ -622,7 +539,6 @@ local function NewRow(parent, y, text, tip)
 				ownEnter(target)
 			end
 			hover:Show()
-			-- Setup and the movers show the tip in the strip, in place of a message; the options pages show it in a tooltip and keep the message.
 			if ui.mode then
 				ui.message = nil
 				ui.tip = row.tip
@@ -677,8 +593,6 @@ local function Chosen(lines, value)
 	return nil
 end
 
--- A button that opens a list. spec.lines() gives { { value, text }, ... }, spec.selected() the value to mark, and spec.pick(value) runs
--- when a line is chosen.
 local function Dropdown(row, width, spec)
 	local button = Frame(row.frame)
 	button:SetSize(width, BUTTON)
@@ -686,7 +600,6 @@ local function Dropdown(row, width, spec)
 	local text = Label(button, "GameFontHighlight", "LEFT", width - 32)
 	text:SetPoint("LEFT", button, "LEFT", 8, 0)
 	Chevron(button)
-	-- A list with samples (spec.sample is the kind) shows the one of the chosen line at the left of the button.
 	local Samples = ns.PanelSamples
 	local picture = spec.sample and Samples and Samples.New(button) or nil
 	local function Lay()
@@ -731,10 +644,8 @@ local function Dropdown(row, width, spec)
 	return object
 end
 
--- The editor of one tracker (the Tracker page) keeps its functions in this table, and its rows have a read and a write of their own and no saved path.
 local editor = {}
 
--- The value of a row and a change to it.
 local function Read(item)
 	if item.read then
 		return item.read()
@@ -748,14 +659,12 @@ local function Write(item, value)
 	end
 	local before = ns.Get(item.path)
 	local result = ns.Set(item.path, value)
-	-- A write of Reset page is noted with its batch (ui.batch), so Ctrl+Z puts the whole page back in one press (PanelHome.lua).
 	if ns.PanelHome then
 		ns.PanelHome.Noted(item, before, ns.Get(item.path), ui.batch)
 	end
 	return result
 end
 
--- A switch: a track of 32 by 16 with a knob. The track is in the accent while the setting is on.
 local function AddBool(row, item)
 	local box = Frame(row.frame)
 	box:SetSize(32, 16)
@@ -766,8 +675,6 @@ local function AddBool(row, item)
 	mark:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -1, 1)
 	local knob = Fill(box, "OVERLAY")
 	knob:SetSize(12, 12)
-	-- nil until the row first reads its value, where the knob is put at once; after that it slides to its end, and a click plays the game's
-	-- checkbox sound (SwitchClick).
 	local on
 	local Place = Slider(knob, box, box)
 	local function Knob()
@@ -821,7 +728,6 @@ local function AddNumber(row, item)
 	bar:SetHeight(4)
 	local thumb = Fill(track, "OVERLAY")
 	thumb:SetSize(10, 16)
-	-- A mark at the default value, when the row has one.
 	local tick = Fill(track, "ARTWORK")
 	tick:SetSize(1, 8)
 	if Number(item.default) and Number(item.min) and Number(item.max) and item.max > item.min then
@@ -836,7 +742,6 @@ local function AddNumber(row, item)
 		Solid(tick, "text-faint")
 	end)
 	local box
-	-- A typed value is applied when the player presses Enter or leaves the box.
 	local function Commit()
 		local typed = box:GetText()
 		local number = IsText(typed) and tonumber(typed)
@@ -848,8 +753,6 @@ local function AddNumber(row, item)
 	box = Field(row.frame, 54, 8, Commit)
 	box:SetPoint("LEFT", row.frame, "LEFT", CONTROL + TRACK + 12, 0)
 	box:SetJustifyH("CENTER")
-	-- A row something else takes over (overIf, as Width of the experience bar under the bar block) says so (overText) in place of its value and
-	-- unit while it does, which greys the row (BuildRow).
 	local unit = Dim(Label(row.frame, "GameFontHighlightSmall", "LEFT", item.overText and 160 or 90))
 	unit:SetPoint("LEFT", box, "RIGHT", 10, 0)
 	local plain = ((item.unit or ""):gsub("^%s+", ""))
@@ -875,14 +778,11 @@ local function AddNumber(row, item)
 			row.Changed()
 		end
 	end)
-	-- The wheel scrolls the page under the slider (the first ScrollFrame up its parents, Flat UI's own Scroller), so a page scrolled past a slider
-	-- keeps scrolling. Shift and the wheel, or the wheel while the number box has the cursor, step the value.
 	local function Wheel(_, delta)
 		local shift = type(IsShiftKeyDown) == "function" and IsShiftKeyDown()
 		if shift or box:HasFocus() then
 			if row.active then
 				Write(item, Read(item) + (delta > 0 and 1 or -1) * item.step)
-				-- A box with the cursor keeps what is typed (Show), so it takes the stepped value here, else Enter would write the old one back.
 				if box:HasFocus() then
 					box:SetText(("%g"):format(Read(item)))
 				end
@@ -941,7 +841,6 @@ local function AddColour(row, item)
 			row.Changed()
 		end
 	end
-	-- The picker is the one of PanelColour.lua: it changes the colour as the player drags in it, and Cancel puts the old colour back.
 	Clickable(swatch, function()
 		if row.active and ns.PanelColour then
 			ns.PanelColour.Open(Read(item), item.alpha == true, Set)
@@ -959,9 +858,6 @@ local function AddColour(row, item)
 	end
 end
 
--- The sound kit of each line of a choice row whose lines are the names of ns.SOUNDS (IconRow.lua), by the line's value, or nil for a row of no
--- sound. Every sound row of Config.lua has those names, so a row is a sound row by its lines alone, three of them at least, so that one line that
--- happens to share a name makes no sound row; None has no kit.
 local soundKits
 local function SoundKits(item)
 	if not soundKits then
@@ -981,9 +877,6 @@ local function SoundKits(item)
 	return count >= 3 and kits or nil
 end
 
--- A sound row plays a line once as it is picked, out of a fight (the changed handler of the combat cue sounds plays it too, and ns.PlayKit plays
--- once a second at most), and has a Play button for the sound it has now, dimmed at None. The same on the options pages, in setup and in the
--- tracker editor.
 local function AddChoice(row, item)
 	if item.segments and ns.PanelCards then
 		return ns.PanelCards.Segments(row, item)
@@ -1035,8 +928,6 @@ local function AddChoice(row, item)
 	end
 end
 
--- A dropdown that acts: the lines come from a function of ns each time it opens, and choosing one calls another with its id. A row of Flat UI
--- setup has an act of its own (Setup.lua, S.Item), which queues the line for Finish: then nothing is called now.
 local function AddList(row, item)
 	local menu = Dropdown(row, FIELD, {
 		lines = function()
@@ -1075,7 +966,6 @@ local function AddList(row, item)
 	end
 end
 
--- A box to type a text in, applied when the player presses Enter or leaves the box.
 function editor.Text(row, item)
 	local box
 	local function Commit()
@@ -1104,11 +994,9 @@ end
 
 local ADD = { bool = AddBool, number = AddNumber, colour = AddColour, choice = AddChoice, list = AddList, text = editor.Text }
 
--- The row of a setting. Returns nil when the client cannot build its control.
 local function BuildRow(parent, page, item, y)
 	local row = NewRow(parent, y, item.label, item.tip)
 	row.item = item
-	-- Pointing at a row brackets the part of the preview that the setting changes. Setup sets its own.
 	row.entered = function()
 		if ui.preview then
 			ui.preview.Mark(item.path)
@@ -1137,7 +1025,6 @@ local function BuildRow(parent, page, item, y)
 	return row
 end
 
--- The row of the Trackers page with this saved key.
 function editor.PageRow(key)
 	for _, page in ipairs(ns.PAGES) do
 		for _, row in ipairs(page) do
@@ -1149,7 +1036,6 @@ function editor.PageRow(key)
 	return nil
 end
 
--- The rows of the editor: the template of the page item, then the rows other files added.
 function editor.Specs(item)
 	local specs = {}
 	for _, spec in ipairs(item.rows or {}) do
@@ -1162,7 +1048,6 @@ function editor.Specs(item)
 	return specs
 end
 
--- Runs a function of ns that changes a tracker and shows the sentence it answers with. True when it worked.
 function editor.Do(name, ...)
 	local call = ns[name]
 	if type(call) ~= "function" then
@@ -1177,7 +1062,6 @@ function editor.Do(name, ...)
 	return done == true
 end
 
--- A number a row was given, rounded to the step of its row and held in its range.
 function editor.Stepped(item, value)
 	if item.kind == "number" and Number(value) and item.step and item.min and item.max then
 		return Clamp(math.floor((value - item.min) / item.step + 0.5) * item.step + item.min, item.min, item.max)
@@ -1185,7 +1069,6 @@ function editor.Stepped(item, value)
 	return value
 end
 
--- The row of one own value: it shows the tracker's own value, else the value of the Trackers page, and a change gives the tracker a value of its own.
 function editor.Row(block, parent, page, spec, y)
 	local key, base = spec.key, spec.key and editor.PageRow(spec.key)
 	local kind = spec.kind or (base and base.kind)
@@ -1204,7 +1087,6 @@ function editor.Row(block, parent, page, spec, y)
 		elseif own ~= nil then
 			return own
 		elseif key == "low" and block.current and block.current.kind == "ammo" then
-			-- The minimum of what the tracker read last: arrows and bullets, or a thrown weapon (TrackerKinds.lua).
 			return ns.Get(type(ns.TrackerAmmoRow) == "function" and ns.TrackerAmmoRow(block.current.id) or "trackers.ammoMin")
 		elseif key == "low" and block.current and block.current.kind == "item" then
 			return math.max(0, (ns.Get("trackers.itemMin") or 1) - 1)
@@ -1237,9 +1119,6 @@ function editor.Row(block, parent, page, spec, y)
 	return row
 end
 
--- The editor of one tracker, for the item of kind entries: a list to choose the tracker from, its name, a row for each value it can have of its
--- own and four buttons. It is built out of combat; in a fight a line says so and the block is built on the next look. Adds its parts to
--- view.rows and returns its height.
 function editor.Add(parent, page, item, y, view)
 	local specs = editor.Specs(item)
 	local height = (5 + #specs) * ROW
@@ -1402,8 +1281,6 @@ function editor.Add(parent, page, item, y, view)
 	return height
 end
 
--- A section header: a mark, the text, and a line under it. Returns the top of the first row under it and the header, which
--- can be placed at another y and hidden.
 local function Header(parent, text, y, big)
 	local label = Label(parent, big and "GameFontNormalLarge" or "GameFontNormal", "LEFT", ROW_W - 12)
 	label:SetText(text)
@@ -1434,8 +1311,6 @@ local function Header(parent, text, y, big)
 	return y + SECTION, header
 end
 
--- Popups ----------------------------------------------------------------------------------------
-
 local function SyncShade()
 	local list = ui.listOwner ~= nil
 	local confirm = ui.confirm:IsShown() == true
@@ -1449,7 +1324,6 @@ local function BuildPopups()
 	end
 	local window = ui.window
 	local base = window:GetFrameLevel()
-	-- Under the list and the question, over everything else: a click on it closes them, and the wheel does nothing behind them.
 	local shade = Frame(window)
 	shade:SetAllPoints(window)
 	shade:SetFrameLevel(base + 40)
@@ -1476,8 +1350,6 @@ local function BuildPopups()
 	ui.list = list
 	ui.listScroller = Scroller(list, FIELD, LINE)
 	ui.listScroller.frame:SetPoint("TOPLEFT", list, "TOPLEFT", 0, 0)
-	-- A list of more than LINES lines has a field that keeps the lines holding what is typed.
-	-- It has the cursor as the list opens (OpenList), so the player can type at once; Enter picks the first line shown and Escape closes the list.
 	ui.listSearch = Field(list, FIELD - 8, 40)
 	ui.listSearch:SetPoint("TOPLEFT", list, "TOPLEFT", 4, -2)
 	local filterHint = Dim(Label(ui.listSearch, "GameFontHighlightSmall", "LEFT"))
@@ -1513,11 +1385,9 @@ local function BuildPopups()
 	Painted(function()
 		Backing(box, "card", 1, "line-strong")
 	end)
-	-- The question has no height of its own, so it takes every line its words need (Ask measures it).
 	local question = Label(confirm, "GameFontHighlight", "CENTER", 330, true)
 	question:SetJustifyV("TOP")
 	question:SetPoint("TOP", confirm, "TOP", 0, -18)
-	-- The first button, which Enter presses too while the question shows (BuildKeys).
 	function ui.AnswerYes()
 		local run = ui.onYes
 		HideConfirm()
@@ -1525,11 +1395,8 @@ local function BuildPopups()
 			run()
 		end
 	end
-	-- The first button is in the accent, the one Enter presses; for a careful question it is red, and the note under the question says Enter does
-	-- not answer it (Ask).
 	local yes, yesText, yesTone = Button(confirm, "Yes", SMALL, ui.AnswerYes)
 	yes:SetPoint("BOTTOMRIGHT", confirm, "BOTTOM", -6, 14)
-	-- The note hangs just under the question's lines, and the box grows with the question (Ask).
 	local note = Dim(Label(confirm, "GameFontHighlightSmall", "CENTER", 330))
 	note:SetPoint("TOP", confirm, "TOP", 0, -68)
 	note:SetText("Enter does not answer this.")
@@ -1548,7 +1415,6 @@ local function BuildPopups()
 	ui.yes, ui.yesText, ui.no, ui.noText = yes, yesText, no, noText
 end
 
--- A line of a dropdown's list.
 local function ListLine(index)
 	local line = ui.lines[index]
 	if line then
@@ -1599,7 +1465,6 @@ function CloseList()
 	end
 end
 
--- Fills the lines of the open list with the ones that hold what is typed in its field. With first, the list opens scrolled to the chosen line.
 function ui.ShowLines(first)
 	local lines = ui.listLines
 	local selected = ui.listSpec.selected and ui.listSpec.selected()
@@ -1693,22 +1558,14 @@ function OpenList(owner, spec)
 	end
 	ui.list:Show()
 	SyncShade()
-	-- A long list's filter field takes the cursor, so typing filters at once.
 	if search > 0 then
 		ui.listSearch:SetFocus()
 	end
 end
 
--- The question box: onYes runs on the first button, onNo (when given) on the second. A click outside the box closes it and runs neither. The buttons
--- say yesText and noText when those are given, and Yes and No otherwise. Enter presses the first button (BuildKeys), but not for a careful question,
--- one whose first button takes a profile's settings away (Delete, Reset, Copy from, Replace; Bring back puts them back only until a reload, and
--- each such question says so): an Enter meant for chat must not answer it. The box grows
--- with the question, at least two lines of its 330 px column, so a long Delete or Copy from question is never cut short; the note and the buttons
--- move down with it.
 function Ask(question, onYes, onNo, yesText, noText, careful)
 	BuildPopups()
 	CloseList()
-	-- The question takes at least two lines' room, and every line its words need.
 	ui.question:SetText(question)
 	local ok, tall = pcall(ui.question.GetStringHeight, ui.question)
 	local qh = math.max(44, (ok and Number(tall)) and math.ceil(tall) or 44)
@@ -1723,7 +1580,6 @@ function Ask(question, onYes, onNo, yesText, noText, careful)
 	ui.yesTone(ui.careful and "danger" or "accent")
 	ui.careNote:SetShown(ui.careful)
 	ui.confirm:SetHeight(110 + (qh - 44) + (ui.careful and 16 or 0))
-	-- It fades in over CONFIRM_FADE, as the colour picker does.
 	local waited = 0
 	ui.confirm:SetAlpha(0)
 	ui.confirm:SetScript("OnUpdate", function(self, elapsed)
@@ -1749,8 +1605,6 @@ function HideConfirm()
 	end
 end
 
--- What Escape closes before the window: the colour picker (its Cancel puts the old colour back), else an open list, else a question; nil while
--- none of them shows. The options pages' keys (BuildKeys) and setup's (ns.PanelKit.Escape) both use it.
 function ui.EscapeAction()
 	if ns.PanelColour and ns.PanelColour.Shown() then
 		return ns.PanelColour.Cancel
@@ -1762,8 +1616,6 @@ function ui.EscapeAction()
 	return nil
 end
 
--- Pages ----------------------------------------------------------------------------------------
-
 local function BuildModel()
 	local model = { pages = {}, byKey = {} }
 	for index, page in ipairs(ns.PAGES) do
@@ -1773,12 +1625,9 @@ local function BuildModel()
 				if item.section then
 					entry.sections[#entry.sections + 1] = item.section
 				elseif item.key == "enabled" and item.kind == "bool" and not item.page and not entry.switchItem then
-					-- The switch of the module is shown in the header of the page, and not as a row.
 					entry.switchItem = item
 				end
 			end
-			-- A page of its own in the sidebar that holds rows of another module (an owner and no parent) is part of that module: it shows the
-			-- module's switch in its header and its Off chip (the Flat UI page has none), and is not a module of its own on Home.
 			local from = page.owner or page.switch
 			if not page.parent and not entry.switchItem and from and from ~= page.key then
 				entry.partOf = from
@@ -1800,7 +1649,6 @@ local function BuildView(entry)
 	local scroller = Scroller(ui.right, CW, RIGHT_H)
 	scroller.frame:SetPoint("TOPLEFT", ui.right, "TOPLEFT", 0, -HEAD)
 	local view = { scroller = scroller, rows = {}, sections = {}, module = true }
-	-- With Sections at Cards, the rows of a section stand on a card; Lines keep the heading with a line under it.
 	local cards = ns.PanelCards and ns.PanelCards.On() and ns.PanelCards.New(entry, view, scroller, CW) or nil
 	local y = 8
 	for index, item in ipairs(entry.page) do
@@ -1812,14 +1660,12 @@ local function BuildView(entry)
 				y = Header(scroller.child, item.section, y)
 			end
 		elseif item == entry.switchItem and not entry.parent then
-			-- It is the switch in the header. A tab with a switch of its own (Your buffs) shows it as its first row.
 		elseif item.kind == "entries" then
 			y = y + editor.Add(scroller.child, entry.page, item, y, view)
 			if cards then
 				cards.Static()
 			end
 		elseif cards and cards.chipped[item] then
-			-- It is a chip in the block under the heading of its section.
 		elseif ns.RowShown(item.path) then
 			local row = BuildRow(scroller.child, entry.page, item, y)
 			if row then
@@ -1843,8 +1689,6 @@ local function BuildView(entry)
 	return view
 end
 
--- Profiles ---------------------------------------------------------------------------------------
-
 local function Call(name, ...)
 	local call = ns[name]
 	if type(call) ~= "function" then
@@ -1858,10 +1702,6 @@ local function Call(name, ...)
 	return first, second
 end
 
--- Profile in use picked in a fight (the Profiles page, Home's Profile card): the pick waits for the fight's end in ProfileSwitch.lua (Switch.Keep),
--- which /flatui profile Name uses too, and wins over a rule of Switch automatically that waits; the title bar shows either under the profile in use
--- ("Raid after the fight", BuildProfileName), and ProfileSwitch.lua switches a frame after the fight. A pick of the profile in use takes back
--- whatever waits, the rule's switch too.
 local function KeepProfile(pick)
 	local current = Call("Profile")
 	current = IsText(current) and current or ""
@@ -1883,7 +1723,6 @@ local function KeepProfile(pick)
 	return false
 end
 
--- Runs a function of Core that changes a profile and shows the sentence it answers with. Profile in use in a fight waits for its end (KeepProfile).
 local function Act(name, ...)
 	if name == "UseProfile" and InCombatLockdown() then
 		return KeepProfile(...)
@@ -1914,8 +1753,6 @@ local function Removable(name, current)
 	return name ~= current and name ~= "Default"
 end
 
--- The question of Delete profile: the name, how many other characters use it, and that Bring back puts it back until a reload (Core.lua,
--- ns.BringBackDeleted). They start as new characters at their next login (Core.lua, ns.DeleteProfile and OwnProfile), on Default.
 function ui.DeleteQuestion(name)
 	local back = "Bring back puts it back until you reload."
 	local db, count = ns.Account(), 0
@@ -1949,9 +1786,7 @@ local function BuildProfiles()
 	end
 	local updates = {}
 	local y = 8
-	-- Every row made from here on, here and in ProfileSwitch.lua and ProfileShare.lua, is kept by its label (NewRow), for search (view.byLabel).
 	ui.collect = {}
-	-- Each row of the page says what it does in its tip, over the label and over each of its controls.
 	local function Row(text, tip)
 		local row = NewRow(child, y, text, tip)
 		y = y + ROW
@@ -2005,7 +1840,6 @@ local function BuildProfiles()
 				name:SetText("")
 			end
 		end
-		-- A copy of the profile in use, settings and positions: under the typed name, else the first of "<name> copy" and "<name> copy 2" to 9 that is free.
 		local function Duplicate()
 			local from, typed = Current(), Typed()
 			if typed == "" then
@@ -2040,7 +1874,6 @@ local function BuildProfiles()
 			updates[#updates + 1] = function()
 				text:SetText(Call("SetupHasDraft") and "Continue setup" or "Set up my screen")
 			end
-			-- The welcome screen's ready-made looks (SetupWelcome.lua, ns.OpenProfiles).
 			local ready = Button(row.frame, "Ready-made looks", 170, function()
 				Call("OpenProfiles")
 			end)
@@ -2111,7 +1944,6 @@ local function BuildProfiles()
 			end
 			menu.SetText(doomed or "Choose a profile")
 		end
-		-- The profile deleted this session comes back with its characters and rules, until a reload (Core.lua, ns.BringBackDeleted).
 		if type(ns.BringBackDeleted) == "function" and type(ns.DeletedProfile) == "function" then
 			local back = Button(row.frame, "Bring back", SMALL + 10, function()
 				Act("BringBackDeleted")
@@ -2134,7 +1966,6 @@ local function BuildProfiles()
 		row = Row("Rename profile", "Gives the profile in use a new name; the characters that use it keep it. Default cannot be renamed.")
 		local name, hint = Field(row.frame, FIELD, 32, nil, "New name")
 		name:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
-		-- The hint names the profile in use, which the new name replaces.
 		updates[#updates + 1] = function()
 			local now = Current()
 			hint:SetText(now ~= "" and ("New name for %s"):format(now) or "New name")
@@ -2160,8 +1991,6 @@ local function BuildProfiles()
 		end)
 		reset:SetPoint("LEFT", row.frame, "LEFT", CONTROL, 0)
 		row.Hover(reset)
-		-- What Reset profile, Copy from, an import that replaces or setup's Finish took from the profile in use comes back, until a reload (Core.lua,
-		-- ns.BringBackProfile). A second press puts back what the first took.
 		if type(ns.BringBackProfile) == "function" and type(ns.LostProfile) == "function" then
 			local back = Button(row.frame, "Bring back", SMALL + 10, function()
 				Act("BringBackProfile")
@@ -2261,7 +2090,6 @@ local function BuildProfiles()
 		Beside(row, "Import", function()
 			local text = into:GetText()
 			if IsText(text) and text:find("%S") then
-				-- A text that can be read is imported with the choices under the paste field.
 				if ns.ProfileShare and ns.ProfileShare.Import(text) then
 					return
 				end
@@ -2290,21 +2118,17 @@ local function BuildProfiles()
 	return view
 end
 
--- Home, and the pages the player goes to --------------------------------------------------------------
-
 local function CurrentProfile()
 	local name = Call("Profile")
 	return IsText(name) and name or ""
 end
 
--- Flips the switch of a module, in the header or on a tile of Home, with the click of a switch.
 local function Toggle(item)
 	Write(item, Read(item) ~= true)
 	SwitchClick(Read(item) == true)
 	RefreshAll()
 end
 
--- A page the player chose: opened, with its group open in the sidebar, and kept as the page the window opens on the next time.
 local function Go(entry)
 	if ui.side then
 		ui.side.Reveal(entry)
@@ -2320,7 +2144,6 @@ local function BuildHome()
 		end,
 		right = ui.right, width = CW, top = HEAD, height = RIGHT_H,
 		Show = Go,
-		-- A click on a recent change or a line of Needs a reload opens that setting's row, as a search result does.
 		Arrive = function(entry, item)
 			Arrive(entry, item)
 		end,
@@ -2339,7 +2162,6 @@ local function BuildHome()
 	})
 end
 
--- The line under the title of Home and Profiles: how many modules are on, the profile in use. A module page has the breadcrumb of PanelTabs.lua there.
 local function Subtitle(entry)
 	if entry.home then
 		return ns.PanelHome.Subtitle(ui.model)
@@ -2350,20 +2172,16 @@ local function Subtitle(entry)
 	return ""
 end
 
--- Draws the sidebar again (PanelNav.lua).
 local function LayoutNav()
 	if ui.side then
 		ui.side.Layout()
 	end
 end
 
--- Search ------------------------------------------------------------------------------------------
-
 local FLASH, FLASH_ALPHA = 0.8, 0.24
 local CHIP_H = 28
 local STEPS_GROUP, PROFILES_GROUP, ACTIONS_GROUP = "Flat UI setup", "Profiles", "Actions"
 
--- The pages whose names match, as chips under a small heading. The frames of the block hold their own text, so that the block is not a row of the results.
 local function BuildChips(parent)
 	local block = { frame = Frame(parent), chips = {} }
 	local holder = Frame(block.frame)
@@ -2373,7 +2191,6 @@ local function BuildChips(parent)
 	block.title:SetPoint("LEFT", holder, "LEFT", 0, 0)
 	block.title:SetText("Pages")
 	block.frame:Hide()
-	-- Shows a chip for each entry, wrapped inside the column. Returns the height of the block, 0 for none.
 	function block.Set(entries, y)
 		for _, chip in ipairs(block.chips) do
 			chip:Hide()
@@ -2435,8 +2252,6 @@ local function BuildSearchView()
 	return view
 end
 
--- A result that opens a page or a step of setup, or runs an action of the window, instead of holding a control: the name and a button, which says
--- Open, or what hit.Button gives (Test mode's Turn on or Turn off).
 local function BuildLink(view, hit, y)
 	local row = NewRow(view.scroller.child, y, hit.label, hit.tip or "")
 	local open, text = Button(row.frame, "Open", SMALL, function()
@@ -2452,7 +2267,6 @@ local function BuildLink(view, hit, y)
 	return row
 end
 
--- The fill of the result the keys are on.
 local function Pick(view, at)
 	local old = view.picks[view.at]
 	if old and old.row.pick then
@@ -2480,7 +2294,6 @@ local function Pick(view, at)
 	end
 end
 
--- The row that was opened glows for a moment: a fill in the accent that fades.
 local function Flash(row)
 	if not row.flash then
 		row.flash = Fill(row.frame, "ARTWORK")
@@ -2505,7 +2318,6 @@ local function Fade(seconds)
 	end
 end
 
--- Opens the tab of a setting, scrolls to its row and flashes it. Search, the preview and Home call it.
 function Arrive(entry, item)
 	ui.search:ClearFocus()
 	Go(entry)
@@ -2525,8 +2337,6 @@ function Arrive(entry, item)
 	end
 end
 
--- The row of a setting on the tab shown, which opens (its card too), comes into view and flashes: scrolled to as Arrive does with `always`, else
--- only when it lies outside the view. Returns true when the tab has the row.
 function ui.Reach(entry, item, always)
 	local view = entry and ui.views[entry]
 	if not view or type(item) ~= "table" then
@@ -2548,8 +2358,6 @@ function ui.Reach(entry, item, always)
 	return false
 end
 
--- After Ctrl+Z or Ctrl+Y (BuildKeys): the row of the change shows on the tab shown (ui.Reach); a change of another tab, or one made while a search
--- shows, names its place after the strip's words ("Undid Border colour: back to #000000 (Unit frames > Bars and pictures)."). Returns the words.
 function ui.ShowChange(text, entry)
 	if not IsText(text) or type(entry) ~= "table" or type(entry.item) ~= "table" or ui.mode then
 		return text
@@ -2565,8 +2373,6 @@ function ui.ShowChange(text, entry)
 	return text
 end
 
--- A click on the strip's count of changes on the tab (ui.stripHit, BuildBars): the next changed row after the last one it went to, in the order
--- of the tab, opens (its card too), comes into view and flashes; after the last it starts at the first again. A new tab starts at the first.
 function ui.NextChanged()
 	local entry = ui.current
 	local view = entry and ui.views[entry]
@@ -2589,7 +2395,6 @@ function ui.NextChanged()
 	end
 end
 
--- Fills the row of a setting in the accent at 10% while its part of the preview is pointed at.
 local function PartFill(path, on, shown)
 	for _, row in ipairs((shown or ui.view or {}).rows or {}) do
 		if row.item and row.item.path == path then
@@ -2615,7 +2420,6 @@ local function Show(view)
 	view.scroller.frame:Show()
 end
 
--- The groups the words find: the rows of the options pages, then Profiles and the steps of setup, each in its order of match.
 local function Collect(words)
 	local groups = {}
 	for _, entry in ipairs(ui.model.pages) do
@@ -2644,7 +2448,6 @@ local function Collect(words)
 			profiles.hits[#profiles.hits + 1] = { tier = tier, label = label, link = true, key = PROFILES_GROUP .. "/" .. label, Open = function()
 				ui.search:ClearFocus()
 				Go(ui.model.profiles)
-				-- The row of the result, scrolled to and flashed as a setting's row is (Arrive); a name that is a part of another row opens that row.
 				local view = ui.views[ui.model.profiles]
 				local row = view and view.byLabel and view.byLabel[ns.PanelSearch.ALIAS[label] or label]
 				if row and row.frame:IsShown() then
@@ -2659,14 +2462,12 @@ local function Collect(words)
 		local tier = step.built and ns.PanelSearch.Tier(words, step.title, "", step.area, STEPS_GROUP)
 		if tier then
 			steps.hits[#steps.hits + 1] = { tier = tier, label = step.title, link = true, key = STEPS_GROUP .. "/" .. step.id, Open = function()
-				-- The options pages are back as they were when setup closes.
 				ui.search:ClearFocus()
 				ShowPage(ui.current)
 				Call("OpenSetup", step.id)
 			end }
 		end
 	end
-	-- The window's own actions (PanelSearch.ACTIONS, ui.actions): each Open leaves the search field first.
 	local actions = { label = ACTIONS_GROUP, hits = {} }
 	for _, action in ipairs(ns.PanelSearch.ACTIONS or {}) do
 		local does = ui.actions and ui.actions[action.id]
@@ -2687,7 +2488,6 @@ local function Collect(words)
 	return ns.PanelSearch.Sort(groups)
 end
 
--- A label with each typed word lit in the accent, wherever it is in the label, in the label's own letters.
 local function Lit(label, words)
 	if not IsText(label) or label == "" then
 		return label or ""
@@ -2810,7 +2610,6 @@ local function Search(typed)
 	LayoutNav()
 end
 
--- Up and Down move the selection of the results, Enter opens it. Out of combat only.
 local function SearchKey(key)
 	local view = ui.searchView
 	if not (ui.searching and view and #view.picks > 0) or InCombatLockdown() then
@@ -2825,14 +2624,11 @@ local function SearchKey(key)
 	end
 end
 
--- The window ---------------------------------------------------------------------------------------
-
 function ShowStrip()
 	if ui.strip then
 		local text = ui.message
 		local status = false
 		if not text then
-			-- A message taken away before its fade in ends leaves the strip at full strength.
 			if ui.sayFade then
 				ui.sayFade = nil
 				ui.strip:SetAlpha(1)
@@ -2844,7 +2640,6 @@ function ShowStrip()
 			end
 		end
 		ui.strip:SetText(text)
-		-- The count of changes on the tab takes clicks (ui.NextChanged) over the width of its words, and only while it shows.
 		local hit = ui.stripHit
 		if hit then
 			if status then
@@ -2877,12 +2672,10 @@ function ShowPage(entry)
 		ui.views[entry] = view
 	end
 	Show(view)
-	-- A tab shows under the title of its module, and the module has the switch in the header.
 	local top = ns.PanelNav.Top(ui.model, entry)
 	ui.title:SetText(top.label)
 	ui.head.Set(top, Subtitle(entry))
 	local band = ui.tabs.Set(entry)
-	-- The preview band is under the tabs, and the rows start under the band.
 	if view.module then
 		local lift = ui.preview.Set(entry, HEAD + ns.PanelTabs.TAB_H)
 		ui.tabs.Shift(lift)
@@ -2933,14 +2726,12 @@ function RefreshAll()
 		if ui.barProfile then
 			ui.barProfile.Update()
 		end
-		-- The dots of the tabs that hold changes (PanelTabs.lua).
 		if ui.tabs and ui.tabs.Marks then
 			ui.tabs.Marks()
 		end
 		if ui.ShowReload then
 			ui.ShowReload()
 		end
-		-- Reset page is dimmed while nothing on the tab is changed.
 		local entry = ui.current
 		if ui.reset and entry and not entry.home and not entry.profiles and ns.PanelTrust then
 			ui.reset:SetAlpha(ns.PanelTrust.Count(entry) == 0 and DIM or 1)
@@ -2960,7 +2751,6 @@ local function SavePosition()
 	end
 end
 
--- True while enough of the window is on the screen to reach its title bar.
 local function OnScreen()
 	local left, bottom, width, height = Rect(ui.window)
 	local screenWidth, screenHeight = ScreenSize()
@@ -2970,7 +2760,6 @@ local function OnScreen()
 	return left + 120 <= screenWidth and left + width - 120 >= 0 and bottom + height <= screenHeight + 20 and bottom + height - TITLE >= 0
 end
 
--- The scale of the window: Window scale, or less when the screen is too small for the window.
 local function ApplyScale()
 	local screenWidth, screenHeight = ScreenSize()
 	local fit = screenWidth and math.min((screenWidth - 40) / WIDTH, (screenHeight - 40) / HEIGHT) or math.huge
@@ -2985,7 +2774,6 @@ local function Place()
 		point, x, y = saved.point, saved.x, saved.y
 		relative = POINTS[saved.relative] and saved.relative or point
 	end
-	-- A screen too small for the window gets a smaller window.
 	ApplyScale()
 	window:ClearAllPoints()
 	window:SetPoint(point, UIParent, relative, x, y)
@@ -3008,7 +2796,6 @@ local function Version()
 	return nil
 end
 
--- Toggles the handles through the command the player types.
 local function ToggleMovers()
 	local module = ns.modules and ns.modules.movers
 	local command = module and module.slash and module.slash.move
@@ -3020,8 +2807,6 @@ local function ToggleMovers()
 	end
 end
 
--- The window's own actions that Search finds (PanelSearch.ACTIONS), by id: what Open runs, its tip and, for Test mode, the word of its button. Test
--- mode is the switch of the title bar (BuildTestSwitch); in a fight it asks for test mode at the fight's end, or takes that back (TestToggle).
 local TestToggle
 ui.actions = {
 	test = {
@@ -3039,7 +2824,6 @@ ui.actions = {
 	looks = { tip = "The ready-made looks of the welcome screen. Nothing changes until you pick one.", Run = function() Call("OpenProfiles") end },
 }
 
--- Shows the parts of the options pages, or the root of the mode that has the window, and the title of whichever it is.
 local function SetParts()
 	local mode = ui.mode
 	for _, part in ipairs(ui.optionParts or {}) do
@@ -3057,15 +2841,12 @@ local function SetParts()
 		ui.barVersion:SetShown(mode == nil)
 	end
 	ui.barCounter:SetShown(mode ~= nil)
-	-- The buttons of the options pages are at the right of the strip; a mode has the whole width.
 	ui.strip:SetWidth(mode and WIDTH - 24 or WIDTH - 24 - 330)
 	if ui.Keys then
 		ui.Keys()
 	end
 end
 
--- Gives the window to a mode (a table with title, Build(window) that returns its root frame, Enter, Update, Frame(seconds), Hidden and Close), or back
--- to the options pages with nil. The mode builds its root the first time it has the window.
 local function SetMode(mode)
 	CloseList()
 	HideConfirm()
@@ -3073,7 +2854,6 @@ local function SetMode(mode)
 	if mode and not mode.root then
 		mode.root = mode.Build(ui.window)
 	end
-	-- Setup paints a draft and the samples of test mode the live profile, so a mode that takes the window ends test mode (TestMode.lua).
 	if mode and type(ns.TestMode) == "table" then
 		ns.TestMode.Off("setup")
 	end
@@ -3087,8 +2867,6 @@ local function SetMode(mode)
 	RefreshAll()
 end
 
--- Gives the window back to the options pages from a mode, at the page they showed before it (Back from setup's first screen). The mode's Hidden runs
--- first, as when the window closes, so the mode keeps what it keeps then.
 local function LeaveMode()
 	local mode = ui.mode
 	if not (ui.window and mode) then
@@ -3116,15 +2894,12 @@ local function BuildLeft(window)
 		Solid(divider, "line")
 	end)
 
-	-- The search field is in the title bar, so that it stays when the sidebar is a rail.
 	local box = Field(window, 360, 40)
 	box:SetHeight(22)
 	box:SetPoint("TOPLEFT", window, "TOPLEFT", 256, -7)
 	local hint = Dim(Label(box, "GameFontHighlight", "LEFT"))
 	hint:SetPoint("LEFT", box, "LEFT", 8, 0)
 	hint:SetText("Search")
-	-- A cross at the right of the box while words are typed, two lines in the dim text, in the text colour under the mouse: a click clears the words,
-	-- shows the page again (Search) and keeps the cursor in the box for the next search. The words keep clear of it (SetTextInsets).
 	local clear = Frame(box)
 	clear:SetSize(16, 16)
 	clear:SetPoint("RIGHT", box, "RIGHT", -4, 0)
@@ -3187,7 +2962,6 @@ local function BuildLeft(window)
 	box:SetScript("OnEnterPressed", function()
 		SearchKey("ENTER")
 	end)
-	-- Escape clears the words and shows the page again.
 	box:SetScript("OnEscapePressed", function(self)
 		local typed = self:GetText()
 		if IsText(typed) and typed ~= "" then
@@ -3278,9 +3052,6 @@ local function BuildRight(window)
 	})
 end
 
--- Reset page, Reload and Done, at the right of the strip. Reset page sets every setting of the tab to its default after a question, and the strip
--- says how many went back; its writes are one batch of Home's record (ui.batch), so one Ctrl+Z puts the page back. With nothing changed on the tab
--- it is dimmed and a click only says so (RefreshAll dims it).
 local function BuildFoot(window)
 	local foot = Frame(ui.stripFrame)
 	foot:SetAllPoints(ui.stripFrame)
@@ -3289,10 +3060,6 @@ local function BuildFoot(window)
 		window:Hide()
 	end, true)
 	done:SetPoint("RIGHT", foot, "RIGHT", -12, 0)
-	-- While changes wait for a reload it reads "Reload (2)" in the accent (RefreshAll, ui.ShowReload), and pointing at it lists them as the reload
-	-- notice does (Reload.lua, ns.ReloadTip); with none it is plain and its tip says so. The tone is its colour and not its alpha, which Reload.lua dims
-	-- in a fight. Its hover scripts are wrapped with SetScript, since the secure button over it runs them through GetScript (Reload.lua's Cover),
-	-- which leaves hooks out.
 	local reload, reloadLabel, reloadTone = Button(foot, "Reload", 88, ns.Reload)
 	reload:SetPoint("RIGHT", done, "LEFT", -8, 0)
 	local waiting = 0
@@ -3342,11 +3109,9 @@ local function BuildFoot(window)
 			local place = top ~= entry and ("%s > %s"):format(top.label, name) or name
 			Ask(ns.PanelTrust.Question(entry, name), function()
 				local before = ns.PanelTrust.Count(entry)
-				-- Every row it writes is noted in one batch, which Ctrl+Z puts back whole.
 				ui.batch = { label = "Reset page on " .. place, what = "Reset page" }
 				local ok, err = pcall(function()
 					for _, item in ipairs(entry.page) do
-						-- A row the game holds is not written: its default is the game's, not this page's.
 						if item.key and item.kind ~= "list" and item.kind ~= "entries" and not ns.RowLive(item) then
 							Write(item, item.default)
 						end
@@ -3363,7 +3128,6 @@ local function BuildFoot(window)
 		end
 	end)
 	ui.reset:SetPoint("RIGHT", reload, "LEFT", -8, 0)
-	-- Its tip in the strip; the hover fill of the button stays (HookScript on a frame of Flat UI's own).
 	ui.reset:HookScript("OnEnter", function()
 		ui.message, ui.tip = nil, "Puts every setting of this tab back to its default. Settings the game holds keep their value."
 		ShowStrip()
@@ -3375,8 +3139,6 @@ local function BuildFoot(window)
 	ui.strip:SetWidth(WIDTH - 24 - 330)
 end
 
--- A click of Test mode (the switch, or its Search result): out of a fight it turns test mode on or off with the switch's sound. In a fight TestMode
--- keeps the wish (TM.On), so the fight's end turns it on while the window is open, and a second click takes it back; the strip says which.
 function TestToggle()
 	local mode = ns.TestMode
 	if type(mode) ~= "table" then
@@ -3392,9 +3154,6 @@ function TestToggle()
 	SwitchClick(mode.Source() ~= nil)
 end
 
--- Test mode (TestMode.lua): a switch just left of Close, with the track and knob of the Bool rows, in the parts of the options pages so it hides
--- while Setup has the window. It reads the state again in RefreshAll; in a fight it is dim and reads After combat, and a click asks for test mode at
--- the fight's end, which shows as the knob on, dimmed, until it comes on or the window closes (TestToggle).
 local function BuildTestSwitch(bar, close)
 	local tip = "Shows your frames on screen with sample content while you change options. Ends when you close the options or turn it off; "
 		.. "pauses in a fight."
@@ -3448,12 +3207,6 @@ local function BuildTestSwitch(bar, close)
 	return switch
 end
 
--- The profile the changes go into, dim, left of the Test mode switch on every options page ("Profile: Raid"); a long name is cut short. Pointing at
--- it says how many characters use the profile, a click opens Profiles, and a change of profile while the window is open (Switch automatically, a
--- slash command) tints it in the accent for a second (PROFILE_FLASH). A profile that waits for the fight's end, picked in a fight (KeepProfile,
--- /flatui profile Name) or due by a rule of Switch automatically, shows on a second line under it in the accent ("Raid after the fight",
--- ProfileSwitch.lua's Switch.Wanted), in the same 160 units, so it never reaches the Search box. RefreshAll sets it; it is in the parts of the
--- options pages, so it hides while a mode has the window.
 local PROFILE_FLASH, PROFILE_HOLD = 1, 0.4
 local function BuildProfileName(bar)
 	local frame = Frame(bar)
@@ -3477,7 +3230,6 @@ local function BuildProfileName(bar)
 	end
 	local name = { frame = frame, text = text }
 	local shownWant, shownRule
-	-- What waits for the fight's end, and whether a rule of Switch automatically wants it.
 	local function Waiting()
 		local switch = ns.ProfileSwitch
 		if type(switch) == "table" and type(switch.Wanted) == "function" then
@@ -3491,7 +3243,6 @@ local function BuildProfileName(bar)
 	function name.Update()
 		local now = CurrentProfile()
 		local at = Now()
-		-- Refreshed every REFRESH while the window is open, so a change seen within two seconds of the last look is one made while it was open.
 		local open = ui.window and ui.window:IsShown() and seenAt ~= nil and at - seenAt < 2
 		if ui.window and ui.window:IsShown() then
 			seenAt = at
@@ -3506,7 +3257,6 @@ local function BuildProfileName(bar)
 		local first, moved = shown == nil, now ~= shown
 		shown, shownWant, shownRule = now, want, rule
 		text:SetText(now ~= "" and ("Profile: " .. now) or "")
-		-- What waits for the fight's end is a second line under the name, in the same width.
 		text:ClearAllPoints()
 		text:SetPoint("RIGHT", frame, "RIGHT", 0, want and 6 or 0)
 		after:SetText(want and ("%s after the fight"):format(want) or "")
@@ -3559,8 +3309,6 @@ local function BuildBars(window)
 		window:StopMovingOrSizing()
 		SavePosition()
 	end)
-	-- Ctrl and the wheel over the title bar set Window scale, 5% a step, between 80% and 150%, and the strip says the new scale. Pointing at the bar
-	-- says so, with the scale now.
 	bar:EnableMouseWheel(true)
 	bar:SetScript("OnMouseWheel", function(_, delta)
 		local ok, held = pcall(IsControlKeyDown)
@@ -3573,7 +3321,6 @@ local function BuildBars(window)
 			end
 		end
 	end)
-	-- Setup keeps the strip for its own words.
 	bar:SetScript("OnEnter", function()
 		if ui.mode then
 			return
@@ -3610,12 +3357,10 @@ local function BuildBars(window)
 		number:SetText(version)
 		ui.barVersion = number
 	end
-	-- What a mode says beside its title, such as the step it is at.
 	local counter = Dim(Label(bar, "GameFontHighlightSmall", "LEFT"))
 	counter:SetPoint("LEFT", title, "RIGHT", 8, -1)
 	counter:Hide()
 	ui.barCounter = counter
-	-- A mode takes the Close button: it may ask before it closes.
 	local close = Button(bar, "Close", 60, function()
 		if ui.mode and ui.mode.Close then
 			ui.mode.Close()
@@ -3646,8 +3391,6 @@ local function BuildBars(window)
 	text:SetPoint("TOPLEFT", strip, "TOPLEFT", 12, -4)
 	text:SetHeight(STRIP - 8)
 	ui.strip = text
-	-- "3 changed on this tab. Click to go to each.": a frame over its words, shown by ShowStrip while the strip shows that count, lights them in the
-	-- accent under the mouse, and a click goes to the next changed row (ui.NextChanged).
 	local hit = Frame(strip)
 	hit:SetHeight(STRIP - 8)
 	hit:SetPoint("LEFT", strip, "LEFT", 12, 0)
@@ -3666,11 +3409,6 @@ local function BuildBars(window)
 	ui.stripHit = hit
 end
 
--- The keys of the options pages come through a frame of Flat UI's own that has the keyboard while the pages show, out of combat only
--- (EnableKeyboard and SetPropagateKeyboardInput are protected in a fight; Setup.lua's S.BuildKeys does the same for setup, whose window this frame
--- leaves to it): Ctrl+F puts the cursor in Search, Escape closes an open list or question and leaves the window open, and Enter answers a question
--- with its first button. Every other key goes on to the game, and Escape too when nothing is open, so it closes the window as before. A box with
--- the cursor takes the keys first.
 local function BuildKeys(window)
 	local keys = Frame(window)
 	keys:SetAllPoints(window)
@@ -3683,8 +3421,6 @@ local function BuildKeys(window)
 	local function Find()
 		ui.search:SetFocus()
 	end
-	-- Ctrl+Z: the newest change of Home's Recent changes goes back, and the strip says what (PanelHome.lua, Home.UndoNewest). Ctrl+Y or
-	-- Ctrl+Shift+Z makes again what it took back (Home.Redo). Either shows the row it changed, or names its place (ui.ShowChange).
 	local function Undo()
 		local text, entry = ns.PanelHome.UndoNewest()
 		RefreshAll()
@@ -3714,8 +3450,6 @@ local function BuildKeys(window)
 			if not done then
 				geterrorhandler()(failed)
 			end
-			-- A key taken here lets the next keys through again from the next frame, so the release of a key held meanwhile, such as one that
-			-- walks, still reaches the game.
 			if action and done and C_Timer and C_Timer.After then
 				C_Timer.After(0, function()
 					if not InCombatLockdown() then
@@ -3728,15 +3462,12 @@ local function BuildKeys(window)
 			action()
 		end
 	end)
-	-- A fight takes the keyboard from it at its start, the last moment that may, and gives it back after while the pages show.
 	keys:RegisterEvent("PLAYER_REGEN_DISABLED")
 	keys:RegisterEvent("PLAYER_REGEN_ENABLED")
 	keys:SetScript("OnEvent", function(_, event)
 		ui.Keys(event ~= "PLAYER_REGEN_DISABLED")
 	end)
 	ui.keys = keys
-	-- Shown while the options pages have the window (no mode) and out of combat; allowed false hides it, at the start of a fight. It shows letting
-	-- keys through, so a key held as it shows (one that walks) is let go in the game too.
 	function ui.Keys(allowed)
 		local shown = allowed ~= false and ui.mode == nil and not InCombatLockdown()
 		if shown then
@@ -3748,7 +3479,6 @@ local function BuildKeys(window)
 end
 
 local function Build()
-	-- The height of a row is read here, since the account is loaded by now.
 	ROW = Look.RowHeight()
 	ns.PanelKit.ROW = ROW
 	ui.shape = Look.Get("density") .. "/" .. Look.Get("sidebar") .. "/" .. Look.Get("sections")
@@ -3760,7 +3490,6 @@ local function Build()
 	ui.window = window
 	window:SetSize(WIDTH, HEIGHT)
 	window:SetFrameStrata("HIGH")
-	-- Set before its parts are made, so each is made above it.
 	window:SetFrameLevel(LEVEL)
 	window:SetClampedToScreen(true)
 	window:SetMovable(true)
@@ -3775,8 +3504,6 @@ local function Build()
 	BuildRight(window)
 	BuildFoot(window)
 	BuildKeys(window)
-	-- It fades in over FADE_IN (OnUpdate, below) with the game's sound of a window opening, and plays the sound of one closing as it hides; it hides at
-	-- once, since Escape hides it through UISpecialFrames. Hidden and shown again by /flatui move (MoversMode's Holding), it plays neither.
 	window:SetScript("OnShow", function()
 		RefreshAll()
 		ui.fade = 0
@@ -3794,23 +3521,19 @@ local function Build()
 		if ui.ready and not holding and type(PlaySound) == "function" and type(SOUNDKIT) == "table" and SOUNDKIT.IG_MAINMENU_CLOSE then
 			pcall(PlaySound, SOUNDKIT.IG_MAINMENU_CLOSE)
 		end
-		-- Under the setting that sends windows back when they close, the options window opens at its default place.
 		if ns.Get("movers.keepSpots") == "reset" then
 			Look.ClearPosition()
 		end
 		CloseList()
 		HideConfirm()
 		ui.search:ClearFocus()
-		-- Test mode turned on here ends with the window, but not while /flatui move holds the window hidden (MoversMode.lua's Holding).
 		local test, movers = ns.TestMode, ns.MoversMode
 		if type(test) == "table" and not (type(movers) == "table" and movers.Holding()) then
 			if test.Source() == "panel" then
 				test.Off("panel")
 			end
-			-- A wish of a fight made here goes with the window too.
 			test.Drop("panel")
 		end
-		-- Any hide ends a mode; the mode keeps what it needs to open again where it was.
 		if ui.mode then
 			local mode = ui.mode
 			ui.mode.Hidden()
@@ -3835,7 +3558,6 @@ local function Build()
 		if ui.flash then
 			Fade(seconds)
 		end
-		-- A message of the strip fades in, and goes after SAY_HOLD (Say).
 		if ui.sayFade then
 			ui.sayFade = ui.sayFade + (Number(seconds) and seconds or 0)
 			local t = math.min(1, ui.sayFade / SAY_FADE)
@@ -3854,7 +3576,6 @@ local function Build()
 			RefreshAll()
 		end
 	end)
-	-- Escape closes it, as it closes the windows the game lists here.
 	if type(UISpecialFrames) == "table" then
 		local listed = false
 		for _, name in ipairs(UISpecialFrames) do
@@ -3865,22 +3586,17 @@ local function Build()
 		end
 	end
 	window:Hide()
-	-- From here on its showing and hiding play the game's window sounds (the hide just above was the build's own).
 	ui.ready = true
-	-- The first time it opens on Home; after that on the page it was left on.
 	local key = Look.Page()
 	ShowPage((key == "profiles" and ui.model.profiles) or ui.model.byKey[key] or ui.model.home)
 end
 
--- A change of the look while the window exists. Colours, borders and corners are painted again, a font is set again, and a Density or a Sidebar
--- builds the rows again, since a row is built at its height and a page at the width of its column. A pair seen before has its pages already.
 local function Rebuild()
 	ROW = Look.RowHeight()
 	ns.PanelKit.ROW = ROW
 	for _, view in pairs(ui.views) do
 		view.scroller.frame:Hide()
 	end
-	-- The pages built for a density and a sidebar are kept and shown again when they come back.
 	ui.sets = ui.sets or {}
 	ui.sets[ui.shape] = ui.views
 	ui.shape = Look.Get("density") .. "/" .. Look.Get("sidebar") .. "/" .. Look.Get("sections")
@@ -3889,7 +3605,6 @@ local function Rebuild()
 	ui.left:SetWidth(SIDE)
 	ui.right:SetWidth(CW)
 	ui.views, ui.view = ui.sets[ui.shape] or {}, nil
-	-- The search view has no cards, so a change of Sections keeps it.
 	local base = Look.Get("density") .. "/" .. Look.Get("sidebar")
 	if ui.searchView and ui.searchBase ~= base then
 		ui.searchView.scroller.frame:Hide()
@@ -3909,7 +3624,6 @@ function Look.onChange(key)
 	end
 	if key == "scale" then
 		ApplyScale()
-		-- A larger window grows from its corner and may reach past the screen: it goes back to the middle.
 		if ui.window:IsShown() and not OnScreen() then
 			ui.window:ClearAllPoints()
 			ui.window:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
@@ -3930,7 +3644,6 @@ function Look.onChange(key)
 			ShowPage(ui.current)
 		end
 	elseif key == "samples" then
-		-- Each dropdown places its sample again when its row is refreshed.
 		RefreshAll()
 	else
 		ui.paintKey = nil
@@ -3964,24 +3677,19 @@ function ns.OpenPanel()
 	return ui.window:IsShown() == true
 end
 
--- The widgets and measures of the window, for a mode that has the window (Setup.lua). Each is the one the options pages use.
 ns.PanelKit = {
 	Frame = Frame, Fill = Fill, Label = Label, Dim = Dim, Tint = Tint, Clickable = Clickable, Button = Button, Field = Field,
 	Scroller = Scroller, Dropdown = Dropdown, NewRow = NewRow, BuildRow = BuildRow, IsOpen = IsOpen, Unmet = Unmet, Header = Header, Painted = Painted,
 	Solid = Solid, Backing = Backing, Accent = Accent, Shade = Shade, Clamp = Clamp, Rect = Rect, IsText = IsText, Cursor = Cursor, Drag = Drag,
 	Say = Say, Ask = Ask, CloseList = CloseList, OpenList = OpenList, Read = Read, Write = Write,
 	Bool = AddBool, SwitchClick = SwitchClick, Slider = Slider, CopyField = CopyField,
-	-- The pressed look of a Button, for a frame of Flat UI's own over it that takes its mouse (Reload.lua's secure button).
 	Press = function(button, down) local press = ui.presses and ui.presses[button] if press then press(down == true) end end,
 	Window = function() return ui.window end,
 	Inset = function(parent, inset) insets[parent] = inset end,
 	Tip = function(text) ui.message, ui.tip = nil, text or "" ShowStrip() end, Refresh = function() RefreshAll() end,
 	Hide = function() if ui.window then ui.window:Hide() end end,
 	Leave = LeaveMode,
-	-- Closes the colour picker, an open list or a question, the one on top; true when one was open.
 	Escape = function() local action = ui.EscapeAction() if action then action() return true end return false end,
-	-- Enter as on the options pages (BuildKeys): the colour picker's Apply, else a question's first button but not a careful question's; true when
-	-- it did one.
 	Enter = function()
 		local picker = ns.PanelColour
 		if picker and picker.Shown() then
@@ -3999,8 +3707,6 @@ ns.PanelKit = {
 	ROW_W = ROW_W, SECTION = SECTION, LABEL = LABEL, CONTROL = CONTROL, FIELD = FIELD, SMALL = SMALL, BUTTON = BUTTON,
 }
 
--- Opens the window in a mode (see SetMode), or leaves it in that mode when it is in it already. In combat before the window was ever built the
--- mode opens after combat, and mode.waiting is what is said meanwhile. Returns true when the window shows the mode now.
 function ns.OpenPanelMode(mode)
 	if not ui.window then
 		if InCombatLockdown() then
@@ -4029,7 +3735,6 @@ function ns.OpenPanelMode(mode)
 	return ui.window:IsShown() == true
 end
 
--- Opens the window at a page by its key (/flatui hide), and leaves it open when it is open already. False when the window or the page is not there.
 function ns.OpenPanelPage(key)
 	if not (ui.window and ui.window:IsShown()) then
 		ns.OpenPanel()
@@ -4042,9 +3747,6 @@ function ns.OpenPanelPage(key)
 	return true
 end
 
--- /flatui <words> (Core.lua): opens the window, or leaves it open, with the words in Search, so the results show lit as when they are typed there, the
--- first picked, and Enter opens it; a miss shows the closest pages. While setup has the window, or in a fight before the window was ever built
--- (ns.OpenPanel says it opens after combat), nothing is searched and the answer is false.
 function ns.OpenPanelSearch(words)
 	if ui.window and ui.window:IsShown() and ui.mode then
 		print("Flat UI: setup has the options window. Search once it is closed.")
@@ -4056,7 +3758,6 @@ function ns.OpenPanelSearch(words)
 	if not (ui.window and ui.window:IsShown()) or ui.mode or not IsText(words) then
 		return false
 	end
-	-- OnTextChanged searches (BuildLeft); the same words again would not fire it.
 	if ui.search:GetText() == words then
 		Search(words)
 	else
@@ -4067,7 +3768,6 @@ function ns.OpenPanelSearch(words)
 	return true
 end
 
--- Opens the window at the Share section of Profiles, and leaves it open when it is open already.
 function ns.OpenPanelShare()
 	if not (ui.window and ui.window:IsShown()) then
 		ns.OpenPanel()
@@ -4088,31 +3788,24 @@ function ns.PanelShown()
 	return ui.window ~= nil and ui.window:IsShown() == true
 end
 
--- True while a mode (setup) has the window.
 function ns.PanelInMode()
 	return ui.mode ~= nil
 end
 
--- The mode that has the window now (Setup.lua), or nil for the options pages.
 function ns.PanelMode()
 	return ui.mode
 end
 
--- Reads every control on screen again.
 function ns.RefreshPanel()
 	if ui.window and ui.window:IsShown() then
 		RefreshAll()
 	end
 end
 
--- The game calls this from the add-on compartment in the minimap.
 function FlatUI_OnAddonCompartmentClick()
 	ns.OpenPanel()
 end
 
--- A Flat UI button in the game menu, right below the gap under Options. It is a frame of its own: the menu's layout places any shown child that
--- has a layoutIndex, so nothing of the game's menu is written. It follows each build of the menu's buttons through ns.Follow, which leaves the method
--- alone while taintLog is on (ns.HookMethod): the menu then works as the game has it, without the button, for that session.
 do
 	local button
 	local function OpenOptions()

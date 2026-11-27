@@ -1,126 +1,19 @@
 local _, ns = ...
 
--- The item finder (spec 0.5.20, item 6): the part "item finder" of Chat and tooltips, a panel of Flat UI's own, FlatUIGearSearch, docked to the right
--- of the Gear comparison window (FlatUIGear, GearWindow.lua): its top left corner 4 px right of the window's top right corner, or, while the screen
--- has no room for it there and has room on the other side, its top right corner 4 px left of the window's top left corner (the window's and the
--- screen's edges, GetLeft, GetRight and GetWidth of the window and UIParent, WL/uiobjects.yaml), and kept on the screen (SetClampedToScreen), so a
--- window sized to the screen or one low on it leaves the finder in sight. It is made on UIParent and hangs from the window by its anchor, so it
--- moves with it, and lies one strata above the window's (Strata and levels, below); it shows only while the window does:
--- when the window hides it closes the finder (GearWindow.lua's Hiding, ns.GearSearchToggle), and the finder closes at its next look once the window
--- is not shown, so the next opening of the window starts without it until Find (the button on the window's title bar, ns.GearSearchToggle) or the
--- list row Item finder (chat.gearFind: ns.GearFindLines and ns.GearFindPick) opens it again. It fades in over 0.1 s as it opens, as the window does
--- (0.5.36), with no sound of its own.
--- Moved and minimized (the owner: "when i use the movers function the search panel needs to be able to be minimized and moved"; 0.5.21: "the
--- search tool isnt movable in mover panel its still in the way"): the finder has an entry of its own in the movers (Movers.lua: FlatUIGearSearch,
--- Item finder), a plain one like the others: its box is at the profile's spot when one is saved, else where the finder starts, docked at the
--- window's edge as above (ns.GearSearchStart), and it is there only while the finder shows (ns.GearSearchShown), so a closed finder is never in
--- the way; opening the finder while the movers are open shows its box (ns.MoverKit.ShowHandle). A drop of its box saves its spot as for any frame,
--- and so does a drag of its title bar out of a fight (SetMovable, StartMoving, StopMovingOrSizing and SetUserPlaced, WL/uiobjects.yaml:4797, 4813,
--- 4778, as the window's title bar drags the window; SetDontSavePosition, :4605): where it is let go goes to the movers (ns.MoverKit.Commit). The
--- finder then hangs from that spot (ns.MoverSaved and ns.MoverSpot, told by ns.GearSearchMoved), not at the window's edge, until Dock (a button
--- on its title bar while it has a spot), a right-click on the title or a reset of its box forgets the spot as the movers forget one
--- (ns.MoverKit.Restore, so their Undo and Reset all know it) and docks it again. While its box or its title bar is dragged nothing draws its box
--- again. Minimize, left of the cross, folds it to its title bar, with the search box on the bar while it leaves the box room enough there, and
--- back; Enter in the box opens it again with the results. That is kept for the character in FlatUICharDB.gearFinder (ns.Character): min
--- (minimized), and w and h, the size of its box in the movers, which takes the title bar's height while it is minimized. While the movers are
--- open (ns.MoverKit.IsOpen) the finder is in the MEDIUM strata, under their boxes (HIGH), so it covers none of them, and Minimize is above them,
--- so the finder can be minimized out of their way.
--- Strata and levels (0.5.23, the owner: "the search function cant be clicked into in the default flatui user interface"): the finder lies one strata
--- above the window's (GetFrameStrata, SetFrameStrata, WL/uiobjects.yaml:4217, 4653: HIGH over MEDIUM, FULLSCREEN over DIALOG), as the Compare gear
--- button lies over the Character window (GearButton.lua), at a level of its own (L.LEVEL, SetFrameLevel, :4646), under that button's (20) so the
--- button stays on its title bar where the two meet, and it is not toplevel; in the window's strata only while the movers are open (above) and while
--- the options window (HIGH, Panel.lua:2654) shows over a window in MEDIUM, so it stays under that with its window. A finder kept on the screen over
--- the window, with no room on either side, covers that part of it. Its search box and level fields lie L.ABOVE levels over it, above the rest of the
--- finder and the Compare gear button, so the search box of a minimized finder docked on the Character window, on that window's title bar where the
--- button is, takes the click where the two meet; Minimize two. They are set again at each look whenever one is not there (D.Levels): the game sets
--- the levels of a frame's children again when the frame's level changes (Blizzard_SharedTalentUI/Blizzard_SharedTalentFrame.lua:817). Before, the
--- finder was toplevel in the window's strata with its search box set once two levels over the title bar. The game raises a toplevel window above
--- every frame of its strata when it is clicked, and the panel manager raises its left panel each time it lays the panels out
--- (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:615-647); the finder, made later and raised only by a click on itself, opened under
--- such a window. By default it docks on one: with UIParent 1365 wide (the game's UI scale 1 on a 16:9 screen) the window, at 680 and 460 wide, leaves
--- no room on its right (1488), so the finder hangs on its left, on the Character window (16 to 647), whose paper doll and stats pane, and on a
--- minimized finder its title bar (510) and the movers' title strip (Movers.lua:3385-3394), then lay over the search box and took its clicks, each
--- raising the Character window again.
--- Opening the finder opens the window first (ns.GearWindowShow, looked up when called); a window that waits for the end of a fight (GearWindow.lua
--- makes its frame out of combat only) has the finder wait for it too (ns.OutOfCombat). Every frame here is a plain frame of Flat UI's own with
--- nothing protected, so it is made, sized, filled, shown and placed in a fight too; only a drag of its title bar waits for the end of one.
--- What it finds (ns.GearSearchFind): the generated item index (ItemIndex.lua, ns.ItemIndex: one string of records for each inventory type, parsed
--- the first time a search needs that type, then kept for the session with an index by item ID), the player's bags and bank, and the other
--- characters' bags and bank, as Bags keeps them (ns.Bags.Data: B.Data.Characters, Containers, Size and Item, BagsData.lua:1432-1547), looked up
--- when called: without Bags' data those two sources find nothing and the status line says so. Another character's bound items are left out, since
--- they cannot come to this one. An item found in the bags or with another character is not listed again from the index. A record of the bags takes
--- the required level, item level and allowed classes of the index's record of the same item; an item the index does not have takes them from
--- C_Item.GetItemInfo (WL/apis.yaml:16525), and one the client has not loaded is asked for once (C_Item.RequestLoadItemDataByID, :17160), the search
--- running again every half second while one waits, a dozen times at most. The inventory type of a kept item is its equip location from the instant
--- info (Bags' Data.Info, C_Item.GetItemInfoInstant, :16569) by the client's INVTYPE names (Enum.InventoryType, WL/enums.yaml:4567-4603), else
--- C_Item.GetItemInventoryTypeByID (:16616).
--- The search box: the words in any order, case-insensitive, each found in the item's name; a pasted item link or "item:ID" finds that item alone,
--- whatever the filters, also one the index does not have (from the client). As the bag search box (0.5.39): a cross at its right while a search is
--- typed clears it and searches again, and Up and Down (OnArrowPressed) step through the last five searches of this session, newest first, Down
--- going forward again to what was typed; a search is kept as Enter is pressed and as the cross clears it, none under two letters, in memory alone. Filters: Slot (the item's inventory type: Main hand is a main-hand
--- weapon and One-hand a weapon of either hand, as the game's tooltips name them; Ranged a bow, gun or crossbow, Wand a wand), Armor (the armor
--- subclass) and Weapon type (the weapon subclass, by the client's names, C_Item.GetItemSubClassInfo, :16785), which exclude each other; required
--- level from and to, the upper bound at first the player's level + 5 with Level filter: Near your level (chat.gearFindLevel), none with Any, until
--- the player types one; quality from (Common at first); and Only what you can wear (chat.gearFindUsable at first): the item's allowed classes and
--- the class's armor and weapon skills, from the client's SkillRaceClassInfo (the GrunzForever export of build 1.60.1.70888, the same data as
--- ItemIndex.lua): the class masks of each skill line, plate and mail from level 40 for the classes that learn them then, polearms from 20; an item
--- counts once the player's level or its own required level reaches that level. The class is UnitClassBase's second answer (:42298) and the level
--- UnitLevel's (:43168). Results: sorted by item level, then required level, quality and name, 50 to a page, in rows of an icon (the instant info's,
--- cut by Icon crop), the name in its quality colour (ColorManager.GetColorDataForItemQuality, Blizzard_Colors/Mainline/ColorManager.lua:52-60, else
--- C_Item.GetItemQualityColor, :16726), the slot and type, where it is, the required level (in the bad colour above the player's level) and the item
--- level; the wheel scrolls a page and the arrows turn it.
--- Best for me works the Overall change out for the page shown only, a few items at a look, out of combat: for each item, once the client has it
--- (asked once, given up after six seconds), G.Compare (GearModel.lua) with the chosen lines the player knows (ns.GearChosen, GearLines.lua) and the
--- options the item tooltips pass, then G.Totals of each candidate slot, and the best slot's figure of the player's role (ns.PlayerRole): healing for
--- a healer, threat for a tank, damage for the others, else the first figure there is. The page is then sorted by it, the figure on each row in the
--- good or bad colour of the tooltips (SpellModel.lua's M.Fmt.Style, else the game's GREEN_FONT_COLOR and RED_FONT_COLOR), "~" before an estimate.
--- It is worked out again when SpellModel's version or the list's changes.
--- Clicks on a row: a click compares the item in the window (ns.GearWindowShow), a right-click compares the window's item against it
--- (ns.GearWindowAgainst), a modified click as the player bound them (IsModifiedClick, :39964): CHATLINK (Shift) puts the whole link in the chat line
--- (ChatFrameUtil.InsertLink, Blizzard_ChatFrameBase/Mainline/ChatFrameUtilOverrides.lua:14), DRESSUP (Ctrl) tries it on (DressUpItemLink,
--- Blizzard_UIPanels_Game/Mainline/DressUpFrames.lua:10), out of a fight, as Bags links an item (BagsItems.lua:1278-1293). A link the client has not
--- loaded yet is asked for, and the player is told to click again.
--- The menus of the filters are frames of Flat UI's own on the finder in the FULLSCREEN_DIALOG strata; one closes when a line is picked, when its
--- button is pressed again, when the finder hides, and at a press anywhere else: GLOBAL_MOUSE_DOWN (WL/events.yaml:5249), heard on a frame of its
--- own only while a menu is open. Tooltips are GameTooltip, never in a fight, as the window's are: SetOwner, SetHyperlink for a row (whose build the
--- item tooltips of GearLines.lua add to), SetText and AddLine, Show, and Hide only while a frame of the finder owns it (IsOwned). The boxes are
--- EditBoxes of Flat UI's own, read with GetText and written with SetText, which give the keyboard back on Enter, Escape and when they hide
--- (ClearFocus). A fight is InCombatLockdown's answer (:39650), a withheld one counting as a fight; time is GetTime's (:39050).
--- The look is the window's, the Windows page's: the Background colour at Window opacity with a thin border (ns.Outline), boxes and buttons in Button
--- and slot colour, the light under the cursor and what is chosen in the Highlight colour. It registers no event but GLOBAL_MOUSE_DOWN while a menu is
--- open, and looks on the OnUpdate of its own frame while it shows: whether the part may run and the window shows, the window's height (the finder is
--- as tall as the window, at least MIN_HEIGHT), its strata and place, typing that settled, items that loaded and Best for me's next items.
--- Everything runs as the part "item finder" of the chat module (ns.EachPart, Core.lua:2197-2228), each run with a count of its own, so three faults
--- stop the finder alone with a line for /flatui status; the first fault of each kind also goes to the game's error handler. It writes no saved
--- variable but FlatUICharDB.gearFinder (above) and its spot in the movers: the search is kept for the session.
-
 local KEY, PART = "chat", "item finder"
--- The finder's name, and the window it docks to (GearWindow.lua's NAME).
 local NAME, PARENT = "FlatUIGearSearch", "FlatUIGear"
--- Units: width, the least height, padding, the title bar and its cross, the gap between two controls and to the window, a field, a row of results and
--- its icon, a check box, a line of a menu, the results a page, the room of the level boxes and of a filter button, and the two right columns; the
--- least width of the search box on the title bar of a minimized finder, the width of Dock, and the frame level that puts Minimize above the boxes
--- of the movers (their levels go up to 501, Movers.lua:56, 1973-1979); the finder's own level, whose frames reach it + 4, under the Compare gear
--- button's (GearButton.lua's LEVEL, 20), and how many levels over it its boxes lie: over the rest of the finder (up to + 4) and over that button
--- and its outline (20 and 21), where the search box of a minimized finder meets it.
 local L = { WIDTH = 344, MIN_HEIGHT = 540, PAD = 8, BAR = 26, CLOSE = 18, GAP = 6, DOCK = 4, FIELD = 20, ROW = 30, ICON = 24, CHECK = 12,
 	MENU_LINE = 16, PER_PAGE = 50, LEVEL_BOX = 34, ARROW = 20, BEST = 84, RIGHT = 54, CHANGE = 60, FOOT = 26, LINE = 12, MIN_BOX = 90, DOCK_W = 44,
 	LIFT = 600, LEVEL = 10, ABOVE = 12 }
 L.INNER = L.WIDTH - 2 * L.PAD
 L.HALF = (L.INNER - L.GAP) / 2
--- Seconds: between two looks, typing that settles before a search, between two searches while an item loads (and how many), how long Best for me
--- waits for an item to load, and how many items it works out at a look.
 local LOOK, SETTLE, WAIT, TRIES, LOAD, STEP = 0.1, 0.25, 0.5, 12, 6, 3
--- How long the finder fades in as it opens, as the window beside it does (0.5.36). Its sound is the window's.
 local FADE_IN = 0.1
 local FONT, TITLE_FONT = "GameFontHighlightSmall", "GameFontHighlight"
--- The text-dim of the windows (PanelLook.lua:27-28), white, and the good and bad colours when SpellModel's style does not answer (the game's
--- GREEN_FONT_COLOR and RED_FONT_COLOR, else Flat UI's combat numbers', CombatText.lua:889-894).
 local DIM, PLAIN = { 0.66, 0.68, 0.62 }, { 1, 1, 1 }
 local GOOD, BAD = { 0.1, 1, 0.1 }, { 1, 0.1, 0.1 }
 local SEPARATOR = 0.07
 
--- Inventory types (Enum.InventoryType, WL/enums.yaml:4567-4603) by the client's equip location names, and the words of each a player can wear.
 local EQUIP = { INVTYPE_HEAD = 1, INVTYPE_NECK = 2, INVTYPE_SHOULDER = 3, INVTYPE_BODY = 4, INVTYPE_CHEST = 5, INVTYPE_WAIST = 6, INVTYPE_LEGS = 7,
 	INVTYPE_FEET = 8, INVTYPE_WRIST = 9, INVTYPE_HAND = 10, INVTYPE_FINGER = 11, INVTYPE_TRINKET = 12, INVTYPE_WEAPON = 13, INVTYPE_SHIELD = 14,
 	INVTYPE_RANGED = 15, INVTYPE_CLOAK = 16, INVTYPE_2HWEAPON = 17, INVTYPE_TABARD = 19, INVTYPE_ROBE = 20, INVTYPE_WEAPONMAINHAND = 21,
@@ -129,7 +22,6 @@ local TYPE_NAMES = { [1] = "Head", [2] = "Neck", [3] = "Shoulder", [4] = "Shirt"
 	[9] = "Wrist", [10] = "Hands", [11] = "Finger", [12] = "Trinket", [13] = "One-hand", [14] = "Shield", [15] = "Ranged", [16] = "Back",
 	[17] = "Two-hand", [19] = "Tabard", [20] = "Chest", [21] = "Main hand", [22] = "Off hand", [23] = "Held in off hand", [25] = "Thrown",
 	[26] = "Ranged", [28] = "Relic" }
--- The Slot filter: its key, words, inventory types, and for the ranged types whether a wand (Enum.ItemWeaponSubclass.Wand, 19) is wanted or left out.
 local SLOTS = {
 	{ "head", "Head", { 1 } }, { "neck", "Neck", { 2 } }, { "shoulder", "Shoulder", { 3 } }, { "back", "Back", { 16 } },
 	{ "chest", "Chest", { 5, 20 } }, { "wrist", "Wrist", { 9 } }, { "hands", "Hands", { 10 } }, { "waist", "Waist", { 6 } },
@@ -138,38 +30,23 @@ local SLOTS = {
 	{ "shield", "Shield", { 14 } }, { "holdable", "Held in off hand", { 23 } }, { "ranged", "Ranged", { 15, 26 }, false },
 	{ "wand", "Wand", { 26 }, true }, { "thrown", "Thrown", { 25 } }, { "relic", "Relic", { 28 } },
 }
--- Enum.ItemClass Weapon and Armor, and the wand's subclass.
 local WEAPON, ARMOR, WAND = 2, 4, 19
--- The Armor filter (Enum.ItemArmorSubclass, WL/enums.yaml:4604-4617) and the Weapon type filter (Enum.ItemWeaponSubclass, :5248-5270): the skill
--- lines of Classic, with English words for a client that does not name them.
 local ARMORS = { { 1, "Cloth" }, { 2, "Leather" }, { 3, "Mail" }, { 4, "Plate" } }
 local WEAPONS = { { 0, "One-Handed Axes" }, { 1, "Two-Handed Axes" }, { 4, "One-Handed Maces" }, { 5, "Two-Handed Maces" },
 	{ 7, "One-Handed Swords" }, { 8, "Two-Handed Swords" }, { 6, "Polearms" }, { 10, "Staves" }, { 13, "Fist Weapons" }, { 15, "Daggers" },
 	{ 2, "Bows" }, { 3, "Guns" }, { 18, "Crossbows" }, { 16, "Thrown" }, { 19, "Wands" }, { 20, "Fishing Poles" }, { 14, "Miscellaneous" } }
 local ARMOR_WORDS = { [1] = "Cloth", [2] = "Leather", [3] = "Mail", [4] = "Plate", [6] = "Shield", [7] = "Libram", [8] = "Idol", [9] = "Totem" }
--- Item qualities (Enum.ItemQuality) the filter offers, from.
 local QUALITIES = { { 0, "Poor" }, { 1, "Common" }, { 2, "Uncommon" }, { 3, "Rare" }, { 4, "Epic" }, { 5, "Legendary" } }
--- The sources, their words and the words of where an item is.
 local SOURCES = { { "all", "All items" }, { "bags", "Bags and bank" }, { "alts", "Other characters" } }
--- Who may wear what: the class masks (bit 2^(class ID - 1): warrior 1, paladin 2, hunter 4, rogue 8, priest 16, shaman 64, mage 128, warlock 256,
--- druid 1024) of each skill line in SkillRaceClassInfo of the client data, all its rows together, with the level the class learns it at: Plate Mail
--- (293) 3 from 40; Mail (413) 3, and 68 from 40; Leather (414) 1103; Cloth (415) 1503; Shield (433) 67; Axes (44) 79; Two-Handed Axes (172) 71;
--- Bows (45), Guns (46), Crossbows (226) and Thrown (176) 13; Maces (54) 1115; Two-Handed Maces (160) 1091; Polearms (229) 1031 from 20; Swords (43)
--- 399; Two-Handed Swords (55) 7; Staves (136) 1493; Fist Weapons (473) 1101; Daggers (173) 1501; Wands (228) 400; Fishing (356) every class. The
--- relics are the class's own (Libram 2, Idol 1024, Totem 64). An armor subclass not listed (Miscellaneous, Cosmetic) is anyone's; a weapon subclass
--- with no rows is no one's on this client.
 local ARMOR_SKILL = { [1] = { { 1503, 0 } }, [2] = { { 1103, 0 } }, [3] = { { 3, 0 }, { 68, 40 } }, [4] = { { 3, 40 } }, [6] = { { 67, 0 } },
 	[7] = { { 2, 0 } }, [8] = { { 1024, 0 } }, [9] = { { 64, 0 } } }
 local WEAPON_SKILL = { [0] = { { 79, 0 } }, [1] = { { 71, 0 } }, [2] = { { 13, 0 } }, [3] = { { 13, 0 } }, [4] = { { 1115, 0 } },
 	[5] = { { 1091, 0 } }, [6] = { { 1031, 20 } }, [7] = { { 399, 0 } }, [8] = { { 7, 0 } }, [9] = {}, [10] = { { 1493, 0 } }, [11] = {}, [12] = {},
 	[13] = { { 1101, 0 } }, [14] = { { -1, 0 } }, [15] = { { 1501, 0 } }, [16] = { { 13, 0 } }, [17] = {}, [18] = { { 13, 0 } }, [19] = { { 400, 0 } },
 	[20] = { { -1, 0 } } }
--- The fields of a record of the index when it does not say (ItemIndex.lua's FIELDS).
 local FIELDS = "id\tname\tclass\tsubclass\treq\tilvl\tquality\tclasses"
--- Best for me: the figures of G.Totals in the order each role looks for them, and their words.
 local FIGURES = { healer = { "healing", "damage", "threat" }, tank = { "threat", "damage", "healing" }, damage = { "damage", "threat", "healing" } }
 local FIGURE_WORDS = { damage = "Damage", healing = "Healing", threat = "Threat" }
--- The words of the finder. Flat UI's lines are English, as its other extra lines.
 local T = {
 	TITLE = "Item finder",
 	SEARCH = "Search items by name, or paste a link",
@@ -233,27 +110,12 @@ local T = {
 
 local IsSecret = ns.IsSecret
 
--- The state of the finder. frame: FlatUIGearSearch, made the first time it opens, and outline; bar, title, close; box (the search box) and hint;
--- choices (the filter buttons by kind), from and to (the level boxes), checks (usable and the sources); status, prev, next, best (Best for me's
--- button); list (the frame of the rows) and listTop (its distance from the top), made (every row made) and rows (those the height holds), empty
--- (the line with no results), foot; fields: outlines of the boxes and buttons; owners: frames
--- whose tooltip the finder writes; menu: the open filter menu.
--- query: the search as the controls hold it; results: what it found, sorted; key: the query they were found for; page and offset (the first row
--- shown of the page); waiting and tries: an item of the bags not loaded yet; typedAt: the last key typed; levelTyped: the player typed an upper
--- level; levelRow and usableRow: the rows of the tab as last read. parsed and byId: the index's records by type and by item ID; types: the types it
--- has; icons, subNames, colours: answers kept. requested: items the client was asked to load. best: Best for me's { on, scores, version, started }.
--- runs, faults, elapsed, pending: the part's runs, what went to the error handler, the time since the last look, an opening that waits for a fight.
--- parent: the window; body: the frame of everything under the title bar; close, fold (Minimize, its strokes in foldLines) and dock (Dock), the
--- buttons of the title bar; boxY: where the search box sits under the title bar; boxes: the search box and the level boxes (D.Levels). placed:
--- where the finder hangs now (Place: "right" or "left" of the window, else its spot); min: minimized; moving: its title bar is dragged; strata and
--- lifted: the strata it took and whether Minimize is above the boxes of the movers.
 local S = { runs = 0, faults = {}, elapsed = 0, page = 1, offset = 0, results = {}, rows = {}, made = {}, choices = {}, checks = {}, fields = {}, owners = {},
 	parsed = {}, byId = {}, icons = {}, subNames = {}, colours = {}, requested = {}, tries = 0,
 	query = { text = "", quality = 1, usable = true, sources = { all = true, bags = true, alts = true } },
 	best = { on = false, scores = {} } }
 
 local Search, Paint, PaintList, Close
--- The placing and minimizing functions, in a table of their own to keep the file under the client's count of locals.
 local D = {}
 
 local function Own(object)
@@ -269,7 +131,6 @@ local function Finite(value)
 	return ns.Finite(value)
 end
 
--- A plain string with something in it, or nil.
 local function Text(value)
 	if not IsSecret(value) and type(value) == "string" and value ~= "" then
 		return value
@@ -277,7 +138,6 @@ local function Text(value)
 	return nil
 end
 
--- A plain whole number, or nil.
 local function Num(value)
 	if Finite(value) then
 		return math.floor(value)
@@ -299,7 +159,6 @@ local function Now()
 	return ok and Finite(now) and now or 0
 end
 
--- True in a fight: InCombatLockdown's answer, a withheld one counting as a fight.
 local function Fighting()
 	if type(InCombatLockdown) ~= "function" then
 		return false
@@ -308,7 +167,6 @@ local function Fighting()
 	return ok and (IsSecret(fighting) or fighting == true)
 end
 
--- A function of a table, looked up when it is called and never kept: the other parts' files may load after this one or fail.
 local function Fn(tbl, name)
 	if type(tbl) ~= "table" or IsSecret(tbl) then
 		return nil
@@ -320,9 +178,6 @@ local function Fn(tbl, name)
 	return nil
 end
 
--- The part ---------------------------------------------------------------------------------------------------------------------------------------
-
--- A fault goes to the game's error handler once for each thing that failed.
 local function Report(what, err)
 	if S.faults[what] then
 		return
@@ -334,7 +189,6 @@ local function Report(what, err)
 	end
 end
 
--- The first answer of a function of another part, or nil when it is missing or raises; its fault goes to the error handler once.
 local function Ask(tbl, name, ...)
 	local fn = Fn(tbl, name)
 	if not fn then
@@ -352,8 +206,6 @@ local function Step(_, fn, ...)
 	return fn(...)
 end
 
--- Runs fn as the part of the chat module, each run counted by a number of its own (ns.EachPart counts a fault once for each first argument and stops
--- the part at the third, Core.lua:2203-2224). A part that stopped closes the finder.
 local function Run(fn, ...)
 	S.runs = S.runs + 1
 	local ok, err = ns.EachPart(KEY, PART, Step, S.runs, fn, ...)
@@ -366,7 +218,6 @@ local function Run(fn, ...)
 	return ok == true
 end
 
--- True while the finder may show: the chat module registered, on and running, and neither this part nor the window's stopped.
 local function Allowed()
 	return type(ns.modules) == "table" and ns.modules[KEY] ~= nil and ns.Enabled(KEY) and not ns.PartStopped(KEY, PART)
 		and not ns.PartStopped(KEY, "gear window")
@@ -383,8 +234,6 @@ local function Refusal()
 	return T.OFF
 end
 
--- The game -----------------------------------------------------------------------------------------------------------------------------------------
-
 local function Client(space, name)
 	if space then
 		return Fn(_G[space], name)
@@ -393,7 +242,6 @@ local function Client(space, name)
 	return type(fn) == "function" and fn or nil
 end
 
--- The player's level and the bit of their class in a class mask, or nil while the game does not say.
 local function PlayerLevel()
 	local level = Client(nil, "UnitLevel")
 	if level then
@@ -416,7 +264,6 @@ local function ClassBit()
 	return nil
 end
 
--- C_Item.GetItemInfo's name, whole link, quality, item level and required level, or nil while the client has not loaded the item.
 local function ItemInfo(link)
 	local info = Client("C_Item", "GetItemInfo")
 	if not info then
@@ -429,7 +276,6 @@ local function ItemInfo(link)
 	return name, Text(whole), Num(quality), Num(ilvl), Num(req)
 end
 
--- Asks the client once a session to load an item.
 local function Want(id)
 	if not id or S.requested[id] then
 		return
@@ -441,7 +287,6 @@ local function Want(id)
 	end
 end
 
--- The instant info of an item: its equip location, icon, class and subclass, which never wait for a load.
 local function Instant(id)
 	local instant = Client("C_Item", "GetItemInfoInstant")
 	if not instant then
@@ -464,7 +309,6 @@ local function Icon(id)
 	return icon or nil
 end
 
--- The inventory type of an item: from its equip location, else C_Item.GetItemInventoryTypeByID.
 local function InvTypeOf(id, equip)
 	local invType = equip and EQUIP[equip] or nil
 	if invType then
@@ -480,7 +324,6 @@ local function InvTypeOf(id, equip)
 	return nil
 end
 
--- The client's name of a subclass, else the English one.
 local function SubName(class, subclass, fallback)
 	local key = tostring(class) .. ":" .. tostring(subclass)
 	local name = S.subNames[key]
@@ -496,7 +339,6 @@ local function SubName(class, subclass, fallback)
 	return name or nil
 end
 
--- Red, green and blue of an item quality: the game's own colour of it, else C_Item.GetItemQualityColor's, else white.
 local function QualityColour(quality)
 	if not Finite(quality) then
 		return PLAIN
@@ -529,7 +371,6 @@ local function QualityColour(quality)
 	return colour
 end
 
--- The good and bad colours of the tooltips: SpellModel's style (M.Fmt.Style), else the game's.
 local function Tone(which)
 	local fmt = type(ns.SpellModel) == "table" and ns.SpellModel.Fmt
 	local style = type(fmt) == "table" and fmt.Style
@@ -544,7 +385,6 @@ local function Tone(which)
 	return which == "good" and GOOD or BAD
 end
 
--- A change as a share: SpellModel's M.Fmt.Percent, else one decimal with its sign.
 local function Percent(x)
 	local fmt = type(ns.SpellModel) == "table" and ns.SpellModel.Fmt
 	local percent = Fn(fmt, "Percent")
@@ -561,7 +401,6 @@ local function Percent(x)
 	return (value > 0 and "+" or "-") .. ("%.1f"):format(math.abs(value)) .. "%"
 end
 
--- A whole number with its thousands broken by commas.
 local function Big(n)
 	local text = tostring(math.floor(n))
 	local head, digits = text:match("^(-?)(%d+)$")
@@ -572,7 +411,6 @@ local function Big(n)
 	return head .. digits
 end
 
--- True while the player pressed the modifier of a kind of click (IsModifiedClick: CHATLINK, DRESSUP).
 local function Modified(kind)
 	local fn = Client(nil, "IsModifiedClick")
 	if not fn then
@@ -582,8 +420,6 @@ local function Modified(kind)
 	return ok and not IsSecret(held) and held == true
 end
 
--- The index ----------------------------------------------------------------------------------------------------------------------------------------
-
 local function Index()
 	local index = ns.ItemIndex
 	if type(index) == "table" and not IsSecret(index) and type(index.DATA) == "table" then
@@ -592,7 +428,6 @@ local function Index()
 	return nil
 end
 
--- The place of each field of a record, by the index's FIELDS.
 local function Positions()
 	if S.positions then
 		return S.positions
@@ -608,8 +443,6 @@ local function Positions()
 	return at
 end
 
--- The records of one inventory type, parsed the first time a search needs them: { id, name, lower, invType, class, subclass, req, ilvl, quality,
--- classes, link, source }. A line that does not parse is skipped.
 local function Parse(invType)
 	local parsed = S.parsed[invType]
 	if parsed then
@@ -647,7 +480,6 @@ local function Parse(invType)
 	return parsed
 end
 
--- Every inventory type the index has, in order.
 local function Types()
 	if S.types then
 		return S.types
@@ -668,7 +500,6 @@ local function Types()
 	return list
 end
 
--- The index's record of an item, or nil.
 local function Known(id, invType)
 	if not id then
 		return nil
@@ -679,9 +510,6 @@ local function Known(id, invType)
 	return S.byId[id]
 end
 
--- Matching ---------------------------------------------------------------------------------------------------------------------------------------
-
--- True when a class mask holds a class's bit; -1 and 0 are any class.
 local function Has(mask, bit)
 	if not Finite(mask) or mask <= 0 then
 		return true
@@ -689,8 +517,6 @@ local function Has(mask, bit)
 	return math.floor(mask / bit) % 2 == 1
 end
 
--- Whether the player's class can wear an item: its classes, then the armor or weapon skill (ARMOR_SKILL, WEAPON_SKILL) at the higher of the
--- player's level and the item's required level.
 local function Usable(rec, ctx)
 	local bit = ctx.bit
 	if not bit then
@@ -712,7 +538,6 @@ local function Usable(rec, ctx)
 	return false
 end
 
--- The Slot filter of a key (or an inventory type), or nil for any.
 local function SlotOf(key)
 	if Finite(key) then
 		return { types = { [key] = true } }
@@ -729,7 +554,6 @@ local function SlotOf(key)
 	return nil
 end
 
--- What a search reads beside the query: its words, an item ID pasted, the slot, the player's class and level, the types to look through.
 local function Context(q)
 	local ctx = { words = {}, level = PlayerLevel(), bit = ClassBit() }
 	local text = q.text or ""
@@ -741,7 +565,6 @@ local function Context(q)
 	end
 	ctx.slot = SlotOf(q.slot)
 	if ctx.id then
-		-- A pasted item is looked for in its own type, whatever the Slot filter says.
 		local invType = InvTypeOf(ctx.id, (Instant(ctx.id)))
 		ctx.types = invType and { invType } or Types()
 	elseif ctx.slot and ctx.slot.list then
@@ -754,7 +577,6 @@ local function Context(q)
 	return ctx
 end
 
--- Whether a record passes the query. An item ID pasted passes alone; a level or quality not known yet passes.
 local function Matches(rec, q, ctx)
 	if ctx.id then
 		return rec.id == ctx.id
@@ -793,7 +615,6 @@ local function Matches(rec, q, ctx)
 	return true
 end
 
--- The order of the results: item level, required level and quality, the highest first, then the name, the ID and the source.
 local SOURCE_ORDER = { bags = 1, alts = 2, all = 3 }
 local function Before(a, b)
 	if (a.ilvl or 0) ~= (b.ilvl or 0) then
@@ -817,9 +638,6 @@ local function Before(a, b)
 	return (a.where or "") < (b.where or "")
 end
 
--- The sources -------------------------------------------------------------------------------------------------------------------------------------
-
--- Bags' data (BagsData.lua), or nil when Bags did not load it.
 local function BagsData()
 	local bags = ns.Bags
 	local data = type(bags) == "table" and not IsSecret(bags) and bags.Data or nil
@@ -829,8 +647,6 @@ local function BagsData()
 	return nil
 end
 
--- A record of Bags (Data.Item) as a result, or nil for one that is no weapon or armor to wear. Its level, item level and classes are the index's
--- record of the item, else the client's; one the client has not loaded waits.
 local function Owned(r, source, where)
 	local id = Num(r.id)
 	if not id then
@@ -872,7 +688,6 @@ local function Owned(r, source, where)
 	return rec
 end
 
--- Calls fn with each record of a character's bags or bank (key nil: this character).
 local function EachSlot(data, key, which, fn)
 	local ok, list = pcall(data.Containers, which, key)
 	if not ok or type(list) ~= "table" then
@@ -890,7 +705,6 @@ local function EachSlot(data, key, which, fn)
 	end
 end
 
--- The other characters Bags keeps: { key, name } each.
 local function Others(data)
 	local list = {}
 	local characters = Fn(data, "Characters")
@@ -909,7 +723,6 @@ local function Others(data)
 	return list
 end
 
--- An item the index does not have, pasted as a link or item:ID, from the client.
 local function FromClient(id, link)
 	local equip, _, class, subclass = Instant(id)
 	local invType = InvTypeOf(id, equip)
@@ -928,10 +741,6 @@ local function FromClient(id, link)
 	return rec
 end
 
--- The search ---------------------------------------------------------------------------------------------------------------------------------------
-
--- A query with its fields checked: { text, slot, armor, weapon, minLevel, maxLevel, quality, usable, sources }; sources a set of "all", "bags" and
--- "alts" (all three when none is given).
 local ARMOR_KEYS = { cloth = 1, leather = 2, mail = 3, plate = 4 }
 local function Normalize(query)
 	local q = type(query) == "table" and query or {}
@@ -956,7 +765,6 @@ local function Normalize(query)
 	return out
 end
 
--- The results of a query, sorted, and whether an item of them waits for the client.
 local function Find(query)
 	local q = Normalize(query)
 	local ctx = Context(q)
@@ -1010,8 +818,6 @@ local function Find(query)
 	return out, waiting
 end
 
--- The look -----------------------------------------------------------------------------------------------------------------------------------------
-
 local function RGB(path, r, g, b)
 	local ok, cr, cg, cb = pcall(ns.Colour, path)
 	if ok and Finite(cr) and Finite(cg) and Finite(cb) then
@@ -1048,7 +854,6 @@ local function Texture(parent, layer, sub)
 	return Own(parent:CreateTexture(nil, layer or "ARTWORK", nil, sub or 0))
 end
 
--- A stroke between two points, each from an anchor point of the frame, as the window draws its cross (GearWindow.lua, Stroke).
 local function Stroke(frame, layer, point, x1, y1, x2, y2)
 	local line = Own(frame:CreateLine(nil, layer, nil, 2))
 	line:SetThickness(1.5)
@@ -1057,14 +862,12 @@ local function Stroke(frame, layer, point, x1, y1, x2, y2)
 	return line
 end
 
--- An outline of a box or button of the finder, filled in Button and slot colour.
 local function Field(frame)
 	local outline = ns.SetOutlineArea(ns.Outline(frame, frame, true), "windows")
 	S.fields[#S.fields + 1] = outline
 	return outline
 end
 
--- Everything the rows of the Windows page and the general backdrop colour decide.
 local function PaintLook()
 	if not S.frame then
 		return
@@ -1106,8 +909,6 @@ local function PaintLook()
 	end
 end
 
--- Tooltips -----------------------------------------------------------------------------------------------------------------------------------------
-
 local function Tooltip()
 	local tip = GameTooltip
 	if type(tip) == "table" and not IsSecret(tip) and not ns.Forbidden(tip) then
@@ -1116,7 +917,6 @@ local function Tooltip()
 	return nil
 end
 
--- Hides the tooltip only while that frame of the finder owns it.
 local function Untip(owner)
 	local tip = Tooltip()
 	if not tip then
@@ -1128,7 +928,6 @@ local function Untip(owner)
 	end
 end
 
--- A plain tooltip of a control: a title and a wrapped line, never in a fight.
 local function Say(owner, title, line)
 	local tip = Tooltip()
 	if not tip or Fighting() then
@@ -1152,8 +951,6 @@ local function Tipped(frame, title, line)
 	end)
 end
 
--- The menu of a filter ------------------------------------------------------------------------------------------------------------------------------
-
 local function CloseMenu()
 	local menu = S.menu
 	if menu and menu.frame:IsShown() then
@@ -1172,7 +969,6 @@ local function MenuFrame()
 	frame:Hide()
 	local menu = { frame = frame, lines = {} }
 	menu.outline = ns.SetOutlineArea(ns.Outline(frame, frame), "windows")
-	-- A press anywhere but on the menu and the button that opened it closes the menu; heard only while it shows.
 	menu.listener = Own(CreateFrame("Frame", nil, frame))
 	menu.listener:SetScript("OnEvent", function()
 		local over = frame:IsMouseOver() or (menu.owner and menu.owner:IsMouseOver())
@@ -1216,8 +1012,6 @@ local function MenuLine(menu, index)
 	return line
 end
 
--- Opens a menu under a button: items { { value, words, colour } }, the chosen value lit, pick(value) for a line clicked. Pressing the button of the open
--- menu again closes it.
 local function OpenMenu(owner, items, chosen, pick)
 	local menu = MenuFrame()
 	if menu.frame:IsShown() and menu.owner == owner then
@@ -1254,9 +1048,6 @@ local function OpenMenu(owner, items, chosen, pick)
 	menu.frame:Show()
 end
 
--- The filters -------------------------------------------------------------------------------------------------------------------------------------
-
--- The choices of each filter button: its items for the menu, the query field it sets, and the words of its value.
 local function SlotItems()
 	local items = { { false, T.ANY } }
 	for _, slot in ipairs(SLOTS) do
@@ -1296,7 +1087,6 @@ local KINDS = {
 	quality = { items = QualityItems, field = "quality", words = T.QUALITY, tip = T.QUALITY_TIP, title = "Quality", any = 0 },
 }
 
--- The words of a filter's value.
 local function ChoiceWords(kind)
 	local def = KINDS[kind]
 	local value = S.query[def.field]
@@ -1315,7 +1105,6 @@ local function PaintChoices()
 	end
 end
 
--- Sets a filter, false or nil being Any; Armor and Weapon type exclude each other.
 local function SetChoice(kind, value)
 	local def = KINDS[kind]
 	if value == false then
@@ -1329,7 +1118,6 @@ local function SetChoice(kind, value)
 	Search(true)
 end
 
--- The next or the one before of a filter's values, for the mouse wheel.
 local function StepChoice(kind, delta)
 	local def = KINDS[kind]
 	local items = def.items()
@@ -1357,7 +1145,6 @@ local function MakeChoice(parent, kind, width)
 	local text = Label(button)
 	text:SetPoint("LEFT", button, "LEFT", 6, 0)
 	text:SetPoint("RIGHT", button, "RIGHT", -16, 0)
-	-- A small v at the right says the button opens a menu.
 	S.strokes[#S.strokes + 1] = Stroke(button, "OVERLAY", "RIGHT", -12, 2, -8.5, -1.5)
 	S.strokes[#S.strokes + 1] = Stroke(button, "OVERLAY", "RIGHT", -8.5, -1.5, -5, 2)
 	button:SetScript("OnClick", function(self, mouse)
@@ -1383,7 +1170,6 @@ local function MakeChoice(parent, kind, width)
 	return button
 end
 
--- A check box of its own: a box, its fill while on, and its words; get() reads it and set(on) writes it.
 local function MakeCheck(parent, key, words, tip, get, set)
 	local button = Own(CreateFrame("Button", nil, parent))
 	button:SetHeight(L.FIELD)
@@ -1427,7 +1213,6 @@ local function PaintChecks()
 	end
 end
 
--- An EditBox of the finder's own, in the look of a field; it gives the keyboard back on Enter, Escape and when it hides.
 local function MakeBox(parent, width, numeric)
 	local box = Own(CreateFrame("EditBox", nil, parent))
 	box:SetSize(width, L.FIELD)
@@ -1457,7 +1242,6 @@ local function BoxText(box)
 	return ok and Text(text) or ""
 end
 
--- The first upper level: the player's level + 5 with Level filter: Near your level, none with Any.
 local function DefaultTo()
 	if Opt("gearFindLevel") == "any" then
 		return ""
@@ -1466,7 +1250,6 @@ local function DefaultTo()
 	return level and tostring(math.floor(level) + 5) or ""
 end
 
--- The rows of the tab the finder starts from: Level filter and Only what you can wear, taken again when the row changes, also over what the player set.
 local function TakeRows()
 	local levelRow, usableRow = Opt("gearFindLevel"), Opt("gearFindUsable")
 	if levelRow ~= S.levelRow then
@@ -1483,9 +1266,6 @@ local function TakeRows()
 	end
 end
 
--- The list of results -----------------------------------------------------------------------------------------------------------------------------
-
--- The results of the page shown: in Best for me's order once it has worked them out, else in the search's.
 local function PageItems()
 	local first = (S.page - 1) * L.PER_PAGE + 1
 	local items = {}
@@ -1519,7 +1299,6 @@ local function Pages()
 	return math.max(1, math.ceil(#S.results / L.PER_PAGE))
 end
 
--- The words under an item's name: its slot and type, and where it is when it is not from the index.
 local function InfoLine(rec)
 	local parts = { TYPE_NAMES[rec.invType] or "" }
 	local sub
@@ -1589,7 +1368,6 @@ function PaintList()
 	S.empty:SetShown(#items == 0)
 end
 
--- The status line: the count and the page, else what is missing; Best for me's progress after it.
 local function StatusText()
 	local count = #S.results
 	local words = count == 1 and T.COUNT_ONE or T.COUNT:format(Big(count))
@@ -1638,9 +1416,6 @@ function Paint()
 	PaintList()
 end
 
--- Best for me --------------------------------------------------------------------------------------------------------------------------------------
-
--- The chosen lines the player knows, as the item tooltips pass them (GearLines.lua:1663-1671).
 local function KnownLines()
 	local list = Ask(ns, "GearChosen")
 	if type(list) ~= "table" or IsSecret(list) then
@@ -1665,12 +1440,10 @@ local function Role()
 	return "damage"
 end
 
--- What Best for me's figures were worked out from: SpellModel's version and the list's.
 local function Version()
 	return tostring(Ask(ns.SpellModel, "Version")) .. "|" .. tostring(Ask(ns, "GearListVersion"))
 end
 
--- The Overall change of an item for the player: the best candidate slot's figure of the role, { pct, figure, estimate }, else false.
 local function Score(link, lines, role)
 	local gear = ns.GearModel
 	local compare, totals = Fn(gear, "Compare"), Fn(gear, "Totals")
@@ -1709,7 +1482,6 @@ local function Score(link, lines, role)
 	return best
 end
 
--- Starts Best for me on the page shown: its items are worked out at the next looks.
 local function BestStart()
 	local best = S.best
 	best.on, best.done, best.figure = true, false, nil
@@ -1718,7 +1490,6 @@ local function BestStart()
 	best.count, best.total = 0, 0
 end
 
--- A few items of the page at a look, out of combat: each once the client has it, or false after LOAD seconds; the page is sorted when all are done.
 local function BestStep()
 	local best = S.best
 	if not best.on then
@@ -1731,7 +1502,6 @@ local function BestStep()
 	if best.done then
 		return
 	end
-	-- G.Compare works nothing out in a fight (GearModel.lua's G.Compare): the status line says Best for me waits.
 	local fighting = Fighting()
 	if fighting ~= best.fighting then
 		best.fighting = fighting
@@ -1797,9 +1567,6 @@ local function BestToggle()
 	Paint()
 end
 
--- Clicks --------------------------------------------------------------------------------------------------------------------------------------------
-
--- The whole link of an item for the chat line, or nil while the client has not loaded it (asked for).
 local function WholeLink(rec)
 	if rec.link:find("|H", 1, true) then
 		return rec.link
@@ -1865,7 +1632,6 @@ local function RowClick(row, mouse)
 	end
 end
 
--- The item's own tooltip (SetHyperlink, which the item tooltips of GearLines.lua add to) and what a click does, never in a fight.
 local function RowTip(row)
 	local rec, tip = row.rec, Tooltip()
 	if not rec or not tip or Fighting() then
@@ -1904,9 +1670,6 @@ local function Turn(step)
 	end
 end
 
--- Searching ---------------------------------------------------------------------------------------------------------------------------------------
-
--- The query as the controls hold it.
 local function ReadControls()
 	local q = S.query
 	q.text = S.box and BoxText(S.box) or q.text
@@ -1924,7 +1687,6 @@ local function QueryKey(q)
 		tostring(q.quality), tostring(q.usable), table.concat(sources, ",") }, "|")
 end
 
--- Searches again with what the controls hold. A new query starts on its first page; the same one (an item loaded since) keeps the page.
 function Search(fresh)
 	if not S.frame then
 		return
@@ -1949,9 +1711,6 @@ function Search(fresh)
 	Paint()
 end
 
--- The frame ---------------------------------------------------------------------------------------------------------------------------------------
-
--- The title bar: the title, Dock, Minimize and the cross. A drag of it moves the finder out of a fight (D.DragStart), a right-click docks it (D.Dock).
 local function MakeBar(frame)
 	local bar = Own(CreateFrame("Frame", nil, frame))
 	bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
@@ -1970,7 +1729,6 @@ local function MakeBar(frame)
 			Run(D.Dock)
 		end
 	end)
-	-- A drag that the finder's hiding cut short ends where it was let go.
 	bar:SetScript("OnHide", function()
 		if S.moving then
 			pcall(D.DragStop)
@@ -1999,11 +1757,8 @@ local function MakeBar(frame)
 	S.barRule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -L.PAD, -L.BAR)
 end
 
--- The search box's cross and its recent searches (0.5.39), as the bag search box has them (BagsSearch.lua): the searches of this session, newest
--- first, at most MOST, none under SHORT letters, in memory alone; at, the one Up brought back (0 for what was typed, typed).
 local RECENT = { list = {}, at = 0, typed = nil, MOST = 5, SHORT = 2, CROSS = 16 }
 
--- A search kept: Enter in the box, and the cross clearing it.
 local function Remember(text)
 	local search = type(text) == "string" and text:match("^%s*(.-)%s*$") or ""
 	if #search < RECENT.SHORT then
@@ -2021,8 +1776,6 @@ local function Remember(text)
 	end
 end
 
--- Up and Down in the box step through the recent searches, as the bag search box's Recall: Up the last search and the one before, Down forward
--- again to what was typed before the first Up; a search that is the text now is stepped over. The finder searches again as typing settles.
 local function Recall(box, key)
 	local list = RECENT.list
 	if (key ~= "UP" and key ~= "DOWN") or #list == 0 then
@@ -2060,14 +1813,12 @@ end
 local function MakeSearch(frame, y)
 	local box = MakeBox(frame, L.INNER, false)
 	box:SetPoint("TOPLEFT", frame, "TOPLEFT", L.PAD, y)
-	-- The text keeps clear of the cross at the right.
 	box:SetTextInsets(6, RECENT.CROSS + 6, 0, 0)
 	S.box = box
 	S.hint = Label(box)
 	S.hint:SetPoint("LEFT", box, "LEFT", 6, 0)
 	S.hint:SetPoint("RIGHT", box, "RIGHT", -6, 0)
 	S.hint:SetText(T.SEARCH)
-	-- The cross: shown while a search is typed, a click clears it (kept as a recent search) and the finder searches again.
 	local cross = Own(CreateFrame("Button", nil, box))
 	cross:SetSize(RECENT.CROSS, RECENT.CROSS)
 	cross:SetPoint("RIGHT", box, "RIGHT", -2, 0)
@@ -2094,7 +1845,6 @@ local function MakeSearch(frame, y)
 		Hint()
 		if typed then
 			S.typedAt = Now()
-			-- Up starts from what is typed again.
 			RECENT.at = 0
 		end
 	end)
@@ -2126,7 +1876,6 @@ local function MakeFilters(frame, y)
 	weapon:SetPoint("TOPLEFT", slot, "BOTTOMLEFT", 0, -L.GAP)
 	local quality = MakeChoice(frame, "quality", L.HALF)
 	quality:SetPoint("TOPLEFT", weapon, "TOPRIGHT", L.GAP, 0)
-	-- Level from and to, and Only what you can wear.
 	S.levelLabel = Label(frame)
 	S.levelLabel:SetPoint("TOPLEFT", weapon, "BOTTOMLEFT", 0, -L.GAP - 4)
 	S.levelLabel:SetText(T.LEVEL)
@@ -2155,7 +1904,6 @@ local function MakeFilters(frame, y)
 		S.query.usable = on
 	end)
 	usable:SetPoint("TOPLEFT", quality, "BOTTOMLEFT", 0, -L.GAP)
-	-- The sources, side by side.
 	local left = L.PAD
 	for _, source in ipairs(SOURCES) do
 		local key = source[1]
@@ -2169,7 +1917,6 @@ local function MakeFilters(frame, y)
 	end
 end
 
--- A small button of text: the arrows and Best for me.
 local function MakeTextButton(frame, words, width, tip, click)
 	local button = Own(CreateFrame("Button", nil, frame))
 	button:SetSize(width, L.FIELD)
@@ -2211,7 +1958,6 @@ local function MakeStatus(frame, y)
 	S.rule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -L.PAD, y - L.FIELD - L.GAP)
 end
 
--- One row of results: a button that takes a click of either side, its light, the icon, name and words, and the right columns.
 local function MakeRow(list)
 	local button = Own(CreateFrame("Button", nil, list))
 	button:SetHeight(L.ROW)
@@ -2265,8 +2011,6 @@ local function MakeRow(list)
 	return row
 end
 
--- Rows for the height of the list, worked out from the finder's height (the client may not have laid the list out yet): as many as fit, made as
--- needed, kept when the list shrinks (S.made) and placed from the top.
 local function LayoutRows()
 	local height = (S.height or L.MIN_HEIGHT) - S.listTop - L.PAD - L.FOOT
 	local count = math.max(1, math.floor(height / L.ROW))
@@ -2314,7 +2058,6 @@ local function MakeList(frame, y)
 	pcall(S.foot.SetJustifyV, S.foot, "BOTTOM")
 end
 
--- The finder's height: the window's, at least MIN_HEIGHT, or its title bar's while it is minimized; its strata, and where it hangs (D.Place).
 local function Fit()
 	local parent = S.parent
 	local ok, height = pcall(parent.GetHeight, parent)
@@ -2329,7 +2072,6 @@ local function Fit()
 	D.Place()
 end
 
--- The looks while the finder shows: whether it may run, its height, typing that settled, items of the bags that loaded and Best for me.
 local function Look()
 	Fit()
 	local now = Now()
@@ -2352,8 +2094,6 @@ local function Showing()
 	Search(true)
 end
 
--- Whatever hid the finder: a drag of its title bar ends where it was let go, its box in the movers goes, the menu closes, its tooltips go, and when
--- the window hid it the finder stays closed until it is opened again. Plain code, so it also runs once the part has stopped.
 local function Hiding()
 	if S.moving then
 		pcall(D.DragStop)
@@ -2370,9 +2110,6 @@ local function Hiding()
 	end
 end
 
--- The frame and everything in it, once, on UIParent beside the window (parent), minimized as the character left it. Everything under the title bar
--- is on the body, which minimizing hides; the search box is on the finder, so it can go on the title bar. Not toplevel, and the levels of its boxes
--- follow its own at each look (D.Strata, D.Levels).
 local function Make(parent)
 	local frame = Own(CreateFrame("Frame", NAME, UIParent))
 	S.parent = parent
@@ -2409,8 +2146,6 @@ local function Make(parent)
 		S.fade = nil
 		Hiding()
 	end)
-	-- It closes once the module or the part is off, and when the window is not shown (it closes the finder as it hides, GearWindow.lua's Hiding).
-	-- It fades in over FADE_IN as it opens.
 	frame:SetScript("OnUpdate", function(_, elapsed)
 		local step = Finite(elapsed) and elapsed or 0
 		if S.fade then
@@ -2442,7 +2177,6 @@ local function Make(parent)
 	D.Place()
 end
 
--- The window the finder docks to: FlatUIGear, a frame of Flat UI's own, or nil before GearWindow.lua made it.
 local function Window()
 	local frame = _G[PARENT]
 	if type(frame) == "table" and not IsSecret(frame) and ns.Own[frame] then
@@ -2456,11 +2190,6 @@ local function WindowShown(frame)
 	return ok and shown == true
 end
 
--- Placing and minimizing ---------------------------------------------------------------------------------------------------------------------------
-
--- What is kept for the character (FlatUICharDB.gearFinder, ns.Character): w and h, the size of the finder's box in the movers (BoxSize of
--- Movers.lua), and min (minimized). Its spot is the movers' (D.Free); the one 0.5.20 kept here (free, x and y) is dropped. Made when make is true;
--- else nil without.
 function D.Record(make)
 	local char = type(ns.Character) == "function" and ns.Character() or nil
 	if type(char) ~= "table" or IsSecret(char) then
@@ -2478,8 +2207,6 @@ function D.Record(make)
 	return kept
 end
 
--- The handle of the finder in the movers drawn again, so its box has the finder's place and size, or goes while the finder is closed (the gate,
--- ns.GearSearchShown). Not while its title bar is dragged: the drop saves the spot and draws it then. A drag of its box the movers leave alone.
 function D.Handle()
 	if S.moving then
 		return
@@ -2491,7 +2218,6 @@ function D.Handle()
 	end
 end
 
--- The size of the box kept for the character: the title bar's height while minimized, else the finder's.
 function D.Keep()
 	local kept = D.Record(true)
 	local height = S.min and L.BAR or (S.height or L.MIN_HEIGHT)
@@ -2501,8 +2227,6 @@ function D.Keep()
 	end
 end
 
--- The finder's spot in the movers while one is saved (ns.MoverSaved, ns.MoverSpot), else nil: its top left corner, in the units of UIParent from
--- the screen's bottom left.
 function D.Free()
 	local spot = Fn(ns, "MoverSpot")
 	if not spot or Ask(ns, "MoverSaved", NAME) ~= true then
@@ -2515,7 +2239,6 @@ function D.Free()
 	return nil
 end
 
--- The width and height of UIParent, or nil.
 function D.Screen()
 	local okW, width = pcall(UIParent.GetWidth, UIParent)
 	local okH, height = pcall(UIParent.GetHeight, UIParent)
@@ -2525,7 +2248,6 @@ function D.Screen()
 	return nil
 end
 
--- Left, bottom, width and height of a frame in the units of UIParent (GetRect and GetEffectiveScale), or nil.
 function D.Rect(frame)
 	local ok, left, bottom, width, height = pcall(frame.GetRect, frame)
 	local okScale, scale = pcall(frame.GetEffectiveScale, frame)
@@ -2538,8 +2260,6 @@ function D.Rect(frame)
 	return left * k, bottom * k, width * k, height * k
 end
 
--- The side of the window the finder hangs on while docked (header): its right while the screen has room for the finder there, else its left while
--- that side has room, else its right, where the clamp to the screen keeps it in sight over the window's edge.
 function D.Side(left, right, screen)
 	if Finite(left) and Finite(right) and Finite(screen) and right + L.DOCK + L.WIDTH > screen and left - L.DOCK - L.WIDTH >= 0 then
 		return "left"
@@ -2547,8 +2267,6 @@ function D.Side(left, right, screen)
 	return "right"
 end
 
--- Where the top left corner of a docked finder is, in the units of UIParent from its bottom left: beside the window while it shows, else beside
--- the window's spot in the movers (ns.MoverSpot and the BoxSize of its entry), on the screen. Nil when neither says.
 function D.Hang()
 	local left, bottom, width, height
 	local window = Window()
@@ -2579,8 +2297,6 @@ function D.Hang()
 	return x, bottom + height
 end
 
--- Hangs the finder from its spot in the movers while one is saved (D.Free), else at the window's edge, where it moves with the window. Not while
--- it is dragged.
 function D.Place()
 	local frame, window = S.frame, S.parent
 	if not frame or S.moving then
@@ -2610,14 +2326,8 @@ function D.Place()
 	D.Bar()
 end
 
--- The strata above each strata a window can have, never above FULLSCREEN, so the finder's menus (FULLSCREEN_DIALOG) stay above it.
 D.OVER = { BACKGROUND = "LOW", LOW = "MEDIUM", MEDIUM = "HIGH", HIGH = "DIALOG", DIALOG = "FULLSCREEN" }
 
--- The finder lies one strata above the window's (header, Strata and levels): HIGH over MEDIUM and FULLSCREEN over DIALOG (GearWindow.lua's Raise),
--- at its own level (L.LEVEL), so no window of the window's strata, which the game raises at a click, lies over it. In the window's strata while
--- the options window (HIGH, ns.PanelShown) shows over a window in MEDIUM, under it as its window is; MEDIUM while the movers are open
--- (ns.MoverKit.IsOpen), under their boxes (HIGH, Movers.lua:1984), so it covers none of them; Minimize then sits above them, so the finder can be
--- minimized out of their way. The menu keeps its own strata. Then the levels of its boxes (D.Levels).
 function D.Strata()
 	local kit = ns.MoverKit
 	local open = type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true
@@ -2646,7 +2356,6 @@ function D.Strata()
 	D.Levels()
 end
 
--- A frame of the finder at a level, set only when it is not there.
 function D.Level(frame, level)
 	local ok, now = pcall(frame.GetFrameLevel, frame)
 	if not (ok and now == level) then
@@ -2654,11 +2363,6 @@ function D.Level(frame, level)
 	end
 end
 
--- The levels of the finder's own frames from its level as it is now, at each look: the search box and the level fields L.ABOVE over it, over the
--- title bar and the body (+ 1), their buttons (+ 2), the rows (+ 3) and the Compare gear button (20 and its outline 21, in the same strata), so
--- the box takes its click on the title bar of a minimized finder too, also where it meets that button; Minimize one over the title bar, or L.LIFT
--- while it is above the boxes of the movers. The game sets the levels of a frame's children again when the frame's level changes, so a level set
--- once does not last (header).
 function D.Levels()
 	local ok, level = pcall(S.frame.GetFrameLevel, S.frame)
 	if not (ok and Finite(level)) then
@@ -2670,8 +2374,6 @@ function D.Levels()
 	D.Level(S.fold, S.lifted and L.LIFT or level + 2)
 end
 
--- The title bar as the finder is: Dock while it hangs from a spot of its own, Minimize's mark (a bar, or a square while minimized), and the search
--- box under the title bar, or on it while minimized where it leaves its least width between the title and the buttons, else hidden.
 function D.Bar()
 	if not S.fold then
 		return
@@ -2704,7 +2406,6 @@ function D.Bar()
 	end
 end
 
--- Minimizes the finder to its title bar, or opens it again; kept for the character, and its box in the movers takes that size.
 function D.Collapse(on)
 	S.min = on == true
 	local kept = D.Record(true)
@@ -2722,8 +2423,6 @@ function D.Collapse(on)
 	D.Keep()
 end
 
--- Docks the finder at the window's edge again: its spot is forgotten as a reset of its box in the movers forgets it (ns.MoverKit.Restore), so
--- their Undo and Reset all know it.
 function D.Dock()
 	local kit = ns.MoverKit
 	if type(kit) == "table" and type(kit.Restore) == "function" then
@@ -2734,7 +2433,6 @@ function D.Dock()
 	D.Handle()
 end
 
--- A drag of the title bar, out of a fight (StartMoving, WL/uiobjects.yaml:4797), as the window's title bar drags the window.
 function D.DragStart()
 	if S.moving or not S.frame or Fighting() then
 		return
@@ -2745,9 +2443,6 @@ function D.DragStart()
 	S.moving = true
 end
 
--- The finder was let go (StopMovingOrSizing, :4813, with SetUserPlaced, :4778, so the client keeps no place of its own): a box of its size, its
--- top left corner at the finder's, is saved as its spot in the movers (ns.MoverKit.Commit), as a drop of its box saves one, so their Undo and Reset
--- all know it, and the finder hangs from that spot (ns.GearSearchMoved).
 function D.DragStop()
 	if not S.moving then
 		return
@@ -2767,7 +2462,6 @@ function D.DragStop()
 	D.Handle()
 end
 
--- Dock, Minimize and their place on the title bar, left of the cross; Minimize's marks are a bar and a square, drawn as the cross is.
 function D.MakeButtons(bar)
 	local fold = Own(CreateFrame("Button", nil, bar))
 	fold:SetSize(L.CLOSE, L.CLOSE)
@@ -2798,7 +2492,6 @@ function D.MakeButtons(bar)
 	S.dock = dock
 end
 
--- Opens the finder, the window first. When the window waits for the end of a fight, the finder waits for it too.
 local function Open()
 	local parent = Window()
 	if not (parent and WindowShown(parent)) then
@@ -2838,7 +2531,6 @@ local function Open()
 	end
 end
 
--- Closes the finder. Plain code, so it also works once the part has stopped.
 function Close()
 	S.pending = false
 	CloseMenu()
@@ -2847,10 +2539,6 @@ function Close()
 	end
 end
 
--- The contract (spec 0.5.20) -----------------------------------------------------------------------------------------------------------------------
-
--- Opens or closes the finder (the window's Find button). True when it opened, closed or waits for the end of a fight; false, with a line that says
--- why, while Chat and tooltips or the part is off.
 function ns.GearSearchToggle()
 	if S.pending then
 		S.pending = false
@@ -2867,7 +2555,6 @@ function ns.GearSearchToggle()
 	return Run(Open)
 end
 
--- True while the finder shows: the gate of its box in the movers (Movers.lua's entry FlatUIGearSearch), so a closed finder has none.
 function ns.GearSearchShown()
 	local frame = S.frame
 	if not frame then
@@ -2877,8 +2564,6 @@ function ns.GearSearchShown()
 	return ok and shown == true
 end
 
--- Where the finder starts while the movers keep no spot of it (start): the offsets of its top left corner from the screen's, docked beside the
--- window (D.Hang); else the entry's x and y.
 function ns.GearSearchStart(x, y)
 	local left, top = D.Hang()
 	local _, height = D.Screen()
@@ -2888,7 +2573,6 @@ function ns.GearSearchStart(x, y)
 	return left, top - height
 end
 
--- The movers set or forgot the finder's spot (changed): it hangs from the spot now (D.Free), or at the window's edge again.
 function ns.GearSearchMoved()
 	S.placed = nil
 	if S.frame then
@@ -2896,7 +2580,6 @@ function ns.GearSearchMoved()
 	end
 end
 
--- The list row Item finder (chat.gearFind): one line, which opens the window and the finder, and a minimized finder again.
 function ns.GearFindLines()
 	return { { 1, T.OPEN_LINE } }
 end
@@ -2922,10 +2605,6 @@ function ns.GearFindPick(id)
 	return Run(Open), nil
 end
 
--- The results of a query { text, slot, armor, weapon, minLevel, maxLevel, quality, usable, sources } (Normalize), sorted by item level: { { id,
--- name, invType, class, subclass, req, ilvl, quality, source, link, where } ... }, source "all" (the index), "bags" (this character's bags and
--- bank) or "alts" (another character's), where the words of that place. The records are the finder's own: read them, do not change them. Empty
--- when the search fails, whose fault goes to the error handler once.
 function ns.GearSearchFind(query)
 	local ok, results = pcall(Find, query)
 	if ok and type(results) == "table" then

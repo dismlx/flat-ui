@@ -1,107 +1,6 @@
 local _, ns = ...
 
--- Bags: the item buttons of the bag window and the bank window (design §2.5). This file makes them, gives them the Flat UI look, draws a record
--- of BagsData.lua on them, dims them for the search, follows their locks and cooldowns, and holds the click and tooltip code of the buttons that
--- are Flat UI's own. Bags.lua makes ns.Bags and every sub-table of it; this file only adds the fields of B.Buttons, and looks each function of
--- another file up when it calls it. It writes no field on a frame of the game's and calls none of the game's bag functions: the helpers of the
--- game it calls (SetItemButtonCount, CooldownFrame_Set) and the template's methods write fields of this addon's own buttons only, and so does
--- B.Buttons.Unsplit, the one field it writes itself (hasStackSplit, below). Besides the calls named below it makes widget calls on frames and
--- regions of its own only (CreateFrame, CreateTexture, SetParent, GetParent, SetID, SetPoint, SetAllPoints, ClearAllPoints, GetFrameLevel,
--- SetFrameLevel, Show, Hide, SetShown, IsShown, IsVisible, SetScript, RegisterForClicks, RegisterForDrag, and the texture, text and animation
--- calls of its look; HookScript is BagsPins.lua's), and asks InCombatLockdown, GetTime and C_Timer.After. A hidden frame of its own on UIParent
--- holds the holders until the bag window exists.
---
--- Live bag slots are the game's own template, ContainerFrameItemButtonTemplate (Blizzard_UIPanels_Game/Mainline/ContainerFrame.xml:77-169), made
--- with CreateFrame("ItemButton", "FlatUIBag<bag + 10>Slot<slot>", holder, template), as the game makes item buttons elsewhere
--- (Blizzard_FrameXML/EquipmentFlyout.lua:64). Each has a global name, so the $parent names of the template's parts never overwrite one another.
--- The template reads its bag from its field bagID, else from its parent's ID, and its slot from its own ID (ContainerFrame.lua:1845-1851), so
--- each bag has a holder, a plain frame of this file whose ID is the bag (SetID), and each button takes its slot as its own ID (SetID) for the
--- whole session. The field bagID, SetBagID and Initialize are never used: they would set the bag in this addon's taint, and the click reads it
--- (ContainerFrame.lua:1824-1864). A button that something takes out of its holder is put back in it, with the holder moved to that frame, so its
--- bag stays its holder's ID. The bags are 0 to 5, and the keyring (-1) while C_ActionBar.ShouldShowKeyring says the game shows one
--- (ContainerFrame.lua:10-12), read at each Prepare; their sizes come from C_Container.GetContainerNumSlots, which counts no locked slot
--- (ContainerFrame.lua:120-135). A bag that gets smaller hides its extra buttons, and a larger one gets more.
--- A click on a live slot is the game's own secure OnClick (ContainerFrame.lua:1503-1622, 1683-1698, 1777-1814): use and equip, also in a fight,
--- sell, deposit at the banker, mail, trade, post at the auction house, split a stack, link, dress up and drag, and its OnEnter is the game's
--- tooltip with the compare, which also takes the game's new flag off (ContainerFrame.lua:1735-1775). No script is set on these buttons; each
--- gets one post-hook of its OnClick as it is made (HookScript, B.Pins.Hook of BagsPins.lua), which runs after the game's click, changes nothing
--- of it, and acts only on Ctrl+right-click, which the game does nothing with: it pins or unpins the slot. B.Buttons.Draw has B.Pins.Mark draw
--- the mark of a pinned slot on a live button, in its top right corner, which nothing else uses.
--- They are made out of combat only, STEP to a frame, by B.Buttons.Prepare (Bags.lua at Start, BagsData.lua at BAG_CONTAINER_UPDATE); a call made
--- in a fight waits for its end with a flag of its own, since ns.OutOfCombat keeps every call it is given (Core.lua:1896-1903). The layout may ask
--- for a missing one (B.Buttons.Live), which is then made at once, out of combat only. Bag addons of this client found slots made by addon code
--- failing when they were first shown in a fight, so as a precaution each Prepare run that made buttons hands them to B.Window.Warm, which shows
--- them once off the screen (design §2.5.1), and PLAYER_REGEN_DISABLED, which comes before the lockdown (Cooldowns.lua:1738-1739), makes every
--- missing button at once and warms those the same way. B.Buttons.ShowAll(true) shows every live button for the warm-up, and ShowAll(false) puts
--- each back as it was. The game's source shows no mechanism that needs it (the first OnShow only registers a callback,
--- Shared/ItemButtonTemplate.lua:22-29). The template's SetAlpha is a Lua method of the game that fades the icon, its borders, the stock and the
--- count only (Shared/ItemButtonTemplate.lua:239-245), so nothing here or in the warm-up hides a button by its alpha.
--- A shift-click on a live slot opens the game's split box (StackSplitFrame) through the template's own click, which writes 1 in the button's field
--- hasStackSplit (ContainerFrame.lua:1805-1813; Mainline/StackSplitFrame.lua:3-16); the template's OnHide hides the box while that field is 1
--- (ContainerFrame.lua:1816-1822), and the box's OnHide runs the up of every key it took through RunBinding (StackSplitFrame.lua:284-299), which is
--- protected for movement. A hiding made by this addon's code would run all of that in Flat UI's taint, so B.Buttons.Unsplit writes 0 there, as
--- the game does when the box closes or moves to another slot (:5, 293), before this file, BagsLayout.lua, BagsWindow.lua or Bags.lua hides a live
--- button or a frame that holds one, and first in the OnHide of the bag window, its title bar and its footer buttons, whichever hears it first. The
--- box is then the game's alone and stays, anchored to the hidden slot, until the player presses Okay or Cancel.
---
--- Bank slots (FlatUIBankTab<tab>Slot<slot>, tabs 6 to 14) and the slots of other characters and of the bank away from the banker
--- (FlatUIBagsCached<n>, pooled per owner) are ItemButtons of this addon's own from the intrinsic alone
--- (Blizzard_ItemButton/Shared/ItemButtonTemplate.xml:4-81), made when asked, also in a fight, since nothing on them is protected. The bank's bag
--- slots (container -2) are not among them: BagsBank.lua draws those, with their clicks and tooltips, in its row over the bank window's footer.
--- The clicks and tooltips of these buttons are this file's:
--- - A bank slot picks its item up with C_Container.PickupContainerItem on a left click, a drag and a drop, and takes it out with
---   C_Container.UseContainerItem and no bank type on a right click, as the game's bank buttons do (Mainline/BankFrameTemplates.lua:436-478), only
---   while the bank is live (B.Bank.Live) and never in a fight, when a line says so.
--- - A modified click links the item: out of a fight with HandleModifiedItemClick (Mainline/ItemButtonTemplate.lua:372-404), for chat links and
---   the dressing room, and in a fight only the chat link, with ChatFrameUtil.InsertLink while IsModifiedClick("CHATLINK"), which is the call that
---   function makes for it (:376-387). The dressing room writes the game's DressUpFrame and opens it as a panel (Mainline/DressUpFrames.lua:346-366),
---   which a fight refuses to this addon (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:853-861, 886-888). The link of a live bank
---   slot is read with C_Container.GetContainerItemLink, and a cached link is made whole with C_Item.GetItemInfo first. Any other click on a cached
---   slot does nothing, so a cached slot never reaches the game's click.
--- - The tooltip is GameTooltip: SetOwner, then SetBagItem for a live bank slot, or SetHyperlink and a line "Last seen ..." from
---   B.Data.Characters (the days counted from the local noon of one day to the other's with date and time, rounded, as the window's title counts
---   them) for a cached one, then Show, out of a fight. The sell price stays: on this build it is plain text
---   (Blizzard_GameTooltip/Mainline/GameTooltip.lua:325-333). In a fight it is the name (C_Item.GetItemNameByID while the record has none), the
---   count and that line in plain lines (SetText, AddLine), the rule Chat keeps for link tooltips (Core.lua:208-210), and so is the tooltip of an
---   item the game builds none for. When the mouse leaves, it is hidden while the button owns it (IsOwned, Hide).
---
--- The look is set once on each button, as Windows restyles the game's slots (Windows.lua:1123-1189): the NormalTexture at alpha 0, the rounded
--- Mask taken off the icon and off the pushed texture (RemoveMaskTexture; it is put on in Shared/ItemButtonTemplate.lua:16-20), the highlight and
--- pushed textures the flat tints of Windows (SetColorTexture), a box of ns.Outline filled with Button and slot colour, the icon cropped by Icon
--- crop (SetTexCoord), and the template's store highlight hidden, which only the template's new item code hides (ContainerFrame.xml:121-125,
--- ContainerFrame.lua:1894, 1902). SetItemButtonQuality is never called, so IconBorder stays hidden and Items.lua's bank hook never sees these
--- buttons (Items.lua:680-699). The edge of the box is red for a broken item (C_Container.GetContainerItemDurability at 0), else the quality colour
--- of ColorManager.GetColorDataForBagItemQuality (Blizzard_Colors/Mainline/ColorManager.lua:92-112; poor items have none) when Quality border lets
--- that quality through, else the border colour. The buttons keep the template's 37 units: the window scales its content.
--- Drawing a record (B.Buttons.Draw, design §2.5.3): the icon (SetTexture; desaturated while the slot is locked, and at 0.4 grey while its
--- cooldown waits, as ContainerFrame.lua:1990-2004 does), the count with the game's SetItemButtonCount (Mainline/ItemButtonTemplate.lua:9-34),
--- which also writes the field count that the refund question reads (ContainerFrame.lua:1435), and on a live slot the cooldown with
--- CooldownFrame_Set (Blizzard_FrameXMLUtil/Cooldown.lua:2-8) from C_Container.GetContainerItemCooldown, and of the template UpdateQuestItem,
--- UpdateNewItem while New item glow is on (hovering takes the glow off), and SetHasItem and SetReadable for the hover cursor
--- (ContainerFrame.lua:1866-1909, 1970-1988), with isLocked and isReadable read live from C_Container.GetContainerItemInfo. The other buttons draw
--- the quest border and the junk coin with textures of their own in the same art (TEXTURE_ITEM_QUEST_BANG and TEXTURE_ITEM_QUEST_BORDER,
--- Blizzard_FrameXMLBase/Constants.lua:274-275; the atlas bags-junkcoin, ContainerFrame.xml:139-143). The item level is a text of this file
--- (NumberFontNormal at 12 with an outline, as Items.lua:491-531 sets its own) from ns.Items.LevelOf, in the quality colour; a bag or quiver
--- (Enum.ItemClass Container 1 and Quiver 11, B.Categories.Kind), which has no item level, shows how many slots it has in the same place in the dim
--- text colour instead, read from its tooltip once per item ID (B.Slots.SizeOf, BagsSlots.lua: by bag and slot for a slot the game holds now, else
--- by link), in both windows and for every character, while Item level is on; it is not kept as the record's level. The marks are
--- ItemMarks' answers drawn as ItemMarks.lua:366-460 draws them (BoE, the red tint, the Feed Pet icon of C_Spell.GetSpellTexture), and Bags' own
--- green plus at the bottom left of a recipe this character can learn now (ItemMarks.Learnable): all four on this character's items, with Unusable
--- and Learnable asked by bag and slot for a live slot and by link for the bank away from the banker, and the BoE mark alone on another
--- character's, since the others describe the character playing. The junk coin shows B.Categories.IsJunk, Errands' own test
--- of the slot for a live slot of the bags, on anything Sell junk would sell, an item of the sell list of any quality too; the BoE word sits in
--- the same corner, so it is left out while the coin shows, since the item is to be sold. The search dims through the item button's
--- SetMatchesSearch (Shared/ItemButtonTemplate.lua:49-56, 96-116), and the level and marks fade to 0.4. A name the client has not loaded is asked
--- for once through B.Data.Want (Core.lua:148-149). An empty slot of a special bag takes a fill of its kind, and the free slot of a kind its count.
---
--- Events this file owns (design §2.8), each run as the part "items" while Bags is on, with the work in its order:
--- ITEM_LOCK_CHANGED(bag, slot) (ContainerDocumentation.lua:718-728): B.Buttons.Lock(bag, slot), the lock of that one button read live; no pass.
--- BAG_UPDATE_COOLDOWN (ContainerDocumentation.lua:668-673): the cooldowns of the live buttons on screen, only while a window shows them.
--- PLAYER_REGEN_DISABLED (UnitDocumentation.lua:3887): Prepare's top-up, every missing template button at once (normally none), then B.Window.Warm
--- for what it made.
-
 local KEY = "bags"
--- The part of the module this file's work runs in (design §2.10): a failure counts toward stopping it alone.
 local PART = "items"
 
 local B = ns.Bags
@@ -113,54 +12,38 @@ local Window = B.Window
 local Bank = B.Bank
 local ItemMarks = ns.ItemMarks
 
--- The game's template of a bag slot and the global names of the buttons of this file.
 local TEMPLATE = "ContainerFrameItemButtonTemplate"
 local LIVE_NAME = "FlatUIBag%dSlot%d"
 local BANK_NAME = "FlatUIBankTab%dSlot%d"
 local OFFLINE_NAME = "FlatUIBagsCached%d"
--- Template buttons made in one frame of a Prepare run.
 local STEP = 40
--- The containers (Enum.BagIndex): the backpack, the four bags and the reagent bag, the keyring, and the bank's tabs (CharacterBankTab_1 to _9).
 local BAGS = { 0, 1, 2, 3, 4, 5 }
 local REAGENT_BAG = 5
 local KEYRING = -1
 local FIRST_TAB, LAST_TAB = 6, 14
 
--- The look of Windows' slots (Windows.lua:56-60) and of its text: the hover and pressed tints, the edge of a broken item, the dim text colour
--- (Threat.lua:46) and how far the level and marks fade while the search dims a slot.
 local HOVER = { 1, 1, 1, 0.3 }
 local SLOT_PRESSED = { 0.9, 0.8, 0.1, 0.3 }
 local BROKEN = { 0.9, 0, 0 }
 local WHITE = { 1, 1, 1 }
 local DIM_TEXT = { 0.66, 0.68, 0.62 }
 local FADED = 0.4
--- The grey of an icon whose cooldown waits (ContainerFrame.lua:1997).
 local GREY = 0.4
--- Button and slot colour and Icon crop, when the profile gives none (Config.lua:1276, 1278).
 local PANEL = { 0.118, 0.118, 0.118 }
 local CROP, CROP_MOST = 8, 15
 local LEVEL_FONT, LEVEL_SIZE = "NumberFontNormal", 12
--- Forever's item classes Container and Quiver (Enum.ItemClass), whose buttons show how many slots they have where gear shows its item level.
 local CONTAINER_CLASS, QUIVER_CLASS = 1, 11
 local FREE_FONT, FREE_COLOUR = "NumberFontNormalLarge", { 0.85, 0.85, 0.85 }
--- The lowest quality each choice of Quality border lets through; Off is none.
 local MIN_QUALITY = { all = 0, uncommon = 2, rare = 3, epic = 4 }
--- The marks as ItemMarks draws them (ItemMarks.lua:46-57): the BoE word, the red of an item the character cannot use, and the Feed Pet icon
--- (spell 6991), or a flat square when the client gives no icon.
 local BIND_WORD, BIND_FONT, BIND_COLOUR = "BoE", "NumberFontNormalSmall", { 0.38, 0.82, 1 }
 local TINT = { 1, 0.18, 0.18 }
 local FEED_PET, FOOD_SIZE, FOOD_COLOUR = 6991, 14, { 0.45, 0.85, 0.3 }
--- Bags' own mark of a recipe this character can learn now (ItemMarks.Learnable): a green plus at the bottom left, a corner a recipe never has an
--- item level or a food mark in, in the game's font of item counts with an outline.
 local LEARN = { word = "+", font = "NumberFontNormal", size = 16, colour = { 0.3, 0.9, 0.3 } }
--- The art of the template that the other buttons draw with textures of their own.
 local JUNK_ATLAS = "bags-junkcoin"
 local QUEST_BANG = { "TEXTURE_ITEM_QUEST_BANG", "Interface\\ContainerFrame\\UI-Icon-QuestBang" }
 local QUEST_BORDER = { "TEXTURE_ITEM_QUEST_BORDER", "Interface\\ContainerFrame\\UI-Icon-QuestBorder" }
 local QUEST_WIDTH, QUEST_HEIGHT = 37, 38
--- The question mark the game shows for an item it has no icon for.
 local UNKNOWN_ICON = 134400
--- The fill of an empty slot of a special bag, by kind (design §4.9), drawn half way from Button and slot colour to it, so it stays faint.
 local KIND_FILLS = {
 	soul = { 0.45, 0.25, 0.55 },
 	quiver = { 0.5, 0.38, 0.2 },
@@ -174,69 +57,48 @@ local KIND_FILLS = {
 	reagent = { 0.28, 0.42, 0.52 },
 }
 local FILL_SHARE = 0.5
--- Enum.ItemClass Container and Quiver, and the kinds of Enum.ItemContainerSubclass that have a fill (WL enums.yaml:4712-4725).
 local CONTAINER, QUIVER = 1, 11
 local SUBCLASS_FILLS = { [1] = "soul", [2] = "herb", [3] = "enchanting", [4] = "engineering", [5] = "gem", [6] = "mining", [7] = "leather",
 	[11] = "reagent" }
--- Each row of the Bags page this file reads, at its default for a profile that has none yet (design §7.2).
 local DEFAULTS = { itemLevel = true, quality = "all", marks = true, junkCoin = true, newGlow = true }
 local SAY = {
 	fight = "Bags: the bank's slots wait for the end of the fight.",
 	closed = "Bags: the bank is not open.",
 	refused = "Bags: the game refused its bag slot template, so the bag window cannot use your items. /reload tries again.",
 }
--- Seconds in which the same line is not said twice: a drag fires a drag and a click.
 local SAY_GAP = 2
 local COUNT_LINE = "%d in this slot"
 local SEEN = { today = "Last seen today", yesterday = "Last seen yesterday", days = "Last seen %d days ago" }
 local DAY = 86400
--- The regions that fade while the search dims a slot.
 local FADES = { "level", "bind", "tint", "food", "learn" }
 local NONE = {}
 
--- Per button: { kind = "live", "bank" or "offline", bag, slot (live and bank), holder (live), owner (offline), icon, outline, cooldown, record and
--- opts of the last Draw, broken, fill (the kind's colour of an empty slot), and the regions of this file made on it when first needed, false when
--- the game refused one: level, bind, tint, food, learn, quest, junk, freeText }.
 local states = setmetatable({}, { __mode = "k" })
--- Per bag: its holder, and its template buttons by slot. The number of slots each bag had at the last Prepare.
 local holders = {}
 local live = {}
 local sizes = {}
--- Per bank tab: the buttons by slot.
 local banks = {}
--- Offline buttons: those free, those each owner holds, and how many were made.
 local pool = {}
 local used = {}
 local offlineMade = 0
--- Template buttons made by a Prepare run and not warmed yet.
 local unwarmed = {}
--- While ShowAll(true) holds: per live button, whether it was shown before.
 local warming = nil
--- The paced run of Prepare: the slots it still makes, the next of them, and whether a frame of it is due.
 local pending, nextIndex, running = nil, 1, false
--- True while a Prepare waits for the end of the fight, and once the game refused the template.
 local queued, refused = false, false
--- Whether the game shows a keyring, as read at the last Prepare (nil before the first).
 local keyringShown = nil
--- A hidden frame of this file that holds the buttons while their window does not exist yet.
 local shelf = nil
--- Per item link: its item level, once the game gave one. The Feed Pet icon, false when the client gives none. Per line: when it was said.
 local levels = {}
 local foodIcon = nil
 local said = {}
-
--- Small helpers -----------------------------------------------------------------------------------------------------------------------
 
 local function Usable(value)
 	return value ~= nil and not ns.IsSecret(value) and type(value) == "table"
 end
 
--- A frame or region: a table with the widget call GetObjectType.
 local function IsFrame(value)
 	return Usable(value) and type(value.GetObjectType) == "function"
 end
 
--- A plain answer, or nil for one the client withholds.
 local function Plain(value)
 	if ns.IsSecret(value) then
 		return nil
@@ -244,7 +106,6 @@ local function Plain(value)
 	return value
 end
 
--- A string that is not empty, or nil.
 local function Text(value)
 	if ns.IsSecret(value) or type(value) ~= "string" or value == "" then
 		return nil
@@ -256,7 +117,6 @@ local function Whole(value)
 	return ns.Finite(value) and value % 1 == 0
 end
 
--- True for a container of the bags this file makes template buttons for.
 local function IsBag(bag)
 	return Whole(bag) and (bag == KEYRING or (bag >= 0 and bag <= REAGENT_BAG))
 end
@@ -265,7 +125,6 @@ local function IsTab(bag)
 	return Whole(bag) and bag >= FIRST_TAB and bag <= LAST_TAB
 end
 
--- A frame or region held in a field of a button of this file.
 local function Field(frame, key)
 	local value = frame[key]
 	if Usable(value) then
@@ -274,8 +133,6 @@ local function Field(frame, key)
 	return nil
 end
 
--- What a function of another part answers, or nil when it is missing or fails: a part that fails leaves its piece of the drawing out, and the
--- rest of the button is still drawn.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -287,7 +144,6 @@ local function Ask(fn, ...)
 	return a, b
 end
 
--- Runs fn as the part of this file (B.Part, ns.EachPart): a failure is counted, never raised.
 local function Part(fn, ...)
 	local part = B.Part
 	if type(part) == "function" then
@@ -296,7 +152,6 @@ local function Part(fn, ...)
 	return pcall(fn, ...)
 end
 
--- Bags is on, not stopped and not standing down (design §2.3.6).
 local function On()
 	return Ask(B.On) == true
 end
@@ -305,7 +160,6 @@ local function Me()
 	return (Ask(B.Me))
 end
 
--- A row of the Bags page, at its default while the profile has none.
 local function Opt(key)
 	local value = Ask(B.Opt, key)
 	if value == nil then
@@ -338,7 +192,6 @@ local function Say(text)
 	print(text)
 end
 
--- Runs fn on the next frame.
 local function Soon(fn)
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, 0, fn) then
 		return
@@ -354,8 +207,6 @@ local function Searching()
 	return Ask(Search.Active) == true
 end
 
--- Reading the game ---------------------------------------------------------------------------------------------------------------------
-
 local function Container(name)
 	local api = C_Container
 	if type(api) ~= "table" or ns.IsSecret(api) or type(api[name]) ~= "function" then
@@ -364,7 +215,6 @@ local function Container(name)
 	return api[name]
 end
 
--- The number of slots of a container, 0 for none or a withheld answer.
 local function SizeOf(bag)
 	local call = Container("GetContainerNumSlots")
 	if call == nil then
@@ -377,7 +227,6 @@ local function SizeOf(bag)
 	return 0
 end
 
--- The game's ContainerItemInfo of a slot (ContainerDocumentation.lua:765-783), or nil.
 local function Info(bag, slot)
 	local call = Container("GetContainerItemInfo")
 	if call == nil then
@@ -390,7 +239,6 @@ local function Info(bag, slot)
 	return nil
 end
 
--- True for an item whose durability is 0, as the game's red slot marks it.
 local function Broken(bag, slot)
 	local call = Container("GetContainerItemDurability")
 	if call == nil then
@@ -400,7 +248,6 @@ local function Broken(bag, slot)
 	return ok and ns.Finite(current) and ns.Finite(most) and most > 0 and current <= 0
 end
 
--- True while the game shows a keyring (C_ActionBar.ShouldShowKeyring, the game's own test, ContainerFrame.lua:10-12).
 local function KeyringShows()
 	local api = C_ActionBar
 	if type(api) ~= "table" or ns.IsSecret(api) or type(api.ShouldShowKeyring) ~= "function" then
@@ -410,7 +257,6 @@ local function KeyringShows()
 	return ok and not ns.IsSecret(shows) and shows == true
 end
 
--- The colour the game gives a quality in the bags, or nil (none for poor items, ColorConstants.lua:21-30).
 local function QualityColour(quality)
 	if not ns.Finite(quality) then
 		return nil
@@ -426,7 +272,6 @@ local function QualityColour(quality)
 	return nil
 end
 
--- The item level of a link, from Items.lua (weapons and armour only), kept once the game gave one.
 local function LevelOf(link)
 	local known = levels[link]
 	if known ~= nil then
@@ -441,7 +286,6 @@ local function LevelOf(link)
 	return nil
 end
 
--- The icon of Feed Pet, read once.
 local function FoodIcon()
 	if foodIcon == nil then
 		foodIcon = false
@@ -456,9 +300,6 @@ local function FoodIcon()
 	return foodIcon or nil
 end
 
--- Records ------------------------------------------------------------------------------------------------------------------------------
-
--- A record of BagsData.lua (design §2.2), or nil for anything that is not one with an item ID.
 local function RecordOf(value)
 	if Usable(value) and ns.Finite(value.id) then
 		return value
@@ -497,9 +338,6 @@ local function NameOf(record)
 	return "Item " .. tostring(math.floor(record.id))
 end
 
--- The fill of an empty slot of a bag of this kind, or nil for a normal bag. kind is BagsData's { id, label, family, class, subclass, key, name }:
--- id is the bag's item ID, and key names the kind ("keyring", "reagent", "bag" and one for each kind of special bag), so the keyring and the
--- reagent bag are known by it on a button of another character, which has no container; a live button knows them by its container too.
 local function KindFill(kind, bag)
 	if bag == KEYRING then
 		return KIND_FILLS.keyring
@@ -523,8 +361,6 @@ local function KindFill(kind, bag)
 	return nil
 end
 
--- Where the buttons live ---------------------------------------------------------------------------------------------------------------
-
 local function Shelf()
 	if shelf == nil then
 		local ok, made = pcall(CreateFrame, "Frame", nil, UIParent)
@@ -538,8 +374,6 @@ local function Shelf()
 	return shelf
 end
 
--- The frame that holds the buttons of a window: the window's content frame when it keeps one in its field content (the frame the window scales
--- and scrolls, design §4.8), else the window, else the shelf until the window exists.
 local function Home(which)
 	local frame = Ask(Window.Get, which)
 	if Usable(frame) then
@@ -561,7 +395,6 @@ local function LevelOfFrame(frame)
 	return nil
 end
 
--- Puts a frame of this file just above another when it is not above it already.
 local function Above(frame, under)
 	local mine, base = LevelOfFrame(frame), LevelOfFrame(under)
 	if mine ~= nil and base ~= nil and mine <= base then
@@ -569,8 +402,6 @@ local function Above(frame, under)
 	end
 end
 
--- The template gives its buttons frame level 10 (ContainerFrame.xml:77), which a window of a higher level would draw over, so a template button is
--- kept above its holder, and its cooldown and the edges of its box (ns.Outline's holder, as BagSort.lua:448-457 keeps its own) above it.
 local function Lift(button, state)
 	if state.holder then
 		Above(button, state.holder)
@@ -593,8 +424,6 @@ local function LiftBag(bag)
 	end
 end
 
--- Moves a frame of this file off the shelf once its window exists; a frame somewhere else stays where something put it. fill: the holder of a
--- bag, which covers the frame it is in. True when it moved the frame.
 local function Rehome(frame, which, fill)
 	if shelf == nil then
 		return false
@@ -631,9 +460,6 @@ local function RehomeAll()
 	end
 end
 
--- Puts a template button back in its holder when something took it out: the template reads its bag from its parent's ID
--- (ContainerFrame.lua:1845-1847), and any other parent would make its click use another bag. The holder goes to the frame the button was put
--- in, so the button stays where it was placed.
 local function Keep(button, state)
 	local holder = state.holder
 	local ok, parent = pcall(button.GetParent, button)
@@ -648,8 +474,6 @@ local function Keep(button, state)
 	pcall(button.SetParent, button, holder)
 	LiftBag(state.bag)
 end
-
--- The look ------------------------------------------------------------------------------------------------------------------------------
 
 local function CropShare()
 	local crop = Ask(B.Look, "crop")
@@ -670,7 +494,6 @@ local function PanelColour()
 	return PANEL[1], PANEL[2], PANEL[3]
 end
 
--- The fill of a slot: Button and slot colour, moved half way to the colour of its kind for an empty slot of a special bag.
 local function FillColour(state)
 	local r, g, b = PanelColour()
 	local kind = state.fill
@@ -682,7 +505,6 @@ local function FillColour(state)
 	return r, g, b
 end
 
--- The edge of a slot: red while broken, the quality colour when Quality border lets the quality through, else none (the border colour).
 local function EdgeColour(state)
 	if state.broken then
 		return BROKEN[1], BROKEN[2], BROKEN[3]
@@ -703,7 +525,6 @@ local function Crop(state)
 	end
 end
 
--- Paints what the look rows decide on one button: the crop, the fill and the edge.
 local function PaintOne(state)
 	Crop(state)
 	local outline = state.outline
@@ -714,7 +535,6 @@ local function PaintOne(state)
 	end
 end
 
--- A state texture of the button as a flat colour over the whole slot, as Windows' Retint does (Windows.lua:356-369).
 local function Retint(texture, button, colour)
 	if not Usable(texture) then
 		return
@@ -724,7 +544,6 @@ local function Retint(texture, button, colour)
 	pcall(texture.SetAllPoints, texture, button)
 end
 
--- The look, given once to each button of this file when it is made (see the top of this file).
 local function Style(button, state)
 	local icon = Field(button, "icon") or Field(button, "Icon")
 	local mask = Field(button, "Mask")
@@ -757,7 +576,6 @@ local function Style(button, state)
 	PaintOne(state)
 end
 
--- A texture of this file on a button, or nil when the game refuses it.
 local function Made(button, layer, sublevel)
 	local ok, texture = pcall(button.CreateTexture, button, nil, layer, nil, sublevel)
 	if not ok or not Usable(texture) then
@@ -767,7 +585,6 @@ local function Made(button, layer, sublevel)
 	return texture
 end
 
--- Each of these makes one region of this file on a button, the first time it is needed, or answers nil.
 local function LevelText(button)
 	local text = ns.OwnText(button, "OVERLAY", LEVEL_FONT)
 	if text == nil then
@@ -807,7 +624,6 @@ local function LearnText(button)
 	return text
 end
 
--- The red with the MOD blend just above the icon, which is in the BORDER layer (Shared/ItemButtonTemplate.xml:17-21), as ItemMarks' tint.
 local function TintTexture(button, state)
 	local texture = Made(button, "BORDER", 7)
 	if texture == nil then
@@ -833,7 +649,6 @@ local function FoodTexture(button)
 	return texture
 end
 
--- The template's junk coin and quest border, for a button made from the intrinsic alone (ContainerFrame.xml:96-101, 139-143).
 local function JunkTexture(button)
 	local texture = Made(button, "OVERLAY", 5)
 	if texture == nil then
@@ -864,7 +679,6 @@ local function FreeText(button)
 	return text
 end
 
--- The region of key on a button, made by make the first time it is wanted; false keeps a refused one from being asked for again.
 local function Region(button, state, key, want, make)
 	local region = state[key]
 	if want and region == nil then
@@ -874,7 +688,6 @@ local function Region(button, state, key, want, make)
 	return region or nil
 end
 
--- Shows or hides the region of key, making it when it is wanted.
 local function Mark(button, state, key, want, make)
 	local region = Region(button, state, key, want, make)
 	if region then
@@ -882,8 +695,6 @@ local function Mark(button, state, key, want, make)
 	end
 	return region
 end
-
--- Drawing ---------------------------------------------------------------------------------------------------------------------------------
 
 local function SetIcon(state, icon)
 	local texture = state.icon
@@ -907,8 +718,6 @@ local function SetLocked(state, locked)
 	end
 end
 
--- The cooldown of a live slot, as the game's UpdateCooldown draws it (ContainerFrame.lua:1990-2004): no item hides it, and the icon is grey while
--- a cooldown waits to start.
 local function Cooldown(state)
 	local frame = state.cooldown
 	if frame == nil then
@@ -939,8 +748,6 @@ local function Cooldown(state)
 	end
 end
 
--- The template's new item glow while New item glow is on; off, its glow, store highlight and their animations are hidden, which only its own
--- new item code does otherwise (ContainerFrame.lua:1878-1909).
 local function Glow(button, record)
 	if record ~= nil and Opt("newGlow") ~= false then
 		pcall(button.UpdateNewItem, button, ns.Finite(record.quality) and record.quality or nil)
@@ -960,7 +767,6 @@ local function Glow(button, record)
 	end
 end
 
--- The quest border or bang of a button made from the intrinsic, as the template's UpdateQuestItem draws it (ContainerFrame.lua:1866-1876).
 local function OwnQuest(button, state, record)
 	local bang = record ~= nil and record.questStart == true
 	local border = record ~= nil and record.quest == true
@@ -971,9 +777,6 @@ local function OwnQuest(button, state, record)
 	end
 end
 
--- How many slots a bag or quiver has (B.Slots.SizeOf), for the number where gear shows its item level, or nil for any other item or while its
--- tooltip does not say. A slot the game holds now (a live record on a button of the bags, or of the bank at the banker) is read by its bag and slot,
--- any other by its link.
 local function SlotsOf(state, record, link)
 	local class = Ask(Categories.Kind, record)
 	if class ~= CONTAINER_CLASS and class ~= QUIVER_CLASS then
@@ -991,7 +794,6 @@ local function Level(button, state, record, link)
 	local value, size = nil, nil
 	if record ~= nil and Opt("itemLevel") ~= false then
 		value = link ~= nil and LevelOf(link) or nil
-		-- The record's level is filled by the first part that works it out (design §2.2).
 		if value ~= nil and record.level == nil then
 			record.level = value
 		end
@@ -1008,20 +810,15 @@ local function Level(button, state, record, link)
 		pcall(text.SetTextColor, text, r, g, b, 1)
 		pcall(text.SetText, text, tostring(math.floor(value + 0.5)))
 	elseif text and size ~= nil then
-		-- In the dim text colour, so a bag's size never reads as an item level.
 		pcall(text.SetTextColor, text, DIM_TEXT[1], DIM_TEXT[2], DIM_TEXT[3], 1)
 		pcall(text.SetText, text, tostring(size))
 	end
 end
 
--- Whether the junk coin shows on a record: what B.Categories.IsJunk says Sell junk would sell (design §4.4), while Junk coin is on.
 local function JunkShown(record)
 	return record ~= nil and Opt("junkCoin") ~= false and Ask(Categories.IsJunk, record) == true
 end
 
--- Whose marks a record gets (design §2.5.3): the character playing gets all four, and Unusable and Learnable read its tooltip by bag and slot
--- while the slot is live, by link otherwise (the bank away from the banker); another character only the BoE mark, which depends on the item and
--- its bound flag. junk: the junk coin shows, in the corner of the BoE word, which is left out then: the item is to be sold.
 local function Marks(button, state, record, link, junk)
 	local bind, tint, food, learn = false, false, false, false
 	if record ~= nil and Opt("marks") ~= false and Usable(ItemMarks) then
@@ -1042,7 +839,6 @@ local function Marks(button, state, record, link, junk)
 	Mark(button, state, "learn", learn, LearnText)
 end
 
--- The junk coin (JunkShown): the template's own JunkIcon on a live slot, a texture of this file's on the other buttons.
 local function Junk(button, state, show)
 	if state.kind == "live" then
 		local coin = Field(button, "JunkIcon")
@@ -1054,7 +850,6 @@ local function Junk(button, state, show)
 	end
 end
 
--- The count of the free slots of a kind, over its first free slot (design §4.5).
 local function FreeCount(button, state, count)
 	local want = ns.Finite(count) and count >= 0
 	local text = Mark(button, state, "freeText", want, FreeText)
@@ -1063,11 +858,6 @@ local function FreeCount(button, state, count)
 	end
 end
 
--- B.Buttons.Dim(button, matched, lit): the search's answer for the record the button shows. Only a search that is typed dims, and an empty slot
--- never.
--- matched is true, false, or nil while the item's data has not loaded; nil dims until it has (design §5.2). With lit, a bag is lit (the mouse
--- over its button on the bag bar or in the bag slot row, B.Layout.Light): matched is the answer for the slot, false for a slot of another bag,
--- and dims it whether a search is typed or not, an empty slot too.
 function Buttons.Dim(button, matched, lit)
 	local state = states[button]
 	if state == nil then
@@ -1089,10 +879,6 @@ function Buttons.Dim(button, matched, lit)
 	end
 end
 
--- B.Buttons.Draw(button, record or nil, opts): draws a record on a button of this file (design §2.5.3). opts: free = the count of a free slot of a
--- kind, kind = the kind of its bag, so an empty slot of a special bag takes its fill, hold = an empty slot that keeps its place while the window
--- is open (design §4.8), drawn blank. A template button always shows its own slot: a record of another slot is replaced by the record BagsData
--- gives for the slot.
 function Buttons.Draw(button, record, opts)
 	local state = states[button]
 	if state == nil then
@@ -1112,7 +898,6 @@ function Buttons.Draw(button, record, opts)
 	local empty = record == nil and opts.hold ~= true
 	local link = record and Text(record.link) or nil
 	local icon = record and IconOf(record) or nil
-	-- Only a slot the game holds now is read: a live record on a button of the bags or of the bank at the banker.
 	local reading = record ~= nil and record.live == true and state.kind ~= "offline"
 	local info = reading and Info(state.bag, state.slot) or nil
 	SetIcon(state, icon)
@@ -1137,7 +922,6 @@ function Buttons.Draw(button, record, opts)
 	state.fill = empty and opts.kind ~= nil and KindFill(opts.kind, state.bag) or nil
 	PaintOne(state)
 	Level(button, state, record, link)
-	-- The junk answer once, for the coin and for the BoE word that gives way to it.
 	local junk = JunkShown(record)
 	Marks(button, state, record, link, junk)
 	Junk(button, state, junk)
@@ -1154,8 +938,6 @@ function Buttons.Draw(button, record, opts)
 	end
 	Buttons.Dim(button, matched)
 end
-
--- Tooltips and clicks of the buttons of this file --------------------------------------------------------------------------------------
 
 local function Tooltip()
 	local tip = _G.GameTooltip
@@ -1176,14 +958,10 @@ local function HideTip(button)
 	end
 end
 
--- True when a tooltip call of the game's built a tooltip (TooltipDataHandler.lua:245-307).
 local function Built(ok, answer)
 	return ok and not ns.IsSecret(answer) and answer == true
 end
 
--- How old a time of BagsData's records is, in days of the calendar: today, yesterday, or so many days ago. The days are counted from the local
--- noon of one day to the other's and rounded, as the window's title (BagsWindow.lua, AsOf) and BagsData's age count them, so a change of summer
--- time between the two counts no day.
 local function NoonOf(stamp)
 	local ok, parts = pcall(date, "*t", stamp)
 	if not ok or not Usable(parts) then
@@ -1217,7 +995,6 @@ local function SeenPhrase(stamp)
 	return SEEN.days:format(days)
 end
 
--- The line "Last seen ..." of a cached record: the time of the character's bags, or of its bank for a slot of a bank tab (design §3.1).
 local function SeenLine(record)
 	if record.live == true then
 		return nil
@@ -1234,7 +1011,6 @@ local function SeenLine(record)
 	return nil
 end
 
--- The plain tooltip of a fight, and of an item the game builds no tooltip for: the name in its quality colour and the count.
 local function PlainTip(tip, state)
 	local record = state.record
 	if record == nil then
@@ -1280,7 +1056,6 @@ local function Entered(button)
 		end
 	end
 	if not shown then
-		-- A tooltip the game could not build hid itself and let go of its owner (TooltipDataHandler.lua:264-269).
 		pcall(tip.SetOwner, tip, button, "ANCHOR_RIGHT")
 		shown = PlainTip(tip, state)
 	end
@@ -1308,8 +1083,6 @@ local function Modified(kind)
 	return ok and not ns.IsSecret(held) and held == true
 end
 
--- The whole link of the item a button shows, for chat: read live for the bank at the banker, else the record's, which for a cached item is an item
--- string that C_Item.GetItemInfo makes whole once the client has the item.
 local function WholeLink(state)
 	local link = nil
 	if state.kind == "bank" and BankLive() then
@@ -1338,7 +1111,6 @@ local function WholeLink(state)
 	return nil
 end
 
--- A modified click (design §2.5.4): out of a fight the game's HandleModifiedItemClick, in a fight the chat link only.
 local function Linked(state)
 	local link = WholeLink(state)
 	if link == nil then
@@ -1356,7 +1128,6 @@ local function Linked(state)
 	end
 end
 
--- A click, drag or drop on a bank slot (design §2.4).
 local function Use(state, mouse)
 	if Fighting() then
 		Say(SAY.fight)
@@ -1426,8 +1197,6 @@ local function Scripts(button, state)
 	end
 end
 
--- Making the buttons ----------------------------------------------------------------------------------------------------------------------
-
 local function Holder(bag)
 	local holder = holders[bag]
 	if holder ~= nil then
@@ -1450,7 +1219,6 @@ local function Holder(bag)
 	return made
 end
 
--- Makes the template button of a slot, out of combat only. warm: it goes to the next warm-up.
 local function Make(bag, slot, warm)
 	local list = live[bag]
 	if list == nil then
@@ -1479,7 +1247,6 @@ local function Make(bag, slot, warm)
 	states[button] = state
 	Style(button, state)
 	Lift(button, state)
-	-- Ctrl+right-click pins the slot (BagsPins.lua).
 	Ask(B.Pins.Hook, button, bag, slot)
 	list[slot] = button
 	if warm then
@@ -1488,7 +1255,6 @@ local function Make(bag, slot, warm)
 	return button
 end
 
--- Makes a button of this file's own from the intrinsic: a bank slot or an offline slot. It starts hidden, as the template does.
 local function MakeOwn(name, parent, kind, bag, slot)
 	local ok, button = pcall(CreateFrame, "ItemButton", name, parent)
 	if not ok or not IsFrame(button) then
@@ -1503,9 +1269,6 @@ local function MakeOwn(name, parent, kind, bag, slot)
 	return button
 end
 
--- B.Buttons.Live(bag, slot): the template button of a slot of the bags, or nil while it has none. Out of combat a missing one is made at once:
--- the layout asks for it as it shows the window, so its first show is out of combat. A slot past the bag's size, and the keyring while the game
--- shows none, have no button.
 function Buttons.Live(bag, slot)
 	if not IsBag(bag) or not Whole(slot) or slot < 1 then
 		return nil
@@ -1540,7 +1303,6 @@ function Buttons.Live(bag, slot)
 	return button
 end
 
--- B.Buttons.Bank(tab, slot): the button of a slot of a bank tab (6 to 14) while the bank is live. The bank's bag slots are BagsBank.lua's.
 function Buttons.Bank(tab, slot)
 	if not Whole(slot) or slot < 1 or not IsTab(tab) then
 		return nil
@@ -1560,7 +1322,6 @@ function Buttons.Bank(tab, slot)
 	return button
 end
 
--- The frame an owner's offline buttons go in: the owner when it is a frame, else the window it names.
 local function ParentFor(owner)
 	if IsFrame(owner) then
 		return owner
@@ -1570,8 +1331,6 @@ local function ParentFor(owner)
 	return Home("bags")
 end
 
--- B.Buttons.Offline(owner): a free offline button for the slots of another character or of the bank away from the banker, held by owner (a
--- window's key, "bags" or "bank", or a frame, which it is put in) until B.Buttons.Release(owner). It comes hidden.
 function Buttons.Offline(owner)
 	local key = owner
 	if key == nil then
@@ -1611,7 +1370,6 @@ local function Return(button)
 	pool[#pool + 1] = button
 end
 
--- B.Buttons.Release(owner): every offline button the owner holds goes back to the pool, hidden; with no owner, every one.
 function Buttons.Release(owner)
 	if owner == nil then
 		for key, list in pairs(used) do
@@ -1632,8 +1390,6 @@ function Buttons.Release(owner)
 	end
 end
 
--- The game's split box is left to the game (see the top of the file): a live button that owns it (hasStackSplit 1, written by the game) gets the 0
--- the game writes when the box closes, so the template's OnHide does not hide the box when this addon hides the button.
 local function Unsplit(button)
 	local ok, value = pcall(rawget, button, "hasStackSplit")
 	if ok and not ns.IsSecret(value) and value == 1 then
@@ -1641,8 +1397,6 @@ local function Unsplit(button)
 	end
 end
 
--- B.Buttons.Unsplit(button): called before Flat UI's code hides a live button or a frame that holds one (the bag window, its content, a holder).
--- With a button, that one, when it is a live one; with none, every live button.
 function Buttons.Unsplit(button)
 	if button ~= nil then
 		local state = states[button]
@@ -1658,8 +1412,6 @@ function Buttons.Unsplit(button)
 	end
 end
 
--- B.Buttons.ShowAll(on): with true, every live button the bags have now is shown, for the warm-up of B.Window.Warm, which shows the window off the
--- screen for one frame (design §2.5.1); with false, each goes back to the shown flag it had.
 function Buttons.ShowAll(on)
 	if not on then
 		local was = warming
@@ -1699,10 +1451,6 @@ function Buttons.ShowAll(on)
 	end
 end
 
--- Prepare and the top-up ----------------------------------------------------------------------------------------------------------------
-
--- The bags to make buttons for, the given ones first, then the rest: 0 to 5, and the keyring while the game shows one. Their sizes are read again,
--- the buttons past a bag's size are hidden, and the keyring's holder shows only with the keyring.
 local function Wanted(containers)
 	keyringShown = KeyringShows()
 	local keyring = holders[KEYRING]
@@ -1746,7 +1494,6 @@ local function Wanted(containers)
 	return list
 end
 
--- The slots of these bags that have no button yet, in order.
 local function Missing(list)
 	local missing = {}
 	for _, bag in ipairs(list) do
@@ -1760,8 +1507,6 @@ local function Missing(list)
 	return missing
 end
 
--- Hands the buttons made since the last warm-up to B.Window.Warm, once their holders are in the window. While Bags is off, stopped or stood down
--- nothing shows, and they wait for the next Prepare or the top-up at the start of a fight.
 local function Finish()
 	if #unwarmed == 0 or not On() then
 		return
@@ -1774,7 +1519,6 @@ end
 
 local Queue
 
--- One frame of a Prepare run: STEP buttons, then the next frame, until every slot has one. A fight stops the run, and the rest waits for its end.
 local function Step()
 	if pending == nil then
 		running = false
@@ -1805,7 +1549,6 @@ local function Step()
 	Finish()
 end
 
--- The work of B.Buttons.Prepare(containers). Its callers (Bags.lua's Start, BagsData.lua's BAG_CONTAINER_UPDATE) call it only while Bags is on.
 local function Prepare(containers)
 	local list = Wanted(containers)
 	if Fighting() then
@@ -1827,7 +1570,6 @@ local function Prepare(containers)
 	end
 end
 
--- A Prepare asked for in a fight waits for its end, once, whatever the number of asks, and runs then only while Bags is still on.
 function Queue()
 	if queued then
 		return
@@ -1841,14 +1583,10 @@ function Queue()
 	end)
 end
 
--- B.Buttons.Prepare(containers): out of combat, a template button for every slot of the bags, the containers given first, STEP to a frame, then
--- the warm-up of what it made. In a fight it waits for the end of the fight.
 function Buttons.Prepare(containers)
 	Part(Prepare, containers)
 end
 
--- PLAYER_REGEN_DISABLED, before the lockdown: every missing template button at once, normally none, and the warm-up of those and of any a run left
--- unwarmed (design §2.5.1).
 local function TopUp()
 	if not On() then
 		return
@@ -1861,10 +1599,6 @@ local function TopUp()
 	Finish()
 end
 
--- Locks, cooldowns and the look --------------------------------------------------------------------------------------------------------
-
--- B.Buttons.Lock(bag, slot): ITEM_LOCK_CHANGED for one slot of the bags, or of the bank while it is live: its icon is desaturated while the game
--- holds it locked, read live; nothing else of the button is drawn again.
 function Buttons.Lock(bag, slot)
 	if not Whole(bag) or not Whole(slot) then
 		return
@@ -1884,7 +1618,6 @@ function Buttons.Lock(bag, slot)
 	SetLocked(state, info ~= nil and Plain(info.isLocked) == true)
 end
 
--- B.Buttons.Cooldowns(): the cooldowns of the live buttons on screen, only while a window shows a bag.
 function Buttons.Cooldowns()
 	local shown = false
 	for _, holder in pairs(holders) do
@@ -1910,14 +1643,11 @@ function Buttons.Cooldowns()
 	end
 end
 
--- B.Buttons.Paint(): the look rows again on every button (Icon crop, Button and slot colour, Quality border), from what each shows.
 function Buttons.Paint()
 	for _, state in pairs(states) do
 		PaintOne(state)
 	end
 end
-
--- Events (design §2.8) ----------------------------------------------------------------------------------------------------------------------
 
 ns.AddEvent(KEY, "ITEM_LOCK_CHANGED", function(bag, slot)
 	if On() then

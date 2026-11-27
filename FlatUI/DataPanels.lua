@@ -1,71 +1,19 @@
 local ADDON_NAME, ns = ...
 
--- Data panels: two panels of Flat UI's own, the top panel and the bottom panel, each a row of up to six slots on a flat background with a thin
--- border, in Flat UI Sans or the game's font. A slot shows one stream (DataStreams.lua): bag space, gold, durability, ammunition, soul shards, the
--- hearthstone, the time, the quests in the log, experience, reputation, coordinates, frame rate and latency, friends or guild members online, the
--- equipment set worn, or the feed of another addon through LibDataBroker, when an addon that is loaded brought LibStub and LibDataBroker-1.1 with
--- it (Flat UI ships no library, and shows feeds of the kind "data source" only). A slot with nothing to show takes no room, a panel with nothing to
--- show is hidden, and a panel makes its frames only once a slot has something to show. The panels are children of UIParent, so they hide with the
--- interface, and they are hidden in a pet battle (PET_BATTLE_OPENING_START to PET_BATTLE_CLOSE, and C_PetBattles.IsInBattle at each loading
--- screen). /flatui move places them: each is in the list of the movers (FlatUIDataTop and FlatUIDataBottom) with the panel itself as its box. A
--- stream is drawn again on its events, once for a burst of them, and the few that change by themselves (coordinates, frame rate and latency, the
--- cooldown of the hearthstone) on a ticker that runs only while a shown panel holds one of them. Pointing at a slot writes its lines in GameTooltip
--- (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide when the cursor leaves). No click casts anything: a left click on the equipment set
--- opens a menu of Flat UI's own (Menus, below), one on Bag space opens or closes Flat UI's bag window while Bags is on (ns.BagsToggle, Bags.lua),
--- one on Time, Quest log, Friends, Guild, Durability, Reputation or Coordinates (the world map) opens the game's window for it (in a fight as the
--- fight ends, with a line in chat), and Shift-click on Coordinates, Experience or Reputation puts its line in the chat box (DataStreams.lua), a
--- right click on any slot of Flat UI's own opens a menu of Flat UI's own under it ("Top panel, third slot") to choose what the slot shows, the one
--- shown now in gold with a tick and a stream that shows nothing for this character now dim, with why ("Soul shards (only for a warlock)"); a pick
--- that leaves the slot with no room says so in chat. While the panel has a slot set to None, "Add a slot after this one" opens a second menu in
--- the same place ("Top panel, new fifth slot") that fills it. The last line opens the Data panels page of the options (ns.OpenPanelPage,
--- Panel.lua, after the fight in one; P.SlotMenu, Menus), each tooltip ends with a dim line that says so, and a click on a feed goes to the feed's
--- own OnClick. A press is a click only when it is let go over the slot. Every value of the game is read in pcall, and one it withholds is left
--- out, with the count it belongs to: no part of a count is shown. A stream that keeps failing is stopped alone (ns.EachPart), with a line for
--- /flatui status. Each change of the gold floats from a Gold slot ("+38s 2c" in green, P.Float, Gold floats).
--- The gold of the account's characters is kept in FlatUIDB.datapanels.gold by "Name - Realm", and the feeds a slot of any profile shows in
--- FlatUIDB.datapanels.feeds, so a slot keeps its feed while the addon that makes it loads after Flat UI.
--- The looks of the Look rows are calls on Flat UI's own frames and font strings only: the outline of the text in the flags of SetFont, its shadow
--- (SetShadowOffset) and its colour (SetTextColor: white, the player's class colour, white while the game withholds the class, or an own colour),
--- under the colour codes of the streams, which keep the parts they colour; the menu of Equipment set keeps its own look. The slot under the mouse
--- has a faint light behind it (HOVER_LIGHT, a texture of the slot's own), kept while its menu is open. Panel width shares the room a panel has
--- beyond what its slots need evenly among the slots shown; Layer is the strata of the panel's frame (SetFrameStrata), and the slots follow it.
--- Opacity in combat and out of combat are the alpha of the panel's frame (SetAlpha, which the game does not protect:
--- SimpleFrameAPIDocumentation.lua:1133-1143), set at the start and the end of a fight (PLAYER_REGEN_DISABLED, PLAYER_REGEN_ENABLED), at each
--- refresh, which asks InCombatLockdown, and when a stream drawn again makes a panel or shows it again. A panel under the mouse, or whose menu is
--- open, is at full opacity, and so is every panel while /flatui move or Edit Mode is open (P.Lining), so a panel at 0% is not an empty box as it
--- is lined up: the frame is asked IsMouseOver, which needs no mouse on it, and the movers and Edit Mode whether they are open, on a ticker every
--- HOVER seconds that runs only while a shown panel rests below full opacity, so slots that let clicks through still do. A change eases, rising
--- over RISE seconds and falling over FALL (each times the share of the way), by an OnUpdate of the panel's own frame that runs only while it
--- eases; a panel just made or shown takes its alpha at once. The alpha is written only when it changes.
--- While test mode is on (TestMode.lua), a slot whose stream has nothing to show shows the stream's sample, the widest text it shows (P.TextOf).
--- The lines around the minimap write the tooltips of the same streams on buttons of their own (P.TipAt, MapText.lua), also with the panels off.
--- Built on the data panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission: its streams, the bridge to LibDataBroker,
--- the ticker that runs only for the streams that are shown, and its looks: font style and colour, width, strata and the opacity in and out of
--- combat (Core/DataPanel.lua:414-433, 1127-1180, 1484-1617). Panels made in Edit Mode, its height (Text size covers it), its fonts of other
--- addons and the secure buttons of its streams are left out, and its colours wrap the text in a code where Flat UI sets the colour of the text.
-
 local KEY = "datapanels"
 local SLOTS = 6
--- The size of the text at 100%, the room left and right of the text of a slot and above and below it.
 local BASE, PAD_X, PAD_Y = 12, 8, 4
--- A burst of events is drawn once, this long after the first. The ticker's step. A live tooltip is written again this often.
 local SETTLE, STEP, LIVE = 0.1, 0.5, 1
--- How often the mouse is looked for while a shown panel rests below full opacity. The seconds a panel takes to rise to full opacity and to fall
--- back to the one it rests at, for the whole way (ease-out, as the frames of the Fading page).
 local HOVER = 0.1
 local RISE, FALL = 0.1, 0.3
--- The faint light behind the slot under the mouse.
 local HOVER_LIGHT = { 1, 1, 1, 0.07 }
--- The strata of a panel by its Layer row.
 local STRATA = { low = "LOW", medium = "MEDIUM", high = "HIGH" }
 local SANS = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Fonts\\IBMPlexSans-Regular.ttf"
 local GAME_FONT = "Fonts\\FRIZQT__.TTF"
 local FEED = "ldb:"
 local LIBRARY = "LibDataBroker-1.1"
--- The colours of the window's text-dim and of its states (PanelLook.lua), for the labels and for what a value tells.
 local DIM, GOOD, WARN, BAD = "|cffa9ae9f", "|cff7ccb8f", "|cffe6b85c", "|cffe5776c"
 local DIM_RGB = { 0.66, 0.68, 0.62 }
--- point: the point of the panel its handle saves, which stays where it is as the panel grows. relative, x, y: where it is with no spot saved.
 local PANELS = {
 	{ id = "top", mover = "FlatUIDataTop", point = "TOP", relative = "TOP", x = 0, y = -2 },
 	{ id = "bottom", mover = "FlatUIDataBottom", point = "BOTTOMLEFT", relative = "BOTTOMLEFT", x = 4, y = 4 },
@@ -74,9 +22,6 @@ local NOTE_SANS = "Data panels: the game did not load Flat UI Sans, so the panel
 local LINE_PET = "Data panels: hidden during the pet battle."
 local LINE_FEED = "Data panels: no addon has made the feed %s yet."
 
--- streams: by id, and order: the ids in the order a slot's list shows them (DataStreams.lua adds them). panels: by id. used: the streams a
--- shown slot holds, by id. dirty: the streams to draw again. last: when a stream with a step of its own was last drawn. feedStreams: the
--- stream of each feed, by its name. reported: the streams and feeds whose first error went to the error handler.
 local P = { streams = {}, order = {}, panels = {}, used = {}, dirty = {}, last = {}, feedStreams = {}, usedFeeds = {}, reported = {}, owner = {},
 	petBattle = false, DIM = DIM, GOOD = GOOD, WARN = WARN, BAD = BAD, FEED = FEED }
 ns.DataPanels = P
@@ -90,9 +35,6 @@ local function Own(object)
 	return object
 end
 
--- Values the game gives ----------------------------------------------------------------------------------------------------------------
-
--- A value that is neither secret nor missing, or nil.
 function P.Plain(value)
 	if value == nil or ns.IsSecret(value) then
 		return nil
@@ -100,7 +42,6 @@ function P.Plain(value)
 	return value
 end
 
--- Up to four values of a call of the client, each nil when the client withholds it; nothing when the call is missing or raises.
 function P.Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -112,8 +53,6 @@ function P.Ask(fn, ...)
 	return P.Plain(a), P.Plain(b), P.Plain(c), P.Plain(d)
 end
 
--- Up to four values of a call of the client after true when it withholds any of them, and after false when it does not. A call that is
--- missing or raises gives false and no value. A stream whose count needs every answer shows nothing rather than a part of it.
 function P.Read(fn, ...)
 	if type(fn) ~= "function" then
 		return false
@@ -128,7 +67,6 @@ function P.Read(fn, ...)
 	return false, a, b, c, d
 end
 
--- A whole number that is not negative, or nil.
 function P.Count(value)
 	if ns.Finite(value) and value >= 0 then
 		return math.floor(value)
@@ -136,7 +74,6 @@ function P.Count(value)
 	return nil
 end
 
--- A field of a table of the game or of another addon, read in pcall: nil when it is missing, withheld or cannot be read.
 function P.Field(object, key)
 	if type(object) ~= "table" or ns.IsSecret(object) then
 		return nil
@@ -147,7 +84,6 @@ function P.Field(object, key)
 	return ok and P.Plain(value) or nil
 end
 
--- A text a stream can show: a string that is not empty, or a number written as one.
 function P.Text(value)
 	if type(value) == "number" and ns.Finite(value) then
 		return tostring(value)
@@ -160,7 +96,6 @@ function P.Now()
 	return ns.Finite(now) and now or 0
 end
 
--- Runs fn after a delay, or at once on a client without a timer.
 function P.After(delay, fn)
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, delay, fn) then
 		return
@@ -172,7 +107,6 @@ function P.InCombat()
 	return P.Ask(InCombatLockdown) == true
 end
 
--- The colour code of red, green and blue.
 function P.Hex(r, g, b)
 	local function Byte(value)
 		return math.max(0, math.min(255, math.floor(value * 255 + 0.5)))
@@ -180,7 +114,6 @@ function P.Hex(r, g, b)
 	return ("|cff%02x%02x%02x"):format(Byte(r), Byte(g), Byte(b))
 end
 
--- The colour code of a class by its file name (WARRIOR), or nil.
 function P.ClassHex(class)
 	if type(class) ~= "string" or ns.IsSecret(class) then
 		return nil
@@ -193,12 +126,10 @@ function P.ClassHex(class)
 	return nil
 end
 
--- "Label value", the label in the dim colour.
 function P.Labelled(label, value)
 	return DIM .. label .. "|r " .. value
 end
 
--- Seconds as the slot and the tooltip write them: 59m, 45s.
 function P.Time(seconds)
 	if seconds >= 3600 then
 		return ("%dh %dm"):format(math.floor(seconds / 3600), math.floor(seconds % 3600 / 60))
@@ -208,8 +139,6 @@ function P.Time(seconds)
 	return ("%ds"):format(math.ceil(seconds))
 end
 
--- What the account keeps for the data panels, outside every profile: { gold = { ["Name - Realm"] = { money, class } }, feeds = { name = label } }.
--- Made only with create, which only the module does while it is on; without it nil when there is none. Nil before the saved variables are loaded.
 function P.Store(create)
 	local db = ns.Account()
 	if type(db) ~= "table" then
@@ -229,23 +158,12 @@ function P.Store(create)
 	return store
 end
 
--- A list the account keeps (gold or feeds), or an empty table to read when it has none.
 function P.Kept(name)
 	local store = P.Store()
 	local list = store and store[name]
 	return type(list) == "table" and list or {}
 end
 
--- Streams ---------------------------------------------------------------------------------------------------------------------------------------
-
--- stream: { id, label = the line of a slot's list and the name of its part in /flatui status, Text = function returning the text of a slot, or
--- nil for nothing, Tip = function(fresh) returning the lines of the tooltip ({ title = text, { left, right }, { left }, ... }; fresh is false when a
--- shown tooltip is written again), sample = the widest text it shows, so the slot keeps its width as its numbers change, every = seconds between
--- two drawings while a slot shows it, or a function giving them (nil when it changes only on its events), live = true for a tooltip that is
--- written again while it is shown, events = { EVENT = true or a function run before the slot is drawn again }, Start = function run when the
--- module starts and at each loading screen, Click = function(slot, button) for a slot that takes a left click, Hint = function giving the text
--- of the tooltip's last line that says what that click does, idle = the few words the slot menu dims its line with while it shows nothing, as
--- "only for a warlock" }.
 function P.Stream(stream)
 	P.streams[stream.id] = stream
 	P.order[#P.order + 1] = stream.id
@@ -260,8 +178,6 @@ function P.Stream(stream)
 	return stream
 end
 
--- Runs a function of a stream as a part of the module: a stream that keeps failing is stopped alone, with a line for /flatui status, and its
--- first error also goes to the game's error handler. True and the first value it returned, or false.
 function P.Run(stream, fn, ...)
 	local answer
 	local ok, err = ns.EachPart(KEY, stream.label, function(_, ...)
@@ -277,7 +193,6 @@ function P.Run(stream, fn, ...)
 	return ok == true, answer
 end
 
--- Calls a function of a feed, which is another addon's code. Its first error goes to the game's error handler.
 function P.Call(name, fn, ...)
 	local ok, err = pcall(fn, ...)
 	if not ok and not P.reported[FEED .. name] then
@@ -290,9 +205,6 @@ function P.Call(name, fn, ...)
 	return ok
 end
 
--- LibDataBroker -----------------------------------------------------------------------------------------------------------------------------
-
--- The library, when an addon brought it. Nothing else of LibStub is asked for.
 function P.Library()
 	if P.lib == nil then
 		local stub = _G.LibStub
@@ -306,7 +218,6 @@ function P.Library()
 	return P.lib
 end
 
--- The data object of a feed by its name, or nil.
 function P.FeedObject(name)
 	local lib = P.Library()
 	local get = lib and P.Field(lib, "GetDataObjectByName")
@@ -320,13 +231,11 @@ function P.FeedObject(name)
 	return nil
 end
 
--- The name a feed shows in a slot's list: its label, else its name.
 function P.FeedLabel(name)
 	local object = P.FeedObject(name)
 	return object and P.Text(P.Field(object, "label")) or nil
 end
 
--- The feeds of the kind "data source" that exist now: { name = label }.
 function P.Feeds()
 	local found = {}
 	local lib = P.Library()
@@ -348,7 +257,6 @@ function P.Feeds()
 	return found
 end
 
--- The stream of a feed: its text is the feed's text, else its value and label; its tooltip and its clicks are the feed's own.
 function P.FeedStream(name)
 	local stream = P.feedStreams[name]
 	if not stream then
@@ -400,21 +308,18 @@ function P.FeedText(name)
 	return (text:gsub("[\r\n]+", " "))
 end
 
--- A feed changed one of its values: its slots are drawn again. Called for every value of every feed, so it does little.
 function P.FeedChanged(_, name)
 	if P.usedFeeds[name] then
 		P.Mark(FEED .. name)
 	end
 end
 
--- A feed was made: a slot that waited for it shows it.
 function P.FeedMade(_, name)
 	if P.usedFeeds[name] == false then
 		P.Soon()
 	end
 end
 
--- Listens to the library once it is found, while the module is on. The callbacks look at nothing while it is off.
 function P.Listen()
 	local lib = P.Library()
 	if not lib or P.listening then
@@ -437,7 +342,6 @@ function P.Listen()
 	P.listening = made or changed
 end
 
--- The feeds a slot of any profile shows are kept for the account with their label, and the others are forgotten.
 function P.Remember()
 	local store, db = P.Store(true), ns.Account()
 	if not store then
@@ -467,7 +371,6 @@ function P.Remember()
 	end
 end
 
--- The lines of a slot's list: None, the streams, then the feeds that exist now and the ones a slot keeps while their addon is not loaded.
 function ns.DataPanelChoices()
 	local list = { { "none", "None" } }
 	for _, id in ipairs(P.order) do
@@ -491,7 +394,6 @@ function ns.DataPanelChoices()
 	return list
 end
 
--- The stream a slot's choice names, or nil.
 function P.StreamOf(id)
 	if type(id) ~= "string" or id == "none" then
 		return nil
@@ -502,9 +404,6 @@ function P.StreamOf(id)
 	return P.streams[id]
 end
 
--- The font ------------------------------------------------------------------------------------------------------------------------------------
-
--- Flat UI Sans has Latin and Cyrillic letters (PanelLook.lua says the same of the options window); any other client takes the game font.
 local function Covers()
 	if ns.FontsLatin == nil or ns.FontsLatin() then
 		return true
@@ -512,7 +411,6 @@ local function Covers()
 	return P.Ask(GetLocale) == "ruRU"
 end
 
--- The file of the game's small text, read from its font object.
 local function GameFile()
 	local object = _G.GameFontHighlightSmall
 	if type(object) == "table" and not ns.IsSecret(object) then
@@ -524,16 +422,12 @@ local function GameFile()
 	return GAME_FONT
 end
 
--- The face and size of the text, the height of a panel, and the flags of Text outline ("" for none: ns.OUTLINE_FLAGS, Config.lua).
 function P.Font()
 	local size = BASE * Opt("textSize") / 100
 	local file = Opt("font") == "sans" and Covers() and SANS or nil
 	return file, size, math.ceil(size + 2 * PAD_Y), ns.OUTLINE_FLAGS[Opt("outline")] or ""
 end
 
--- Sets the face, the size and the outline on a text of a slot, and the face and the size on one of the menu, which keeps no outline (flags nil).
--- A face the game refuses (an answer of false, or an error) leaves the game's font with the same outline, and the status says so; a language
--- Flat UI Sans has no letters for takes the game's font (Covers).
 function P.SetFont(text, file, size, flags)
 	flags = type(flags) == "string" and flags or ""
 	if file then
@@ -549,9 +443,6 @@ function P.SetFont(text, file, size, flags)
 	pcall(text.SetFont, text, GameFile(), size, flags)
 end
 
--- The shadow and the colour of the text by Text shadow and Text colour: white, the player's class colour, or the own colour. The class is read
--- with UnitClass, which the game withholds while unit identity is restricted (UnitDocumentation.lua:911-915); ns.ClassColour gives nothing then,
--- and the text is white.
 function P.TextStyle()
 	local shadow = Opt("shadow") == true
 	local r, g, b = 1, 1, 1
@@ -567,8 +458,6 @@ function P.TextStyle()
 	return { shadow = shadow, r = r, g = g, b = b, key = ("%s:%.3f:%.3f:%.3f"):format(shadow and "shadow" or "plain", r, g, b) }
 end
 
--- Gives the text of a slot the shadow and the colour of P.style, when they changed. The colour is the text's own: the codes of a stream colour
--- their parts over it (DIM, GOOD, WARN, BAD), so worn gear stays red whatever the row says.
 function P.Style(slot)
 	local style, text = P.style, slot.text
 	if not style or not text or slot.styleKey == style.key then
@@ -580,15 +469,12 @@ function P.Style(slot)
 	pcall(text.SetTextColor, text, style.r, style.g, style.b, 1)
 end
 
--- Panels ------------------------------------------------------------------------------------------------------------------------------------------
-
 local function Guard(fn)
 	return function(...)
 		ns.Try(KEY, fn, ...)
 	end
 end
 
--- The frame, the text and the line of a slot, made with its panel's frame.
 function P.MakeSlot(panel, slot)
 	local frame = Own(CreateFrame("Frame", nil, panel.frame))
 	frame:Hide()
@@ -597,12 +483,9 @@ function P.MakeSlot(panel, slot)
 	slot.text:SetPoint("CENTER", frame, "CENTER", 0, 0)
 	slot.text:SetJustifyH("CENTER")
 	slot.text:SetWordWrap(false)
-	-- The shadow and the colour of Text shadow and Text colour (P.Fill gives them again when a row changes).
 	P.Style(slot)
-	-- The line between this slot and the one before it.
 	slot.line = Own(panel.frame:CreateTexture(nil, "ARTWORK", nil, 0))
 	slot.line:Hide()
-	-- The faint light behind a slot under the mouse, as Flat UI's own buttons lighten, a pixel inside the slot so the lines stay clear.
 	slot.hover = Own(frame:CreateTexture(nil, "BACKGROUND", nil, 1))
 	slot.hover:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
 	slot.hover:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
@@ -620,7 +503,6 @@ function P.MakeSlot(panel, slot)
 			P.CloseMenu()
 		end
 		slot.hover:Hide()
-		-- A change of the gold floating from the slot goes with it (P.Float).
 		local float = slot.float
 		if float then
 			pcall(float.group.Stop, float.group)
@@ -631,8 +513,6 @@ function P.MakeSlot(panel, slot)
 	frame:SetScript("OnMouseDown", function(_, button)
 		slot.down = button
 	end)
-	-- A press is a click only when it is let go over the slot, as with a button of the game's (Errands.lua does the same); a client that does not say
-	-- counts as over.
 	frame:SetScript("OnMouseUp", Guard(function(self, button)
 		local pressed = slot.down == button
 		slot.down = nil
@@ -643,7 +523,6 @@ function P.MakeSlot(panel, slot)
 	end))
 end
 
--- A panel: its slots, and no frame until one of them has something to show, so a panel that shows nothing makes nothing.
 function P.Panel(spec)
 	local panel = P.panels[spec.id]
 	if not panel then
@@ -656,9 +535,6 @@ function P.Panel(spec)
 	return panel
 end
 
--- The frame of a panel, on UIParent in the strata of Layer, with a flat background and a thin border, and the frames of its slots. It starts at
--- full opacity, which P.Fade knows, so a panel at 100% in and out of combat is never given an alpha. panel.ease is the OnUpdate of its frame
--- while its opacity eases (P.Fade).
 function P.Build(panel)
 	local frame = Own(CreateFrame("Frame", nil, UIParent))
 	panel.strata = STRATA[Opt("strata")] or "LOW"
@@ -675,8 +551,6 @@ function P.Build(panel)
 	end
 end
 
--- The text a slot's stream gives now, or nil. While test mode is on (TestMode.lua) a stream with nothing to show gives its own sample, the widest
--- text it shows, so an empty slot and an empty panel can be seen.
 function P.TextOf(slot)
 	local stream = P.StreamOf(slot.id)
 	if stream and not ns.PartStopped(KEY, stream.label) then
@@ -691,7 +565,6 @@ function P.TextOf(slot)
 	return nil
 end
 
--- The text of a slot is written again. True when the room it takes changed.
 function P.Draw(slot, text)
 	local stream = P.StreamOf(slot.id)
 	if text == nil or stream == nil then
@@ -709,10 +582,8 @@ function P.Draw(slot, text)
 	if ns.Finite(measured) and ok then
 		width = math.max(width, measured)
 	elseif slot.width then
-		-- A width the game does not give keeps the last one.
 		width = math.max(width, slot.width - 2 * PAD_X)
 	else
-		-- Guessed from the letters shown: the colour codes of a stream take no room.
 		width = math.max(width, #(text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) * slot.size / 2)
 	end
 	width = math.ceil(width) + 2 * PAD_X
@@ -722,7 +593,6 @@ function P.Draw(slot, text)
 	return changed
 end
 
--- The width of the widest text a stream shows, measured once for each face and size on the slot's own text.
 function P.Width(slot, sample)
 	if type(sample) ~= "string" then
 		return 0
@@ -737,9 +607,6 @@ function P.Width(slot, sample)
 	return P.samples[key]
 end
 
--- Lays the slots of a panel out from the left, each as wide as its text, with a thin line between two. A Panel width larger than the slots need
--- shares the room left over evenly among the slots shown, in whole units, the first ones taking what does not divide: each slot grows with its
--- text centred and the lines stay between slots. A smaller width is ignored, so no slot is cut. A panel with no slot to show is hidden.
 function P.Layout(panel)
 	local frame, height = panel.frame, P.height
 	local x, shown = 0, 0
@@ -782,7 +649,6 @@ function P.Layout(panel)
 	panel.shown = shown > 0
 	if panel.shown then
 		frame:SetSize(x, height)
-		-- A panel that comes on screen takes its opacity at once (P.Fade), so it never fades down from full in sight.
 		if not frame:IsShown() then
 			panel.snap = true
 		end
@@ -792,8 +658,6 @@ function P.Layout(panel)
 	end
 end
 
--- The game's widgets at the top of the screen (the scores of a battleground or of a world PvP zone: UIWidgetTopCenterContainerFrame, TOP 0,-15
--- of UIParent on MEDIUM, Blizzard_UIWidgetTopCenterFrame.xml:3-7), while they are where the game puts them; nil once the movers placed them.
 local function TopWidgets()
 	local widgets = _G.UIWidgetTopCenterContainerFrame
 	if ns.Forbidden(widgets) then
@@ -805,13 +669,8 @@ local function TopWidgets()
 	return widgets
 end
 
--- Puts a panel at the spot of its handle, else where it starts. A handle that was centred keeps the panel on the middle of the screen at any width.
--- With no spot the top panel hangs under the top widgets, 4 below their bottom as the game hangs its GhostFrame (GhostFrame.lua:21), so a
--- battleground's scores push it down instead of being drawn over it. Only Flat UI's own frame gets a point.
 function P.Place(panel)
 	local spec, frame = panel.spec, panel.frame
-	-- The handle has no box of its own, so the panel hangs from the point its spot was saved by: a centred handle keeps the panel on the middle
-	-- of the screen at any width, and a nudge from there moves it by the nudge.
 	local spots = type(ns.Spots) == "function" and ns.Spots()
 	local entry = type(spots) == "table" and type(ns.CleanSpot) == "function" and ns.CleanSpot(spots[spec.mover]) or nil
 	local point = entry and entry.point or spec.point
@@ -834,7 +693,6 @@ function P.Place(panel)
 	end
 end
 
--- Sets up the slots of a panel from its rows and draws them, or hides the panel.
 function P.Fill(panel, wanted)
 	if not wanted then
 		for _, slot in ipairs(panel.slots) do
@@ -874,14 +732,11 @@ function P.Fill(panel, wanted)
 		end
 		P.Style(slot)
 		P.Draw(slot, texts[index])
-		-- A feed and a stream with a click of its own (Equipment set, Bag space, Time and the others) keep their clicks while the tooltips are off;
-		-- one marked through (Gold, whose Ctrl-click goes with its tooltip) lets clicks through then.
 		local stream = P.StreamOf(slot.id)
 		local clicks = stream ~= nil and type(stream.Click) == "function" and not stream.through
 		slot.frame:EnableMouse(slot.id ~= nil and (tips or slot.feed ~= nil or clicks))
 	end
 	ns.SetOutline(panel.outline, Opt("background") == true, Opt("background") == true)
-	-- The layer of the panel's own frame; its slots follow it.
 	local strata = STRATA[Opt("strata")] or "LOW"
 	if panel.strata ~= strata then
 		panel.frame:SetFrameStrata(strata)
@@ -891,7 +746,6 @@ function P.Fill(panel, wanted)
 	P.Place(panel)
 end
 
--- The streams the shown slots hold, and the feeds they show or wait for (false while the library has no object of that name).
 function P.Used()
 	local used, feeds = {}, {}
 	for _, panel in pairs(P.panels) do
@@ -915,10 +769,8 @@ function P.Refresh()
 		P.Listen()
 		P.Remember()
 	else
-		-- The events of a fight are not heard while the module is off: the next start asks the game again.
 		P.fight = nil
 	end
-	-- The outline is in the key, so P.Width measures the samples again with it: an outline makes a text wider.
 	local file, size, height, flags = P.Font()
 	P.fontKey, P.height, P.size = ("%s:%.2f:%s"):format(tostring(file), size, flags), height, size
 	P.style = P.TextStyle()
@@ -930,8 +782,6 @@ function P.Refresh()
 			P.Fill(panel, wanted)
 		end
 	end
-	-- A menu stays open only while the module is on and its slot is still shown: a stream's menu while the slot still shows the stream that
-	-- opened it, and the slot's menu always, opened again so its tick and its dim lines follow the rows (a feed loaded, a row changed).
 	local menu = P.menu
 	local open = menu and menu.slot
 	if open and on and open.panel.wanted and open.width and menu.stream == P.SLOT_MENU then
@@ -950,7 +800,6 @@ function P.Refresh()
 	P.FadeAll()
 end
 
--- A refresh a moment later, for a burst of changes.
 function P.Soon()
 	if P.soon then
 		return
@@ -964,10 +813,6 @@ function P.Soon()
 	end)
 end
 
--- Opacity ---------------------------------------------------------------------------------------------------------------------------------------
-
--- The opacity a shown panel rests at: Opacity in combat in a fight, Opacity out of combat otherwise. The fight is what PLAYER_REGEN_DISABLED and
--- PLAYER_REGEN_ENABLED last said (P.fight), and InCombatLockdown before either was heard.
 function P.Rest()
 	local fight = P.fight
 	if fight == nil then
@@ -980,14 +825,11 @@ function P.Rest()
 	return math.max(0, math.min(100, percent)) / 100
 end
 
--- True while the frame is under the mouse. IsMouseOver measures the frame and needs no mouse on it; an answer the game withholds counts as under
--- the mouse, so the panel stays readable.
 local function Under(frame)
 	local ok, over = pcall(frame.IsMouseOver, frame)
 	return ok and (ns.IsSecret(over) or over == true)
 end
 
--- Writes a panel's alpha, only when it changes.
 local function SetAlpha(panel, alpha)
 	if panel.alpha ~= alpha then
 		panel.alpha = alpha
@@ -995,8 +837,6 @@ local function SetAlpha(panel, alpha)
 	end
 end
 
--- True while /flatui move (Movers.lua) or the game's Edit Mode is open, so a faded panel is seen whole as its box is lined up, as Fade.lua
--- keeps its frames (MoversOpen and Wanted there).
 function P.Lining()
 	local kit = ns.MoverKit
 	if type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true then
@@ -1005,10 +845,6 @@ function P.Lining()
 	return type(ns.EditModeOpen) == "function" and ns.EditModeOpen() == true
 end
 
--- Gives a panel's frame the opacity it should have now: full while it is shown under the mouse or its menu is open, or while the movers or Edit
--- Mode are open (P.Lining), so its tooltips and clicks stay usable at 0%, else the resting one. It eases there from where it is, up over RISE
--- and down over FALL, each times the share of the way (P.Ease); a call while it eases only aims it again. A frame that is hidden, or that
--- P.Layout has just shown, takes it at once, so a new panel never fades down from full on screen.
 function P.Fade(panel)
 	local frame = panel.frame
 	if not frame then
@@ -1043,7 +879,6 @@ function P.Fade(panel)
 	end
 end
 
--- A step of an easing, by the panel's OnUpdate: ease-out from where it was to where it is aimed, and the script goes once it is there.
 function P.Ease(panel)
 	local fade, frame = panel.fade, panel.frame
 	if not fade then
@@ -1061,7 +896,6 @@ function P.Ease(panel)
 	SetAlpha(panel, fade.from + (fade.to - fade.from) * (1 - (1 - share) * (1 - share)))
 end
 
--- True while the module is on and a shown panel rests below full opacity: only then is the mouse looked for.
 function P.Dimmed()
 	if not ns.Enabled(KEY) or P.Rest() >= 1 then
 		return false
@@ -1082,7 +916,6 @@ local function StopHover()
 	end
 end
 
--- Starts the ticker that looks for the mouse while a panel is dimmed, and stops it once none is, or once the module stopped on an error.
 function P.HoverTicker()
 	local want = P.Dimmed()
 	if want and not P.hover then
@@ -1108,7 +941,6 @@ function P.HoverTick()
 	end
 end
 
--- Every panel takes its opacity, and the ticker starts or stops.
 function P.FadeAll()
 	for _, panel in pairs(P.panels) do
 		P.Fade(panel)
@@ -1116,16 +948,11 @@ function P.FadeAll()
 	P.HoverTicker()
 end
 
--- The start (true) or the end (false) of a fight. The events are taken as they come: in the handlers of PLAYER_REGEN_DISABLED the game's lockdown
--- has not begun yet (the trackers still move their secure buttons then, Core.lua), so InCombatLockdown would say no fight.
 function P.Combat(on)
 	P.fight = on
 	P.FadeAll()
 end
 
--- Drawing again --------------------------------------------------------------------------------------------------------------------------------
-
--- A stream changed: its slots are drawn again a moment later, once for a burst of events.
 function P.Mark(id)
 	if not P.used[id] then
 		return
@@ -1141,7 +968,6 @@ function P.Mark(id)
 	end)
 end
 
--- Draws the slots of the streams that changed, lays out the panels whose slots took another width and writes again a tooltip of theirs.
 function P.Flush()
 	local dirty = P.dirty
 	P.dirty = {}
@@ -1150,7 +976,6 @@ function P.Flush()
 	end
 	for _, panel in pairs(P.panels) do
 		if panel.wanted and not panel.frame then
-			-- A panel that showed nothing yet is made once a slot of it has something to show.
 			for _, slot in ipairs(panel.slots) do
 				if slot.id and dirty[slot.id] and P.TextOf(slot) then
 					P.Fill(panel, true)
@@ -1173,12 +998,9 @@ function P.Flush()
 		end
 	end
 	P.Ticker()
-	-- A panel made here (P.Build starts it at full opacity) or shown again takes the opacity it rests at, and the ticker that looks for the mouse,
-	-- which stopped while no dimmed panel was shown, starts again. An alpha that did not change is not written again.
 	P.FadeAll()
 end
 
--- The step of a stream: seconds between two drawings while it is shown, or nil.
 local function Every(stream)
 	local every = stream and stream.every
 	if type(every) == "function" then
@@ -1193,8 +1015,6 @@ local function Visible(frame)
 	return ok and not ns.IsSecret(visible) and visible == true
 end
 
--- True while a shown panel holds a stream with a step of its own, or a live tooltip of one of its slots is shown. A panel hidden with the
--- interface (Alt+Z) keeps the ticker, which draws nothing then.
 function P.NeedsTicker()
 	if not ns.Enabled(KEY) then
 		return false
@@ -1212,7 +1032,6 @@ function P.NeedsTicker()
 	return false
 end
 
--- Starts the ticker while something needs it and stops it once nothing does.
 function P.Ticker()
 	local want = P.NeedsTicker()
 	if want and not P.ticker then
@@ -1225,7 +1044,6 @@ function P.Ticker()
 			token.handle = ok and ticker or nil
 		end
 		if not token.handle then
-			-- A client without NewTicker: a timer that sets the next one while the token is the ticker. With no timer at all there is no ticker.
 			local function Later(fn)
 				return type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, STEP, fn)
 			end
@@ -1255,7 +1073,6 @@ function P.Tick()
 		P.Ticker()
 		return
 	end
-	-- Nothing is drawn while no panel is on screen, as with the interface hidden.
 	local seen = false
 	for _, panel in pairs(P.panels) do
 		seen = seen or (panel.wanted and panel.shown and panel.frame ~= nil and Visible(panel.frame))
@@ -1282,15 +1099,6 @@ function P.Tick()
 	end
 end
 
--- Gold floats -------------------------------------------------------------------------------------------------------------------------------
-
--- A change of the gold floats from each Gold slot on screen: "+38s 2c" in green or "-1g 4s" in red, FLOAT.rise units up from the slot (down from
--- it on a panel in the upper half of the screen, where its tooltip opens below, so it never runs off the screen edge) over FLOAT.seconds, fading
--- after FLOAT.fade, as the bag window's footer does (GoldFloat, BagsWindow.lua). It is a frame, a font string and an animation group of the
--- slot's own, made the first time, in the panels' face, size and outline; a change that comes while one plays adds to it and starts it again,
--- so a Sell junk pass or a pack's loot reads as one growing sum. It hides with the slot. The gold stream calls it on PLAYER_MONEY, never at
--- login, after a loading screen or in test mode (DataStreams.lua); in test mode, while its Moving is on, the module's Tick floats a sample
--- instead, "+38s 2c" and then "-1g 4s" every 5 seconds (at the end of this file).
 local FLOAT = { rise = 10, seconds = 1.2, fade = 0.6 }
 
 local function MakeFloat(slot)
@@ -1356,7 +1164,6 @@ local function FloatOn(slot, delta)
 	float.group:Play()
 end
 
--- A change of a stream's number (the gold, in copper) floats from each slot that shows it on a panel on screen.
 function P.Float(id, delta)
 	if not (ns.Finite(delta) and delta ~= 0) or not ns.Enabled(KEY) then
 		return
@@ -1372,8 +1179,6 @@ function P.Float(id, delta)
 	end
 end
 
--- Tooltips and clicks -------------------------------------------------------------------------------------------------------------------------
-
 local function Tooltip()
 	local tip = _G.GameTooltip
 	if tip == nil or ns.Forbidden(tip) then
@@ -1382,7 +1187,6 @@ local function Tooltip()
 	return tip
 end
 
--- Whether GameTooltip is the slot's and the cursor is still over the slot.
 local function Owned(slot)
 	local tip = Tooltip()
 	if not tip then
@@ -1392,7 +1196,6 @@ local function Owned(slot)
 	return ok and not ns.IsSecret(owned) and owned == true
 end
 
--- Where a tooltip opens: below a panel in the upper half of the screen, above one in the lower half.
 function P.Anchor(panel)
 	local ok, _, y = pcall(panel.frame.GetCenter, panel.frame)
 	local okHeight, height = pcall(UIParent.GetHeight, UIParent)
@@ -1402,8 +1205,6 @@ function P.Anchor(panel)
 	return panel.spec.point:find("TOP", 1, true) and "ANCHOR_BOTTOM" or "ANCHOR_TOP"
 end
 
--- Writes the lines of a stream's tooltip: the title, then { left, right } as two columns (the left in the dim colour) or { left } alone, then a
--- dim line with what a click does: the stream's own hint (Hint, a function giving a text or nil), and the right click that opens the options.
 function P.Tip(slot, fresh)
 	local stream, tip = P.StreamOf(slot.id), Tooltip()
 	if not (stream and stream.Tip and tip) or ns.PartStopped(KEY, stream.label) then
@@ -1435,8 +1236,6 @@ function P.Tip(slot, fresh)
 	end)
 end
 
--- The same lines on another frame of Flat UI's own, for the lines around the minimap (MapText.lua): the frame that owns the tooltip, its anchor,
--- the stream's id and fresh as above, and hints, dim lines after them. True when the tooltip shows.
 function P.TipAt(owner, anchor, id, fresh, hints)
 	local stream, tip = P.StreamOf(id), Tooltip()
 	if not (owner and stream and stream.Tip and tip) or ns.PartStopped(KEY, stream.label) then
@@ -1463,15 +1262,12 @@ function P.TipAt(owner, anchor, id, fresh, hints)
 	end))
 end
 
--- A tooltip that is shown is written again, while it is still the slot's.
 function P.Retip(slot)
 	if slot.over and not slot.feed and Opt("tooltips") and Owned(slot) then
 		P.Tip(slot, false)
 	end
 end
 
--- The tooltip of a feed: its OnEnter when it has one, which shows its own, else GameTooltip with the lines of its OnTooltipShow or its tooltip text,
--- and then a dim line for the slot's menu, which Alt-right-click opens on a feed (P.Click).
 function P.FeedEnter(slot)
 	local name, object = slot.feed, P.FeedObject(slot.feed)
 	if not object then
@@ -1502,9 +1298,7 @@ function P.Enter(slot)
 	if slot.hover then
 		slot.hover:Show()
 	end
-	-- A dimmed panel rises to full opacity at once, before the ticker sees the mouse.
 	P.Fade(slot.panel)
-	-- The slot's menu lies where its tooltip would.
 	if not slot.id or not Opt("tooltips") or P.MenuOpen(slot) then
 		return
 	end
@@ -1532,18 +1326,12 @@ function P.Leave(slot)
 	if Owned(slot) then
 		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
 	end
-	-- The light stays while the slot's menu is open.
 	if slot.hover and not P.MenuOpen(slot) then
 		slot.hover:Hide()
 	end
 	P.Fade(slot.panel)
 end
 
--- A click on a slot: a feed's own OnClick, with the slot and the button, or the Click of a stream of Flat UI's own that has one (Equipment set, Bag
--- space, Time, Coordinates, Quest log, Experience, Reputation, Friends, Guild, Durability), with the slot and the button. A right click on a slot
--- of Flat UI's own opens the slot's menu of what it shows (P.SlotMenu, below), or closes it when it is open; another menu open on the slot
--- closes first. On a feed, whose clicks are its own, Alt-right-click does that (a plain right click still goes to the feed), and any other
--- click closes the slot's menu before it goes on to the feed. Any other click on a slot of Flat UI's own does nothing.
 function P.Click(slot, button)
 	local alt = false
 	if slot.feed and button == "RightButton" and type(IsAltKeyDown) == "function" then
@@ -1561,7 +1349,6 @@ function P.Click(slot, button)
 			if Owned(slot) then
 				pcall(_G.GameTooltip.Hide, _G.GameTooltip)
 			end
-			-- A feed's own tooltip, from its OnEnter, goes as it would when the mouse leaves.
 			local entered = slot.entered
 			if entered then
 				slot.entered = nil
@@ -1588,23 +1375,7 @@ function P.Click(slot, button)
 	end
 end
 
--- Menus -------------------------------------------------------------------------------------------------------------------------------------------
-
--- A menu of Flat UI's own that a stream opens from its slot (Equipment set), or a right click (the slot's menu, P.SlotMenu): a title and a column
--- of lines in the face and size of the panels, on a flat background with a thin border, under the slot when the panel is in the upper half of the
--- screen and over it in the lower half, as its tooltip opens. A column is as tall as the screen allows (UIParent's height less the title and
--- room at the edges, at least four lines); the lines past it go on in a second column beside it, and a third, each as wide as its widest line,
--- with a thin line in the border colour between two, so every line can be clicked with many feeds or a large Text size. The title is over the
--- first column. A line is { text, pick = function, inert = true for a line that does nothing }. A click on a line closes the menu and runs its pick
--- as a part of the stream. A press anywhere else (GLOBAL_MOUSE_DOWN, heard on a frame of Flat UI's own only while the menu is shown), a second
--- click on the slot, Escape, the start of a fight, the slot hiding or showing another stream and the module going off close it; a refresh keeps
--- the slot's menu, drawn again. For Escape the menu's own frame takes the keyboard while it is open out of a fight (EnableKeyboard), and its
--- OnKeyDown keeps Escape from going on (SetPropagateKeyboardInput false) and lets every other key go on to the game, as the movers' keys and the
--- options window's do (MoversMode.lua, Panel.lua); the menu is at DIALOG, over the options window (HIGH), so it hears the key first. The keyboard
--- goes as the menu closes, which the start of a fight does before the lockdown begins, and a menu opened in a fight takes no keyboard. Nothing
--- of the game's is used for it: neither the game's menus nor its list of the windows that Escape closes.
 local EDGE = 4
--- The light behind the line under the cursor.
 local LIGHT = { 1, 1, 1, 0.08 }
 
 local function Over(frame)
@@ -1612,7 +1383,6 @@ local function Over(frame)
 	return ok and not ns.IsSecret(over) and over == true
 end
 
--- True while the menu is open, on that slot when one is given.
 function P.MenuOpen(slot)
 	local menu = P.menu
 	return menu ~= nil and menu.slot ~= nil and (slot == nil or menu.slot == slot)
@@ -1631,14 +1401,11 @@ function P.CloseMenu()
 	pcall(menu.listener.UnregisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
 	pcall(menu.frame.EnableKeyboard, menu.frame, false)
 	menu.frame:Hide()
-	-- The panel held at full opacity for its menu rests again once the mouse is off it.
 	if panel then
 		P.Fade(panel)
 	end
 end
 
--- A press of a mouse button while the menu is open: one outside the menu and its slot closes it. A press on the slot is the slot's own click,
--- which closes the menu as the button comes up.
 local function Pressed()
 	local menu = P.menu
 	if menu and menu.slot and not Over(menu.frame) and not Over(menu.slot.frame) then
@@ -1653,11 +1420,9 @@ local function MenuFrame()
 	local frame = Own(CreateFrame("Frame", nil, UIParent))
 	frame:SetFrameStrata("DIALOG")
 	frame:SetSize(1, 1)
-	-- A click on the edge of the menu stays on it.
 	frame:EnableMouse(true)
 	pcall(frame.SetClampedToScreen, frame, true)
 	pcall(frame.EnableKeyboard, frame, false)
-	-- Escape closes the menu and goes no further; every other key goes on to the game.
 	frame:SetScript("OnKeyDown", function(self, key)
 		local escape = key == "ESCAPE" and P.MenuOpen()
 		if not InCombatLockdown() then
@@ -1720,7 +1485,6 @@ local function MenuLine(menu, index)
 	return line
 end
 
--- The width of a text of the menu: measured, else guessed from its length.
 local function Measure(text, value, size)
 	local ok, width = pcall(text.GetStringWidth, text)
 	if ok and ns.Finite(width) then
@@ -1729,7 +1493,6 @@ local function Measure(text, value, size)
 	return #value * size / 2
 end
 
--- Opens the menu of a stream on its slot with a title and lines, or closes it when it is open on that slot already. True when it opened.
 function P.OpenMenu(slot, stream, title, items)
 	if P.MenuOpen(slot) then
 		P.CloseMenu()
@@ -1740,14 +1503,12 @@ function P.OpenMenu(slot, stream, title, items)
 	end
 	local menu = MenuFrame()
 	P.CloseMenu()
-	-- The menu keeps its own look: the face and the size of the panels, without Text outline.
 	local file, size = P.Font()
 	local height = P.height or math.ceil(size + 2 * PAD_Y)
 	P.SetFont(menu.title, file, size)
 	menu.title:SetText(DIM .. title .. "|r")
 	menu.title:ClearAllPoints()
 	menu.title:SetPoint("LEFT", menu.frame, "TOPLEFT", PAD_X, -(EDGE + height / 2))
-	-- The lines a column holds: as many as the screen's height takes under the title, at least four.
 	local per = #items
 	local okScreen, screen = pcall(UIParent.GetHeight, UIParent)
 	if okScreen and ns.Finite(screen) and screen > 0 then
@@ -1771,7 +1532,6 @@ function P.OpenMenu(slot, stream, title, items)
 		lefts[column] = total
 		total = total + widths[column]
 	end
-	-- A title wider than the columns widens the last one.
 	local need = math.ceil(Measure(menu.title, title, size)) + 2 * PAD_X
 	if need > total then
 		widths[columns] = widths[columns] + need - total
@@ -1789,7 +1549,6 @@ function P.OpenMenu(slot, stream, title, items)
 		menu.lines[index].item = nil
 		menu.lines[index].frame:Hide()
 	end
-	-- A thin line in the border colour between two columns, as between two slots of a panel.
 	local r, g, b = ns.BorderRGB()
 	local thin = ns.Pixels(menu.frame, 1)
 	for column = 2, columns do
@@ -1819,43 +1578,22 @@ function P.OpenMenu(slot, stream, title, items)
 	ns.SetOutline(menu.outline, true, true)
 	menu.slot, menu.stream = slot, stream
 	menu.frame:Show()
-	-- Escape closes it, out of a fight only; every other key still goes to the game.
 	if not InCombatLockdown() then
 		pcall(menu.frame.EnableKeyboard, menu.frame, true)
 		pcall(menu.frame.SetPropagateKeyboardInput, menu.frame, true)
 	end
-	-- The panel stays at full opacity while its menu is open, wherever the mouse goes.
 	P.Fade(slot.panel)
 	pcall(menu.listener.RegisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
-	-- The slot's tooltip would lie over the menu.
 	if Owned(slot) then
 		pcall(_G.GameTooltip.Hide, _G.GameTooltip)
 	end
 	return true
 end
 
--- The menu of a slot: a right click on a slot of Flat UI's own opens it, or Alt-right-click on another addon's feed, titled with the panel and the
--- slot ("Top panel, third slot"). It lists None, every stream and the feeds, as the slot's row on the options page does (ns.DataPanelChoices), the
--- one the slot shows now in gold with a tick, which does nothing; a pick sets the slot's row (ns.Set, and Home's Recent changes as for a change on
--- the page, so Ctrl+Z and the reset arrow take it back) and the module's refresh draws the panel again. A stream of Flat UI's own that shows
--- nothing for this character now (its Text run as the slot would, without test mode's sample) reads dim with its idle words, as "Soul shards (only
--- for a warlock)", and can still be picked. A pick that leaves the slot with no room (None, or such a stream) says so in chat with print, as the
--- data panels have no chat switch: "Flat UI: Soul shards shows nothing for this character now (only for a warlock), so the third slot of the top
--- panel takes no room.", and that the panel hides when it has nothing left to show. "Move left" and "Move right" swap the slot's row with that of
--- its nearest neighbour that takes room now (a None slot, or one with nothing to show, is passed over; a line is left out at either end) and open
--- the menu again on the slot that now holds the moved kind, so each press moves it on. While the panel has a slot set to None, "Add a slot after
--- this one" (before, for a free slot before it) opens a second menu at the same slot for the first such slot after it, else the nearest before it,
--- titled with the place the new slot lands ("Top panel, new third slot"), listing every choice but None. Its pick lands right beside the slot
--- clicked: the rows between it and the free slot shift one place toward the free slot, and the pick is written next to the slot clicked. A move or
--- an add is one batch in Recent changes (SetSlot), one line there and one Ctrl+Z. Its last line opens the Data panels page of the options
--- (ns.OpenPanelPage, Panel.lua; in a fight the window says it opens after it). SLOT_MENU stands for a stream in P.OpenMenu, for the label of its
--- part; menu.target is the free slot the second menu fills.
 P.SLOT_MENU = { label = "Slot menu" }
 local ORDINALS = { "first", "second", "third", "fourth", "fifth", "sixth" }
 local TICK = " |TInterface\\Buttons\\UI-CheckBox-Check:0|t"
 
--- Sets the row of a slot, and notes the change in Home's Recent changes with the row of Config.lua, as a change made on the page is noted. With
--- batch ({ label, what }), every change of one move or add goes back in one Undo or Ctrl+Z (Home.Noted and Home.UndoBatch, PanelHome.lua).
 local function SetSlot(path, id, batch)
 	local before = ns.Get(path)
 	ns.Set(path, id)
@@ -1873,7 +1611,6 @@ local function SetSlot(path, id, batch)
 	end
 end
 
--- True with the idle words when a stream of Flat UI's own shows nothing now, read as a slot would (P.TextOf without test mode's sample).
 local function Empty(stream)
 	if ns.PartStopped(KEY, stream.label) then
 		return true, "stopped after an error"
@@ -1885,8 +1622,6 @@ local function Empty(stream)
 	return true, stream.idle
 end
 
--- After a pick, which the module's refresh has drawn (ns.Set refreshes it at once): a slot left with no room says so, and a panel left with
--- nothing to show that it hides. label is the choice picked, nil for None; why its idle words.
 local function SayEmpty(slot, label, why)
 	if slot.width or not slot.panel.wanted then
 		return
@@ -1908,7 +1643,6 @@ local function SayEmpty(slot, label, why)
 	print(line)
 end
 
--- The slot "Add a slot" fills: the first of the panel set to None after this one, else the nearest before it, or nil; and whether it is after.
 local function FreeSlot(slot)
 	local spec, nearest = slot.panel.spec, nil
 	for index = 1, SLOTS do
@@ -1922,7 +1656,6 @@ local function FreeSlot(slot)
 	return nearest, false
 end
 
--- The nearest slot of the panel from index in the direction step (-1 left, 1 right) that takes room now, or nil.
 local function Neighbour(panel, index, step)
 	local at = index + step
 	while at >= 1 and at <= SLOTS do
@@ -1935,8 +1668,6 @@ local function Neighbour(panel, index, step)
 	return nil
 end
 
--- Fills the free slot free (set to None) with id so that it lands right beside slot index: the rows from the free slot back to the one beside
--- index each take the row next to them toward index, then id is written beside index. One batch.
 local function AddBeside(spec, index, free, id)
 	local batch = { label = "Add a slot", what = "adding the slot" }
 	local step = free > index and 1 or -1
@@ -1947,7 +1678,6 @@ local function AddBeside(spec, index, free, id)
 	SetSlot(KEY .. "." .. spec.id .. landing, id, batch)
 end
 
--- Swaps the rows of slots index and other, and opens the menu again on other, which now holds the moved kind. One batch.
 local function Swap(panel, index, other)
 	local spec = panel.spec
 	local batch = { label = "Move a slot", what = "the move" }
@@ -1956,7 +1686,6 @@ local function Swap(panel, index, other)
 	SetSlot(KEY .. "." .. spec.id .. index, theirs, batch)
 	local moved = panel.slots[other]
 	P.SlotMenu(moved)
-	-- The light marks the slot the menu is on now, as a refresh keeps it.
 	if moved.hover and P.MenuOpen(moved) then
 		moved.hover:Show()
 	end
@@ -1964,7 +1693,6 @@ end
 
 local MOVES = { { -1, "Move left" }, { 1, "Move right" } }
 
--- Opens the menu of a slot, or with target the second menu, which fills that slot of the panel while it is still set to None.
 function P.SlotMenu(slot, target)
 	local panel = slot.panel
 	local spec = panel and panel.spec
@@ -1974,7 +1702,6 @@ function P.SlotMenu(slot, target)
 	if target and not (panel.slots[target] and Opt(spec.id .. target) == "none") then
 		target = nil
 	end
-	-- The slot the pick lands in: beside the one clicked for the second menu.
 	local landing = target and (target > slot.index and slot.index + 1 or slot.index - 1) or slot.index
 	local filled = panel.slots[landing] or slot
 	local path, now = KEY .. "." .. spec.id .. slot.index, target and "none" or (slot.id or "none")
@@ -2036,8 +1763,6 @@ function P.SlotMenu(slot, target)
 	end
 end
 
--- The module --------------------------------------------------------------------------------------------------------------------------------------
-
 local function EachStream(method)
 	for _, id in ipairs(P.order) do
 		local stream = P.streams[id]
@@ -2047,7 +1772,6 @@ local function EachStream(method)
 	end
 end
 
--- The game says whether a pet battle is on (C_PetBattles.IsInBattle); a client that does not say keeps what the events said.
 local function PetBattleNow()
 	local battles = _G.C_PetBattles
 	local now = type(battles) == "table" and not ns.IsSecret(battles) and P.Ask(battles.IsInBattle) or nil
@@ -2056,11 +1780,8 @@ local function PetBattleNow()
 	end
 end
 
--- At the start and at each loading screen: the panels are drawn, then each stream does what it does once (the gold is kept, the guild roster
--- asked for), which a slot it holds needs to be drawn first for.
 function P.Start()
 	PetBattleNow()
-	-- Whether a fight is on is asked again (P.Rest): a loading screen may have ended one unheard.
 	P.fight = nil
 	P.Refresh()
 	EachStream("Start")
@@ -2075,7 +1796,6 @@ function P.PetBattle(on)
 	end
 end
 
--- Another addon loaded: the library may have come with it, and a slot may wait for its feed.
 function P.OnAddon()
 	if P.lib == nil and P.Library() then
 		P.Soon()
@@ -2107,7 +1827,6 @@ function P.Status()
 	return lines
 end
 
--- The movers: the frame of a shown panel is its handle's box and the frame the handle hangs from.
 local function Row(id)
 	local panel = P.panels[id]
 	if panel and panel.frame and panel.wanted and panel.shown and ns.Enabled(KEY) then
@@ -2124,7 +1843,6 @@ function ns.DataPanelBottomRow()
 	return Row("bottom")
 end
 
--- The movers set or put back the spot of a panel.
 function ns.DataPanelsMoved()
 	for _, panel in pairs(P.panels) do
 		panel.placed = nil
@@ -2132,14 +1850,11 @@ function ns.DataPanelsMoved()
 			ns.Try(KEY, P.Place, panel)
 		end
 	end
-	-- Their opacity follows the movers too (P.Lining).
 	if ns.Enabled(KEY) then
 		ns.Try(KEY, P.FadeAll)
 	end
 end
 
--- Another file changed what a stream reads without an event the stream hears (Errands' Show the reputation you gain switches the faction of
--- Flat UI's bar BURST seconds after the gain, by a timer, ErrandsLevelling.lua): its slots are drawn again, once for a burst, as on its events.
 function ns.DataPanelMark(id)
 	if ns.Enabled(KEY) then
 		ns.Try(KEY, P.Mark, id)
@@ -2162,7 +1877,6 @@ ns.Register(KEY, {
 			P.PetBattle(false)
 		end,
 		ADDON_LOADED = P.OnAddon,
-		-- The panels take Opacity in combat, and nothing is offered in a fight (DataStreams.lua, Equipment set).
 		PLAYER_REGEN_DISABLED = function()
 			P.Combat(true)
 			P.CloseMenu()
@@ -2173,9 +1887,6 @@ ns.Register(KEY, {
 	},
 })
 
--- Test mode: On, Off and a pause refresh the page, so an empty slot shows its stream's sample while it is on (P.TextOf) and goes after. While
--- its Moving is on, a shown Gold slot floats a sample change every SAMPLE_GOLD seconds, a gain and then a loss in turn (P.Float); the money and
--- the session count are left alone, and a real change floats nothing then (DataStreams.lua).
 if ns.TestMode then
 	local SAMPLE_GOLD, GAIN, LOSS = 5, 3802, -10400
 	local loss = false

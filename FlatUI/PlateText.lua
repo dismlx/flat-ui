@@ -1,13 +1,5 @@
 local _, ns = ...
 
--- Nameplate text and cast bar parts, added to the plates as parts of Nameplates.lua (ns.PlateExtra): whether the name shows and its colour,
--- the colour and the visibility of the health text, a health text of the addon's own in another format, the size, outline and colour of the
--- spell name, the size of the spell icon, and the spark and the shield. Every call is in a pcall; a part that fails on enough plates stops
--- alone, puts back what it changed and has a line in /flatui status. A row at its default makes no call the game did not make.
--- Show health text at Only on the target finds the target by its plate frame (ns.PlateUnitFrame), as Nameplates.lua's Show auras does, since the
--- game's isTarget comes from a unit comparison the client can withhold; the texts are looked at again as the target changes. On the target and
--- focus keeps the text on the focus's plate too, found the same way, and looks again as the focus changes.
-
 local KEY = "nameplates"
 local EXTRA = ns.PlateExtra
 if type(EXTRA) ~= "table" then
@@ -18,10 +10,7 @@ local FONT_OBJECT = "SystemFont_NamePlate"
 local HEALTH_TEXTS, CAST_TEXTS = { "Text", "LeftText", "RightText" }, { "Text", "CastTargetNameText" }
 local NAME, HEALTH, FORMAT, CAST, PARTS = "name text", "health text", "health text format", "cast bar text", "cast bar parts"
 
--- Per unit frame: nameFaded, nameSet (the colour is set here), nameGame (the colour the game gave the name, false when it was withheld),
--- htFaded, own (the health text of the addon's own), ownFont, iconSized.
 local state = setmetatable({}, { __mode = "k" })
--- Per font string: the colour the game gave it, while a colour is set here.
 local gameColour = setmetatable({}, { __mode = "k" })
 local followName, followHealth
 local waitingForCombat, queued = false, false
@@ -51,7 +40,6 @@ local function St(unitFrame)
 	return record
 end
 
--- False for the plate of a friendly unit while Restyle friendly nameplates is off, and for every plate while the module is off.
 local function OnFor(unitFrame)
 	if not ns.Enabled(KEY) then
 		return false
@@ -78,7 +66,6 @@ local function Region(owner, key)
 	return region
 end
 
--- The font strings of a frame that exist and have not been withheld.
 local function Strings(owner, keys)
 	local list = {}
 	for _, key in ipairs(keys) do
@@ -90,7 +77,6 @@ local function Strings(owner, keys)
 	return list
 end
 
--- A frame of a plate that the addon may touch.
 local function Frame(owner, key)
 	local frame = Region(owner, key)
 	if frame and not ns.Forbidden(frame) then
@@ -108,8 +94,6 @@ local function HealthBarOf(unitFrame)
 	return container and Frame(container, "healthBar")
 end
 
--- Sets the text colour of a font string after keeping the colour the game gave it; nil puts that colour back. A colour that could not be read or
--- set is raised, so that the part counts it.
 local function TextColour(fontString, r, g, b)
 	if r ~= nil then
 		if gameColour[fontString] == nil then
@@ -131,7 +115,6 @@ local function TextColour(fontString, r, g, b)
 	end
 end
 
--- Whether the game lets addon code change a protected frame now.
 local function Allowed(frame)
 	local check = C_RestrictedActions and C_RestrictedActions.CheckAllowProtectedFunctions
 	if check then
@@ -143,12 +126,6 @@ local function Allowed(frame)
 	return not InCombatLockdown()
 end
 
--- Name -------------------------------------------------------------------------------------
-
--- Threat colour on the name: while the threat of the nameplates (ns.PlateThreat, PlateThreat.lua) keeps a state for the plate that is not of a unit
--- tapped by someone else, the colour of that state, which takes the place of Name colour's (Threat Plates' names By reaction and By class,
--- Modules/Color.lua:431-440). With Health text in the name's colour the health text takes it too, as Threat Plates' status text takes the name's
--- colour with SubtextColorUseHeadline (Elements/StatusText.lua:482-486). Nil while the row is off or the plate shows no threat.
 local function ThreatColour(unitFrame)
 	local threat = Opt("threatName") == true and ns.PlateThreat
 	if type(threat) ~= "table" then
@@ -168,7 +145,6 @@ local function ThreatColour(unitFrame)
 	return nil
 end
 
--- The threat colour of the health text, while Health text in the name's colour is on and the name has the threat colour.
 local function HealthThreatColour(unitFrame)
 	if Opt("threatHealthText") ~= true then
 		return nil
@@ -176,8 +152,6 @@ local function HealthThreatColour(unitFrame)
 	return ThreatColour(unitFrame)
 end
 
--- Whether the name shows and what colour it has. The game colours the name again after each of its updates and this runs after that
--- (fromGame), so the colour read then is the game's own and is kept for putting it back.
 local function NamePart(unitFrame, st, on, fromGame)
 	local name = Region(unitFrame, "name")
 	if name == nil then
@@ -190,7 +164,6 @@ local function NamePart(unitFrame, st, on, fromGame)
 	end
 	local mode = on and Opt("nameColour") or "game"
 	local r, g, b
-	-- The threat colour is kept and put back as Name colour's is.
 	local tr, tg, tb
 	if on then
 		tr, tg, tb = ThreatColour(unitFrame)
@@ -204,7 +177,6 @@ local function NamePart(unitFrame, st, on, fromGame)
 	elseif mode == "reaction" or mode == "class" then
 		local unit = unitFrame.unit
 		if Plain(unit, "string") then
-			-- Class is the class colour of a player and the reaction colour of any other unit, as on the unit frames. A class the client withholds leaves the game's colour.
 			local okPlayer, player = pcall(UnitIsPlayer, unit)
 			if mode == "class" and okPlayer and Plain(player, "boolean") and player then
 				r, g, b = ns.ClassColourOf(unit)
@@ -217,7 +189,6 @@ local function NamePart(unitFrame, st, on, fromGame)
 		if not followName then
 			ns.Note(KEY, "Name colour: the game's name update cannot be followed, so the colour can go back to the game's.")
 		end
-		-- The game hides the name without setting a colour, so the colour is the game's only while the name is shown.
 		local okShown, isShown = pcall(name.IsShown, name)
 		local gameColour = fromGame and okShown and Plain(isShown, "boolean") and isShown
 		if gameColour or st.nameGame == nil then
@@ -228,7 +199,6 @@ local function NamePart(unitFrame, st, on, fromGame)
 				st.nameGame = false
 			end
 		end
-		-- Marked before the call, so a failure still leaves a restore to do.
 		st.nameSet = true
 		if not pcall(name.SetVertexColor, name, r, g, b) then
 			error("the name colour could not be set", 0)
@@ -241,8 +211,6 @@ local function NamePart(unitFrame, st, on, fromGame)
 		end
 	end
 end
-
--- Health text ------------------------------------------------------------------------------
 
 local function AnyShown(strings)
 	if #strings == 0 then
@@ -257,8 +225,6 @@ local function AnyShown(strings)
 	return false
 end
 
--- The colour of the game's three health text strings, and which plates have them. Nameplates.lua fades them when Health text is off. The threat
--- colour of the name comes before Health text colour, kept and put back the same way.
 local function HealthPart(unitFrame, st, on)
 	local strings = Strings(HealthBarOf(unitFrame), HEALTH_TEXTS)
 	local r, g, b
@@ -272,14 +238,11 @@ local function HealthPart(unitFrame, st, on)
 		TextColour(fontString, r, g, b)
 	end
 	local when, format = on and Opt("healthTextWhen") or "always", on and Opt("healthFormat") or "game"
-	-- A format that stopped draws nothing, so the game's text stays.
 	if ns.PartStopped(KEY, FORMAT) then
 		format = "game"
 	end
 	local mine = when ~= "always" or format ~= "game"
 	if mine or st.htFaded then
-		-- The target's plate (and the focus's, at On the target and focus) is compared as a frame: the game's isTarget comes from a unit comparison the
-		-- client can withhold.
 		local shown = ns.PlateUnitFrame("target") == unitFrame or (when == "focus" and ns.PlateUnitFrame("focus") == unitFrame)
 		local fade = (ns.Enabled(KEY) and not Opt("healthText")) or format ~= "game" or (when ~= "always" and not shown)
 		for _, fontString in ipairs(strings) do
@@ -289,10 +252,8 @@ local function HealthPart(unitFrame, st, on)
 	end
 end
 
--- The format strings of the health text, which the drawings of Flat UI setup write with a plain sample in place of the unit's health.
 ns.PLATE_HEALTH_FORMATS = { percent = "%.0f%%", both = "%s  %.0f%%", curmax = "%s / %s" }
 
--- 12.3k or 12,345, by Number style of the unit frames.
 local function Num(value)
 	local call = ns.Get("unitframes.numberStyle") == "full" and BreakUpLargeNumbers or AbbreviateNumbers or BreakUpLargeNumbers
 	return call(value)
@@ -313,7 +274,6 @@ local function SetHealthText(own, format, unit)
 	end
 end
 
--- The health text of the addon's own, at the right end of the health bar, in the font of the game's own health text.
 local function OwnHealthText(unitFrame, st, healthBar)
 	local own = st.own
 	if own == nil then
@@ -339,8 +299,6 @@ local function OwnHealthText(unitFrame, st, healthBar)
 	return own
 end
 
--- The format of the health text. Another format than the game's is drawn by a font string of the addon's own and the game's three strings are
--- faded (HealthPart). It follows the game's own health text: shown while any of the three is shown.
 local function FormatPart(unitFrame, st, on)
 	local format = on and Opt("healthFormat") or "game"
 	if format == "game" then
@@ -377,8 +335,6 @@ local function FormatPart(unitFrame, st, on)
 	end
 end
 
--- Cast bar ---------------------------------------------------------------------------------
-
 local function CastPart(unitFrame, st, on)
 	local castBar = CastBarOf(unitFrame)
 	if castBar == nil then
@@ -411,8 +367,6 @@ end
 
 local Layout
 
--- The spell icon is a percent of the size the game gives it, from NamePlateSetupOptions. In combat the game does not take a size from addon
--- code, so it is done when combat ends.
 local function PartsPart(unitFrame, st, on)
 	local castBar = CastBarOf(unitFrame)
 	if castBar == nil then
@@ -430,7 +384,6 @@ local function PartsPart(unitFrame, st, on)
 		return
 	end
 	if Allowed(castBar) then
-		-- Marked before the call, so a failure still leaves a restore to do.
 		st.iconSized = percent ~= 100 or nil
 		icon:SetSize(width * percent / 100, height * percent / 100)
 	elseif not InCombatLockdown() then
@@ -444,9 +397,6 @@ local function PartsPart(unitFrame, st, on)
 	end
 end
 
--- Running the parts ------------------------------------------------------------------------
-
--- Every plate is laid out again on the next frame, after a part has stopped on one of them.
 local function QueueAll()
 	if not queued then
 		queued = true
@@ -457,7 +407,6 @@ local function QueueAll()
 	end
 end
 
--- Runs one part for one plate. A part that is stopped, or a module that is off, runs with `on` false, which puts the game's look back.
 local function Run(part, fn, unitFrame, ...)
 	local st = St(unitFrame)
 	if ns.IsStopped(KEY) or ns.PartStopped(KEY, part) then
@@ -516,10 +465,6 @@ local function Retarget()
 	end)
 end
 
--- Threat colour on the name follows each change of a plate's threat (ns.PlateThreat). On UNIT_THREAT_LIST_UPDATE the game names the plate before
--- its aggro update (Shared/CompactUnitFrame.lua:136-140), which is what the threat core follows, so the name is coloured again after a change,
--- and with Health text in the name's colour the health text too. The listener is added the first time a hook finds the core; a row turned off
--- reaches every plate through the refresh.
 local threatFollowed = false
 local function OnThreat(frame)
 	if Opt("threatName") == true and ns.IsPlate(frame) and not ns.Forbidden(frame) then

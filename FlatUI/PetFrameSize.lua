@@ -1,27 +1,10 @@
 local _, ns = ...
 
--- The size of the pet frame, as a percent of the player frame or of the normal size.
--- The pet frame hangs in a container under the player frame, and the container lays out its children at
--- their own scale. The game gives the pet frame a scale only in UpdatePetFrameScale: the Frame Size of
--- Edit Mode's pet frame divided by the scale of the player frame, then the container is laid out again
--- (EditModeSystemTemplates.lua:2700-2711). The game keeps the pet frame at its own Frame Size on screen
--- even when Flat UI has scaled the player frame, so the pet frame comes out larger than a shrunk player frame.
--- This sets the scale with SetScaleBase, the engine's own call. No method of the pet frame is hooked: UpdatePetFrameScale is called when Edit
--- Mode applies a layout (EDIT_MODE_LAYOUTS_UPDATED, PLAYER_SPECIALIZATION_CHANGED, the spectate override layouts, the revert buttons inside
--- Edit Mode), so the size is put back one frame after those events and after Edit Mode closes. The pet frame's OnShow is followed as well, which
--- the game does not need for this (ManagedFrameMixin.OnShow only adds the frame to its container, ManagedFrameSystem.lua:17-19) (EllesmereUI follows Edit Mode in the same way,
--- with post-hooks on ApplySystemAnchor and a one-frame wait: EllesmereUI/EllesmereUIActionBars/EUI_UnlockMode_Positions.lua:2717-2745, and moves no frame from inside the
--- game's call). It is not a module: the unit frames module calls
--- ns.PetFrameSize whenever it applies its settings, and the movers call it after the player frame's
--- scale is set or put back.
-
 local KEY = "unitframes"
 local PART = "petsize"
 local MIN, MAX = 0.1, 5
 local TOLERANCE = 0.0005
 
--- given is the scale the game set last, and what the pet frame gets back. ours is the scale this file
--- wrote last. puts counts the times the size was put back after the game set a scale.
 local state = { given = nil, ours = nil, queued = false, hooked = false, watched = false, later = false, puts = 0 }
 local Apply
 
@@ -58,7 +41,6 @@ local function Parent(frame)
 	return UIParent
 end
 
--- The scale the pet frame gets, or nil when the setting is off or a scale cannot be read.
 local function Wanted(frame)
 	if not ns.Enabled(KEY) or ns.PartStopped(KEY, PART) or not ns.Get("unitframes.petSize") then
 		return nil
@@ -79,10 +61,6 @@ local function Wanted(frame)
 	return math.max(MIN, math.min(MAX, scale))
 end
 
--- A frame outside the container hangs from its own anchors, whose offsets are measured at the scale the
--- frame had. After a new scale the offsets are divided again, so the frame stays where it was, as the
--- game does in SetScaleOverride (EditModeSystemTemplates.lua:121-135). SetPointBase is the engine's call;
--- the Lua SetPoint is Edit Mode's and writes its anchor flags (EditModeSystemTemplates.lua:146-150).
 local function Reanchor(frame, old, scale)
 	if not ns.Finite(old) or old <= 0 or not ns.Finite(scale) or scale <= 0 then
 		return
@@ -110,8 +88,6 @@ local function Reanchor(frame, old, scale)
 	end
 end
 
--- Writes a scale with the engine's call, never SetScale, which is Edit Mode's. The container is marked
--- for a layout out of combat; Layout itself is the game's.
 local function Put(frame, scale, fromGame)
 	local current = Read(frame, "GetScale")
 	if current ~= nil and math.abs(current - scale) <= TOLERANCE then
@@ -140,7 +116,6 @@ local function Write(frame, fromGame)
 	if scale then
 		local current = Read(frame, "GetScale")
 		if state.ours ~= nil and current ~= nil and math.abs(current - state.ours) > TOLERANCE then
-			-- The game has set a scale of its own since this file wrote one; that is the scale to give back when the setting goes off.
 			state.given, fromGame = current, true
 		elseif state.given == nil then
 			state.given = current
@@ -148,7 +123,6 @@ local function Write(frame, fromGame)
 		state.ours = scale
 		Put(frame, scale, fromGame)
 	elseif state.ours then
-		-- Back to the scale the game gave last.
 		state.ours = nil
 		local given = state.given
 		state.given = nil
@@ -180,12 +154,10 @@ function Apply(fromGame)
 		end
 		state.ours = nil
 	elseif ns.PartStopped(KEY, PART) and state.ours then
-		-- The part stopped: the pet frame gets the game's scale back.
 		pcall(Write, frame, fromGame)
 	end
 end
 
--- One frame after the game set a scale: Write reads the scale it gave from the frame, and the size goes back on it.
 local function Game()
 	state.later = false
 	Apply(true)
@@ -229,7 +201,6 @@ function ns.PetFrameSize()
 	Apply()
 end
 
--- The line of /flatui status, or nothing while the setting is off.
 function ns.PetFrameSizeStatus()
 	if not state.hooked or not ns.Enabled(KEY) or not ns.Get("unitframes.petSize") then
 		return nil
@@ -246,7 +217,6 @@ function ns.PetFrameSizeStatus()
 	return ("Pet frame size: %d%% of the %s, %s"):format(percent, basis, puts)
 end
 
--- The pet frame can be set up after the module starts.
 local events = CreateFrame("Frame")
 pcall(events.RegisterEvent, events, "PLAYER_ENTERING_WORLD")
 pcall(events.RegisterEvent, events, "EDIT_MODE_LAYOUTS_UPDATED")

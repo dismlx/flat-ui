@@ -1,87 +1,19 @@
 local _, ns = ...
 
--- Lava tick timer (general.lavaTimer on the World and cursor page, In lava zones by default): a bar of the addon's own that times the ticks of
--- lava, so a player who swims or walks in it can be in the air, by a jump, when the next one lands. Lava hits whoever stands or swims in it with
--- fire every 2 seconds, and a timed jump avoids one tick even when the player lands back in it (Wowpedia, "Lava"; player reports of crossing the
--- lava of Molten Core and Blackrock Depths). In cMaNGOS, an emulator and not the game's own code, its first pulse comes 1 second after the player
--- enters the liquid and one every 2 seconds after, and the timer never reaches the client (Player.cpp:164-176, 1164-1176 and 1199-1340,
--- Player.h:411-417), so no call of the game tells the time; MIRROR_TIMER_START covers only fatigue, breath, death and feign death
--- (Blizzard_MirrorTimer/Mainline/MirrorTimer.lua:1-8). The combat log is closed to addons on this client, so its ENVIRONMENTAL_DAMAGE of type LAVA
--- cannot be read either. What can be seen is UNIT_COMBAT for the player (UnitDocumentation.lua:4168-4181): its event, flag and school mask are
--- plain, its amount is withheld and is never read, and it names no source or spell. A tick is a WOUND or IMMUNE on the player of the fire school
--- alone (mask 4), in a lava place or anywhere as the row says, while no Hellfire of the player's own runs (UnitChannelInfo, its spell ID 1949,
--- 11683 or 11684; a channel whose spell the game withholds counts as Hellfire for a warlock). Out of combat (UnitAffectingCombat) or while
--- swimming (IsSwimming) such a hit is a tick at once; in a fight it is one only when it comes 1 to 4 periods after the last tick or the last such
--- hit, give or take 0.25 seconds, so a fire spell off the rhythm never moves the countdown. It cannot tell lava from a fire damage over time that
--- ticks every 2 seconds in a fight, or from a campfire out of one: it is an estimate, and its row and /flatui lava say so.
--- A lava place is a dungeon or raid by its instance ID, the 8th answer of GetInstanceInfo (InstanceDocumentation.lua:103-120): Molten Core 409,
--- Blackrock Depths 230, Blackrock Spire 229 and Ragefire Chasm 389; or a map of the zone, walking up at most six steps from
--- C_Map.GetBestMapForUnit('player') by the parentMapID of C_Map.GetMapInfo (MapDocumentation.lua:49 and 312): Searing Gorge 1427, Burning Steppes
--- 1428 and Un'Goro Crater 1449, which also holds the Blackrock Mountain hub under the first two. These are the classic IDs; names are never read,
--- since the game gives them in the player's language. /flatui lava says the IDs of the place, for a place that turns out to be missing.
--- The timeline: a tick seen at time A puts the k-th next one at A + 2k, and the server judges where the player is by what it last heard, so the
--- danger moment is A + 2k minus the world latency of GetNetStats (its 4th answer, ConnectionDocumentation.lua:40-49), held to 0 to 0.4 seconds. The
--- bar fills from one danger moment to the next; the jump window, Jump lead long, is a band at its right end in the jump colour with a mark at its
--- start, and the fill takes that colour inside it. Crossing into the window cues once a period: the word Jump, a flash if Flash when it is time to
--- jump is on, and the sound of Jump sound on the Gameplay SFX channel (as Cooldowns.lua plays its ready sounds). Around each danger moment (0.1
--- seconds either side) it reads IsFalling('player') each frame (UnitDocumentation.lua:405-418). 0.3 seconds after the tick was due, a tick seen
--- says Hit and starts the timeline again; none while the player was in the air says Dodged (Dodged x2, x3 as the dodges in a row build, and a hit
--- ends the streak); none on the ground says nothing (the player most likely left the lava). The bar fades in over FADE_IN seconds as it shows,
--- and fades out over FADE_OUT 5 seconds after the last tick or dodge, with nothing counted or cued while it fades; a tick then brings it back
--- whole at once. After ten dodges in a row with no tick in between only a tick keeps it. Death, the row going Off and the end of test mode hide it
--- at once. Its fades are the alpha of its own frame (SetAlpha), written only when it changes. Nothing is protected: an addon cannot jump for the
--- player (JumpOrAscendStart is protected), so the bar only cues.
--- The bar is a frame of the addon's own, a child of UIParent in the LOW strata (DIALOG while it shows the preview of a row's change, below) that
--- takes no mouse and hides with the interface, with the outline
--- of the Flat UI page (ns.Outline), a StatusBar in the bar texture of that page over a dim track, and its words in GameFontHighlightSmall. It is
--- made the first time it shows, and it runs OnUpdate only while it shows. /flatui move places it (FlatUILavaTimer in Movers.lua, its middle at the
--- middle of the box, just under the character), with a box while the row is not Off. A frame of the addon's own hears UNIT_COMBAT for the player
--- (RegisterUnitEvent, else every unit and the handler keeps the player's), PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA, ZONE_CHANGED,
--- ZONE_CHANGED_INDOORS and PLAYER_DEAD while the row is not Off, and nothing while it is. Nothing of the game is written. Not a module, as the
--- cursor ring (CursorRing.lua): Core.lua applies the rows at login and when the profile changes, and the rows call ns.LavaChanged themselves;
--- Jump sound calls ns.LavaSoundPicked, which also plays the sound picked once while the options window shows and out of a fight, as the combat
--- sounds do (CombatCues.lua), so it can be chosen by ear. None plays nothing.
--- Test mode (TestMode.lua) cannot run an entry of a file that is no module (TM.Register runs one only while its module is on), so at every On, Off,
--- pause and resume (TM.Watch) the rows are applied again, and while it is on the bar shows a sample at its spot: a tick every 2 seconds, the
--- window, the cue and its flash, a Hit and then Dodged and Dodged x2, frozen while the bar's Moving is off. Its sound plays only when
--- TM.Sound('lava') allows it, the first time after an On. /flatui lava test shows the same sample for 8 seconds, with one sound. A change of one
--- of the rows (its size, Jump lead, Flash, the colours, Jump sound, or In lava zones and Anywhere) while the options window shows and out of a
--- fight shows it too, silent, until PREVIEW seconds after the last change, then fades it out (ns.LavaChanged). That preview shows over the
--- options window (DIALOG, as the line of ErrandsRanks.lua; the window is HIGH, Panel.lua), since with no spot saved the bar sits under it; as it
--- ends the bar is back at LOW, under the game's windows, for the real timeline, /flatui lava test and test mode. A real tick takes over from the
--- sample. /flatui lava says the mode, the place and its IDs, the ticks seen, dodged (with the most in a row) and not seen this
--- session, the last hit on the player, the last gaps between ticks and the latency used; /flatui lava trace prints a line for every UNIT_COMBAT of
--- the player with what the timer made of it, the way to check in lava that this client reports its ticks at all. /flatui status has a line only
--- when the hits could not be heard, or after an error, which stops the timer until /reload.
--- The idea is the timing bar of the Classic WeakAura "Avoid lava damage" (wago.io), which shows when to jump before the tick; none of its code or
--- text is used, and its trigger, the combat log, is not open here.
-
 local MOVER = "FlatUILavaTimer"
--- The box of the handle in Movers.lua: the bar's default size, and where its middle is with no spot saved.
 local BOX_W, BOX_H, BOX_X, BOX_Y = 160, 14, 0, -100
 local MODES = { zones = true, anywhere = true }
--- The period of lava, the slack of a tick that keeps the rhythm, the wait past a due tick before it counts as not come, the seconds the bar stays
--- after the last tick or dodge, the dodges in a row that keep it, the time either side of a danger moment that the jump is read, and the periods
--- a tick is kept to judge the rhythm by.
 local PERIOD, SLACK, GRACE, HIDE, DODGE_MAX, AIR, KEEP = 2, 0.25, 0.3, 5, 10, 0.1, 4
--- The sample ticks once every this many periods and dodges the others.
 local SAMPLE_EVERY = 3
--- The highest latency counted, the time of a flash, of a word after a tick, of /flatui lava test, and of the silent sample a change of a row
--- shows (from its last step).
 local RTT_MAX, FLASH_TIME, SAY_TIME, TEST_TIME, PREVIEW = 0.4, 0.3, 0.6, 8, 4
--- The seconds the bar takes to fade in as it shows, and to fade out once you left the lava.
 local FADE_IN, FADE_OUT = 0.15, 0.4
--- The fire school (CombatText.lua:98).
 local FIRE = 4
 local HITS = { WOUND = true, IMMUNE = true }
--- The classic instance and zone map IDs of the places with lava; the names are for /flatui lava only.
 local INSTANCES = { [409] = "Molten Core", [230] = "Blackrock Depths", [229] = "Blackrock Spire", [389] = "Ragefire Chasm" }
 local MAPS = { [1427] = "Searing Gorge", [1428] = "Burning Steppes", [1449] = "Un'Goro Crater" }
 local MAP_STEPS = 6
--- Hellfire's ranks, which burn the warlock with fire every second.
 local HELLFIRE = { [1949] = true, [11683] = true, [11684] = true }
 local PLACE_EVENTS = { "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "PLAYER_DEAD" }
--- The choices of Jump sound, as the No target sound's (CombatCues.lua), by their place in ns.SOUNDS (IconRow.lua).
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 local SOUND_CHANNEL = "Gameplay SFX"
 local FONT = "GameFontHighlightSmall"
@@ -93,23 +25,9 @@ local STEPS_MOST = 50
 
 local IsSecret, Finite = ns.IsSecret, ns.Finite
 
--- The state. mode: the row's choice in use. lava: this is a lava place; where: what the place was read from. listening: the hearer hears; deaf: the
--- game took no UNIT_COMBAT. live: a real timeline runs; sample: the sample runs; sampleUntil: the end of /flatui lava test; testSound: its one
--- sound is still to play. anchor: the tick the timeline runs from; k: the period counted down; cued: the last period cued; air: the player was in
--- the air at the danger moment of k; pendK and pendAir: the period past its danger moment and not yet judged. lastReal: the last real tick; held: a
--- fire hit in a fight that waits for a second to set the rhythm. lastAlive: the last tick or dodge; streak: the dodges in a row, and best the most
--- of real ones this session; flip: the period of the sample, a tick every SAMPLE_EVERY; preview: the sample is the preview of a row's change,
--- over the options window. rtt: the latency of the timeline. say, sayRGB and sayUntil:
--- the word after a tick. flashAt and flashPeak: the flash. seen, dodged, unseen and gaps: what /flatui lava counts. trace: /flatui lava trace is
--- on. broken: the error that stopped the timer.
 local S = { lava = false, where = {}, listening = false, deaf = false, live = false, sample = false, k = 1, cued = 0, air = false, pendAir = false,
 	streak = 0, best = 0, rtt = 0, seen = 0, dodged = 0, unseen = 0, gaps = {}, trace = false, flip = 0 }
--- The last UNIT_COMBAT of the player, for /flatui lava.
 local LAST = {}
--- The bar: frame, outline, bar, track, band, mark, flash, word and count, once made; placed: the spot it was put at; file: the bar texture on it;
--- width and lead: of the rows; lavaRGB and jumpRGB: the colours; shown: the word, its colour, the count and the band width written last. alpha:
--- the frame's alpha written last; strata: its strata written last; fadeInAt: when it began to fade in; fadeOutAt and fadeFrom: when it began to
--- fade out, and from what alpha.
 local U = {}
 
 local Stop
@@ -119,7 +37,6 @@ local function Mode()
 	return MODES[mode] and mode or nil
 end
 
--- A number row held to its range, else its default.
 local function Number(key, fallback, low, high)
 	local value = ns.Get("general." .. key)
 	if not Finite(value) then
@@ -128,7 +45,6 @@ local function Number(key, fallback, low, high)
 	return math.max(low, math.min(high, value))
 end
 
--- The first answer of a call of the client when it is plain, else nil.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -140,12 +56,10 @@ local function Ask(fn, ...)
 	return nil
 end
 
--- True only for a plain true.
 local function Yes(fn, ...)
 	return Ask(fn, ...) == true
 end
 
--- A value of the game as /flatui lava prints it.
 local function Plain(value)
 	if IsSecret(value) then
 		return "withheld"
@@ -160,18 +74,15 @@ local function Testing()
 	return type(test) == "table" and test.IsOn() == true
 end
 
--- True while a sample shows: test mode is on, or /flatui lava test runs.
 local function Sampling(now)
 	return Testing() or (S.sampleUntil ~= nil and now < S.sampleUntil)
 end
 
--- False only while test mode is on and its Moving is off, which freezes the sample.
 local function Moving()
 	local test = ns.TestMode
 	return not (Testing() and type(test.Moving) == "function" and test.Moving() == false)
 end
 
--- The world latency in seconds, held to 0 to RTT_MAX.
 local function Latency()
 	if type(GetNetStats) ~= "function" then
 		return 0
@@ -183,7 +94,6 @@ local function Latency()
 	return math.max(0, math.min(RTT_MAX, world / 1000))
 end
 
--- The place: a lava place by its instance ID or the maps it lies in, and the IDs read, for /flatui lava.
 local function ReadPlace()
 	local where, lava = { chain = {} }, false
 	if type(GetInstanceInfo) == "function" then
@@ -214,7 +124,6 @@ local function ReadPlace()
 	S.lava, S.where = lava, where
 end
 
--- True while the player channels Hellfire, which burns the warlock with fire.
 local function Hellfire()
 	if type(UnitChannelInfo) ~= "function" then
 		return false
@@ -230,7 +139,6 @@ local function Hellfire()
 	return not IsSecret(class) and class == "WARLOCK"
 end
 
--- True for a gap that is one to KEEP periods, give or take SLACK.
 local function Fits(gap)
 	for k = 1, KEEP do
 		if math.abs(gap - k * PERIOD) <= SLACK then
@@ -240,7 +148,6 @@ local function Fits(gap)
 	return false
 end
 
--- What a hit on the player is: "tick", "held" (a fire hit in a fight off any rhythm, kept to judge the next by) or nil, and why.
 local function Judge(action, school, now)
 	S.fighting, S.swimming = nil, nil
 	if IsSecret(action) or not HITS[action] then
@@ -268,9 +175,6 @@ local function Judge(action, school, now)
 	return "held", "in combat, waits for a second one on the rhythm"
 end
 
--- The look ----------------------------------------------------------------------------------------------------------------------------------------
-
--- The bar, made the first time it shows.
 local function Build()
 	if U.frame then
 		return U.frame
@@ -292,7 +196,6 @@ local function Build()
 	ns.Own[track] = true
 	track:SetAllPoints(bar)
 	track:SetColorTexture(TRACK[1], TRACK[2], TRACK[3], TRACK[4])
-	-- The jump window at the right end of the track, and the mark where it starts.
 	local band = bar:CreateTexture(nil, "BACKGROUND", nil, -6)
 	ns.Own[band] = true
 	band:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
@@ -322,7 +225,6 @@ local function Build()
 	return frame
 end
 
--- Puts the middle of the bar at the middle of its handle's box.
 local function Place()
 	local x, y
 	if type(ns.MoverSpot) == "function" then
@@ -341,7 +243,6 @@ local function Place()
 	end
 end
 
--- The rows on the bar: its size, texture, text height, colours and lead. A texture the game refuses leaves a flat fill.
 local function Paint()
 	local width, height = Number("lavaWidth", BOX_W, 80, 400), Number("lavaHeight", BOX_H, 8, 30)
 	U.frame:SetSize(width, height)
@@ -356,7 +257,6 @@ local function Paint()
 	end
 	local text = math.max(7, math.min(16, height - 2))
 	U.word:SetTextHeight(text)
-	-- The word stops short of the count at the right end, so "Dodged x3" never runs under it on a narrow bar.
 	U.word:SetWidth(math.max(20, width - 36))
 	U.count:SetTextHeight(text)
 	U.lavaRGB = { ns.Colour("general.lavaColour") }
@@ -365,7 +265,6 @@ local function Paint()
 	U.band:SetColorTexture(jump[1], jump[2], jump[3], 0.35)
 	U.mark:SetColorTexture(jump[1], jump[2], jump[3], 1)
 	U.shown = {}
-	-- Made outside a module's code, the outline follows the Flat UI page.
 	ns.SetOutlineArea(U.outline, nil)
 	Place()
 end
@@ -379,16 +278,12 @@ local function Say(word, rgb, now)
 	S.say, S.sayRGB, S.sayUntil = word, rgb, now + SAY_TIME
 end
 
--- The timeline ------------------------------------------------------------------------------------------------------------------------------------
-
--- When the server judges period k of the timeline.
 local function Danger(k)
 	return S.anchor + k * PERIOD - S.rtt
 end
 
 local Refresh
 
--- A tick at time at starts the timeline again: a real one, or one of the sample.
 local function Tick(at, sample)
 	local now = GetTime()
 	if not sample then
@@ -411,8 +306,6 @@ local function Tick(at, sample)
 	end
 end
 
--- Period k is past and no tick came: Dodged when the player was in the air, with the dodges in a row from the second ("Dodged x2"), else nothing.
--- The sample ticks every SAMPLE_EVERY periods and dodges the others, so its count shows too.
 local function Settle(k, air, now)
 	if S.sample then
 		S.flip = (S.flip + 1) % SAMPLE_EVERY
@@ -438,7 +331,6 @@ local function Settle(k, air, now)
 	end
 end
 
--- The sound of the sample: in test mode once after each On (TM.Sound), and once in /flatui lava test.
 local function SampleSound()
 	if Testing() then
 		return type(ns.TestMode.Sound) == "function" and ns.TestMode.Sound("lava") == true
@@ -448,7 +340,6 @@ local function SampleSound()
 	return first
 end
 
--- The cue of a period: the flash and the sound, as the rows say. The word Jump comes from the window itself.
 local function Cue(now)
 	if ns.Get("general.lavaFlash") == true then
 		Flash(U.jumpRGB, 0.6, now)
@@ -459,8 +350,6 @@ local function Cue(now)
 	end
 end
 
--- Moves the timeline on: periods whose danger moment is past wait to be judged, the jump is read around each danger moment, a period is judged
--- GRACE after its tick was due, and the cue fires once a period.
 local function Advance(now)
 	for _ = 1, STEPS_MOST do
 		if now < Danger(S.k) then
@@ -493,7 +382,6 @@ local function Advance(now)
 	end
 end
 
--- Writes a text and its colour only when they changed; key and colourKey name them in U.shown.
 local function Write(text, key, colourKey, value, rgb)
 	local shown = U.shown
 	if shown[key] ~= value then
@@ -506,7 +394,6 @@ local function Write(text, key, colourKey, value, rgb)
 	end
 end
 
--- Draws the period counted down: the fill, the window, the word, the count and the flash.
 local function Draw(now)
 	local danger = Danger(S.k)
 	local start = S.k == 1 and S.anchor or Danger(S.k - 1)
@@ -544,7 +431,6 @@ local function Draw(now)
 	end
 end
 
--- The alpha of the bar's own frame, written only when it changes.
 local function FrameAlpha(alpha)
 	if U.alpha ~= alpha then
 		U.alpha = alpha
@@ -556,7 +442,6 @@ local Run
 
 local function Step(_, elapsed)
 	local now = GetTime()
-	-- Fading out, the bar keeps what it last drew: no period is counted, cued or sounded any more.
 	if U.fadeOutAt then
 		local alpha = (U.fadeFrom or 1) * (1 - (now - U.fadeOutAt) / FADE_OUT)
 		if not Finite(alpha) or alpha <= 0 then
@@ -576,7 +461,6 @@ local function Step(_, elapsed)
 		end
 	end
 	if S.sample and not Moving() then
-		-- A frozen sample keeps its place in the period.
 		S.anchor = S.anchor + (Finite(elapsed) and elapsed or 0)
 	end
 	if S.live and now - S.lastAlive > HIDE then
@@ -605,9 +489,6 @@ local function StartSample(now)
 	S.say, S.sayUntil, S.flashAt = nil, nil, nil
 end
 
--- Shows the bar, painted and placed, with its step, fading in from hidden over FADE_IN; a bar fading out is whole again at once. Hides it with
--- no step: at once, or with fade over FADE_OUT, which its step runs and then hides it. A preview shows over the options window (DIALOG), all else
--- at LOW; a fade out keeps the strata it had.
 function Run(on, fade)
 	if on then
 		local frame = Build()
@@ -640,8 +521,6 @@ function Run(on, fade)
 	end
 end
 
--- Shows the real timeline, else the sample while one is wanted, else nothing: at once, or with fade (the bar's own end, 5 seconds after the last
--- tick or as /flatui lava test ends) over FADE_OUT. Death, the row going Off and the end of test mode hide it at once.
 function Refresh(fade)
 	local now = GetTime()
 	if S.broken or Mode() == nil then
@@ -661,8 +540,6 @@ function Refresh(fade)
 	end
 end
 
--- Hearing --------------------------------------------------------------------------------------------------------------------------------------
-
 local function Trace(action, flag, school, verdict, why, now)
 	local yes = { [true] = "yes", [false] = "no" }
 	print(("Flat UI lava: %.2f %s, flag %s, school %s; in combat %s, swimming %s, falling %s, lava place %s: %s (%s)."):format(now, Plain(action),
@@ -670,7 +547,6 @@ local function Trace(action, flag, school, verdict, why, now)
 		yes[Yes(IsFalling, "player")], yes[S.lava == true], verdict or "ignored", why))
 end
 
--- A UNIT_COMBAT of the player.
 local function Heard(action, flag, amount, school)
 	local now = GetTime()
 	LAST.at, LAST.action, LAST.flag, LAST.school = now, Plain(action), Plain(flag), Plain(school)
@@ -697,8 +573,6 @@ local function OnEvent(_, event, unit, action, flag, amount, school)
 	end
 end
 
--- The hearer hears while the row is not Off, and nothing while it is. RegisterUnitEvent has no documented return: only an error or false counts as
--- a refusal, as in CombatText.lua.
 local function Listen(on)
 	if on == S.listening then
 		return
@@ -738,7 +612,6 @@ local function Listen(on)
 	S.listening = on
 end
 
--- An error stops the timer until the next /reload, with a line for /flatui status.
 function Stop(err)
 	if S.broken then
 		return
@@ -768,10 +641,6 @@ local function Apply()
 	Refresh()
 end
 
--- A row of the timer changed (path, as Core.lua's Changed passes it), the player logged in, the profile changed, or test mode turned on, paused,
--- resumed or ended (no path). A change of a row while the options window shows, out of a fight and with no real timeline running, shows the
--- sample in the new look, silent, until PREVIEW seconds after the change, so a slider drag keeps it up to its last step; then it fades out. It
--- shows over the options window (S.preview, DIALOG in Run) until it ends.
 function ns.LavaChanged(path)
 	local ok, err = pcall(Apply)
 	if not ok then
@@ -791,8 +660,6 @@ function ns.LavaChanged(path)
 	end
 end
 
--- Jump sound changed: the rows are applied again (with the silent sample, as for the other rows), and the sound picked plays once, so it can be
--- chosen by ear, only while the options window shows and out of a fight, as the combat sounds do (CombatCues.lua). None plays nothing.
 function ns.LavaSoundPicked(path)
 	ns.LavaChanged(path)
 	if type(path) ~= "string" or InCombatLockdown() or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
@@ -809,14 +676,10 @@ function ns.LavaSoundPicked(path)
 	end
 end
 
--- The movers ------------------------------------------------------------------------------------------------------------------------------------
-
--- True while the bar has a handle in the movers: while the row is not Off.
 function ns.LavaTimerShown()
 	return not S.broken and Mode() ~= nil
 end
 
--- The movers set or put back the spot.
 function ns.LavaTimerMoved()
 	U.placed = nil
 	if U.frame and not S.broken then
@@ -827,9 +690,6 @@ function ns.LavaTimerMoved()
 	end
 end
 
--- Status and commands ---------------------------------------------------------------------------------------------------------------------------
-
--- The line of /flatui status, only when something is wrong.
 function ns.LavaStatus()
 	if S.broken then
 		return "Lava tick timer: stopped. " .. S.broken
@@ -870,7 +730,6 @@ local function Report()
 	end
 end
 
--- /flatui lava, /flatui lava test and /flatui lava trace.
 function ns.LavaCommand(rest)
 	local word = (rest or ""):lower():match("^%s*(%S*)") or ""
 	if word == "test" then
@@ -889,7 +748,6 @@ function ns.LavaCommand(rest)
 	end
 end
 
--- Test mode: the rows are applied again at every On, Off, pause and resume; the sample shows while it is on.
 if type(ns.TestMode) == "table" and type(ns.TestMode.Watch) == "function" then
 	ns.TestMode.Watch(function()
 		ns.LavaChanged()

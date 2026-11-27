@@ -1,112 +1,40 @@
 local _, ns = ...
 
--- Text around the minimap: small lines of the addon's own above or below the map, each with its rows on the Minimap tab (hud.mapCoords and the
--- rows after it), part "map text" of the hud module, which stops alone after a few failures. The lines are font strings on a frame of the
--- addon's own, a child of the minimap the size of the map that takes no mouse, so they move, scale and hide with the map. The frame is made out
--- of combat, or on a minimap the game does not protect, and only while a line has something the client can give; the text, its colour and its
--- place are set at any time. Nothing of the game's is written: of the minimap only its level and whether it is protected are read, of the game's
--- own coordinates line whether it is shown, and the map's OnShow is followed with HookScript, which writes nothing on the frame.
--- Over each line lies a button of the addon's own, a child of that frame the size of the line's text, made with the line's text out of combat
--- or on a map the game does not protect, which shows and hides with the text; the frame itself still takes no mouse, so the map's own clicks
--- are untouched. Pointing at a line, also in a fight, writes a tooltip in GameTooltip (SetOwner, SetText, AddLine, AddDoubleLine, Show, and Hide
--- only while IsOwned says the button owns it), written again while it shows as the line changes, so the coordinates stay live as you walk: the
--- zone, subzone and coordinates, each worn item's durability, and the frame rate, home and world latency and Flat UI's memory, all as the data
--- panels write them (ns.DataPanels.TipAt with their streams), and the local and realm time and the time of this session (GetSessionTime, as the
--- data panels' Time tooltip). Tooltips in combat on the Tooltips page, at Hide every tooltip, hides this one in a fight with the others.
--- Shift-click on the coordinates puts the zone and the coordinates shown into the chat box (ns.PutInChat: Insert into the chat box that is
--- open, else ChatFrameUtil.OpenChat, never the game's link insert, which writes a /cast line into a macro being written), and a plain click
--- opens the world map (ToggleWorldMap); a click on the durability opens the character window (ToggleCharacter), as the data panels' Durability
--- slot does; a click on the time opens the game's stopwatch and alarm (ToggleTimeManager) and a Shift-click its calendar (ToggleCalendar). In a
--- fight, where the game opens no such window, the click waits for the end of the fight (ns.OpenAfterFight): chat says once, for example,
--- "Flat UI: the stopwatch opens when the fight ends.", the window opens as the fight ends, and the tooltip's hints say "after the fight".
--- The line of the frame rate lets clicks through; a line that takes clicks has a faint light behind its text while it is under the mouse, as a
--- data panel's slot has (HOVER_LIGHT, a texture of the frame of the lines). Text size (hud.mapTextSize) sizes the four lines at once (ns.TextStyle on
--- each, a share of the game's small font), and the lines, the addon button row under the map and the room under the zone name follow it.
---   Coordinates: the player's place on the map of the zone, from C_Map.GetBestMapForUnit("player") and C_Map.GetPlayerMapPosition(map,
---     "player"), whose x and y are read as fields (the game's own line calls GetXY of that table: Mainline/Minimap.lua:1434-1457). Neither is
---     secret on Forever, only their arguments are guarded (MapDocumentation.lua:49-63, 437-452), and the position is nil where the game
---     withholds it. Nothing shows in an instance (IsInInstance), nor while the game's own coordinates show under the map (below). 0 to 2
---     decimals.
---   Durability: the lowest share of the current to the most durability of the equipped items (GetInventoryItemDurability, slots 1 to 19),
---     white, yellow at 50% or less and red at 20% or less, in the colours of the game's damaged and broken items (INVENTORY_ALERT_COLORS,
---     Blizzard_DurabilityFrame/DurabilityFrame.lua:14-16). It is read on the game's durability and equipment events and a second after a
---     death or a release, never on a timer, and not at all where the game rule RepairArmorDisabled is on (DurabilityFrame.lua:51-55).
---     Durability shows (hud.mapDurabilityWhen) keeps it Always, or hides it until an item is at 50% or less (yellow) or at 20% or less (red);
---     the line comes as an item wears to the mark and goes after a repair, and the lines and the addon button row below close up.
---   Frame rate and latency: GetFramerate, and the home and world latency of GetNetStats (its values 3 and 4), neither of which marks a return
---     secret (ClientDocumentation.lua:44-51, ConnectionDocumentation.lua:40-49). Show picks the frame rate, the latency or both, and Latency
---     picks home and world, the higher one, or one of them. With Colour by value each number is green, yellow or red by ns.PerfColour, which the
---     data panels use too: frame rate red under 30 and yellow under 60, latency yellow over 100 ms and red over 200 ms. fps, ms and the
---     separators stay white: the colours are codes around the numbers, in the text of Flat UI's own line.
---   Time: local time (date, as GameTime_GetLocalTime) or realm time (GetGameTime), 12 or 24 hours, in the game's own formats when it has
---     them (Blizzard_FrameXMLUtil/GameTimeUtil.lua:9-33).
--- The coordinates, the frame rate and the time are read by one ticker (C_Timer.NewTicker): every 0.2 seconds while coordinates are wanted, every
--- second otherwise. It runs only while one of them can be shown and the frame is on the screen: it stops when the frame hides with the map, and
--- the map showing again starts it. A line whose value the game withholds is hidden, and the lines of its place close up; /flatui status says why.
--- The game's own coordinates under the map (Mainline/Minimap.xml:287-301, shown while its minimapShowPlayerCoords variable is on, Options,
--- Interface, Coordinates) are left alone: while that variable is on and their line, MinimapCluster.PlayerCoords, is shown, Flat UI's
--- Coordinates line is hidden, so the place shows once, and the lines below the map start under the game's. MapButtons.lua leaves room under
--- the map for the lines below it (ns.MapTextBelow), and Hud.lua, while Close the gap under the zone name is on, leaves room under the zone name
--- for the lines whose place is above the map (ns.MapTextAbove).
--- These follow the minimap stats of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
--- Coordinates on the world map (hud.mapWorldCoords) puts your place and the cursor's in one line at the bottom middle of the world map, on a frame
--- of Flat UI's own on the map's scroll container (W, below).
-
 local KEY, PART = "hud", "map text"
--- The lines, from the map outwards: the row of each, the row of its place, and how often the ticker reads it (none: on events only).
 local LINES = {
 	{ id = "coords", option = "mapCoords", place = "mapCoordsPlace", every = 0.2, label = "Coordinates" },
 	{ id = "durability", option = "mapDurability", place = "mapDurabilityPlace", label = "Durability" },
 	{ id = "perf", option = "mapPerf", place = "mapPerfPlace", every = 1, label = "Frame rate and latency" },
 	{ id = "clock", option = "mapClock", place = "mapClockPlace", every = 1, label = "Time" },
 }
--- Between the map and the first line, between two lines, and from the map to the first line below while the game's own coordinates show there
--- (its line ends 18 under the map: Mainline/Minimap.xml:287-291). LINE is the height of a line when the client does not say it.
 local GAP, SPACING, UNDER_GAME, LINE = 4, 2, 21, 10
--- The frame of the lines is this many levels over the map, over the ring of the game's minimap.
 local RAISE = 5
 local WHITE, YELLOW, RED = { 1, 1, 1 }, { 1, 0.82, 0.18 }, { 0.93, 0.07, 0.07 }
--- A frame rate under these is middling, then poor; a latency over these, in milliseconds.
 local FPS_MIDDLING, FPS_POOR, MS_MIDDLING, MS_POOR = 60, 30, 100, 200
--- The equipped slots (INVSLOT_FIRST_EQUIPPED to INVSLOT_LAST_EQUIPPED).
 local FIRST_SLOT, LAST_SLOT = 1, 19
--- The seconds between two reads of the lines that change once a second or less.
 local SLOW = 1
--- The data panels' stream whose tooltip each line shows (DataStreams.lua), the tooltip's anchor, and the dim colour of its words.
 local STREAMS = { coords = "coords", durability = "durability", perf = "fps" }
 local ANCHOR = "ANCHOR_LEFT"
 local DIM_RGB = { 0.66, 0.68, 0.62 }
--- The lines a click does something on, and the hints their tooltips end with. The frame rate line lets clicks through.
 local CLICKS = { coords = true, durability = true, clock = true }
--- The faint light behind a line that takes clicks while it is under the mouse, as the data panels' slots have (DataPanels.lua), and how far it
--- reaches past the text.
 local HOVER_LIGHT, LIGHT_OUT = { 1, 1, 1, 0.07 }, 2
 local HINTS = {
 	coords = { "Click: world map", "Shift-click: put this in chat" },
 	durability = { "Click: character window" },
 	clock = { "Click: stopwatch and alarm", "Shift-click: calendar" },
 }
--- The hints in a fight, when the windows open as the fight ends; Shift-click on the coordinates works in a fight too.
 local FIGHT_HINTS = {
 	coords = { "Click: world map, after the fight", "Shift-click: put this in chat" },
 	durability = { "Click: character window, after the fight" },
 	clock = { "Click: stopwatch and alarm, after the fight", "Shift-click: calendar, after the fight" },
 }
--- The chat lines of a click in a fight.
 local LATER_STOPWATCH = "Flat UI: the stopwatch opens when the fight ends."
 local LATER_CALENDAR = "Flat UI: the calendar opens when the fight ends."
 local LATER_CHARACTER = "Flat UI: the character window opens when the fight ends."
 local LATER_MAP = "Flat UI: the world map opens when the fight ends."
 
--- frame: the frame of the lines; text[id]: the font string of a line; button[id]: the button over it; shown[id]: its text while it shows;
--- colour[id]: its colour; size[id]: the Text size it was given; why[id]: why a wanted line is hidden, for /flatui status; over: the line under
--- the mouse; ticker, step, slow: the
--- ticker, its step and the time since the slow lines were read; sig: the layout last made; game: the game's own coordinates show under the
--- map; below: the room the lines take under the map; above: the room the lines whose place is above the map ask for over it; queued, waiting,
--- hooked: a pass waits for the next frame, a make for the end of a fight, the map's OnShow is followed.
 local S = { text = {}, button = {}, shown = {}, colour = {}, size = {}, why = {}, below = 0, above = 0 }
 
--- The first value of a call that may be missing, raise or be withheld; nil then.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -118,7 +46,6 @@ local function Ask(fn, ...)
 	return value
 end
 
--- A field of a table the game gave, or nil when the read raises or the value is withheld.
 local function Field(t, key)
 	if t == nil or ns.IsSecret(t) or type(t) ~= "table" then
 		return nil
@@ -140,7 +67,6 @@ local function Wanted(line)
 	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and Opt(line.option) == true
 end
 
--- The map calls of the client, or nil on a client without them.
 local function MapCalls()
 	local api = _G.C_Map
 	if type(api) ~= "table" or ns.IsSecret(api) or type(api.GetBestMapForUnit) ~= "function" or type(api.GetPlayerMapPosition) ~= "function" then
@@ -149,7 +75,6 @@ local function MapCalls()
 	return api
 end
 
--- True inside a dungeon, a raid, a battleground or an arena. An answer the game withholds counts as outside: the position is asked for then.
 local function InInstance()
 	return Ask(_G.IsInInstance) == true
 end
@@ -158,7 +83,6 @@ local function LocalTime()
 	return Opt("mapClockTime") ~= "realm"
 end
 
--- True when the client has the calls of a line.
 local function Available(line)
 	if line.id == "coords" then
 		return MapCalls() ~= nil
@@ -173,13 +97,9 @@ local function Available(line)
 	return type(_G.GetGameTime) == "function"
 end
 
--- True when the ticker has a line to read: wanted, with the client's calls, and for the coordinates outside an instance while the game's own
--- coordinates do not show.
 local function Live(line)
 	return line.every ~= nil and Wanted(line) and Available(line) and not (line.id == "coords" and (S.game or InInstance()))
 end
-
--- The readers: the text of a line and its colour, or nil and why it is hidden. A client without the calls of a line has no line and no reason.
 
 local function Coords()
 	local api = MapCalls()
@@ -203,7 +123,6 @@ local function Coords()
 	return ("%." .. decimals .. "f, %." .. decimals .. "f"):format(x * 100, y * 100)
 end
 
--- True where the game rule that keeps gear from wearing out is on.
 local function NoWear()
 	local rules = _G.C_GameRules
 	local rule = Field(Field(_G.Enum, "GameRule"), "RepairArmorDisabled")
@@ -232,7 +151,6 @@ local function Durability()
 	if not lowest then
 		return nil, "hidden, nothing you wear has durability"
 	end
-	-- Durability shows: at 50% or less, or at 20% or less, the line waits for an item that worn; hidden by choice, so /flatui status is quiet.
 	local when = Opt("mapDurabilityWhen")
 	if (when == "worn" and lowest > 50) or (when == "low" and lowest > 20) then
 		return nil
@@ -244,16 +162,11 @@ local function Durability()
 	return ("%s %d%%"):format(word, lowest), (lowest <= 20 and RED) or (lowest <= 50 and YELLOW) or WHITE
 end
 
--- The colour code of red, green and blue, 0 to 1.
 local function Code(rgb)
 	return ("|cff%02x%02x%02x"):format(math.floor(rgb[1] * 255 + 0.5), math.floor(rgb[2] * 255 + 0.5), math.floor(rgb[3] * 255 + 0.5))
 end
--- The minimap's codes for a good, a middling and a poor frame rate or latency: green, and the yellow and red of the durability line.
 local PERF_CODES = { Code({ 0.1, 1, 0.1 }), Code(YELLOW), Code(RED) }
 
--- The colour code of a frame rate (kind "fps") or a latency in milliseconds (kind "ms") by how good it is: a frame rate is middling under 60 and
--- poor under 30, a latency middling over 100 ms and poor over 200 ms. codes, when given, are the caller's own { good, middling, poor } (the data
--- panels have colours of their own); else they are the minimap's, green, yellow and red. Nil for a value that is not a plain number.
 function ns.PerfColour(kind, value, codes)
 	if not ns.Finite(value) then
 		return nil
@@ -267,8 +180,6 @@ function ns.PerfColour(kind, value, codes)
 	return (type(codes) == "table" and codes or PERF_CODES)[level]
 end
 
--- The frame rate, the latency or both, as Show and Latency choose: the latency as home and world, the higher one, or one of them, each wanted
--- value plain or the part is left out. With Colour by value each number is wrapped in its colour, and the words and separators stay white.
 local function Perf()
 	local rate, net = _G.GetFramerate, _G.GetNetStats
 	local show = Opt("mapPerfShow")
@@ -308,7 +219,6 @@ local function Perf()
 	return table.concat(parts, "   ")
 end
 
--- A time in a format of the game's when it has one that works, else in plain digits.
 local function Formatted(pattern, fallback, ...)
 	if not ns.IsSecret(pattern) and type(pattern) == "string" then
 		local ok, text = pcall(string.format, pattern, ...)
@@ -319,8 +229,6 @@ local function Formatted(pattern, fallback, ...)
 	return fallback:format(...)
 end
 
--- The hour and minute of local time (date, as GameTime_GetLocalTime) or of realm time (GetGameTime): nil on a client without the call, false
--- when it does not say them.
 local function TimeParts(isLocal)
 	local hour, minute
 	if isLocal then
@@ -348,7 +256,6 @@ local function TimeParts(isLocal)
 	return math.floor(hour) % 24, math.floor(minute) % 60
 end
 
--- A time in the format Time format chooses.
 local function Stamp(hour, minute)
 	if Opt("mapClockHours") ~= "12" then
 		return Formatted(_G.TIMEMANAGER_TICKER_24HOUR, "%02d:%02d", hour, minute)
@@ -373,8 +280,6 @@ end
 
 local READ = { coords = Coords, durability = Durability, perf = Perf, clock = Clock }
 
--- Tooltips and clicks ---------------------------------------------------------------------------------------------------------------------
-
 local function Tooltip()
 	local tip = _G.GameTooltip
 	if tip == nil or ns.Forbidden(tip) then
@@ -383,7 +288,6 @@ local function Tooltip()
 	return tip
 end
 
--- True while GameTooltip is the button's.
 local function Owns(button)
 	local tip = Tooltip()
 	if not (tip and button) then
@@ -393,8 +297,6 @@ local function Owns(button)
 	return ok and not ns.IsSecret(owned) and owned == true
 end
 
--- The time of this session (GetSessionTime), as the data panels' Time tooltip writes it (P.Time: 1h 20m, 45m, 30s), or nil when the game does
--- not say it.
 local function SessionTime()
 	local seconds = Ask(_G.GetSessionTime)
 	if not ns.Finite(seconds) or seconds < 0 then
@@ -413,7 +315,6 @@ local function SessionTime()
 	return ("%dm"):format(math.ceil(seconds / 60))
 end
 
--- The local and realm time, each in the format Time format chooses, and the time of this session.
 local function ClockTip(button)
 	local tip = Tooltip()
 	if not tip then
@@ -439,8 +340,6 @@ local function ClockTip(button)
 	end)
 end
 
--- Writes the tooltip of a line on its button: the data panels' stream of the line, or the time, in a fight too; fresh is false when a tooltip
--- that shows is written again.
 local function Tip(_, line, button, fresh)
 	if not button or not S.shown[line.id] then
 		return
@@ -455,7 +354,6 @@ local function Tip(_, line, button, fresh)
 	end
 end
 
--- A line under the mouse whose text changed writes its tooltip again, while it is still the button's.
 local function Retip(line)
 	local button = S.button[line.id]
 	if S.over == line.id and Owns(button) then
@@ -463,7 +361,6 @@ local function Retip(line)
 	end
 end
 
--- The text the chat box takes for a line: the zone and the coordinates shown.
 local function ChatText(line)
 	local shown = S.shown[line.id]
 	if line.id ~= "coords" or type(shown) ~= "string" then
@@ -473,9 +370,6 @@ local function ChatText(line)
 	return type(zone) == "string" and zone ~= "" and (zone .. " " .. shown) or shown
 end
 
--- A click on a line: Shift on the coordinates puts them in the chat box, and a plain click opens the world map (ToggleWorldMap); on the
--- durability a click opens the character window (ToggleCharacter("PaperDollFrame"), as the data panels' Durability slot does); on the time a
--- click opens the stopwatch and alarm, Shift the calendar. A window waits for the end of a fight (ns.OpenAfterFight).
 local function Click(_, line)
 	local shift = Ask(_G.IsShiftKeyDown) == true
 	if line.id == "coords" and shift then
@@ -505,7 +399,6 @@ local function Click(_, line)
 	end
 end
 
--- The button over a line's text, made with the text out of combat or on a map the game does not protect; nil when it cannot be made now.
 local function MakeButton(line, text)
 	local map = _G.Minimap
 	if InCombatLockdown() and (map == nil or ns.MaybeProtected == nil or ns.MaybeProtected(map)) then
@@ -518,7 +411,6 @@ local function MakeButton(line, text)
 	ns.Own[button] = true
 	button:SetAllPoints(text)
 	button:EnableMouse(true)
-	-- The light is a texture of the frame of the lines, so it lies behind the text; the button is a level above that frame.
 	local light
 	if CLICKS[line.id] then
 		light = S.frame:CreateTexture(nil, "BACKGROUND")
@@ -570,11 +462,8 @@ local function MakeButton(line, text)
 	return button
 end
 
--- Drawing ---------------------------------------------------------------------------------------------------------------------------------
-
 local Queue
 
--- MapButtons.lua puts its row of addon buttons under the lines below the map.
 local function SetBelow(room)
 	if room == S.below then
 		return
@@ -585,7 +474,6 @@ local function SetBelow(room)
 	end
 end
 
--- Hud.lua leaves this room under the zone name while Close the gap under the zone name is on.
 local function SetAbove(room)
 	if room == S.above then
 		return
@@ -603,8 +491,6 @@ local function StopTicker()
 	S.ticker, S.step = nil, nil
 end
 
--- The game's own coordinates show under the map while its variable is on and their line is shown; a client without that line is taken at the
--- word of the variable. Of the line only IsShown is read.
 local function GameCoords()
 	local cvar = _G.C_CVar
 	if type(cvar) ~= "table" or ns.IsSecret(cvar) or Ask(cvar.GetCVar, "minimapShowPlayerCoords") ~= "1" then
@@ -617,8 +503,6 @@ local function GameCoords()
 	return Ask(line.IsShown, line) ~= false
 end
 
--- Makes the frame of the lines on the map, once. False while it cannot be made now: in a fight on a map the game may protect, the make waits
--- for the end of the fight.
 local function Make(map)
 	if S.frame then
 		return true
@@ -643,7 +527,6 @@ local function Make(map)
 	if ns.Finite(level) then
 		frame:SetFrameLevel(level + RAISE)
 	end
-	-- The frame hides with the map, and the ticker stops with it.
 	frame:SetScript("OnHide", StopTicker)
 	S.frame = frame
 	if not S.hooked and type(map.HookScript) == "function" then
@@ -677,7 +560,6 @@ local function Show(line, value, colour)
 		text:Hide()
 		S.text[line.id] = text
 	end
-	-- Text size, a share of the game's small font; the layout reads the new height (Layout's sig holds the size).
 	local size = tonumber(Opt("mapTextSize")) or 100
 	if S.size[line.id] ~= size then
 		ns.TextStyle(text, { percent = size })
@@ -717,17 +599,11 @@ local function Read(line)
 	end
 end
 
--- The height of a line as the client gives it, else LINE.
 local function Height(text)
 	local height = Ask(text.GetStringHeight, text)
 	return ns.Finite(height) and height > 0 and height or LINE
 end
 
--- The plate of the zone name, MinimapCluster.ZoneTextButton, 152 by 23 (Blizzard_Minimap/Mainline/Minimap.xml:24,
--- Camelot/MinimapZoneTextButton.xml:9-12). The game puts it over the map; Edit Mode's Header Underneath puts it under the map
--- (Camelot/Minimap.lua:68-80, Blizzard_EditMode/Shared/EditModeSystemTemplates.lua:1794-1797). Its side of the map and how far its near and
--- its far edge are from that edge of the map, in the units of the frame of the lines; nil while it is beside the map, hidden, or the client
--- does not say where it is. Only region calls of the client are made on it, and nothing is written.
 local function Plate()
 	local button = Field(_G.MinimapCluster, "ZoneTextButton")
 	if ns.Forbidden(button) or Ask(button.IsVisible, button) ~= true then
@@ -749,10 +625,6 @@ local function Plate()
 	return nil
 end
 
--- Puts the lines that show one after another, out from the map on each side, when which lines show, where, or the plate of the zone name has
--- changed. Over the map, where the game puts the plate, the screen ends above it: the lines above that do not fit between the map and the plate
--- go below (Hud.lua makes room for them, as far as the game's place, while it hangs the plate from the map). Under the map (Header Underneath),
--- a line below that would reach the plate goes on under it.
 local function Layout()
 	local places, sig = {}, { S.game and "game" or "", "size=" .. tostring(Opt("mapTextSize")) }
 	local side, near, far = Plate()
@@ -765,7 +637,6 @@ local function Layout()
 			end
 			if place == "above" and side == "above" then
 				used = (used and used + SPACING or GAP) + Height(S.text[line.id])
-				-- The room Hud.lua leaves comes back through two scales, a hair short at worst.
 				if used > near + 0.01 then
 					place = "below"
 				end
@@ -810,7 +681,6 @@ local function Layout()
 	SetBelow(room)
 end
 
--- Reads the lines given (all of them without a list) and lays them out.
 local function Pass(which)
 	for _, line in ipairs(LINES) do
 		if not which or which[line.id] then
@@ -847,7 +717,6 @@ local function Step()
 	end
 end
 
--- One step of the ticker. Each run has a key of its own, so every failure counts toward stopping the part; a stopped part takes its lines away.
 local function Tick()
 	if ns.IsStopped(KEY) or not ns.Enabled(KEY) or ns.PartStopped(KEY, PART) or not S.frame then
 		StopTicker()
@@ -861,7 +730,6 @@ local function Tick()
 	end
 end
 
--- Starts the ticker at the step of the quickest line it has to read, or stops it when it has none or the frame is not on the screen.
 local function Ticker()
 	local step
 	for _, line in ipairs(LINES) do
@@ -886,7 +754,6 @@ local function Ticker()
 	end
 end
 
--- True while a line is wanted and the client has its calls: only then is the frame made.
 local function Needed()
 	for _, line in ipairs(LINES) do
 		if Wanted(line) and Available(line) then
@@ -911,24 +778,12 @@ local function Update()
 	Ticker()
 end
 
--- The world map's line ---------------------------------------------------------------------------------------------------------------------
-
--- Coordinates on the world map (hud.mapWorldCoords): "You 45.2, 61.8    Cursor 33.0, 12.5" at the bottom middle of the map, with Coordinate
--- decimals. W.frame is a frame of Flat UI's own, a child of WorldMapFrame.ScrollContainer (Blizzard_WorldMap.xml:11), made out of combat or on a
--- container the game does not protect, over the map's pins (they take levels up to 9000, MapCanvas_PinFrameLevelsManager.lua:3-4); it takes no
--- mouse and shows and hides with the map, so its OnUpdate runs only while the map shows, every WORLD_EVERY seconds. Nothing of the map's is
--- written and none of its mixin's calls is made: the map shown is read with rawget(WorldMapFrame, "mapID") (MapCanvasMixin keeps it there,
--- Blizzard_MapCanvas.lua:60-62), your place on it from C_Map.GetPlayerMapPosition as the Coordinates line reads it, and the cursor from
--- GetCursorPosition over the map's canvas (ScrollContainer.Child) with its region calls, the sums of the game's NormalizeUIPosition
--- (MapCanvas_ScrollContainerMixin.lua:858-873). Your part shows while you are on the map shown and not in an instance, the cursor part while the
--- pointer is over the map; a part outside 0 to 100 is left out. Part "map text", so its failures stop it with the other lines.
 local W = { every = 0.1, up = 6, pad = 6, level = 9500, gap = "    ", back = 0.6 }
 
 function W.Wanted()
 	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and Opt("mapWorldCoords") == true and MapCalls() ~= nil
 end
 
--- The world map, its scroll container and the canvas in it; nil while the game has none or one addons may not touch.
 function W.Map()
 	local map = _G.WorldMapFrame
 	if type(map) ~= "table" or ns.IsSecret(map) or ns.Forbidden(map) then
@@ -942,7 +797,6 @@ function W.Map()
 	return map, container, child
 end
 
--- A share of the map as text, or nil outside it.
 function W.Spot(x, y, format)
 	if not (ns.Finite(x) and ns.Finite(y)) or x < 0 or x > 1 or y < 0 or y > 1 then
 		return nil
@@ -950,7 +804,6 @@ function W.Spot(x, y, format)
 	return format:format(x * 100, y * 100)
 end
 
--- Your place on the map shown, or nil in an instance, on another map or where the game gives none.
 function W.You(api, map, format)
 	if InInstance() then
 		return nil
@@ -967,7 +820,6 @@ function W.You(api, map, format)
 	return W.Spot(x, y, format)
 end
 
--- The cursor's place on the map, or nil while the pointer is not over it.
 function W.Cursor(container, child, format)
 	if Ask(container.IsMouseOver, container) ~= true then
 		return nil
@@ -985,7 +837,6 @@ function W.Cursor(container, child, format)
 	return W.Spot((cx / scale - left) / width, (top - cy / scale) / height, format)
 end
 
--- One read: the line's text, the backing sized to it; both hidden while neither part has anything to show.
 function W.Read()
 	local api = MapCalls()
 	local map, container, child = W.Map()
@@ -1029,8 +880,6 @@ function W.Step(_, elapsed)
 	end
 end
 
--- Makes the frame on the map, once. False while it cannot be made now: in a fight on a container the game may protect, the make waits for the
--- end of the fight.
 function W.Make()
 	if W.frame then
 		return true
@@ -1065,7 +914,6 @@ function W.Make()
 	backing:Hide()
 	local text = ns.OwnText(frame, "OVERLAY", "GameFontHighlightSmall")
 	if not text then
-		-- The client refused the text: no line, and no second frame.
 		frame:Hide()
 		W.broken = true
 		return false
@@ -1074,15 +922,12 @@ function W.Make()
 	text:Hide()
 	W.frame, W.text, W.backing = frame, text, backing
 	frame:SetScript("OnUpdate", W.Step)
-	-- The map hid: the next showing reads at once.
 	frame:SetScript("OnHide", function()
 		W.at = W.every
 	end)
 	return true
 end
 
--- Shows the line's frame while its row is on, else hides it; a change of decimals shows on the next read. Through ns.EachPart, so a failure
--- counts toward stopping the part; a stopped part hides it.
 function W.Refresh()
 	if ns.PartStopped(KEY, PART) or ns.IsStopped(KEY) then
 		if W.frame then
@@ -1133,7 +978,6 @@ Queue = function()
 	end)
 end
 
--- An event is looked at on the next frame, only while a line can show or the frame is there to hide.
 local function Relevant()
 	return S.frame ~= nil or Needed()
 end
@@ -1144,7 +988,6 @@ local function Changed()
 	end
 end
 
--- The game settles the durability of a death or a release a moment after it.
 local function Later()
 	if Relevant() and type(C_Timer) == "table" and type(C_Timer.After) == "function" then
 		C_Timer.After(1, Queue)
@@ -1160,14 +1003,12 @@ end
 ns.AddEvent(KEY, "CVAR_UPDATE", Changed, function(name)
 	return not ns.IsSecret(name) and name == "minimapShowPlayerCoords"
 end)
--- The world map may come with its addon after login: its line is made then.
 ns.AddEvent(KEY, "ADDON_LOADED", function()
 	W.Refresh()
 end, function(name)
 	return not ns.IsSecret(name) and name == "Blizzard_WorldMap"
 end)
 
--- /flatui status says why a wanted line is hidden.
 ns.AddStatus(KEY, function()
 	local lines = {}
 	for _, line in ipairs(LINES) do
@@ -1178,26 +1019,18 @@ ns.AddStatus(KEY, function()
 	return lines
 end)
 
--- Hud.lua calls this at the end of RefreshMinimap: a changed row, the page, the profile, the size of the screen, a new world.
 function ns.MapTextRefresh()
 	Draw()
 end
 
--- The room the lines below the map take under it, in the units of the map; 0 while none shows.
 function ns.MapTextBelow()
 	return S.below
 end
 
--- The room the lines whose place is above the map ask for over it, in the units of the map, whether or not they fit under the zone name; 0
--- while none shows.
 function ns.MapTextAbove()
 	return S.above
 end
 
--- Puts a text into the chat box: into the chat box that is open (ChatFrameUtil.GetActiveWindow, then the box's Insert and SetFocus), else into
--- a box it opens (ChatFrameUtil.OpenChat), ready to send. Not ChatFrameUtil.InsertLink, the game's link insert: with the macro editor open it
--- writes "/cast " before any text that is no item link (Mainline/ChatFrameUtilOverrides.lua:19-38). The experience bar's Shift-click uses it
--- too (XpBar.lua). True when a box took it.
 function ns.PutInChat(text)
 	local util = _G.ChatFrameUtil
 	if type(text) ~= "string" or text == "" or type(util) ~= "table" or ns.IsSecret(util) then
@@ -1217,11 +1050,6 @@ function ns.PutInChat(text)
 	return false
 end
 
--- A window of the game opened by a click of Flat UI's: now, or in a fight as the fight ends, since the game opens its windows as panels it does
--- not show in a fight (ShowUIPanel) or loads them with their addon. open is the call, made in a pcall; said is the line chat says in a fight, once
--- for each window asked for ("Flat UI: the stopwatch opens when the fight ends."). The last window asked for in a fight is the one that opens. The
--- clicks on the time, the durability and the coordinates use it, and the reputation bar's (XpBar.lua) and the quest count's (QuestCount.lua).
--- True when the window was opened now.
 local opening = {}
 function ns.OpenAfterFight(open, said)
 	if type(open) ~= "function" then

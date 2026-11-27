@@ -1,21 +1,8 @@
 local _, ns = ...
 
--- The text of the chat windows: the face and outline, the shadow, how many lines a window keeps and whether old messages fade. Runs with the
--- chat module, after each pass of it and at UPDATE_CHAT_WINDOWS and PLAYER_ENTERING_WORLD, on each window named in CHAT_FRAMES. What the game
--- gave a window is read the first time a row asks for a change and put back when the row goes back to the game's value or the module is off.
--- The size of the text stays the game's: both ways the game sets it read the face and the outline back first (Mainline/FloatingChatFrame.lua:1097-1098,
--- Mainline/ChatFrameOverrides.lua:121-122), so a face and an outline set here stay through a size change.
--- A size change the player makes also copies the face and flags of ChatFrame1 to GMChatFrame and CommunitiesFrame.Chat.MessageFrame
--- (Mainline/FloatingChatFrame.lua:1097-1106). Those two frames are not in CHAT_FRAMES, so a face set here spreads to them and is not put back there. The game's own values are 128 lines and
--- 120 seconds (Mainline/ChatFrameOverrides.lua:2-3). ScrollingMessageFrame.lua:240-276 has the four calls for lines and fading. This file reads no message text. ChatLinks.lua, of
--- the same module, reads the text of chat lines through the game's chat filters, which give it only lines an addon may read: a line of the chat
--- lockdown is passed on untouched, so its web addresses stay plain text.
-
 local KEY = "chat"
 local GAME_LINES, GAME_TIME = 128, 120
 
--- Per chat window: the parts that changed it, each with what the game gave: { font = { file, flags, setFile, setFlags }, shadow = { x, y },
--- lines = { base }, fading = { base }, time = { base } }
 local records = setmetatable({}, { __mode = "k" })
 
 local function Opt(key)
@@ -37,7 +24,6 @@ local function Font(frame, record, restore)
 		error("GetFont gave nothing for a chat window", 0)
 	end
 	if mine and mine.setFile ~= nil and (file ~= mine.setFile or flags ~= mine.setFlags) then
-		-- Set again by the game or another addon: what it gave now is the one to go back to.
 		mine.setFile, mine.setFlags = nil, nil
 	end
 	if not mine then
@@ -91,7 +77,6 @@ local function Shadow(frame, record, restore)
 	end
 end
 
--- A value of the window with a getter and a setter: set to `value` while wanted, and put back to what the game gave when not.
 local function Keep(frame, record, name, get, set, wanted, value)
 	local mine = record[name]
 	if not wanted and not mine then
@@ -128,8 +113,6 @@ local function Fading(frame, record, restore)
 	Keep(frame, record, "time", "GetTimeVisible", "SetTimeVisible", not restore and fade and after ~= GAME_TIME, after)
 end
 
--- One part on one window. With the module off, or the part stopped after enough refusals, the part puts the game's value back, and a refusal
--- then is let go.
 local function Run(part, fn, frame, record)
 	if ns.Enabled(KEY) and not ns.PartStopped(KEY, part) then
 		ns.EachPart(KEY, part, fn, frame, record, false)

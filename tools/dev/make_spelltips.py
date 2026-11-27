@@ -33,6 +33,8 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import strip_lua
 DATA = os.path.join(HERE, 'spelltips')
 ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(ROOT, 'FlatUI', 'SpellData.lua')
@@ -1440,6 +1442,7 @@ def main():
     rockbiter = build_rockbiter(client, cur)
     seal_values(entries, client, cur)
     text, w = write_lua(entries, rules, crit, gear, cur, threat, probes, defaults, rockbiter, client)
+    text = strip_lua.strip(text)
     check_whole(entries, rules, crit, w, client, coef, threat, gear)
     ranks = sum(len(e.ranks) for e in entries.values())
     with_threat = sum(1 for e in entries.values() if e.threat)

@@ -1,25 +1,5 @@
 local _, ns = ...
 
--- Errands of the loot window.
---
--- Quick loot: when the game is about to loot by itself (LOOT_READY says so: Auto Loot is on, or its key is held with it off; a client that does
--- not say is asked through autoLootDefault and IsModifiedClick("AUTOLOOTTOGGLE")), every slot is taken at once with LootSlot, first to last,
--- once per loot window. A slot the game keeps locked (an item being rolled for), a slot that cannot be read and, under master loot, an item at
--- or above the loot threshold are left, and so is an item that binds when picked up, or whose binding cannot be read: the game's own auto
--- loot takes those, so that its question before an item binds is asked from its own code, never from inside a call of Flat UI's. With the
--- game not looting by itself the window opens as it always does.
---
--- Make room: while the loot window is open and every general bag is full (the backpack and bags 1 to 4 of family 0; the reagent bag and the special
--- bags, a trade bag, a quiver, an ammo pouch, a soul bag, take only certain items, so they are not counted), a button under the window deletes the
--- grey stack worth least at a vendor (a grey with no price counts as worth nothing), and names it: Delete, its icon, its name and the count, the
--- name cut short when long. A quest item, a locked item, an item that binds to a quest and an item on the keep list (/flatui keep) are never
--- picked. The pick is read again at the click, and the item is picked up and deleted inside the
--- click itself (C_Container.PickupContainerItem, then DeleteCursorItem), which the game allows only from a click, with the cursor empty before and
--- the link checked after. After a delete the button stays hidden until the deleted slot reads empty or holds something else, so a quick second click
--- cannot delete a second stack while the server has not answered. A loot of money only has no button. The button is made out of combat only, is
--- never there under the gamepad interface, does nothing in a fight, and hides itself whenever it is no longer wanted.
--- Both follow EnhanceQoL (quick loot, and the loot window junk button of its Forever version), adapted with the permission of its author.
-
 local E = ns.Errands
 local part = E.Part({ label = "Loot" })
 
@@ -30,20 +10,15 @@ local ITEM_SLOT = 1
 local MASTER = 2
 local DEFAULT_BAGS = 4
 local DEFAULT_THRESHOLD = 2
--- The words of the button for an item whose name the game does not say, and the icon of an item with none (the game's question mark).
 local GENERIC = "Make room: delete a grey item"
 local QUESTION_ICON = 134400
 
 local lootOpen = false
--- Quick loot has run for this loot window.
 local looted = false
 local button
--- The grey item the button deletes: { bag, slot, id, link, count, value, icon, name }.
 local target
--- A delete waits for its slot to read empty or changed: { bag, slot, link }, or nil.
 local waitBags
 local fighting = false
--- What /flatui status says: slots taken by the last quick loot, and the last item deleted.
 local lastTaken, lastDeleted
 
 local function Field(info, key)
@@ -54,9 +29,6 @@ local function Field(info, key)
 	return value
 end
 
--- Quick loot ---------------------------------------------------------------------------------------------------------------------------------
-
--- The sell price and the binding of an item (C_Item.GetItemInfo gives them 11th and 14th), or nil when the game has not said yet.
 local function Facts(link)
 	if type(C_Item) ~= "table" or type(C_Item.GetItemInfo) ~= "function" then
 		return nil
@@ -70,8 +42,6 @@ end
 
 local AsksFirst
 
-
--- Whether the game loots by itself now, for a client whose LOOT_READY does not say: Auto Loot (autoLootDefault) unless its key is held.
 local function GameLoots()
 	local on = type(C_CVar) == "table" and E.Ask(C_CVar.GetCVarBool, "autoLootDefault")
 	local flipped = E.Ask(IsModifiedClick, "AUTOLOOTTOGGLE")
@@ -81,7 +51,6 @@ local function GameLoots()
 	return on ~= flipped
 end
 
--- The quality from which master loot keeps an item for the loot master, or nil when master loot is not on.
 local function MasterThreshold()
 	local method
 	if type(C_PartyInfo) == "table" and type(C_PartyInfo.GetLootMethod) == "function" then
@@ -98,7 +67,6 @@ local function MasterThreshold()
 	return type(threshold) == "number" and threshold or DEFAULT_THRESHOLD
 end
 
--- Whether a slot holds an item.
 local function HoldsItem(slot)
 	if type(GetLootSlotType) == "function" then
 		local kind = E.Ask(GetLootSlotType, slot)
@@ -116,7 +84,6 @@ local function HoldsItem(slot)
 	return nil
 end
 
--- Whether the game asks before the item of a slot binds, or cannot say: such a slot is left to the game's own auto loot. Money is no item.
 AsksFirst = function(slot)
 	local item = HoldsItem(slot)
 	if item == false then
@@ -160,8 +127,6 @@ end
 
 E.Listen(part, "LOOT_READY", QuickLoot)
 
--- Make room ----------------------------------------------------------------------------------------------------------------------------------
-
 local function Bags()
 	for _, n in ipairs({ NUM_BAG_SLOTS }) do
 		if type(n) == "number" and not ns.IsSecret(n) and n >= 0 and n <= 20 then
@@ -171,7 +136,6 @@ local function Bags()
 	return DEFAULT_BAGS
 end
 
--- A grey item in a slot that may be deleted.
 local function Candidate(bag, slot)
 	local info = E.Ask(C_Container.GetContainerItemInfo, bag, slot)
 	if type(info) ~= "table" then
@@ -198,8 +162,6 @@ local function Candidate(bag, slot)
 		name = type(name) == "string" and name ~= "" and name or nil }
 end
 
--- The cheapest grey item when every general bag (family 0, bags 0 to NUM_BAG_SLOTS) is full, or nil. A bag whose kind the game does not say,
--- or a bag with room, means no button.
 local function Cheapest()
 	if type(C_Container) ~= "table" then
 		return nil
@@ -256,7 +218,6 @@ end
 
 local Update
 
--- The words of the button: the icon and the name of the stack it deletes, with the count; the game cuts a long name short (Errands.Button).
 local function Label(entry)
 	if not entry.name then
 		return GENERIC
@@ -264,7 +225,6 @@ local function Label(entry)
 	return ("Delete |T%d:0|t %s%s"):format(entry.icon or QUESTION_ICON, entry.name, entry.count > 1 and (" x%d"):format(entry.count) or "")
 end
 
--- Whether the loot window still holds an item: a loot of money only needs no room. A client that does not say counts as holding one.
 local function ItemLeft()
 	local count = E.Ask(GetNumLootItems)
 	if type(count) ~= "number" then
@@ -278,7 +238,6 @@ local function ItemLeft()
 	return false
 end
 
--- The wait after a delete ends once its slot reads empty or holds something else.
 local function Settle()
 	if not waitBags then
 		return
@@ -294,7 +253,6 @@ local function DeleteNow()
 		return
 	end
 	local shown, now = target, Cheapest()
-	-- Only the item the button showed is deleted: anything that changed since is shown again first.
 	if not now or now.bag ~= shown.bag or now.slot ~= shown.slot or now.id ~= shown.id or now.link ~= shown.link or now.count ~= shown.count then
 		Update()
 		return
@@ -315,14 +273,12 @@ local function DeleteNow()
 	end
 	lastDeleted = shown.link
 	E.Say(("Deleted %s. Loot again."):format(Worth(shown)))
-	-- The slot can read as taken until the server answers: wait for it.
 	waitBags, target = { bag = shown.bag, slot = shown.slot, link = shown.link }, nil
 	if button then
 		button:Hide()
 	end
 end
 
--- A fault between the pick-up and the delete must not leave the stack on the cursor.
 local function Delete()
 	local ok, err = pcall(DeleteNow)
 	if not ok then
@@ -333,7 +289,6 @@ local function Delete()
 	end
 end
 
--- Whether the button is still wanted: asked every frame while it shows.
 local function Wanted()
 	return lootOpen and target ~= nil and not waitBags and E.On("makeRoom") and not E.Gamepad() and not ns.PartStopped("errands", part.label)
 end
@@ -416,7 +371,6 @@ for _, event in ipairs({ "CURSOR_CHANGED", "GET_ITEM_INFO_RECEIVED", "INPUT_DEVI
 	end)
 end
 
--- Events missed while the module was off: the loot window is read again, and nothing waits any longer.
 function part.Refresh()
 	local count = E.Ask(GetNumLootItems)
 	lootOpen = type(count) == "number" and count > 0 and E.Shown(LootFrame)

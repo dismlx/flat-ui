@@ -1,57 +1,17 @@
 local _, ns = ...
 
--- A bar the game lays out again (the action bars, and the frames a container places) is kept where the player put it by
--- writing the spot into the Edit Mode layout in use, which the game's own code then applies. Nothing is hooked and no bar is
--- placed from inside a call of the game.
---
--- The approach is EllesmereUI's. An Edit Mode frame is kept by writing anchorInfo and isInDefaultPosition false into the saved
--- layout in use through C_EditMode.SaveLayouts: never into a preset, never in combat, never while Edit Mode is open, and a reset puts
--- back Edit Mode's default (EllesmereUIChat/EllesmereUIChat.lua:1724-1734, 1900-1920, 1926-1958, 1960-1990). The payload is built with
--- the presets first, because SaveLayouts replaces the whole set and activeLayout counts from the presets (EllesmereUI_Uninstall.lua:427-455).
--- Only the data of C_EditMode is read, never a method of EditModeManagerFrame, and only EditModePresetLayoutManager's copy of the presets.
---
--- SaveLayouts is called once, in the click of the Reload button, and ReloadUI follows in the same handler. A save while the game runs makes
--- the game apply the whole layout again inside the caller, and the fields it writes then taint the layout pass at the next edge of a fight
--- (EditModeManager.lua:192-199, 1008-1035; ActionBar.lua:285-287, 339-365). EllesmereUI saves once and forces a reload for that reason
--- (EllesmereUICooldownManager/EUI_CDM_Blizzard.lua:170, 285-330). Until the reload a moved bar is placed by the check, out of combat, with
--- no hook.
---
--- Why it holds: the layout passes of the game place a bar only while its row is in the default position (EditModeManager.lua:684,
--- :693), and ApplySystemAnchor places a bar that is not from its anchorInfo (EditModeSystemTemplates.lua:350-382). A preset
--- cannot be written (EditModePresetLayoutsManager.lua:46-48, 70-74), so a bar on a preset layout is placed by the addon out of
--- combat and goes back to the game's spot in a fight.
---
--- A preset cannot be written, so with movers.presetLayout on "make" the Reload click makes a layout of the addon's own, named Flat UI,
--- from the preset: the layout goes into the saved list after the player's own, C_EditMode.SaveLayouts takes the list and
--- C_EditMode.SetActiveLayout makes it the one in use, and the interface reloads (EllesmereUI/EllesmereUI_Profiles.lua:4683-4745). The game's
--- own layout list is not touched otherwise. After the reload the first check says whether Edit Mode kept it: the layout in use is named Flat UI
--- and is no preset (the self-check of this feature), and when it did not, the status line says so and nothing is tried again.
---
--- ns.LayoutSpots.Kind says which frames this is for, Resolve reads the layout in use, Queue offers the spot of a frame, Apply is the
--- Reload button, Release offers to put a row back, Status gives the lines of /flatui status.
-
 local LS = {}
 ns.LayoutSpots = LS
 
--- Offsets that differ by less than this are the same spot.
 local TOLERANCE = 0.1
--- How long the answer of Mode is kept, in seconds.
 local MODE_FOR = 0.5
 
--- queue: the frames waiting for the next frame, by name. pending: the writes and releases that wait for the Reload button, by name. refused:
--- frames whose row did not take the spot. kept: the layout name a frame is kept in.
 local queue, queued, waiting = {}, false, false
 local pending, refused, kept = {}, {}, {}
 local mode = { at = nil, value = nil, name = nil }
 local preset = nil
--- The layout of the addon's own. want: the click makes it. state: nil, "kept", "refused" or "elsewhere". checked: the check after a reload is done.
--- recheck: a flush is asked for with no frame queued. presetName: the preset in use when state is "elsewhere". existing: a Flat UI layout is saved
--- already. refusedMode: the value of movers.presetLayout when Edit Mode refused the layout. A refusal is saved for the character
--- (flatLayout.refused and .mode), so no later session tries again until the layout in use is Flat UI or movers.presetLayout is changed. bars: the frames marked refused with the layout. seen: the last
--- spot queued for each frame, offered again when movers.presetLayout changes. setting: the value of movers.presetLayout at the last flush.
 local FLAT = "Flat UI"
 local flat = { want = false, state = nil, checked = false, recheck = false, presetName = nil, existing = false, refusedMode = nil, seen = {}, setting = nil, bars = {} }
--- The writers other builds add: list by id, wanted by id for the next click, refused, kept, and the ids to put back at the next click.
 local wr = { list = {}, pending = {}, refused = {}, kept = {}, unwrite = {} }
 
 local function Soon(fn)
@@ -77,9 +37,6 @@ local function Copy(anchor)
 	return copy
 end
 
--- The frames this is for: a system frame of the list that the game's layout passes place again, or a bar of the action bar system, which
--- has the same passes (ActionBar.lua:285-287 and :373 run one at each edge of a fight). `passes` is the answer of Movers about the frame;
--- without it only a bar of the stacks counts.
 function LS.Kind(info, frame, passes)
 	if type(info) ~= "table" or not info.system or type(frame) ~= "table" then
 		return nil
@@ -100,8 +57,6 @@ function LS.Kind(info, frame, passes)
 	return nil
 end
 
--- The saved layouts with the presets first, as SaveLayouts takes them, with the number of presets and the layout in use. Nothing when
--- the data cannot be read. Never a method of EditModeManagerFrame.
 local function Load()
 	if not (C_EditMode and type(C_EditMode.GetLayouts) == "function" and type(C_EditMode.SaveLayouts) == "function") then
 		return nil
@@ -139,8 +94,6 @@ local function IsPreset(layout, index, count)
 	return index <= count or (presetType ~= nil and layout.layoutType == presetType)
 end
 
--- The layout in use and the payload to save, or nil and why: "combat", "editmode" (both pass), "unavailable" (the calls or the data are
--- missing), "preset" (the layout in use cannot be written, and its entry is the third answer). Reads data only.
 function LS.Resolve()
 	if InCombatLockdown() then
 		return nil, "combat"
@@ -158,8 +111,6 @@ function LS.Resolve()
 	return info, entry
 end
 
--- "layout" when the layout in use takes a written spot, "preset" or "unavailable" when it does not, "pending" while a spot waits for the Reload
--- button, and the name of the layout. The answer holds for a moment, and again after anything that could change it.
 function LS.Mode()
 	if next(pending) ~= nil then
 		return "pending"
@@ -184,7 +135,6 @@ function LS.Invalidate()
 	mode.value = nil
 end
 
--- The row of a layout for a frame: the one whose system and index are the frame's.
 function LS.Entry(layout, frame)
 	local ok, system, index = pcall(function()
 		return frame.system, frame.systemIndex
@@ -200,8 +150,6 @@ function LS.Entry(layout, frame)
 	return nil
 end
 
--- True when the row already holds the spot: its point on UIParent with the same point, offsets within 0.1, no second anchor and not in the
--- default position. spot is { point, x, y, relativePoint }, the offsets in the units of the layout.
 function LS.Agrees(row, spot)
 	local anchor = type(row) == "table" and row.anchorInfo
 	if type(anchor) ~= "table" or row.anchorInfo2 ~= nil or row.isInDefaultPosition ~= false or type(spot) ~= "table" then
@@ -212,8 +160,6 @@ function LS.Agrees(row, spot)
 		and math.abs(anchor.offsetX - spot.x) <= TOLERANCE and math.abs(anchor.offsetY - spot.y) <= TOLERANCE
 end
 
--- The offsets saved for a spot: the offsets Move passes, which are in the units of the frame, times the scale of the frame, which is what the
--- game divides them by when it places the bar (EditModeSystemTemplates.lua:365-366).
 local function Target(frame, spot)
 	if type(spot) ~= "table" or type(spot.point) ~= "string" or type(spot.x) ~= "number" or type(spot.y) ~= "number" then
 		return nil
@@ -236,7 +182,6 @@ local function Records()
 	return account.layoutBefore
 end
 
--- The note of a loop breaker: a spot saved before and still not held by its row is not offered again.
 local function Tried()
 	local account = ns.Account()
 	if type(account) ~= "table" then
@@ -252,7 +197,6 @@ local function IdOf(lkey, name, target)
 	return lkey .. "|" .. ("%s|%s|%.3f|%.3f"):format(name, target.point, target.x, target.y)
 end
 
--- Edit Mode refused the Flat UI layout: kept in this session and saved for the character.
 local function SaveRefusal()
 	flat.state, flat.refusedMode = "refused", ns.Get("movers.presetLayout")
 	local char = ns.Character()
@@ -284,7 +228,6 @@ function LS.DeepCopy(value)
 	return copy
 end
 
--- True when the layout data says it is for the gamepad interface (the field EditModeUtil.lua:6-9 reads), read from the data of C_EditMode only.
 function LS.IsGamepad(layout)
 	local enum = Enum and Enum.InputDeviceInterfaceType
 	return type(layout) == "table" and enum ~= nil and enum.Gamepad ~= nil and layout.interfaceStyle == enum.Gamepad
@@ -295,7 +238,6 @@ function LS.IsCharacter(layout)
 	return enum ~= nil and layout.layoutType == enum.Character
 end
 
--- The index of the saved layout named Flat UI of the character type, or nil.
 function LS.FlatIndex(info, count)
 	for index = count + 1, #info.layouts do
 		local layout = info.layouts[index]
@@ -306,18 +248,15 @@ function LS.FlatIndex(info, count)
 	return nil
 end
 
--- The state of the layout of the addon's own: nil, "kept", "refused" or "elsewhere".
 function LS.FlatState()
 	return flat.state
 end
 
--- True when a check after a reload is waiting: a click made the layout, and no flush has looked at the layout in use since the reload.
 function LS.CheckDue()
 	local char = ns.Character()
 	return not flat.checked and type(char) == "table" and type(char.flatLayout) == "table" and (char.flatLayout.tried == true or char.flatLayout.refused == true)
 end
 
--- Puts a value into a field of a row: a setting number is the entry of row.settings with that setting, any other field is a field of the row.
 function LS.SetField(row, field, value)
 	if type(field) == "number" and type(row.settings) == "table" then
 		for index, entry in ipairs(row.settings) do
@@ -338,8 +277,6 @@ function LS.SetField(row, field, value)
 	row[field] = value
 end
 
--- note(frameName, row, field, before) of a writer: keeps the earlier value of a setting the first time only, in
--- records[layoutKey].settings[frameName][field], with who wrote it and which row it was.
 function LS.Noter(records, lkey, id)
 	return function(frameName, row, field, before)
 		if type(frameName) ~= "string" or type(row) ~= "table" or field == nil then
@@ -366,7 +303,6 @@ function LS.Noter(records, lkey, id)
 	end
 end
 
--- True when a record of a setting this writer wrote is kept for any layout.
 function LS.WroteAny(records, id)
 	for _, list in pairs(records or {}) do
 		if type(list) == "table" and type(list.by) == "table" and list.by[id] and next(list.by[id]) ~= nil then
@@ -376,7 +312,6 @@ function LS.WroteAny(records, id)
 	return false
 end
 
--- Puts back every recorded setting of a writer in a layout, and drops the records. True when a setting was put back.
 function LS.PutBack(records, layout, id)
 	local list = records[Key(layout)]
 	local owned = list and list.by and list.by[id]
@@ -422,13 +357,9 @@ function LS.PutBack(records, layout, id)
 	return did
 end
 
--- The line with the Reload button. The layout is saved when the button is pressed, and the interface reloads in the same click, so the game
--- applies the saved layout at its own load and not under this addon's call (EllesmereUI/EllesmereUICooldownManager/EUI_CDM_Blizzard.lua:170, 285-330).
 local notice = nil
 
 local function Click()
-	-- On Forever the secure button saves and reloads in one click. A press that gets here saves nothing, because a saved layout with no reload
-	-- after it would run the game's layout pass in this addon's call.
 	if type(ns.ReloadIsForever) == "function" and ns.ReloadIsForever() then
 		ns.Reload()
 		return
@@ -438,7 +369,6 @@ local function Click()
 	end
 end
 
--- What the line says depends on what waits for the click.
 function LS.NoticeText()
 	if flat.want then
 		if flat.existing then
@@ -502,7 +432,6 @@ local function ShowNotice()
 	if notice then
 		if notice.text then
 			notice.text:SetText(LS.NoticeText())
-			-- 330 wide, wider when the line needs it.
 			local okWidth, width = pcall(notice.text.GetStringWidth, notice.text)
 			if okWidth and Plain(width) and type(width) == "number" then
 				notice.frame:SetWidth(math.max(330, math.ceil(width) + 90))
@@ -512,7 +441,6 @@ local function ShowNotice()
 	end
 end
 
--- The Reload button of the line, for the test.
 function LS.ReloadButton()
 	return notice and notice.button or nil
 end
@@ -539,7 +467,6 @@ local function DropWrites()
 		any = true
 	end
 	if next(wr.unwrite) ~= nil then
-		-- A preset holds nothing of a writer, so there is nothing to put back.
 		wr.unwrite = {}
 		any = true
 	end
@@ -548,8 +475,6 @@ local function DropWrites()
 	end
 end
 
--- The bars Edit Mode did not keep: the ones queued in this batch that the layout in use does not hold, and every bar that was written into the
--- Flat UI layout (the batch can be empty when the check runs before the bars are queued).
 local function MarkRefusedBars(entry, batch)
 	for name, item in pairs(batch) do
 		local row, target = LS.Entry(entry, item.frame), Target(item.frame, item.spot)
@@ -569,9 +494,6 @@ local function MarkRefusedBars(entry, batch)
 	end
 end
 
--- The check after a reload, done once at the first flush. When a click made the Flat UI layout, the layout in use is that layout and no preset, or
--- Edit Mode did not keep it, and the refusal is saved. A saved refusal comes back as the state "refused" until the layout in use is Flat UI or
--- movers.presetLayout is not what it was.
 function LS.CheckAfterReload(entry, isPreset, batch)
 	flat.checked = true
 	local char = ns.Character()
@@ -603,8 +525,6 @@ function LS.CheckAfterReload(entry, isPreset, batch)
 	end
 end
 
--- Evaluates the frames that were queued: a row that does not hold the spot becomes a pending write, to be saved by the Reload button. Nothing is
--- saved here and no field of the layout is changed. A flush with no frame queued is for the writers and for the check after a reload.
 local function Flush()
 	queued = false
 	local again = flat.recheck
@@ -644,7 +564,6 @@ local function Flush()
 	local isPreset = IsPreset(entry, info.activeLayout, count)
 	local setting = ns.Get("movers.presetLayout")
 	if flat.setting ~= nil and flat.setting ~= setting then
-		-- The player changed what a preset gets: every frame is looked at again.
 		for name, item in pairs(flat.seen) do
 			batch[name] = batch[name] or item
 		end
@@ -696,7 +615,6 @@ local function Flush()
 					changed = true
 				end
 			elseif tried and tried[id] then
-				-- Saved and reloaded before, and the row is still not the spot: Edit Mode does not take it.
 				refused[name] = true
 				kept[name] = nil
 			else
@@ -705,7 +623,6 @@ local function Flush()
 			end
 		end
 	end
-	-- The writers: one that still wants a write on the layout where it was written has been refused.
 	local ids = {}
 	for id in pairs(wr.list) do
 		ids[#ids + 1] = id
@@ -743,7 +660,6 @@ local function Flush()
 	end
 	if copyNow and next(wr.unwrite) ~= nil then
 		if flat.existing then
-			-- The click puts the settings back in the Flat UI layout that holds them.
 			any = true
 		else
 			wr.unwrite = {}
@@ -756,8 +672,6 @@ local function Flush()
 	end
 end
 
--- The spot of a frame is looked at on the next frame, with every other frame queued in this one. spot is { point, x, y }: the offsets Move
--- passes, in the units of the frame.
 function LS.Queue(name, frame, spot)
 	queue[name] = { frame = frame, spot = spot }
 	flat.seen[name] = queue[name]
@@ -767,7 +681,6 @@ function LS.Queue(name, frame, spot)
 	end
 end
 
--- EDIT_MODE_LAYOUTS_UPDATED. After a reload that follows a click the check is due, and it needs a flush even when no frame is queued.
 function LS.Updated()
 	LS.Invalidate()
 	if LS.CheckDue() and not queued then
@@ -776,11 +689,6 @@ function LS.Updated()
 	end
 end
 
--- A writer is added by another part of the addon: writer = { label, Wanted(layout) -> boolean, Write(layout, note) -> boolean }. Wanted only reads
--- the layout; Write changes rows of layout.systems in place, only in the click of the Reload button, and calls note(frameName, row, field, before)
--- for each setting it changes. Write returns true when it changed something, and should return true whenever Wanted is true: a Write that returns
--- false is marked tried like one that was refused, so it is not offered again after every click. An Unwrite on a preset is done only into an
--- existing Flat UI layout, and dropped otherwise. True when the writer is taken.
 function LS.AddWriter(id, writer)
 	if type(id) ~= "string" or type(writer) ~= "table" or type(writer.Wanted) ~= "function" or type(writer.Write) ~= "function" then
 		return false
@@ -790,7 +698,6 @@ function LS.AddWriter(id, writer)
 	return true
 end
 
--- A flush on the next frame, as Queue does, for the writers.
 function LS.Recheck()
 	flat.recheck = true
 	if not queued then
@@ -799,7 +706,6 @@ function LS.Recheck()
 	end
 end
 
--- The settings a writer wrote are put back in the layout in use at the next click. True when something was written.
 function LS.Unwrite(id)
 	local records = Records()
 	if not wr.list[id] and not LS.WroteAny(records, id) then
@@ -815,7 +721,6 @@ function LS.Unwrite(id)
 	return true
 end
 
--- "pending" while the next click writes it, "kept" once the layout holds it, "refused" when Edit Mode did not take it, nil otherwise.
 function LS.WriterState(id)
 	if wr.pending[id] or wr.unwrite[id] then
 		return "pending"
@@ -829,7 +734,6 @@ function LS.WriterState(id)
 	return nil
 end
 
--- True when a record of a write of this frame is kept for any layout.
 function LS.Written(name)
 	local records = Records()
 	for _, list in pairs(records or {}) do
@@ -840,7 +744,6 @@ function LS.Written(name)
 	return false
 end
 
--- Writes the spot into the row of a frame, with the record of what the row was.
 local function WriteRow(records, lkey, row, name, target)
 	local layoutRecords = records[lkey]
 	if not layoutRecords then
@@ -858,8 +761,6 @@ local function WriteRow(records, lkey, row, name, target)
 	row.isInDefaultPosition = false
 end
 
--- Puts the row of a frame back as it was before the addon wrote it, in every saved layout, when the row is still the one the addon wrote. With
--- commit false nothing of the records is dropped: it only says whether a row would change. True when a row is (or would be) put back.
 local function Put(info, count, name, frame, spot, commit)
 	local records = Records()
 	local manager = EditModePresetLayoutManager
@@ -907,7 +808,6 @@ local function Put(info, count, name, frame, spot, commit)
 	return did
 end
 
--- Why a preset cannot be copied into the Flat UI layout, or nil when it can: the lines Apply prints.
 function LS.CopyRefusal(info, count, entry, existing)
 	if LS.IsGamepad(entry) then
 		return "A gamepad layout is not copied."
@@ -934,9 +834,6 @@ function LS.CopyRefusal(info, count, entry, existing)
 	return nil
 end
 
--- The press of the Reload button: saves every pending write and release in one SaveLayouts call, on the layout in use as it is now. The only call of
--- SaveLayouts in the addon. On a preset with the Flat UI layout wanted it saves a layout of the addon's own made from the preset (or the one made
--- before) and makes it the layout in use. True when the interface can be reloaded: the layout was saved, or nothing was waiting.
 function LS.Apply()
 	if next(pending) == nil and next(wr.pending) == nil and next(wr.unwrite) == nil then
 		return true
@@ -1083,9 +980,6 @@ function LS.Apply()
 	return true
 end
 
--- A frame is put back as it was before the addon wrote it, after the next reload, when the row is still the row the addon wrote: with no record it
--- goes back to Edit Mode's default for the frame. The record is dropped when the layout is saved. True when the layout puts the frame back (after a
--- reload), false when nothing of it was written.
 function LS.Release(name, frame, spot)
 	local had = LS.Written(name)
 	refused[name], kept[name], queue[name], pending[name], flat.seen[name] = nil, nil, nil, nil, nil
@@ -1094,7 +988,6 @@ function LS.Release(name, frame, spot)
 	if info then
 		did = Put(info, count, name, frame, spot, false)
 		if not did and had then
-			-- No row of the layout is the one that was written: only the record is dropped.
 			Put(info, count, name, frame, spot, true)
 		end
 	elseif had then
@@ -1107,7 +1000,6 @@ function LS.Release(name, frame, spot)
 	return had or did
 end
 
--- A frame whose spot was changed in Edit Mode: its record is dropped for the layout in use and nothing is written over what the player did.
 function LS.Forget(name)
 	kept[name], queue[name], pending[name], flat.seen[name] = nil, nil, nil, nil
 	Changed()
@@ -1136,7 +1028,6 @@ function LS.Forget(name)
 	end
 end
 
--- Lines for /flatui status.
 function LS.Status()
 	local lines = {}
 	local byLayout = {}
@@ -1183,9 +1074,6 @@ function LS.Status()
 	return lines
 end
 
--- The layout the Reload click would save as Flat UI: a copy of the Flat UI layout when there is one, else of the layout in use, with the pending
--- rows and the writers applied to the copy. Nothing is saved and nothing of the game's data is changed. Nil and why: "combat", "editmode",
--- "unavailable" (the data is missing, or the layout is for the gamepad interface).
 function LS.FlatEntry()
 	local _, why = LS.Resolve()
 	if why == "combat" or why == "editmode" then

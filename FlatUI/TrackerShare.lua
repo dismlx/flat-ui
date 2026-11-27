@@ -1,22 +1,9 @@
 local _, ns = ...
 
--- Text for trackers: /flatui tracker export prints every tracker, or one, as text that starts with FlatUIT1:, and /flatui tracker import adds the
--- trackers of such a text to the list. The packing and the check value are the profile text's (ns.PackText, ns.UnpackText in Core.lua). One
--- tracker is one line: its kind, then its fields as name=value, every field of the entry except the id. A value is a letter for its kind and
--- then the value: t or f for a switch, n and a number, s and a text, l and a list of numbers and texts (n.. and s..) separated by commas.
--- Import never replaces: each line becomes a new entry with a new id at the end of the list, and the list cleans it the way it cleans every
--- saved entry, which gives a field with a value the kind does not allow the page's value and keeps a key it has no use for. Out of combat the row
--- then shows every tracker that is on as its sample for a moment, the new ones at the end (ns.TrackerPreviewRow). Nothing here reads a game value.
--- The chat edit box takes 255 characters, so a text of any size goes in and out through the Export trackers and Import trackers rows of the Share
--- section; the slash commands are for a text that fits one line.
-
 local IsSecret = ns.IsSecret
 
--- PREFIX: the start of a tracker text. PROFILE: the start of a profile text. MAX: the most trackers in a list. CHUNK: characters to a printed line.
--- ID_CHARS: the characters of an id, as in Trackers.lua.
 local K = { PREFIX = "FlatUIT1:", PROFILE = "FlatUI1:", MAX = 40, CHUNK = 232, ID_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789" }
 
--- A field: the separators and the escape are written as % and two hex digits.
 local function Escape(text)
 	return (text:gsub("[%%|,=\r\n]", function(char)
 		return ("%%%02X"):format(char:byte())
@@ -33,7 +20,6 @@ local function Finite(value)
 	return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
 end
 
--- The text of one number or string, with its letter, or nil.
 local function Item(value)
 	if IsSecret(value) then
 		return nil
@@ -45,7 +31,6 @@ local function Item(value)
 	return nil
 end
 
--- The text of a value, or nil for a value that is not written: a nested table, a function, a list with such a value in it.
 local function Value(value)
 	if IsSecret(value) then
 		return nil
@@ -70,7 +55,6 @@ local function Value(value)
 	return Item(value)
 end
 
--- The line of an entry: the kind, the own keys in sorted order, then every other key in sorted order. The id is not written.
 local function Line(entry)
 	if type(entry) ~= "table" or type(entry.kind) ~= "string" or entry.kind == "" then
 		return nil
@@ -132,7 +116,6 @@ local function ReadValue(text)
 	return list
 end
 
--- The entry a line holds, or nil.
 local function Read(line)
 	local fields = {}
 	for field in (line .. "|"):gmatch("([^|]*)|") do
@@ -156,7 +139,6 @@ local function Read(line)
 	return entry
 end
 
--- The text of a list of entries, as one string, or "" when no entry can be written.
 local function Pack(entries)
 	local lines = {}
 	for _, entry in ipairs(entries) do
@@ -168,7 +150,6 @@ local function Pack(entries)
 	return ns.PackText(K.PREFIX, lines)
 end
 
--- The text of every tracker as one string, for a box to copy from. The text, or false and a line that says why not.
 function ns.TrackerExportText()
 	local text = Pack(ns.TrackerEntries and ns.TrackerEntries() or {})
 	if text == "" then
@@ -177,8 +158,6 @@ function ns.TrackerExportText()
 	return text
 end
 
--- The text of every tracker, or of the one with that number, in lines of at most 232 characters. True and the lines, or false and a line that
--- says why not.
 function ns.TrackerExport(number)
 	local entries = ns.TrackerEntries and ns.TrackerEntries() or {}
 	if number ~= nil then
@@ -211,8 +190,6 @@ local function NewId(taken)
 	return id
 end
 
--- Adds the trackers of a text from export to the saved list. Lines of the text may be joined with spaces or line breaks, as a chat splits a
--- long one. True or false, and the line to print.
 function ns.TrackerImport(text)
 	if InCombatLockdown() then
 		return false, "Import after the fight."
@@ -232,7 +209,6 @@ function ns.TrackerImport(text)
 	if not lines then
 		return false, why == "prefix" and "That is not a tracker text." or "The text is incomplete."
 	end
-	-- The list is cleaned first, so the count and the ids are those of the entries that stay.
 	ns.TrackerEntries()
 	local list = saved.trackers
 	if type(list) ~= "table" then
@@ -256,18 +232,15 @@ function ns.TrackerImport(text)
 			entry.id = NewId(taken)
 			taken[entry.id] = true
 			list[#list + 1] = entry
-			-- The list drops an entry that has nothing to go by, so the limit is counted on what stays.
 			ns.TrackerEntries()
 			list = saved.trackers
 		end
 	end
-	-- The list drops a line that has nothing to go by, so the count is of what stays.
 	ns.TrackerEntries()
 	local added = #saved.trackers - before
 	if ns.TrackerLayout then
 		ns.TrackerLayout()
 	end
-	-- Out of combat the row shows its samples for a moment, the new trackers at the end.
 	if added > 0 and ns.TrackerPreviewRow then
 		ns.TrackerPreviewRow()
 	end

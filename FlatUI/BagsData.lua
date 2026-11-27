@@ -1,204 +1,52 @@
 local _, ns = ...
 
--- Bags data: what the bag and bank windows of Bags show, and the record the account keeps of each character's bags, bank, worn items and gold, so
--- that the bank and the other characters can be shown away from the banker and counted in item tooltips. Bags.lua is the module and makes ns.Bags
--- with every sub-table; this file only adds the fields of ns.Bags.Data, and two functions of ns for the row Forget a character. It hears its events
--- on the module (ns.AddEvent, Core.lua:2093-2141), and each handler runs as the part cache of the module (B.Part, a fresh key per call as
--- Errands.Run does, Errands.lua:212-227), so a failure counts against this part alone. Nothing else tells the windows that the bags changed, so
--- cache is one of the parts Bags cannot do without (Bags.lua): when it stops, both windows hide and the game's bags come back. The tooltip index
--- alone (below) is built as the part tooltips, the part of BagsTooltip.lua that it serves. It touches no frame of the game's: it reads the
--- game, writes FlatUIDB.bags, and looks up the other parts of Bags and the functions of Core.lua when it calls them, never at load. Its one frame
--- of its own hears PLAYER_ENTERING_WORLD whatever the switches of the pages, for the gold of the session: the money this character had as it
--- logged in, kept in FlatUICharDB.sessionMoney with the time it began in FlatUICharDB.sessionStartAt (written at a login, and at a loading screen
--- while nothing is kept, so a /reload keeps the session), which ns.SessionMoney sets against GetMoney for the gold tooltip of the bag window
--- (BagsWindow.lua) and the Gold slot of Data panels, which also says what the session made an hour.
---
--- The record. FlatUIDB.bags is account data outside every profile, made only while the module is on, as FlatUIDB.datapanels is
--- (DataPanels.lua:193-212). v is its layout, 1; a store of another layout starts its characters again and keeps placed, the hand placements of
--- BagsCategories.lua. chars holds each character by "Name - Realm" (ns.CharacterKey, Core.lua:2704-2707): realm (GetNormalizedRealmName,
--- PlayerScriptDocumentation.lua:651-658), class (UnitClassBase, UnitDocumentation.lua:930-946), faction (UnitFactionGroup, :1207-1222), level
--- (UnitLevel, :2474-2487), money (GetMoney, PlayerScriptDocumentation.lua:642-649), seen and bankSeen (time() of the last write of the bags or the
--- gold, and of the bank), bags (containers 0 to 5, and -1 while the game shows the keyring), bank (the bought tabs, 6 to 14), bagItems (the item ID
--- of the bag in bag slots 1 to 5), bankItems (of the bag in bank bag slots 2 to 9) and worn (the item IDs in inventory slots 1 to 19,
--- GetInventoryItemID, in the client's apis.yaml with no documentation). A container is { n = its slots, f = the family of its bag when not 0,
--- [slot] = text } with every empty slot absent, and a text is Flat UI's own: <itemID>[*<count>][#<quality>][~<flags>][@<item>]. The count is
--- written only above 1; the flags are b bound, q quest item, s starts a quest, e in an equipment set and n no value; the item is fields 1 to 8 of
--- the link (ID, enchant, four gems, suffix, unique ID), written only when one of 2 to 8 is not empty or 0 and read back with a sign allowed, since a
--- random suffix is negative. A text that would pass 80 characters keeps no item fields. Nothing secret is written: every answer goes through
--- ns.IsSecret or ns.Finite first and a withheld one counts as none. A character that is not a table, a key that is not a string and a text that
--- does not parse are skipped when read, never raised.
---
--- When it is written, by the events this file owns, in this order (the module hears them only while it is on, Core.lua:3504-3512):
--- PLAYER_ENTERING_WORLD (SystemDocumentation.lua:136), the module's Start (ns.AddStart, Core.lua:2186-2199), and B.Data.Resume, which Bags.lua
--- calls when the page comes on again after Start (Core then runs Refresh and not Start, Core.lua:2278-2287, and the module heard nothing while the
--- page was off): the keyring test and the kinds of the bags are read again, and the realm, class, faction, level, gold, worn items and bag items
--- written; a full scan of the bags, and of the bank's tabs while the bank is open, then waits for the next BAG_UPDATE_DELAYED, and runs FULL_WAIT
--- seconds later when none comes. After B.Data.Resume that scan is followed by a read of the quest marks and the set of every slot (Remark, below):
--- the scan reads them only for a slot whose item changed, and the events that tell of them went unheard while the page was off too.
--- BAG_UPDATE (ContainerDocumentation.lua:661) only marks its container. BAG_UPDATE_DELAYED (:677, one after a batch of changes) scans the
--- marked containers, and every bag when the last full scan is SWEEP seconds old, which also catches up a change no BAG_UPDATE marked (the bank is
--- read in full at each open instead). A slot counts as changed when its item, link, count, lock or quality changed, and its text is written when
--- its item, link, count, quality or binding changed. Bags is then told, in this order: B.Categories.New.Seen(changed) with the changed slots of the
--- bags, B.Pins.Scanned(changed) (BagsPins.lua), B.Request("items", "bags", changed) and the footer of the bags, and while the bank is open (or
--- in the grace after its close, below) B.Request("items", "bank", changed) and the footer of the bank, and B.Request("layout", "bank") when a
--- bank bag slot changed what the tabs are or, while the bank is open, a tab's size changed (a tab just bought, whose slots the client may give
--- only after the layout that read it).
--- BAG_CONTAINER_UPDATE (:623, a bag put in or taken out) reads the keyring test, the kinds and the bag items again, flags a full scan, and calls
--- B.Buttons.Prepare with the bags' containers and B.Request("layout", "bags"); while the bank is open it reads the bank's tabs again too and asks
--- B.Request("layout", "bank"). BAG_NEW_ITEMS_UPDATED (:629; the game's bag windows draw again on it, Mainline/ContainerFrame.lua:611-612) comes
--- when new flags were set or taken off, and the game may set an item's flag after the BAG_UPDATE_DELAYED that brought it: on the next frame, once
--- for a run of them, the slots of my bags whose flag is set (C_NewItems.IsNewItem, NewItemsDocumentation.lua:15-28) go to
--- B.Categories.New.Seen and B.Request("items", "bags", ...), except during a sort hold of the bags (B.Sorting of Bags.lua), whose moves bring
--- nothing new. QUEST_ACCEPTED (QuestLogDocumentation.lua:1312) and UNIT_QUEST_LOG_CHANGED for the player
--- (UnitDocumentation.lua:4565), on which the game draws its quest marks again
--- (Mainline/ContainerFrame.lua:613-619), read the quest info of my slots again, at most once a second; EQUIPMENT_SETS_CHANGED
--- (EquipmentManagerDocumentation.lua:308) reads the set of each slot again; a change of either is written and asks B.Request("items").
--- GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT (ItemDocumentation.lua:1815, 1857) fill in the records that waited for an item's name, and for
--- an item B.Data.Want asked for call B.Request("items") and B.Request("search"). PLAYER_MONEY (CurrencyInfoDocumentation.lua:637) writes the gold,
--- and PLAYER_LOGOUT (SystemDocumentation.lua:159), heard only while the page is on, writes the gold, the worn items and the bag items once more as
--- a last refresh, which also catches a change whose event failed or that came while this part was stopped (what changed while the page was off was
--- read again by B.Data.Resume when it came back on, and nothing is written while it stays off); both ask B.Request("footer", "bags").
--- PLAYER_LEVEL_UP (UnitDocumentation.lua:3832) writes the level from its own value, which UnitLevel may not count yet; PLAYER_EQUIPMENT_CHANGED
--- (PaperDollInfoDocumentation.lua:386) writes the worn item of its slot. The other parts are told only while Bags is in use (B.On: on, not
--- stopped and not stood down for another bag addon or the gamepad interface); the record is kept all the same.
---
--- The bank is read only while it is open, as the game reads it only while its panel shows (Mainline/BankFrameTemplates.lua:622-630): BagsBank.lua
--- calls B.Data.BankScan at the open, B.Data.BankTabs when the tabs or the bank's bag slots change (it reads them again, has every tab scanned at
--- the next BAG_UPDATE_DELAYED, and says whether they changed, which needs a new layout of the bank window), and B.Data.BankClosed at the close,
--- which ends the live reading and dates the snapshot (bankSeen), except for a close the module did not hear (Bank.Settle, when the page comes up),
--- whose snapshot keeps the date of its last write. A move sent just before a close may be answered after it, so for GRACE seconds after a close
--- it heard the tabs a BAG_UPDATE marks are still read at BAG_UPDATE_DELAYED, slot by slot against what the visit read; a tab the client then gives
--- no slots, or no item at all where the visit read some, is no answer and keeps its snapshot, since the client may drop the bank's items at the
--- close. The bought tabs are C_Bank.FetchPurchasedBankTabIDs(Enum.BankType.Character) (BankDocumentation.lua:256-269): tab 6 is the
--- bank's own slots and tab 5 + n the bag in bank bag slot n, the item at (Enum.BagIndex.Characterbanktab, n) (C_Container.GetContainerItemID,
--- ContainerDocumentation.lua:175-190; Camelot/BankFrame.lua:136-191, 312-319). The items in a tab change with BAG_UPDATE of the tab
--- (Mainline/BankFrameTemplates.lua:791-795) and are written as they change, so a visit that ends in a disconnect is kept. A tab the game gives no
--- slots while its bag slot holds a bag, or the first tab with none, has not been answered yet, and its snapshot stays. A bank left open while the
--- page was off ends once the game says the player no longer deals with a banker (C_PlayerInteractionManager.IsInteractingWithNpcOfType with
--- Banker, CharacterBanker and AccountBanker, apis.yaml and enums.yaml of the client).
---
--- Reading the game. A slot of mine is C_Container.GetContainerItemInfo (ContainerDocumentation.lua:192-207, its fields :766-783); its quest marks
--- GetContainerItemQuestInfo (:281-295, :817-825), read as the game draws "!" for a quest not taken yet and a border for a quest item
--- (Mainline/ContainerFrame.lua:1866-1876), with an item of class 12 a quest item too; its set GetContainerItemEquipmentSetInfo (:158-173); and its
--- GUID C_Item.GetItemGUID (ItemDocumentation.lua:501-514) on an ItemLocation from the game's own constructor (ItemLocation:CreateFromBagAndSlot,
--- Blizzard_ObjectAPI/Mainline/ItemLocation.lua:9-13), for the New items record of BagsCategories.lua. Sizes are GetContainerNumSlots (:313-326);
--- the family of a bag is the second answer of GetContainerNumFreeSlots (:297-311; 0 is a normal bag, and no family bit is named in this file,
--- since the client adds new ones); the bag in bag slot 1 to 5 is ContainerIDToInventoryID (:20-34) and GetInventoryItemID. The keyring counts
--- only while C_ActionBar.ShouldShowKeyring() (ActionBarFrameDocumentation.lua:987-995), the game's own test (Mainline/ContainerFrame.lua:10-12).
---
--- What it answers. B.Data.Item gives the record of a slot: live for this character's bags, and for its bank while the bank is open, else decoded
--- from the record, with the icon from C_Item.GetItemIconByID (ItemDocumentation.lua:611-624), the quality from GetItemQualityByID (:906-919) when
--- the text has none, and the link "item:" and the item fields or the ID. A record's name is the text of a link where there is one, which holds the
--- random suffix of an item ("of the Monkey") that its own name leaves out, so a search and the order of a section treat a live item and a kept one
--- alike: for a live slot its hyperlink, else its itemName, else GetItemNameByID (:846-859); for a kept text with item fields the whole link the
--- client makes of them (the second answer of C_Item.GetItemInfo, :626-657), asked only once C_Item.IsItemDataCachedByID (:1520-1533) says the
--- client has the item, else GetItemNameByID. A live record is kept per slot while its item, link, count, quality and binding stay, its lock read
--- anew at each call; a decoded one while something holds it.
--- B.Data.Info is C_Item.GetItemInfoInstant (:659-679), kept per item ID. B.Data.Want asks C_Item.RequestLoadItemDataByID (:1710-1718) once a
--- session for an item a window shows with no name; the record decoder, the picker's counts and the tooltip index never ask. The kind of a bag is
--- its item's class and subclass from the instant info, named by C_Item.GetItemSubClassInfo (:1020-1036); the backpack, the keyring and the bank's
--- own slots take the game's words (BACKPACK_TOOLTIP and KEYRING, Mainline/ContainerFrame.lua:2072, 2077; BANK, Mainline/BankFrameTemplates.lua:41),
--- and bag 5 is the reagent bag. B.Data.Characters lists every character kept, and this one with the game's answers. A character is near when its
--- realm is this one's or one the client names as connected (C_AutoComplete.GetAutoCompleteRealms, AutoCompleteDocumentation.lua:26-33), or, kept
--- with no realm, when its key ends in this character's realm. The tooltip index of B.Data.Counts holds the bags, bank and worn items of the near
--- characters other than this one by item ID. It is built the first time a tooltip asks, INDEX_STEP slots a frame (C_Timer.After), each step as the
--- part tooltips (so an index that keeps failing stops the counts alone), and kept for the session, since the others do not change while this one
--- plays; Forget, or connected realms the client names later, have it built again.
---
--- The currencies (BagsCurrency.lua). A character's record also keeps currencies: the currencies its Currency tab marked Show on Backpack when
--- they were last read, in the game's order, as { ID, icon, count } (whole numbers, and a file ID or a path), for the bag window's footer while it
--- shows that character. B.Data.KeepCurrencies writes this character's, only when they changed and only while the record may be written (Mine),
--- and B.Data.Currencies reads a character's back, each entry checked as it is read, or nil when none are kept. Forget takes them out with the rest.
---
--- Forget a character (ns.BagsCharacterLines and ns.BagsCharacterForget, a list row as Forget a character's gold is, DataStreams.lua:239-257, its
--- ids numbers as the game's options need, Options.lua:165-195) takes a character out of the record; this character is then not written again
--- until it logs in again. /flatui status (ns.AddStatus, Core.lua:2143-2165) says how many characters and items are kept and how old this
--- character's bank is, and warns above MANY characters.
-
 local KEY = "bags"
 local PART = "cache"
--- The part of Counts in tooltips (BagsTooltip.lua), which builds the tooltip index.
 local TIPS = "tooltips"
 local B = ns.Bags
--- Bags.lua makes ns.Bags and its sub-tables before this file loads; without them there is nothing to fill.
 if type(B) ~= "table" or type(B.Data) ~= "table" then
 	return
 end
 local Data = B.Data
 
--- The layout of FlatUIDB.bags.
 local LAYOUT = 1
--- Containers (Enum.BagIndex in the client's enums.yaml): the keyring, the backpack, the reagent bag, the first and last tab of the character bank,
--- and the holder of the bank's bag slots, whose slot n holds the bag of tab TAB_OF_SLOT + n (Camelot/BankFrame.lua:312-319).
 local KEYRING, BACKPACK, REAGENT = -1, 0, 5
 local FIRST_TAB, LAST_TAB, BANK_BAGS, TAB_OF_SLOT = 6, 14, -2, 5
 local LAST_WORN = 19
--- A text of a slot keeps no item fields when it would be longer than this.
 local MAX_TEXT = 80
--- The fields of a link kept: ID, enchant, four gems, suffix and unique ID.
 local ITEM_FIELDS = 8
--- No container holds more slots; a size above it is bad data.
 local MAX_SLOTS = 255
--- Slots of the record read into the tooltip index in one frame.
 local INDEX_STEP = 2000
--- Seconds: quest marks are read at most this often; a flagged full scan runs this long after its flag when no BAG_UPDATE_DELAYED comes; every
--- bag is scanned again when the last full scan is this old; the client is asked again for connected realms it did not name.
 local QUEST_EVERY, FULL_WAIT, SWEEP, REALMS_AGAIN = 1, 2, 60, 60
--- Seconds the bank's tabs are still read after a close, for a move the server answers after it.
 local GRACE = 2
 local DAY = 86400
--- /flatui status warns above this many characters kept.
 local MANY = 40
--- Enum.ItemClass.Questitem.
 local QUEST_CLASS = 12
 local SECTIONS = { "bags", "bagItems", "bank", "bankItems", "worn" }
 local WINDOWS = { "bags", "bank" }
--- Enum.BankType.Character, and Enum.PlayerInteractionType Banker, CharacterBanker and AccountBanker, in the client's enums.yaml, for a client
--- whose Enum does not say.
 local CHARACTER_BANK = 0
 local BANKERS = { { "Banker", 8 }, { "CharacterBanker", 67 }, { "AccountBanker", 68 } }
 local REAGENT_WORD, BAG_WORD, BAGS_WORD = "Reagent bag", "Bag", "Bags"
 local EMPTY = {}
 local WEAK_VALUES, WEAK_KEYS = { __mode = "v" }, { __mode = "k" }
 
--- What the last scan read of each container of mine, to tell which slots changed: last[bag] = { n = slots, [slot] = { id, link, count, quality,
--- locked, bound, noValue, class, quest, start, set } }. Made afresh each session, and for the bank at each visit.
 local last = {}
--- dirty[container] from BAG_UPDATE until the next scan.
 local dirty = {}
--- A full scan of the bags or of the bank's tabs waits for the next BAG_UPDATE_DELAYED; fullTimer while the fallback wait runs; sweptAt is when
--- (GetTime) the last full scan of the bags ran. The first scan of a session is a full one.
 local full, bankFull, fullTimer, sweptAt = true, false, false, nil
--- The bank is open, from B.Data.BankScan to B.Data.BankClosed, and liveTabs are its bought tabs; tabsSign is those tabs and the bags in them as
--- last read ("6,7:4500,8:0"), to tell whether they changed.
 local bankLive, liveTabs, tabsSign = false, {}, nil
--- The bank closed a moment ago (B.Data.BankClosed): { tabs = the visit's bought tabs } until GRACE seconds after the close, else nil. What the
--- visit read of those tabs (last) and their marks (dirty) are kept meanwhile.
 local grace
--- Whether the game shows the keyring (nil until asked), the kinds of my containers, and the live records of my slots: live[bag][slot].
 local keyring
 local kinds, live = {}, {}
--- Records decoded from the record, decoded[key][bag][slot], while something holds them, and the text each came from.
 local decoded = {}
 local textOf = setmetatable({}, WEAK_KEYS)
--- Instant info per item ID; items asked to load once a session and those still pending; records that wait for an item's name or quality.
 local infos, asked, pending, waiting = {}, {}, {}, {}
--- The tooltip index: index[itemID][key] = { bags, bank, worn }, who[key] = { class, name, realm }, and whether it was built before the client named
--- connected realms. building is the index being built; generation tells the steps of an index that was dropped.
 local index, who, builtWithout, building
 local generation = 0
--- My realm without spaces, the set of connected realms once the client names any, and when it was last asked.
 local myRealm, connected, realmsAt
--- Quest marks: when they were last read, and whether a read waits. remarkAll: B.Data.Resume ran, and the next full scan reads the quest marks and
--- the set of every slot again.
 local questAt, questQueued = nil, false
 local remarkAll = false
--- Forget a character took this one out: nothing of it is written again this session.
 local muted = false
 
--- Helpers ----------------------------------------------------------------------------------------------------------------------------------------
-
--- ns.IsSecret and ns.Finite of Core.lua, looked up when called.
 local function IsSecret(value)
 	return ns.IsSecret(value)
 end
@@ -207,7 +55,6 @@ local function Finite(value)
 	return ns.Finite(value)
 end
 
--- A function of the client: a global (space nil), or a field of one of its namespaces such as C_Container; nil when this client has none.
 local function Client(space, name)
 	local holder = _G
 	if space ~= nil then
@@ -223,7 +70,6 @@ local function Client(space, name)
 	return fn
 end
 
--- The first answer of a call: nil when the client lacks the call, when it raises, or when it withholds the answer.
 local function Ask(fn, ...)
 	if not fn then
 		return nil
@@ -235,7 +81,6 @@ local function Ask(fn, ...)
 	return nil
 end
 
--- The first two answers, each nil when withheld.
 local function Ask2(fn, ...)
 	if not fn then
 		return nil, nil
@@ -253,7 +98,6 @@ local function Ask2(fn, ...)
 	return first, second
 end
 
--- A whole number the client gave (an ID, a count, a container), or nil.
 local function Whole(value)
 	if Finite(value) and value % 1 == 0 then
 		return value
@@ -261,7 +105,6 @@ local function Whole(value)
 	return nil
 end
 
--- A whole number that is not negative, or nil.
 local function Count(value)
 	value = Whole(value)
 	if value ~= nil and value >= 0 then
@@ -270,7 +113,6 @@ local function Count(value)
 	return nil
 end
 
--- A text that is not empty, or nil.
 local function Text(value)
 	if IsSecret(value) or type(value) ~= "string" or value == "" then
 		return nil
@@ -278,12 +120,10 @@ local function Text(value)
 	return value
 end
 
--- True only for a plain true.
 local function Flag(value)
 	return not IsSecret(value) and value == true
 end
 
--- An icon: a file ID or a path, or nil.
 local function Icon(value)
 	if Finite(value) and value > 0 then
 		return value
@@ -291,7 +131,6 @@ local function Icon(value)
 	return Text(value)
 end
 
--- A container this file reads (the keyring, the backpack, the four bags, the reagent bag, the tabs of the character bank), or nil.
 local function Container(value)
 	value = Whole(value)
 	if value ~= nil and value >= KEYRING and value <= LAST_TAB then
@@ -308,7 +147,6 @@ local function Slot(value)
 	return nil
 end
 
--- The containers a character carries: the keyring, the backpack, the bags and the reagent bag.
 local function Held(bag)
 	return bag == KEYRING or (bag >= BACKPACK and bag <= REAGENT)
 end
@@ -317,7 +155,6 @@ local function IsTab(bag)
 	return bag >= FIRST_TAB and bag <= LAST_TAB
 end
 
--- "Name - Realm" of this character, or nil when the client does not say.
 local function Me()
 	local key = ns.CharacterKey()
 	if IsSecret(key) or type(key) ~= "string" or key == "" then
@@ -326,7 +163,6 @@ local function Me()
 	return key
 end
 
--- The time of day in seconds (time()), and the client's clock (GetTime) for waits.
 local function Now()
 	return Count(Ask(Client(nil, "time")))
 end
@@ -339,7 +175,6 @@ local function Clock()
 	return nil
 end
 
--- Runs fn after the given seconds (C_Timer.After), or at once on a client with no timer.
 local function After(seconds, fn)
 	local timer = Client("C_Timer", "After")
 	if not (timer and pcall(timer, seconds, fn)) then
@@ -347,7 +182,6 @@ local function After(seconds, fn)
 	end
 end
 
--- The module is on and has not stopped: only then is the record written.
 local function Running()
 	local ok, on = pcall(ns.Enabled, KEY)
 	return ok and on == true
@@ -362,8 +196,6 @@ local function Writing()
 	return not muted and Running() and not Stopped()
 end
 
--- Bags shows its windows (B.On: on, not stopped and not stood down for another bag addon or the gamepad interface). Only then are the other parts
--- told of a change; while it is stood down the record is still kept.
 local function Active()
 	local on = B.On
 	if type(on) ~= "function" then
@@ -373,7 +205,6 @@ local function Active()
 	return ok and yes == true
 end
 
--- Runs fn as the part cache of the module: B.Part, a fresh key per call, so each failure counts and a part that keeps failing stops alone.
 local function Part(fn, ...)
 	local part = B.Part
 	if type(part) == "function" then
@@ -384,8 +215,6 @@ local function Part(fn, ...)
 	end, {}, ...)
 end
 
--- Runs fn as the part tooltips of the module, the part of Counts in tooltips that the tooltip index serves: an index that keeps failing stops the
--- counts alone, and the windows, which cannot do without this file's part cache, go on.
 local function TipsPart(fn, ...)
 	local part = B.Part
 	if type(part) == "function" then
@@ -396,7 +225,6 @@ local function TipsPart(fn, ...)
 	end, {}, ...)
 end
 
--- B.Request(flag, which, changed) of Bags.lua, looked up when it is called: the shown windows draw again on the next frame, once.
 local function Request(flag, which, changed)
 	local request = B.Request
 	if type(request) == "function" then
@@ -404,7 +232,6 @@ local function Request(flag, which, changed)
 	end
 end
 
--- A word of the game's global strings, or the English one when the client has none.
 local function Word(name, english)
 	local word = _G[name]
 	if IsSecret(word) or type(word) ~= "string" or word == "" then
@@ -413,7 +240,6 @@ local function Word(name, english)
 	return word
 end
 
--- A value of the game's Enum (Enum.BankType.Character and so on), or the fallback when the client's Enum does not have it.
 local function EnumValue(group, name, fallback)
 	local enum = _G.Enum
 	if IsSecret(enum) or type(enum) ~= "table" then
@@ -430,10 +256,6 @@ local function EnumValue(group, name, fallback)
 	return value
 end
 
--- Items ------------------------------------------------------------------------------------------------------------------------------------------
-
--- { class, subclass, equipLoc, itype, isubtype, icon } of an item ID from C_Item.GetItemInfoInstant, which answers at once and never waits for the
--- server; kept per ID. Nil for an item the client does not know, asked again next time.
 function Data.Info(id)
 	id = Count(id)
 	if not id or id == 0 then
@@ -457,7 +279,6 @@ function Data.Info(id)
 	return info
 end
 
--- The item's name, quality and icon from what the client has loaded; nil until it has.
 local function ItemName(id)
 	return Text(Ask(Client("C_Item", "GetItemNameByID"), id))
 end
@@ -477,8 +298,6 @@ local function SubclassName(class, subclass)
 	return Text(Ask(Client("C_Item", "GetItemSubClassInfo"), class, subclass))
 end
 
--- The name in the text of a link, "[Name]", which holds the random suffix of the item ("of the Monkey"), without the markup of an atlas the game
--- may put in it (|A...|a, Blizzard_SharedXMLBase/TextureUtil.lua:289-311).
 local function LinkName(link)
 	local name = link and link:match("|h%[(.-)%]|h")
 	if not name then
@@ -487,10 +306,6 @@ local function LinkName(link)
 	return Text((name:gsub("%s*|A.-|a", "")))
 end
 
--- The texts of slots ---------------------------------------------------------------------------------------------------------------------------
-
--- Fields 1 to 8 of the item part of a link, or nil when 2 to 8 are all empty or 0, or when the link does not hold them as numbers. A field keeps
--- its sign: a random suffix is negative.
 local function ItemString(link, id)
 	if not link then
 		return nil
@@ -522,7 +337,6 @@ local function ItemString(link, id)
 	return nil
 end
 
--- The text of a slot from what a scan read of it.
 local function Encode(state)
 	local text = ("%d"):format(state.id)
 	if state.count > 1 then
@@ -543,7 +357,6 @@ local function Encode(state)
 	return text
 end
 
--- The item ID, count, quality (nil when not kept), flags and item fields (nil when not kept) of a text, or nil for a text that does not parse.
 local function Decode(text)
 	if type(text) ~= "string" then
 		return nil
@@ -584,10 +397,6 @@ local function Has(flags, letter)
 	return flags:find(letter, 1, true) ~= nil
 end
 
--- The record ---------------------------------------------------------------------------------------------------------------------------------------
-
--- FlatUIDB.bags, or nil before the saved variables load. Made, or started again for another layout, only with create, which only the writes of
--- this file ask for while the module is on; without it nil when there is none.
 local function Store(create)
 	local db = ns.Account()
 	if type(db) ~= "table" then
@@ -610,7 +419,6 @@ local function Store(create)
 	return store
 end
 
--- A character kept, or nil.
 local function Character(key)
 	if type(key) ~= "string" then
 		return nil
@@ -623,7 +431,6 @@ local function Character(key)
 	return nil
 end
 
--- Who this character is, and its gold. A value the client withholds keeps the one written before.
 local function Identity(record)
 	record.realm = Text(Ask(Client(nil, "GetNormalizedRealmName"))) or record.realm
 	record.class = Text(Ask(Client(nil, "UnitClassBase"), "player")) or record.class
@@ -639,7 +446,6 @@ local function Identity(record)
 	end
 end
 
--- This character's record: read with create false, and made with its tables with create true, which gives nil while nothing may be written.
 local function Mine(create)
 	local key = Me()
 	if not key then
@@ -672,7 +478,6 @@ local function Mine(create)
 	return record
 end
 
--- The container table of a character's bag or tab, or nil.
 local function SlotsOf(record, bag)
 	local section = record.bags
 	if IsTab(bag) then
@@ -696,9 +501,6 @@ local function SizeOf(slots)
 	return 0
 end
 
--- Kinds of bag ---------------------------------------------------------------------------------------------------------------------------------
-
--- The item ID of the bag that makes a container of mine: the bag in bag slot 1 to 5, or the bag in the bank bag slot of a tab after the first.
 local function LiveBagItem(bag)
 	local id
 	if bag >= 1 and bag <= REAGENT then
@@ -713,11 +515,6 @@ local function LiveBagItem(bag)
 	return nil
 end
 
--- kind = { id = the bag's item ID, label, family, class, subclass, key, name }. key groups free slots: "bag" for the general bags (the backpack,
--- normal bags and the bank's own slots, family 0), which take any item and alone count as free space (Data.Free); "reagent" for the reagent bag,
--- whose family is 0 too but which takes only reagents; one key per class and subclass of special bag, a trade bag, a quiver, an ammo pouch or a
--- soul bag (or per family when the item is not known), each taking only its own items; and "keyring", whose slots Data.Free leaves out. name is
--- the bag item's name, when loaded.
 local function MakeKind(bag, id, family)
 	family = Count(family) or 0
 	local kind = { id = id, family = family }
@@ -752,7 +549,6 @@ local function MakeKind(bag, id, family)
 	return kind
 end
 
--- The kind of a container of mine, read once and again after BAG_CONTAINER_UPDATE or a change of the bank's tabs.
 local function LiveKind(bag)
 	local kind = kinds[bag]
 	if not kind then
@@ -763,7 +559,6 @@ local function LiveKind(bag)
 	return kind
 end
 
--- The kind of a kept container, from the kept bag item and family.
 local function StoredKind(record, bag, slots)
 	local id
 	if record then
@@ -790,9 +585,6 @@ local function Keyring()
 	return keyring
 end
 
--- Reading a slot -------------------------------------------------------------------------------------------------------------------------------
-
--- id, link, count, quality, locked, bound, noValue, icon, name and readable of a slot of mine; nothing for an empty slot.
 local function ReadSlot(bag, slot)
 	local info = Ask(Client("C_Container", "GetContainerItemInfo"), bag, slot)
 	if type(info) ~= "table" then
@@ -810,7 +602,6 @@ local function ReadSlot(bag, slot)
 		Icon(info.iconFileID), Text(info.itemName), Flag(info.isReadable)
 end
 
--- quest: a quest item, an item that starts a quest, or an item of class 12; start: it starts a quest the player has not taken.
 local function QuestOf(bag, slot, class)
 	local quest, start = class == QUEST_CLASS, false
 	local info = Ask(Client("C_Container", "GetContainerItemQuestInfo"), bag, slot)
@@ -830,7 +621,6 @@ local function InSet(bag, slot)
 	return Flag(Ask(Client("C_Container", "GetContainerItemEquipmentSetInfo"), bag, slot))
 end
 
--- The GUID of the item in a slot of mine.
 local function GUID(bag, slot)
 	local maker = _G.ItemLocation
 	if IsSecret(maker) or type(maker) ~= "table" or type(maker.CreateFromBagAndSlot) ~= "function" then
@@ -843,8 +633,6 @@ local function GUID(bag, slot)
 	return Text(Ask(Client("C_Item", "GetItemGUID"), location))
 end
 
--- Records --------------------------------------------------------------------------------------------------------------------------------------
-
 local function DropLive(bag, slot)
 	local byBag = live[bag]
 	if byBag then
@@ -852,7 +640,6 @@ local function DropLive(bag, slot)
 	end
 end
 
--- A decoded record that lacks its name or quality waits for its item to load.
 local function Wait(rec)
 	local list = waiting[rec.id]
 	if not list then
@@ -862,9 +649,6 @@ local function Wait(rec)
 	list[rec] = true
 end
 
--- The name of a kept item as a live slot of it is named: the text of the whole link the client makes of the kept item fields (the second answer
--- of C_Item.GetItemInfo), which holds a random suffix that GetItemNameByID leaves out. It is asked only once C_Item.IsItemDataCachedByID says the
--- client has the item, so no decoded record asks for a load. Nil for a record that keeps no item fields.
 local function KeptName(rec)
 	if rec.link == "item:" .. rec.id or Ask(Client("C_Item", "IsItemDataCachedByID"), rec.id) ~= true then
 		return nil
@@ -873,7 +657,6 @@ local function KeptName(rec)
 	return LinkName(Text(link))
 end
 
--- Fills what the client has loaded since a decoded record was made.
 local function Fill(rec)
 	if rec.name == nil then
 		rec.name = KeptName(rec) or ItemName(rec.id)
@@ -899,8 +682,6 @@ local function TakeInfo(rec)
 	end
 end
 
--- The record of a slot of mine as the game has it now. It is kept while its item, link, count, quality and binding stay; its lock is read anew.
--- Its name is the text of its link before the slot's own itemName, so a random suffix is named as a kept record of the item names it (KeptName).
 local function LiveRecord(key, bag, slot)
 	local id, link, count, quality, locked, bound, noValue, icon, name, readable = ReadSlot(bag, slot)
 	local byBag = live[bag]
@@ -913,7 +694,6 @@ local function LiveRecord(key, bag, slot)
 	local rec = byBag and byBag[slot]
 	if rec and rec.key == key and rec.id == id and rec.link == link and rec.count == count and rec.quality == quality and rec.bound == bound then
 		rec.locked = locked
-		-- A name the client loaded since (B.Data.Want, then B.Request("items")).
 		if rec.name == nil then
 			rec.name = LinkName(link) or name or ItemName(id)
 		end
@@ -939,7 +719,6 @@ local function LiveRecord(key, bag, slot)
 	return rec
 end
 
--- The record of a kept slot, decoded from its text.
 local function StoredRecord(key, bag, slot)
 	local record = Character(key)
 	local slots = record and SlotsOf(record, bag)
@@ -981,8 +760,6 @@ local function StoredRecord(key, bag, slot)
 	return rec
 end
 
--- Scans ------------------------------------------------------------------------------------------------------------------------------------------
-
 local function Mark(changed, bag, slot)
 	if changed then
 		local set = changed[bag]
@@ -994,11 +771,6 @@ local function Mark(changed, bag, slot)
 	end
 end
 
--- Reads one container of mine slot by slot. A slot whose item, link, count, lock or quality changed goes into changed[bag]; the text of a slot whose
--- item, link, count, quality or binding changed is written into into[bag] (my bags or bank in the record), and every text when the container is
--- read for the first time this session or its table is new. guard: a size of 0 is no answer, and the container is left as it was. True when the
--- size read differs from the last one this session read of the container (none read yet counts as 0 slots), so a tab whose slots the client
--- gives only after a layout read it as none is laid out again (Delayed).
 local function Scan(bag, into, changed, guard)
 	local size = Count(Ask(Client("C_Container", "GetContainerNumSlots"), bag))
 	if not size or size > MAX_SLOTS or (size == 0 and guard) then
@@ -1075,7 +847,6 @@ local function Scan(bag, into, changed, guard)
 	return size ~= was
 end
 
--- Forgets what this session read of a container, and its kept table.
 local function DropContainer(bag, into)
 	last[bag], live[bag], kinds[bag] = nil, nil, nil
 	if into then
@@ -1083,7 +854,6 @@ local function DropContainer(bag, into)
 	end
 end
 
--- My bags, the marked ones or all; the keyring only while the game shows it.
 local function ScanBags(record, changed, all)
 	local into = record and record.bags
 	for bag = BACKPACK, REAGENT do
@@ -1100,8 +870,6 @@ local function ScanBags(record, changed, all)
 	end
 end
 
--- The bought tabs of the bank, read while it is open. True when the client answered with a list, and then true again when the tabs or the bags in
--- the bank's bag slots differ from the last read.
 local function ReadTabs()
 	for tab = FIRST_TAB, LAST_TAB do
 		kinds[tab] = nil
@@ -1130,7 +898,6 @@ local function ReadTabs()
 	return true, moved
 end
 
--- The bags in the bank's bag slots, and no kept tab the bank no longer has.
 local function WriteBank(record)
 	local bought = {}
 	for _, tab in ipairs(liveTabs) do
@@ -1150,8 +917,6 @@ local function WriteBank(record)
 	record.bankItems = items
 end
 
--- The bank's tabs, the marked ones or all. The first tab, or a tab whose bag slot holds a bag, with no slots has not been answered yet. True when
--- the size of a tab changed (Scan): a tab just bought, or one whose slots the client gave only after the bank window was laid out.
 local function ScanBank(record, changed, all)
 	local into = record and record.bank
 	local resized = false
@@ -1165,9 +930,6 @@ local function ScanBank(record, changed, all)
 	return resized
 end
 
--- Whether a tab of the visit still answers after the bank closed: the client gives it the slots the visit read, and an item in one of them unless the
--- visit read none there. The client may drop the bank's items at the close, so a tab with other slots, or with no item at all where the visit read
--- some, is no answer, and its snapshot stays.
 local function Answers(tab)
 	local held = last[tab]
 	local size = Count(Ask(Client("C_Container", "GetContainerNumSlots"), tab))
@@ -1192,8 +954,6 @@ local function Answers(tab)
 	return false
 end
 
--- The grace after a close: the tabs of the visit that a BAG_UPDATE marked since are read once more, slot by slot against what the visit read of them
--- (last, kept until the grace ends), for a move the server answered after the close.
 local function GraceScan(record, changed)
 	local into = record and record.bank
 	for _, tab in ipairs(grace.tabs) do
@@ -1203,7 +963,6 @@ local function GraceScan(record, changed)
 	end
 end
 
--- The player still deals with a banker. Only a plain no for each kind of banker, from a client that has the call, says the bank closed.
 local function AtBanker()
 	local ask = Client("C_PlayerInteractionManager", "IsInteractingWithNpcOfType")
 	if not ask then
@@ -1218,7 +977,6 @@ local function AtBanker()
 	return false
 end
 
--- What a visit read of the bank's tabs is forgotten, and the grace after its close ends.
 local function DropTabs()
 	grace = nil
 	for tab = FIRST_TAB, LAST_TAB do
@@ -1226,14 +984,11 @@ local function DropTabs()
 	end
 end
 
--- The bank is no longer read: what this visit read of it is forgotten, and its windows show the record.
 local function EndBank()
 	bankLive, bankFull, tabsSign = false, false, nil
 	DropTabs()
 end
 
--- Whether the bank is read live. A bank left open while the page was off, whose close the module never heard, ends here before anything of it
--- is read or written again, so a tab the game no longer answers for never wipes its snapshot.
 local function BankOpen()
 	if bankLive and not AtBanker() then
 		EndBank()
@@ -1254,15 +1009,12 @@ local function WriteWorn(record)
 	end
 end
 
--- Writes the text of a slot again after its quest marks or set changed.
 local function Rewrite(record, bag, slot, state)
 	local slots = record and SlotsOf(record, bag)
 	if slots then
 		slots[slot] = Encode(state)
 	end
 end
-
--- Realms ---------------------------------------------------------------------------------------------------------------------------------------
 
 local function NameOf(key)
 	return key:match("^(.-) %- ") or key
@@ -1279,7 +1031,6 @@ local function MyRealm()
 	return myRealm
 end
 
--- The realms the client names as connected to this one, a set; asked again a while later while it names none.
 local function Connected()
 	if connected then
 		return connected
@@ -1306,7 +1057,6 @@ local function Connected()
 	return set
 end
 
--- A character on this realm or a connected one: the only ones whose items can reach this character.
 local function Near(key, record)
 	local realm = Text(record.realm)
 	local mine = MyRealm()
@@ -1317,8 +1067,6 @@ local function Near(key, record)
 	local ours = me and RealmOf(me)
 	return ours ~= nil and RealmOf(key) == ours
 end
-
--- The tooltip index ----------------------------------------------------------------------------------------------------------------------------
 
 local function DropIndex()
 	index, who, builtWithout, building = nil, nil, nil, nil
@@ -1339,8 +1087,6 @@ local function AddCount(target, id, key, where, count)
 	counts[where] = counts[where] + count
 end
 
--- Reads up to INDEX_STEP kept slots into the index being built, and the next ones on the next frame, each step as the part tooltips (TipsPart).
--- job.failed stays true when a step raises, or does not run because that part stopped.
 local function IndexStep(job)
 	if building ~= job or job.generation ~= generation then
 		return
@@ -1384,7 +1130,6 @@ local function IndexStep(job)
 	end)
 end
 
--- Starts the index of the near characters other than this one; an account with no more than INDEX_STEP kept slots has it at once.
 local function StartIndex()
 	local job = { index = {}, who = {}, queue = {}, at = 1, generation = generation }
 	local store = Store(false)
@@ -1416,9 +1161,6 @@ local function StartIndex()
 	end
 end
 
--- What the windows and tooltips ask ------------------------------------------------------------------------------------------------------------
-
--- { key, name, realm, class, faction, level, money, seen, bankSeen, me, near } of a character; realm is the realm in its key, as the game names it.
 local function Entry(key, record, me)
 	record = record or EMPTY
 	local entry = { key = key, name = NameOf(key), realm = RealmOf(key) or Text(record.realm), class = Text(record.class),
@@ -1440,8 +1182,6 @@ local function Entry(key, record, me)
 	return entry
 end
 
--- Every character kept, and this one, as its game answers, whether kept or not. This realm comes first with this character at its head, then the
--- connected realms and then the others, each realm by name and its characters by name.
 function Data.Characters()
 	local me = Me()
 	local list, listed = {}, false
@@ -1480,8 +1220,6 @@ function Data.Characters()
 	return list
 end
 
--- The containers a window shows, in order: "bags" is 0 to 5, and -1 while the keyring shows (for another character, while it was kept); "bank" is
--- the bought tabs, live while my bank is open and else the kept ones. key nil is this character.
 function Data.Containers(which, key)
 	local me = Me()
 	local mine = key == nil or key == me
@@ -1520,7 +1258,6 @@ function Data.Containers(which, key)
 	return list
 end
 
--- The slots of a container and its kind: live for my bags, and my tabs while the bank is open; else as kept (0 when nothing is kept).
 function Data.Size(key, bag)
 	bag = Container(bag)
 	if bag == nil then
@@ -1539,7 +1276,6 @@ function Data.Size(key, bag)
 	return SizeOf(slots), StoredKind(record, bag, slots)
 end
 
--- The record of a slot, or nil for an empty slot: live for my bags, and my tabs while the bank is open; else decoded from the record.
 function Data.Item(key, bag, slot)
 	bag, slot = Container(bag), Slot(slot)
 	if bag == nil or slot == nil then
@@ -1558,7 +1294,6 @@ function Data.Item(key, bag, slot)
 	return StoredRecord(key, bag, slot)
 end
 
--- The free slots of a live container, and the first one.
 local function LiveFree(bag, size)
 	local free = Count((Ask2(Client("C_Container", "GetContainerNumFreeSlots"), bag)))
 	if not free or free == 0 then
@@ -1579,7 +1314,6 @@ local function LiveFree(bag, size)
 	return free, nil
 end
 
--- The free slots of a kept container, and the first one.
 local function StoredFree(slots, size)
 	local free, first = 0, nil
 	for slot = 1, size do
@@ -1591,12 +1325,6 @@ local function StoredFree(slots, size)
 	return free, first
 end
 
--- The free slots of a window, one row per kind of bag: { kind, label, free, total, bag, slot, general }, bag and slot being the first free slot
--- of that kind. The general bags (key "bag", MakeKind) are one row, labelled Bags, or Bank in the bank, with general true, and always come
--- first; the special kinds (the reagent bag, trade bags, quivers, ammo pouches, soul bags) follow in the order they first come. Only the general
--- row is room for any item, so only it is the free space of the bags (the footer of BagsWindow.lua, the count of Free slots in BagsLayout.lua);
--- a special row says how much room is left for its own items. The keyring is left out: it holds only keys, so its slots are no room in the bags
--- (its own label in Bag by bag still counts them, BagsLayout.lua, as a special bag's does).
 function Data.Free(key, which)
 	local me = Me()
 	if key == me then
@@ -1650,7 +1378,6 @@ function Data.Free(key, which)
 	return rows
 end
 
--- A character's gold in copper: mine as the game says, else as kept; nil when unknown.
 function Data.Money(key)
 	local me = Me()
 	if key == nil or key == me then
@@ -1664,10 +1391,6 @@ function Data.Money(key)
 	return record and Count(record.money) or nil
 end
 
--- The currencies of the bag window's footer (BagsCurrency.lua) -------------------------------------------------------------------------------
-
--- A character's currencies as last kept, { { id, icon, count }, ... } in the order of its backpack, each entry checked, or nil when none are
--- kept. key nil is this character.
 function Data.Currencies(key)
 	if key == nil then
 		key = Me()
@@ -1689,8 +1412,6 @@ function Data.Currencies(key)
 	return list
 end
 
--- Keeps this character's currencies, { { id, icon, count }, ... }, only when they changed and only while the record may be written (Mine). True
--- when it wrote.
 function Data.KeepCurrencies(list)
 	if IsSecret(list) or type(list) ~= "table" then
 		return false
@@ -1727,12 +1448,6 @@ function Data.KeepCurrencies(list)
 	return true
 end
 
--- The gold of this session -------------------------------------------------------------------------------------------------------------------
-
--- The money this character had as it logged in, kept in FlatUICharDB.sessionMoney so a /reload keeps the session, and when, in
--- FlatUICharDB.sessionStartAt (time(), the seconds of this computer's clock): written at the PLAYER_ENTERING_WORLD of a login (its first value,
--- isInitialLogin, SystemDocumentation.lua:136), and at any other one while nothing is kept yet. A frame of this file's own hears it, whatever
--- the switches of the pages, since the Gold slot of Data panels (DataStreams.lua) says it too.
 local function SessionStart(initial)
 	local char = ns.Character()
 	local money = Count(Ask(Client(nil, "GetMoney")))
@@ -1745,8 +1460,6 @@ local function SessionStart(initial)
 	end
 end
 
--- What this character made (more than 0) or spent (less) since it logged in, in copper, then the seconds since then (nil when not known, as for a
--- session that began before the time was kept); nil while the client does not say. The bag window reads the first value only.
 function ns.SessionMoney()
 	local char = ns.Character()
 	local start = type(char) == "table" and Count(char.sessionMoney) or nil
@@ -1773,8 +1486,6 @@ do
 	end
 end
 
--- Asks the game once a session to load an item a window shows with no name, and notes it as pending until ITEM_DATA_LOAD_RESULT or
--- GET_ITEM_INFO_RECEIVED.
 function Data.Want(id)
 	id = Count(id)
 	if not id or id == 0 or asked[id] then
@@ -1788,8 +1499,6 @@ function Data.Want(id)
 	Ask(Client("C_Item", "RequestLoadItemDataByID"), id)
 end
 
--- { { key, class, bags, bank, worn, name, realm } ... } of the near characters other than this one that carry an item, the most first. Nothing
--- while the index is being built.
 function Data.Counts(id)
 	id = Count(id)
 	if not id or id == 0 or Stopped() then
@@ -1824,9 +1533,6 @@ function Data.Counts(id)
 	return rows
 end
 
--- The bank opened (BagsBank.lua, at BANKFRAME_OPENED, as this part): it is read live from now on and its tabs are read at once, since the windows
--- ask for them; what is left of a visit before, its grace included, is forgotten first. Every tab is written now and scanned again at the next
--- BAG_UPDATE_DELAYED, in case the game had not given them all yet.
 function Data.BankScan()
 	EndBank()
 	bankLive = true
@@ -1844,11 +1550,6 @@ function Data.BankScan()
 	end)
 end
 
--- The bank closed (BagsBank.lua, once a visit): it is no longer read live, so its windows show the record, and the snapshot is dated. A move sent
--- just before the close may be answered after it, so for GRACE seconds the tabs a BAG_UPDATE marks are still read at BAG_UPDATE_DELAYED (Delayed,
--- GraceScan) against what the visit read of them, which is forgotten when the grace ends (DropTabs). late: a close the module did not hear
--- (Bank.Settle, when the page comes up): nothing of the bank is read again, and the snapshot keeps the date of its last write, which is no later
--- than what it holds.
 function Data.BankClosed(late)
 	if not bankLive then
 		return
@@ -1876,10 +1577,6 @@ function Data.BankClosed(late)
 	end)
 end
 
--- The bank's tabs or its bag slots changed (BagsBank.lua, at PLAYERBANKSLOTS_CHANGED and BANK_TABS_CHANGED): the bought tabs and the bags in the
--- bank's bag slots are read again, and every tab is scanned at the next BAG_UPDATE_DELAYED, which tells the bank window the slots that changed and
--- marks the time of a change for a sort hold; a scan here would take those changes in unseen. True when the bought tabs or the bags in them
--- changed, so the bank window needs a new layout.
 function Data.BankTabs()
 	if not BankOpen() then
 		return false
@@ -1898,8 +1595,6 @@ function Data.BankTabs()
 	return moved == true
 end
 
--- Takes a character out of the record. This character is then not written again until its next login; a window that showed the character
--- shows this one again.
 function Data.Forget(key)
 	if key == nil then
 		key = Me()
@@ -1934,8 +1629,6 @@ function Data.Forget(key)
 	return had
 end
 
--- The other parts, by name ---------------------------------------------------------------------------------------------------------------------
-
 local function NewSeen(changed)
 	local categories = B.Categories
 	local new = type(categories) == "table" and categories.New
@@ -1951,14 +1644,8 @@ local function Prepare()
 	end
 end
 
--- Events -----------------------------------------------------------------------------------------------------------------------------------------
-
--- After B.Data.Resume: the quest marks and the set of every slot of mine read again (below, with Remark).
 local RemarkAll
 
--- BAG_UPDATE_DELAYED: scans the marked containers (all of them after a flag, or when the last full scan is SWEEP seconds old), and in the grace
--- after a close the marked tabs of the visit, writes the record, and tells New items and the windows what changed; while the bank is open, a
--- change of the tabs or of a tab's size lays the bank window out afresh.
 local function Delayed()
 	local record = Mine(true)
 	local now = Clock()
@@ -1970,11 +1657,8 @@ local function Delayed()
 	local bags, bank = {}, {}
 	local tabsMoved = false
 	ScanBags(record, bags, all)
-	-- The bank is read in full at each open, so the sweep leaves it alone.
 	if BankOpen() then
 		if dirty[BANK_BAGS] then
-			-- A bag went in or out of a bank bag slot: when the tabs or the bags in them changed since the last read, the bank window needs a new
-			-- layout, also when the client named the bag only after PLAYERBANKSLOTS_CHANGED.
 			local answered, moved = ReadTabs()
 			if answered and record then
 				WriteBank(record)
@@ -1984,8 +1668,6 @@ local function Delayed()
 		end
 		local tabs = bankFull
 		bankFull = false
-		-- A tab whose size changed needs a new layout as well: the layout read each tab's size once, and the client may give the slots of a tab
-		-- (one just bought with the Buy button of BagsBank.lua) only after that.
 		if ScanBank(record, bank, tabs) then
 			tabsMoved = true
 		end
@@ -1993,7 +1675,6 @@ local function Delayed()
 			record.bankSeen = Now() or record.bankSeen
 		end
 	elseif grace then
-		-- The bank closed a moment ago: a move answered after the close is written to the tab it went in or came out of too.
 		GraceScan(record, bank)
 		if record and next(bank) ~= nil then
 			record.bankSeen = Now() or record.bankSeen
@@ -2006,7 +1687,6 @@ local function Delayed()
 		record.seen = Now() or record.seen
 	end
 	if remarkAll and all then
-		-- Once every slot is read after B.Data.Resume, also while Bags stands down (Remark asks the windows only while it is in use).
 		remarkAll = false
 		RemarkAll()
 	end
@@ -2015,7 +1695,6 @@ local function Delayed()
 	end
 	if next(bags) ~= nil then
 		Part(NewSeen, bags)
-		-- Pinned slots (BagsPins.lua) count their items and go on putting them back; their work runs as a part of their own.
 		local scanned = type(B.Pins) == "table" and B.Pins.Scanned or nil
 		if type(scanned) == "function" then
 			scanned(bags)
@@ -2032,7 +1711,6 @@ local function Delayed()
 	end
 end
 
--- A full scan of the bags waits for the next BAG_UPDATE_DELAYED, or runs FULL_WAIT seconds from now when none has come by then.
 local function FlagFull()
 	full = true
 	if fullTimer then
@@ -2047,8 +1725,6 @@ local function FlagFull()
 	end)
 end
 
--- The module's Start, PLAYER_ENTERING_WORLD and B.Data.Resume: who this character is, its gold, worn items and bags, then a full scan of the bags,
--- and of the bank's tabs while the bank is open.
 local function Started()
 	keyring = ShowsKeyring()
 	for bag in pairs(kinds) do
@@ -2073,7 +1749,6 @@ local function BagUpdate(bag)
 	end
 end
 
--- BAG_CONTAINER_UPDATE: a bag went in or out of a bag slot, or of a bank bag slot.
 local function ContainerUpdate()
 	keyring = ShowsKeyring()
 	for bag in pairs(kinds) do
@@ -2101,12 +1776,8 @@ local function ContainerUpdate()
 	end
 end
 
--- BAG_NEW_ITEMS_UPDATED waits for the next frame, once for a run of them.
 local newQueued = false
 
--- The game set or took off new flags, and it may set one after the BAG_UPDATE_DELAYED that brought the item: every slot of my bags whose flag is
--- set (C_NewItems.IsNewItem) goes to New items (B.Categories.New.Seen, which leaves out what came out of the bank) and is drawn again. Nothing
--- during a sort hold of the bags (B.Sorting), whose moves bring nothing new.
 local function NewFlags()
 	local sorting = B.Sorting
 	if not Active() or (type(sorting) == "function" and sorting("bags") == true) then
@@ -2146,8 +1817,6 @@ local function NewItemsUpdated()
 	end)
 end
 
--- Reads one mark of every slot of mine again (my bags, and my tabs while the bank is open), writes the slots whose mark changed, and has the
--- windows draw them.
 local function Remark(read)
 	local record = Mine(true)
 	local bags, bank = false, false
@@ -2202,7 +1871,6 @@ local function QuestNow()
 	Remark(QuestMarks)
 end
 
--- QUEST_ACCEPTED and UNIT_QUEST_LOG_CHANGED for the player: the quest marks, at most once every QUEST_EVERY seconds.
 local function QuestSoon()
 	if questQueued then
 		return
@@ -2226,16 +1894,12 @@ local function SetsChanged()
 	Remark(SetMarks)
 end
 
--- The full scan after B.Data.Resume read every slot: QUEST_ACCEPTED, UNIT_QUEST_LOG_CHANGED and EQUIPMENT_SETS_CHANGED went unheard while the page
--- was off, and the scan reads quest marks and sets only for a slot whose item changed, so both are read again for every slot of mine.
 RemarkAll = function()
 	questAt = Clock()
 	Remark(QuestMarks)
 	Remark(SetMarks)
 end
 
--- GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT: the records that waited for this item take its name; an item a window asked for has the
--- windows draw and match again.
 local function Loaded(id, success)
 	id = Count(id)
 	if not id then
@@ -2269,9 +1933,6 @@ local function MoneyChanged()
 	end
 end
 
--- PLAYER_LOGOUT, heard only while the page is on: who this character is and its gold, and its worn items and bag items once more, a last refresh
--- that also catches a change whose event failed, or one that came while this part was stopped. What changed while the page was off was read again
--- by B.Data.Resume when it came back on, and nothing is written while it stays off.
 local function LoggingOut()
 	local record = Mine(true)
 	if record then
@@ -2307,9 +1968,6 @@ local function EquipmentChanged(slot)
 	end
 end
 
--- The row Forget a character, and /flatui status -------------------------------------------------------------------------------------------------
-
--- The local noon of the day a time() falls on, by the calendar of this computer (date and time), or nil.
 local function Noon(stamp)
 	local parts = Ask(Client(nil, "date"), "*t", stamp)
 	if type(parts) ~= "table" then
@@ -2318,8 +1976,6 @@ local function Noon(stamp)
 	return Count(Ask(Client(nil, "time"), { year = parts.year, month = parts.month, day = parts.day, hour = 12 }))
 end
 
--- Today, yesterday or how many days ago a time() was, in days of the calendar counted from noon to noon, so a change of the clock between them
--- counts no day; the bag and bank windows (BagsWindow.lua) and the tooltips of their slots (BagsItems.lua) count the same way.
 local function Age(stamp)
 	local now = Now()
 	if not stamp or not now then
@@ -2343,7 +1999,6 @@ local function Thousands(number)
 	return (grouped:gsub("^,", ""))
 end
 
--- The characters kept, by key: { key, record }.
 local function Kept()
 	local list = {}
 	local store = Store(false)
@@ -2392,7 +2047,6 @@ function ns.BagsCharacterForget(position)
 	return true, ("Flat UI: the bags, bank and gold of %s are forgotten."):format(entry.key)
 end
 
--- How many characters and slots with an item are kept.
 local function Tally()
 	local characters, items = 0, 0
 	local store = Store(false)
@@ -2418,9 +2072,6 @@ local function Tally()
 	return characters, items
 end
 
--- Hearing -------------------------------------------------------------------------------------------------------------------------------------------
-
--- Each handler runs as the part cache: a failure is counted against this part, never the module.
 local function Listen(event, fn, filter)
 	ns.AddEvent(KEY, event, function(...)
 		Part(fn, ...)
@@ -2444,16 +2095,10 @@ Listen("PLAYER_LOGOUT", LoggingOut)
 Listen("PLAYER_LEVEL_UP", LevelUp)
 Listen("PLAYER_EQUIPMENT_CHANGED", EquipmentChanged)
 
--- The module's Start, at login or when the page is first turned on: the same work as a loading screen.
 ns.AddStart(KEY, function()
 	Part(Started)
 end)
 
--- The page came on again after the module's Start (Bags.lua's Refresh, since Core runs Refresh and not Start then, Core.lua:2278-2287): the module
--- heard none of its events while the page was off, so the work of Start runs again and its full scan catches up the items that changed meanwhile;
--- after that scan the quest marks and the set of every slot are read again too (remarkAll, Delayed and RemarkAll), which no slot-by-slot change
--- shows. They are not read here, before the scan: a slot whose item changed would be written with the marks of its new item and the rest of the
--- old one.
 function Data.Resume()
 	remarkAll = true
 	Part(Started)

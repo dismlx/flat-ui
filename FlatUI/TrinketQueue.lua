@@ -1,97 +1,17 @@
 local _, ns = ...
 
--- Trinket queue (0.5.36, the owner: "a slot-queuing feature like trinketmenu addon would be helpful"): a module of its own, "trinkets", on by
--- default, with the Auto queue of each slot off, so nothing is put on until the player ticks one. This file is the engine: the lists, the
--- decision, the swap, the slash words and the /flatui status lines; TrinketQueueWindow.lua is its window and TrinketQueueButtons.lua the two
--- squares beside the trinket slots of the Character window. The idea follows the trinket queue of TrinketMenu by Gello, as the owner described
--- it; none of its code or data is used.
--- The store: FlatUICharDB.trinketQueue (ns.Character, Core.lua:2992-2994), for this character alone, made at the first edit (as BagsPins.lua's
--- Store): top and bottom, ordered lists, best first, of at most MOST entries { item = item ID, delay = whole seconds 0 to 120, stop = true or nil },
--- an item at most once a list (it may be in both); paused, Pause all (true or nil, per character, so a profile switch never unpauses it); auto,
--- { top, bottom }, the Auto queue of each slot (true or nil), which the rows trinkets.autoTop and trinkets.autoBottom read and write through
--- their get and set (ns.TrinketAutoGet and ns.TrinketAutoSet; ns.Get and ns.Set route such a row, Core.lua:1080-1112, 2774-2793, and no
--- profile holds it), so a profile switch, by hand or by the Profiles page's automatic switch, never turns it on or off and an alt on the same
--- profile keeps its own; held, { top, bottom }, the item the player put on by hand in each slot, or 0 for a slot the player emptied. The first
--- read of a session cleans it, as Cooldowns.lua's Own.List does (Cooldowns.lua:612-640), and writes it back only when something changed.
--- Q.Copy puts the other slot's list at the end of a list, in its order with each Delay and Stop, passing over a trinket it holds already, and
--- Q.Clear empties a list (0.5.37): /flatui queue copy top or bottom and clear top or bottom, and the window's Copy button on an empty list.
--- When it looks: never on a ticker. An event or an edit asks for a look (Q.Soon), which comes SETTLE seconds later, once however many asked; each
--- look arms at most one timer (C_Timer.After, WL/apis.yaml:28390) for the first moment a decision can change, and a token makes an older timer
--- do nothing. Nothing runs while both Auto queue rows are off, Pause all is on, or the module or its part "swaps" is off. The module's events
--- (ns.Register, Core.lua:2497-2519): PLAYER_ENTERING_WORLD (a quiet QUIET seconds after a loading screen, when the game sends its own equipment
--- changes), PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED (UnitDocumentation.lua:3893), PLAYER_EQUIPMENT_CHANGED for slots 13 and 14
--- (PaperDollInfoDocumentation.lua:383-394), BAG_UPDATE_DELAYED, BAG_UPDATE_COOLDOWN and ITEM_LOCK_CHANGED (ContainerDocumentation.lua:671, 677,
--- 717-727), PLAYER_ALIVE and PLAYER_UNGHOST, GET_ITEM_INFO_RECEIVED and ITEM_DATA_LOAD_RESULT (as BagsData.lua:56 hears them). The player's
--- UNIT_SPELLCAST_SUCCEEDED (UnitDocumentation.lua:4845-4856) is heard on a frame of its own (RegisterUnitEvent "player", as LavaWalk hears
--- UNIT_COMBAT), only while a list has a delay or the cooldowns are read from the tooltips.
--- The gates, every one before any swap, each with a reason the window, the buttons and /flatui status say: the module and the part on
--- (ns.ModuleOn, ns.PartStopped); Pause all off; the slot's Auto queue on and its list not empty; no swap waiting for its answer; the client has
--- C_Item.EquipItemByName (WL/apis.yaml:16288-16295; there is no global EquipItemByName); no fight, InCombatLockdown (:39650) and
--- UnitAffectingCombat("player") (:42083) both plainly false, since the game changes no slot but the weapons in a fight
--- (INVSLOTS_EQUIPABLE_IN_COMBAT, Blizzard_FrameXMLBase/Constants.lua:158-162; Camelot/PaperDollFrame.lua:2557-2566); not dead or a ghost
--- (UnitIsDeadOrGhost, :42886); no cast or channel (UnitCastingInfo, UnitChannelInfo, :42211, :42249, secret under cast restrictions,
--- UnitDocumentation.lua:828-831, 870-873; the game's equipment manager waits for a cast too, Mainline/EquipmentManager.lua:260-263); nothing on
--- the cursor (CursorHasItem, GetCursorInfo, :35286, :36258), no spell waiting for its target (SpellIsTargeting, :41587), and no Sell junk
--- (ns.ErrandsSelling), Deposit or Take out (ns.Bags.Bank.Busy), clean up (ns.Bags.Sorting), trade or split box (TradeFrame, StackSplitFrame,
--- IsShown) under way, the list BagsPins.lua waits on (BagsPins.lua:834-866), each looked up when called; the worn slot not locked
--- (IsInventoryItemLocked, :39870). A withheld answer counts as the gate being shut.
--- The decision for one slot (n, slot s, its list L): the worn item w (GetInventoryItemID, Cooldowns.lua:1973 reads it the same way) stays while
--- the player put it on by hand (held), while it is in L with Stop, while its Delay has not run since its use, and while its effect runs (the game
--- holds its cooldown); else the first entry above w in L (w out of L, or an empty slot, counts below the whole list) that is usable and ready is
--- put on ("ready again"), and while w cools (a plain time left above Ready with this much left), the first one below it ("on cooldown"). A w
--- whose cooldown cannot be read is not cooling: it stays unless one above it is ready, since a trinket taken off on an unknown cooldown could
--- never come back. A slot the player emptied stays empty (held). Usable: a bag copy (bags 0 to NUM_BAG_SLOTS,
--- C_Container.GetContainerNumSlots and GetContainerItemInfo, ContainerDocumentation.lua:192, 313, 766-781, as Cooldowns.lua's Own.Bags walks
--- them) that is not locked and is bound (an unbound one would bring up the game's EQUIP_BIND question, PaperDollInfoDocumentation.lua:334-343,
--- so the queue leaves that to the player), not refused or in back-off, whose required level (C_Item.GetItemInfo's fifth answer, :16525) the
--- player has, and when the item is worn in the other slot, a second copy of an item the game plainly says is not unique
--- (C_Item.GetItemUniquenessByID, ItemDocumentation.lua:1052-1072). Ready: no use (C_Item.GetItemSpell, ItemDocumentation.lua:966-985, as
--- Cooldowns.lua's Own.HasUse asks), or at most Ready with this much left of its cooldown, or, worn, the 30 second cooldown the game starts on an
--- item with a use as it is put on (the churn guard, even at 0).
--- Cooldowns, every answer through ns.IsSecret and ns.Finite: C_Item.GetItemCooldown (ItemDocumentation.lua:434-449), else
--- GetInventoryItemCooldown("player", slot) for the worn copy and C_Container.GetContainerItemCooldown (ContainerDocumentation.lua:122-138) for a
--- bag copy; where neither is plain, the item's tooltip (C_TooltipInfo.GetInventoryItem and GetBagItem, TooltipInfoDocumentation.lua:389, 137),
--- out of combat only: its line ITEM_COOLDOWN_TIME ("Cooldown remaining: %s"), refined by the use heard and the length of the Use: line of
--- C_TooltipInfo.GetItemByID (:439; line type 44, as CharacterThorns.lua reads it). A line it cannot read is unknown, and unknown is never ready
--- and never cooling.
--- The swap (Q.Swap): C_Item.EquipItemByName(link, slot) (ItemDocumentation.lua:251-260, not protected), as the game's /equipslot
--- (SlashCommands.lua:428-444); for a second copy of an item worn in the other slot, and while the bags hold a bound and an unbound copy of the
--- item (R.Mixed: one link names both, so the game could take the unbound one), C_Container.PickupContainerItem of the chosen copy then
--- PickupInventoryItem, as the game's equipment manager does (Mainline/EquipmentManager.lua:95-116), with anything left on the cursor given back
--- (ClearCursor). Every call is in pcall. The answer is the slot's PLAYER_EQUIPMENT_CHANGED with the item in it within CONFIRM seconds, else it
--- failed: back-off of 5, 20 and 60 seconds (the end of a fight forgets the back-offs), then refused until Queue now, so a trinket the game will
--- never take (a requirement the gates do not read) is not tried again at each change of the bags or each fight. A change of a slot that no swap
--- of the queue made is a change by hand (the player, an equipment set, another addon): the slot is held until the item is used, and a slot
--- emptied by hand stays empty until a trinket goes in by hand; either hold also ends with Queue now, the slot's Auto queue turned on or Pause all
--- turned off.
--- Each swap is said in chat (Say each swap in chat) and may play a sound of ns.SOUNDS (IconRow.lua:17-25, PlaySound in pcall; not ns.PlayKit,
--- whose note speaks of a flash); picking Sound on a swap in the options window plays it once, as every sound row of Panel.lua's AddChoice does
--- (the row's own handler of 0.5.37 went in 0.5.39: it played it again and on an undo). Everything runs as the part "swaps" of the module
--- (ns.EachPart, each run with a count of its own as its first argument, as GearWindow.lua's Run), so three faults stop the swaps alone with a line
--- for /flatui status; the first fault of each kind also goes to the game's error handler. It never writes a field of a game frame, calls no
--- mixin, adds no hook, makes no secure frame and never swaps in a fight; its frames are its own.
-
 local KEY, PART = "trinkets", "swaps"
--- The slots (INVSLOT_TRINKET1 and 2, Blizzard_FrameXMLBase/Constants.lua:148-149), their order, the other slot, the Auto queue row, the slot of
--- each row's key, and the word of each.
 local SLOTS = { top = 13, bottom = 14 }
 local ORDER = { "top", "bottom" }
 local OTHER = { top = "bottom", bottom = "top" }
 local ROW = { top = "trinkets.autoTop", bottom = "trinkets.autoBottom" }
 local AUTO = { autoTop = "top", autoBottom = "bottom" }
 local WORD = { top = "Top", bottom = "Bottom" }
--- Entries a list holds at most, the longest delay, and the most a cooldown may have left to count as ready (Ready with this much left).
 local MOST, LONGEST, READY_MOST = 24, 120, 60
--- Seconds: the wait before a look (a slider step settles first), the wait for the game's answer to a swap and to its question of an unbound
--- trinket the player clicked, how long an answer that came later still counts, between two tries while a cast, a fight
--- the game still counts or the cursor holds the swap back, the quiet after a loading screen, the equip lockout with slack, the global cooldown
--- (Pulse.lua's GCD), the farthest a timer is armed, how often the end of a fight is tried again, and the least wait of a timer.
 local TIME = { SETTLE = 0.2, CONFIRM = 2, ASK = 60, LATE = 15, RETRY = 0.5, BUSY = 1, QUIET = 3, LOCKOUT = 30.5, GCD = 2, FAR = 3600, TRIES = 10, NEAR = 0.05 }
 local BACKOFF = { 5, 20, 60 }
 local MAX_ID = 2147483647
--- The places of the Sound on a swap choices in ns.SOUNDS (IconRow.lua), as Pulse.lua has them.
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
--- The first letter of a time word of a tooltip, in seconds.
 local UNITS = { s = 1, m = 60, h = 3600, d = 86400 }
 local TRINKET, ON_USE, LINES = "INVTYPE_TRINKET", 44, 40
 local T = {
@@ -131,8 +51,6 @@ local T = {
 	STATUS_SLOT = "Trinket queue, %s: wearing %s; %s%s.",
 	STATUS_NEXT = "; next %s in %s",
 }
--- What each reason of a slot says, and its tone for the dot of the slot's button and the window: off (grey), on (the Highlight colour), wait
--- (amber) and halt (red).
 local WHY = {
 	off = { "off", "The trinket queue is off" },
 	auto = { "off", "Auto queue is off" },
@@ -161,13 +79,10 @@ local WHY = {
 	refused = { "halt", "The game refused it: Queue now tries it again" },
 }
 
--- The words of the reasons whose sentence takes a number, without it.
 local PLAIN = { delay = "Kept on for its delay", wait = "On cooldown" }
 
--- The reasons of a slot at rest, which a trinket the game refused turns red ("The game refused it").
 local RESTING = { keep = true, wait = true, unknown = true, none = true, next = true }
 
--- The contract (Q, also ns.TrinketQueue), the state of the session (S, one table to keep the upvalues few), the reads (R) and the decision (D).
 local Q, R, D = {}, {}, {}
 local S = { pending = nil, fails = {}, nextTry = {}, refused = {}, said = {}, noted = {}, equippedAt = {}, heldAt = {}, heard = {}, uses = {},
 	tipLen = {}, kinds = {}, levels = {}, loading = {}, autoWas = {}, once = {}, why = {}, untilAt = {}, nextAt = {}, next = {}, token = 0,
@@ -183,7 +98,6 @@ local function Finite(value)
 	return ns.Finite(value)
 end
 
--- A function of a table, or nil.
 local function Fn(source, name)
 	if type(source) ~= "table" or IsSecret(source) then
 		return nil
@@ -192,7 +106,6 @@ local function Fn(source, name)
 	return type(fn) == "function" and fn or nil
 end
 
--- pcall of a function that may be missing: false when it is.
 local function Call(fn, ...)
 	if type(fn) ~= "function" then
 		return false
@@ -200,7 +113,6 @@ local function Call(fn, ...)
 	return pcall(fn, ...)
 end
 
--- The first answer of a call, or nil when it is missing, raises or is withheld.
 local function Ask(fn, ...)
 	local ok, answer = Call(fn, ...)
 	if ok and not IsSecret(answer) then
@@ -227,9 +139,6 @@ local function Earliest(a, b)
 	return math.min(a, b)
 end
 
--- The part ---------------------------------------------------------------------------------------------------------------------------------------
-
--- A fault goes to the game's error handler once for each thing that failed, as GearWindow.lua's Report.
 function Q.Report(what, err)
 	if S.faults[what] then
 		return
@@ -245,8 +154,6 @@ local function Step(_, fn, ...)
 	return fn(...)
 end
 
--- Runs fn as the part "swaps" with a count of its own first, so every fault counts (Core.lua:2430-2463). A part that stopped drops its timer and
--- any swap that waits.
 function Q.Run(fn, ...)
 	S.runs = S.runs + 1
 	local ok, err = ns.EachPart(KEY, PART, Step, S.runs, fn, ...)
@@ -259,22 +166,16 @@ function Q.Run(fn, ...)
 	return ok == true
 end
 
--- True while the module runs and its swaps are not stopped.
 function Q.Running()
 	return type(ns.modules) == "table" and ns.modules[KEY] ~= nil and ns.ModuleOn(KEY) and not ns.PartStopped(KEY, PART)
 end
 
--- The timer and the swap that waits are let go: the part stopped or the module went off.
 function Q.Halt()
 	S.token = S.token + 1
 	S.pending = nil
 	R.Ear(false)
 end
 
--- The store ----------------------------------------------------------------------------------------------------------------------------------------
-
--- One list as it should be: entries with a plain whole item ID, none twice, at most MOST, each delay whole from 0 to LONGEST, stop true or nil.
--- The list itself when nothing changed.
 function R.CleanList(list)
 	if type(list) ~= "table" then
 		return {}, true
@@ -305,7 +206,6 @@ function R.CleanList(list)
 	return list, false
 end
 
--- The first read of a session cleans the store (header).
 function R.Normalise(store)
 	for _, n in ipairs(ORDER) do
 		if store[n] ~= nil then
@@ -342,7 +242,6 @@ function R.Normalise(store)
 	end
 end
 
--- FlatUICharDB.trinketQueue, made with make; nil before the saved variables load, or when there is none and make is not set.
 function Q.Store(make)
 	local char = ns.Character()
 	if type(char) ~= "table" then
@@ -363,7 +262,6 @@ function Q.Store(make)
 	return store
 end
 
--- A slot's list, highest first. Without make, a fresh empty table when there is none, which the caller must not keep.
 function Q.List(n, make)
 	if not SLOTS[n] then
 		return {}
@@ -381,7 +279,6 @@ function Q.List(n, make)
 	return store[n]
 end
 
--- The place and the entry of an item in a list.
 function Q.Find(list, id)
 	if id == nil then
 		return nil, nil
@@ -394,7 +291,6 @@ function Q.Find(list, id)
 	return nil, nil
 end
 
--- The item the player put on by hand in a slot, 0 for a slot the player emptied, or nil; and taking it away.
 function Q.Held(n)
 	local store = Q.Store(false)
 	local held = store and store.held
@@ -419,15 +315,11 @@ function R.Hold(n, id)
 	S.version = S.version + 1
 end
 
--- An edit: the version moves on and the queue looks again.
 function R.Edited()
 	S.version = S.version + 1
 	Q.Soon()
 end
 
--- Reads -------------------------------------------------------------------------------------------------------------------------------------------
-
--- The item worn in a slot, or nil for an empty one.
 function R.Worn(slot)
 	local id = Ask(GetInventoryItemID, "player", slot)
 	return Whole(id) and id or nil
@@ -445,7 +337,6 @@ function R.Load(id)
 	end
 end
 
--- An item ID from an ID, a link or an item string, or nil.
 function R.ItemID(item)
 	if Whole(item) then
 		return item
@@ -457,7 +348,6 @@ function R.ItemID(item)
 	return nil
 end
 
--- True for a trinket (C_Item.GetItemInfoInstant's fourth answer, WL/apis.yaml:16569, which never waits), false for any other item, nil unknown.
 function R.Trinket(id)
 	if S.kinds[id] ~= nil then
 		return S.kinds[id]
@@ -470,7 +360,6 @@ function R.Trinket(id)
 	return S.kinds[id]
 end
 
--- The bags: per trinket, its copies { bag, slot, link, locked, bound }, and the trinkets in the order of the bags. Kept until the bags change.
 function R.Scan()
 	if S.bags then
 		return S.bags, S.order
@@ -504,7 +393,6 @@ function R.Copies(id)
 	return bags[id] or {}
 end
 
--- The spell of an item's use, false for an item without one, nil while the client has not loaded it (as Cooldowns.lua's Own.HasUse).
 function R.Use(id)
 	if S.uses[id] ~= nil then
 		return S.uses[id]
@@ -522,7 +410,6 @@ function R.Use(id)
 	return nil
 end
 
--- The level an item needs (C_Item.GetItemInfo's fifth answer), or nil while it is not loaded.
 function R.Level(id)
 	if S.levels[id] ~= nil then
 		return S.levels[id]
@@ -536,7 +423,6 @@ function R.Level(id)
 	return nil
 end
 
--- A plain cooldown answer: its start, duration and whether the game holds it while the effect runs (enable false or 0); nil when withheld.
 function R.Plain(ok, start, duration, enable)
 	if not (ok and Finite(start) and Finite(duration)) then
 		return nil
@@ -544,8 +430,6 @@ function R.Plain(ok, start, duration, enable)
 	return start, duration, not IsSecret(enable) and (enable == false or enable == 0)
 end
 
--- The cooldown of an item as the game gives it: C_Item.GetItemCooldown, else that of the worn copy or the bag copy (where: { worn = slot } or a
--- copy).
 function R.Cooldown(id, where)
 	local start, duration, held = R.Plain(Call(Fn(C_Item, "GetItemCooldown"), id))
 	if start == nil and where.worn then
@@ -556,7 +440,6 @@ function R.Cooldown(id, where)
 	return start, duration, held
 end
 
--- The lines of a tooltip the game builds (C_TooltipInfo), or nil.
 function R.TipLines(getter, ...)
 	local ok, data = Call(Fn(C_TooltipInfo, getter), ...)
 	if not ok or type(data) ~= "table" or IsSecret(data) then
@@ -571,7 +454,6 @@ function R.Text(line)
 	return not IsSecret(text) and type(text) == "string" and text or nil
 end
 
--- Seconds from a time of a tooltip: "1:42", or a number and the first letter of its word ("45 sec", "2 min", "1 hour"); nil when unreadable.
 function R.Seconds(text)
 	local m, s = text:match("(%d+):(%d%d)")
 	if m then
@@ -582,7 +464,6 @@ function R.Seconds(text)
 	return number and unit and tonumber(number) * unit or nil
 end
 
--- The pattern of the line the game adds while an item cools: ITEM_COOLDOWN_TIME with its magic characters escaped and %s caught, else English.
 function R.Pattern()
 	if S.pattern then
 		return S.pattern
@@ -596,7 +477,6 @@ function R.Pattern()
 	return S.pattern
 end
 
--- The time left that a copy's tooltip says, out of combat only: 0 without the line, nil when it cannot be read or the tooltip is not there.
 function R.TipLeft(where)
 	if D.Fighting() then
 		return nil
@@ -625,7 +505,6 @@ function R.TipLeft(where)
 	return 0
 end
 
--- The full cooldown of an item from its Use: line, "(2 Min Cooldown)", in seconds; nil while not known.
 function R.TipLength(id)
 	if S.tipLen[id] ~= nil then
 		return S.tipLen[id] or nil
@@ -655,8 +534,6 @@ function R.TipLength(id)
 	return nil
 end
 
--- The time left of an item's cooldown (header): seconds, false for an item with no use, "held" while the game holds it as the effect runs, nil
--- unknown; then the time of its last use when known, and the plain start and duration.
 function R.Left(id, where, now)
 	local use = R.Use(id)
 	if use == false then
@@ -692,7 +569,6 @@ function R.Left(id, where, now)
 	return left, heard, nil, nil
 end
 
--- Whether a game frame shows (read only, with IsShown), a withheld answer counting as shown.
 function R.Shown(name)
 	local frame = _G[name]
 	if type(frame) ~= "table" or ns.Forbidden(frame) then
@@ -702,7 +578,6 @@ function R.Shown(name)
 	return ok and (IsSecret(shown) or shown == true)
 end
 
--- True for a plain true or a withheld answer of a call that exists.
 function R.Yes(fn, ...)
 	if type(fn) ~= "function" then
 		return false
@@ -728,9 +603,6 @@ function R.ClearCursor()
 	Call(ClearCursor)
 end
 
--- The heard use ---------------------------------------------------------------------------------------------------------------------------------
-
--- The player cast a spell: when it is plain and is the use of a worn trinket, that trinket was used now. A withheld one is not heard.
 function R.Heard(unit, spellID)
 	if unit ~= "player" or not Whole(spellID) then
 		return
@@ -744,7 +616,6 @@ function R.Heard(unit, spellID)
 	end
 end
 
--- The frame of its own that hears the player's casts, while it is wanted.
 function R.Ear(on)
 	on = on == true
 	if on == S.listening then
@@ -770,7 +641,6 @@ function R.Ear(on)
 	end
 end
 
--- Wanted while the queue acts and a list has a delay, or the cooldowns come from the tooltips.
 function R.EarWanted()
 	if not Q.Active() then
 		return false
@@ -788,7 +658,6 @@ function R.EarWanted()
 	return false
 end
 
--- Refusals are forgotten: Queue now, for the items of its lists (only).
 function R.ClearRefused(only)
 	for id in pairs(S.refused) do
 		if not only or only[id] then
@@ -801,9 +670,6 @@ function R.ClearRefused(only)
 	end
 end
 
--- The gates --------------------------------------------------------------------------------------------------------------------------------------
-
--- A fight: InCombatLockdown or UnitAffectingCombat true or withheld.
 function D.Fighting()
 	return R.Yes(InCombatLockdown) or R.Yes(UnitAffectingCombat, "player")
 end
@@ -822,7 +688,6 @@ function D.Casting()
 	return false
 end
 
--- The cursor and the bags busy, the list BagsPins.lua waits on (header).
 function D.Busy()
 	if R.CursorHolds() or R.Yes(SpellIsTargeting) then
 		return true
@@ -841,7 +706,6 @@ function D.Busy()
 	return Ask(Fn(bags, "Sorting"), "bags") == true
 end
 
--- The reasons that hold every slot back from a call that equips, and when to look again: nil when nothing does.
 function D.Blocked(now)
 	if S.pending then
 		return "pending"
@@ -869,7 +733,6 @@ function D.Blocked(now)
 	return nil
 end
 
--- The reasons of one slot that need no reading of the gear: off, paused, Auto queue off, an empty list.
 function D.Static(n)
 	if not Q.Running() then
 		return "off"
@@ -883,9 +746,6 @@ function D.Static(n)
 	return nil
 end
 
--- The decision -----------------------------------------------------------------------------------------------------------------------------------
-
--- Ready (header): no use, at most threshold seconds left, or for the worn item the cooldown the game starts as it is put on.
 function D.Ready(left, start, duration, equippedAt, threshold)
 	if left == false then
 		return true
@@ -896,7 +756,6 @@ function D.Ready(left, start, duration, equippedAt, threshold)
 	return Finite(start) and Finite(duration) and duration <= TIME.LOCKOUT and equippedAt ~= nil and math.abs(start - equippedAt) <= 1
 end
 
--- A bag copy of an item the slot could take now, or nil with the time it is tried again when it waits for its back-off (header: Usable).
 function D.Usable(id, otherWorn, now)
 	if S.refused[id] then
 		return nil
@@ -927,7 +786,6 @@ function D.Usable(id, otherWorn, now)
 	return copy
 end
 
--- An entry the slot can put on now: its copy; else nil and when it may be ready (its cooldown end less the threshold, or its back-off).
 function D.Candidate(id, otherWorn, now, threshold)
 	local copy, retry = D.Usable(id, otherWorn, now)
 	if not copy then
@@ -943,8 +801,6 @@ function D.Candidate(id, otherWorn, now, threshold)
 	return nil, nil, true
 end
 
--- The first entry from first to last the slot can put on now, and its copy; else nil, nil, when to look again and whether any was usable. The
--- earliest that may come is the slot's next (S.next, S.nextAt).
 function D.Through(n, list, first, last, otherWorn, now, threshold)
 	local wake, any = nil, false
 	for i = first, last do
@@ -961,8 +817,6 @@ function D.Through(n, list, first, last, otherWorn, now, threshold)
 	return nil, nil, wake, any
 end
 
--- The rule for one slot (header). Answers the reason, when to look again, and for a swap the entry and the copy; S.next and S.nextAt say which
--- entry comes next and when.
 function D.Slot(n, now, threshold)
 	local slot, list = SLOTS[n], Q.List(n)
 	local worn, otherWorn = R.Worn(slot), R.Worn(SLOTS[OTHER[n]])
@@ -1008,7 +862,6 @@ function D.Slot(n, now, threshold)
 		return any and "next" or "none", wake
 	end
 	if left == nil then
-		-- Unknown is not cooling (header): nothing lower goes on in its place.
 		return "unknown", wake
 	end
 	if not D.Ready(left, start, duration, S.equippedAt[n], threshold) then
@@ -1021,18 +874,15 @@ function D.Slot(n, now, threshold)
 	return "keep", wake
 end
 
--- The threshold of Ready with this much left.
 function D.Threshold()
 	local value = ns.Get("trinkets.ready")
 	return Finite(value) and math.max(0, math.min(READY_MOST, value)) or 30
 end
 
--- What a pass changed that the window and the buttons show.
 function D.Signature()
 	return ("%s/%s/%s/%s"):format(tostring(S.why.top), tostring(S.why.bottom), tostring(S.next.top), tostring(S.next.bottom))
 end
 
--- One pass over both slots, top first, at most one swap; the other slot waits for its answer. Answers when to look again.
 function D.Pass()
 	local now = Now()
 	local threshold = D.Threshold()
@@ -1065,7 +915,6 @@ function D.Pass()
 	return wake
 end
 
--- Arms the one timer for when a decision can change; any earlier timer does nothing once the token moved on.
 function D.Arm(at)
 	S.token = S.token + 1
 	if at == nil or not (C_Timer and C_Timer.After) then
@@ -1079,7 +928,6 @@ function D.Arm(at)
 	end)
 end
 
--- A look: the reasons of both slots while the queue does nothing, else a pass and its timer.
 function D.Look()
 	if not Q.Active() then
 		D.Idle()
@@ -1089,7 +937,6 @@ function D.Look()
 	R.Ear(R.EarWanted())
 end
 
--- The queue does nothing: no timer, no ear, and the reasons that say why.
 function D.Idle()
 	S.token = S.token + 1
 	R.Ear(false)
@@ -1102,9 +949,6 @@ function D.Idle()
 	end
 end
 
--- The swap ---------------------------------------------------------------------------------------------------------------------------------------
-
--- The bag copy goes into the slot by the cursor, so it is the one that moves while the same item is worn in the other slot (header).
 function R.PickUp(copy, slot)
 	local pick = Fn(C_Container, "PickupContainerItem")
 	if not pick or type(PickupInventoryItem) ~= "function" then
@@ -1124,7 +968,6 @@ function R.PickUp(copy, slot)
 	return placed
 end
 
--- True while the bags hold a bound and an unbound copy of an item: the same link names both, so the copy chosen goes in by the cursor.
 function R.Mixed(id)
 	local bound, unbound = false, false
 	for _, copy in ipairs(R.Copies(id)) do
@@ -1134,7 +977,6 @@ function R.Mixed(id)
 	return bound and unbound
 end
 
--- Puts an item from a bag copy into slot n's slot (header). wear is true for a click on a row of the window, whose item the slot then holds.
 function Q.Swap(n, id, copy, why, wear)
 	local slot = SLOTS[n]
 	local from = R.Worn(slot)
@@ -1158,7 +1000,6 @@ function Q.Swap(n, id, copy, why, wear)
 		return
 	end
 	if C_Timer and C_Timer.After then
-		-- An unbound trinket the player clicked brings up the game's question, which waits for the player.
 		C_Timer.After(wear and not copy.bound and TIME.ASK or TIME.CONFIRM, function()
 			if S.pending == pending then
 				Q.Run(Q.Failed, pending)
@@ -1167,7 +1008,6 @@ function Q.Swap(n, id, copy, why, wear)
 	end
 end
 
--- The name of an item for a line in chat: its link, else its name, else its ID.
 function R.Named(id, link)
 	if link then
 		return link
@@ -1180,7 +1020,6 @@ function R.Named(id, link)
 	return ("item %d"):format(id)
 end
 
--- Plays Sound on a swap (header).
 function R.Sound()
 	local word = ns.Get("trinkets.sound")
 	local kit = word ~= "none" and type(ns.SOUNDS) == "table" and ns.SOUNDS[KITS[word] or 0] or nil
@@ -1193,7 +1032,6 @@ function R.Sound()
 	end
 end
 
--- The slot holds the item the swap asked for.
 function Q.Confirmed(pending)
 	S.pending = nil
 	S.fails[pending.item], S.nextTry[pending.item] = nil, nil
@@ -1216,7 +1054,6 @@ function Q.Confirmed(pending)
 	Q.Soon()
 end
 
--- No answer within CONFIRM seconds, or the call failed: back-off, then refused (header).
 function Q.Failed(pending)
 	if S.pending == pending then
 		S.pending = nil
@@ -1247,9 +1084,6 @@ function Q.Failed(pending)
 	Q.Soon()
 end
 
--- Events -----------------------------------------------------------------------------------------------------------------------------------------
-
--- A slot changed (PLAYER_EQUIPMENT_CHANGED): the answer to a swap, or a change by hand, which holds the slot (header).
 function Q.Equipped(slot)
 	local n = slot == SLOTS.top and "top" or slot == SLOTS.bottom and "bottom" or nil
 	if not n then
@@ -1265,20 +1099,17 @@ function Q.Equipped(slot)
 			return
 		end
 	elseif not pending and late and late.name == n and late.item == worn and now - late.at < TIME.LATE then
-		-- The answer to a swap that came after CONFIRM: the swap worked after all.
 		S.late = nil
 		S.refused[late.item] = nil
 		Q.Confirmed(late)
 		return
 	elseif not pending and now >= S.quietUntil and Q.Running() and Q.Auto(n) and not Q.Paused() and #Q.List(n) > 0 then
-		-- A slot emptied by hand is held empty (0), so the trinket just taken off does not come straight back (header).
 		R.Hold(n, worn or 0)
 	end
 	S.version = S.version + 1
 	Q.Soon()
 end
 
--- The fight began: the timer goes, and each slot whose Auto queue is on waits for its end.
 function Q.Fight()
 	S.token = S.token + 1
 	for _, n in ipairs(ORDER) do
@@ -1289,27 +1120,23 @@ function Q.Fight()
 	S.version = S.version + 1
 end
 
--- The fight ended: back-offs are forgotten (refusals wait for Queue now, header), and the queue looks.
 function Q.Peace()
 	S.nextTry = {}
 	S.fightTries = 0
 	Q.Soon(true)
 end
 
--- A loading screen ended: a quiet while the game sends its own changes of the slots.
 function Q.Entered()
 	S.quietUntil = Now() + TIME.QUIET
 	S.bags = nil
 	Q.Soon()
 end
 
--- The bags changed (BAG_UPDATE_DELAYED) or an item's lock did (ITEM_LOCK_CHANGED): the scan is read again. Refusals stay (header).
 function Q.BagsChanged()
 	S.bags = nil
 	Q.Soon()
 end
 
--- True for an item of either list.
 function R.Listed(id)
 	for _, n in ipairs(ORDER) do
 		if Q.Find(Q.List(n), id) then
@@ -1319,7 +1146,6 @@ function R.Listed(id)
 	return false
 end
 
--- An item loaded: what was read of it is read again.
 function Q.Loaded(id)
 	if not Whole(id) or not (S.loading[id] or R.Listed(id)) then
 		return
@@ -1332,14 +1158,10 @@ function Q.Loaded(id)
 	Q.Soon()
 end
 
--- The contract (TrinketQueueWindow.lua, TrinketQueueButtons.lua) ----------------------------------------------------------------------------------
-
--- True while the queue acts: it runs, Pause all is off and an Auto queue row is on.
 function Q.Active()
 	return Q.Running() and not Q.Paused() and (Q.Auto("top") or Q.Auto("bottom"))
 end
 
--- Asks for a look SETTLE seconds from now, once however many ask. In combat lockdown only the fight's end asks (force), as nothing changes in one.
 function Q.Soon(force)
 	if not Q.Active() then
 		D.Idle()
@@ -1368,7 +1190,6 @@ function Q.Paused()
 	return store ~= nil and store.paused == true
 end
 
--- Pause all: off gives back the slots held by hand to the queue (header).
 function Q.SetPaused(on)
 	on = on == true
 	if on == Q.Paused() then
@@ -1387,8 +1208,6 @@ function Q.Auto(n)
 	return ROW[n] ~= nil and ns.Get(ROW[n]) == true
 end
 
--- The rows' get and set (Config.lua names them): the Auto queue of a slot, kept per character in the store (header), never in a profile. Nil
--- before the saved variables load, so the row reads its default, off.
 function ns.TrinketAutoGet(def)
 	local n = type(def) == "table" and AUTO[def.key] or nil
 	if not n or type(ns.Character()) ~= "table" then
@@ -1412,7 +1231,6 @@ function ns.TrinketAutoSet(def, value)
 	S.version = S.version + 1
 end
 
--- A slot's Auto queue (its row, which ns.Set routes to ns.TrinketAutoSet, Core.lua:2774-2793); turned on it takes back a slot held by hand.
 function Q.SetAuto(n, on)
 	if not ROW[n] then
 		return
@@ -1424,7 +1242,6 @@ function Q.SetAuto(n, on)
 	R.Edited()
 end
 
--- Adds a trinket to a list, at its end or (atTop) at its top: done, and a line for the caller to say when it was not.
 function Q.Add(n, item, atTop)
 	local id = R.ItemID(item)
 	if not SLOTS[n] or not id then
@@ -1459,7 +1276,6 @@ function Q.Remove(n, index)
 	end
 end
 
--- Moves an entry by one place (-1 up, +1 down), or to the top or the bottom (by -math.huge or math.huge).
 function Q.Move(n, index, by)
 	local list = Q.List(n)
 	if not list[index] or not Finite(by) and by ~= math.huge and by ~= -math.huge then
@@ -1492,8 +1308,6 @@ function Q.ToggleStop(n, index)
 	end
 end
 
--- Copies the other slot's list to the end of n's, in its order, each entry with its Delay and Stop (0.5.37): a trinket already in n's list is
--- passed over, and the copy stops at MOST. How many were added.
 function Q.Copy(n)
 	if not SLOTS[n] then
 		return 0
@@ -1515,7 +1329,6 @@ function Q.Copy(n)
 	return added
 end
 
--- Empties a slot's list (0.5.37): how many entries it held.
 function Q.Clear(n)
 	local count = #Q.List(n)
 	if SLOTS[n] and count > 0 then
@@ -1528,7 +1341,6 @@ function Q.Clear(n)
 	return count
 end
 
--- Queue now: the hold goes, refusals and back-offs of the list are forgotten, and the next decision of the slot leaves Stop and Delay aside once.
 function Q.Now(n)
 	for _, name in ipairs(n and { n } or ORDER) do
 		if SLOTS[name] then
@@ -1545,8 +1357,6 @@ function Q.Now(n)
 	R.Edited()
 end
 
--- A click on a row's icon in the window: that trinket goes on now, and the slot holds it. A bound copy first, as D.Usable takes; an unbound one
--- (the game asks itself before it binds) only while the bags hold no bound copy, so a spare that binds when worn is never taken in its place.
 function Q.Wear(n, id)
 	local slot = SLOTS[n]
 	if not slot or not Whole(id) then
@@ -1571,7 +1381,6 @@ function Q.Wear(n, id)
 		end
 	end
 	if copy and bound and not copy.bound then
-		-- Every bound copy is locked (it moves): the click waits for it.
 		copy = nil
 	end
 	local name = R.Named(id, copy and copy.link)
@@ -1588,7 +1397,6 @@ function Q.Wear(n, id)
 	return true
 end
 
--- What the window, the buttons and /flatui status show of a slot.
 function Q.State(n)
 	local slot = SLOTS[n]
 	local worn = slot and R.Worn(slot) or nil
@@ -1607,7 +1415,6 @@ function Q.State(n)
 		nextAt = S.nextAt[n], held = Q.Held(n), refused = refused }
 end
 
--- m:ss, from 10 minutes whole minutes ("12m"), from an hour whole hours ("2h").
 function Q.Clock(seconds)
 	seconds = Finite(seconds) and math.max(0, math.ceil(seconds)) or 0
 	if seconds >= 3600 then
@@ -1618,7 +1425,6 @@ function Q.Clock(seconds)
 	return ("%d:%02d"):format(math.floor(seconds / 60), seconds % 60)
 end
 
--- The tone of a slot: off, on, wait or halt (WHY); in a fight, wait whenever its Auto queue is on and the queue is not paused.
 function Q.Tone(n, state)
 	state = state or Q.State(n)
 	if state.why == "fight" or (D.Fighting() and not D.Static(n)) then
@@ -1630,7 +1436,6 @@ function Q.Tone(n, state)
 	return (WHY[state.why] or WHY.keep)[1]
 end
 
--- The sentence of a slot's state (TrinketQueueWindow.lua's state line, the buttons' tooltips, /flatui status).
 function Q.Sentence(n, state)
 	state = state or Q.State(n)
 	local why = state.why
@@ -1652,9 +1457,6 @@ function Q.Sentence(n, state)
 	return (PLAIN[why] or (WHY[why] or WHY.keep)[2])
 end
 
--- What the window shows of an item: its cooldown left (R.Left: seconds, false, "held" or nil), how many copies the bags hold, the slot it is
--- worn in, whether a copy is bound, the level it needs and whether that is above the player's, its link, name, icon and quality, and the copy
--- whose tooltip it shows.
 function Q.Info(id)
 	local info = { id = id, carried = 0, bound = false }
 	for _, n in ipairs(ORDER) do
@@ -1691,7 +1493,6 @@ function Q.Info(id)
 	return info
 end
 
--- The trinkets in the bags and the two worn, each once, by name: { id, name, worn = slot name, copy }.
 function Q.Candidates()
 	local list, seen = {}, {}
 	for _, n in ipairs(ORDER) do
@@ -1718,7 +1519,6 @@ function Q.Candidates()
 	return list
 end
 
--- The words of a slot and the word for the window's foot of a fight.
 function Q.Word(n)
 	return WORD[n]
 end
@@ -1731,9 +1531,6 @@ function Q.Threshold()
 	return D.Threshold()
 end
 
--- The module ---------------------------------------------------------------------------------------------------------------------------------
-
--- The window and the buttons hear of a change of the module (TrinketQueueWindow.lua, TrinketQueueButtons.lua), looked up when called.
 function R.Tell()
 	for _, name in ipairs({ "TrinketWindowSync", "TrinketButtonsChanged" }) do
 		local ok, err = Call(Fn(ns, name))
@@ -1743,7 +1540,6 @@ function R.Tell()
 	end
 end
 
--- Started: a quiet after login, the holds saved count from now, and a look.
 function Q.Started()
 	local now = Now()
 	S.quietUntil = now + TIME.QUIET
@@ -1757,7 +1553,6 @@ function Q.Started()
 	R.Tell()
 end
 
--- Refreshed: a row changed, the module went on or off, or a general row settled. An Auto queue row turned on takes back its slot's hold.
 function Q.Refreshed()
 	if not Q.Running() then
 		Q.Halt()
@@ -1775,12 +1570,10 @@ function Q.Refreshed()
 	R.Tell()
 end
 
--- A sentence with its first letter small, for the middle of a line.
 function R.Lower(text)
 	return (text:gsub("^%u", string.lower))
 end
 
--- The line of an entry for /flatui queue list.
 function R.EntryLine(index, entry)
 	local extra = ""
 	if entry.delay > 0 then
@@ -1792,8 +1585,6 @@ function R.EntryLine(index, entry)
 	return T.LIST_LINE:format(index, R.Named(entry.item), extra)
 end
 
--- /flatui queue copy and clear, with the list they act on (0.5.37): copy bottom fills the Bottom list from the Top one; clear top empties the Top
--- list. One line in chat each.
 function R.SlashList(word, n)
 	if not SLOTS[n] then
 		print(T.WHICH:format(word, word))
@@ -1813,7 +1604,6 @@ function R.SlashList(word, n)
 	print(added > 0 and T.COPIED:format(WORD[n], added, WORD[from]) or T.COPY_NONE:format(WORD[from], WORD[n]))
 end
 
--- /flatui queue and /flatui trinkets.
 function Q.Slash(rest)
 	local word = type(rest) == "string" and rest:lower():match("^%s*(%S*)") or ""
 	if word == "" or word == "top" or word == "bottom" then
@@ -1849,7 +1639,6 @@ function Q.Slash(rest)
 	end
 end
 
--- The lines of /flatui status, only while the module is on (header).
 function Q.StatusLines()
 	if not ns.Enabled(KEY) then
 		return {}

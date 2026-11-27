@@ -1,8 +1,3 @@
--- Provisions' panel (/prov, /provisions, and an entry in the game's Settings, AddOns list): a row per kind with its
--- icon (drag it, or click it, to pick up the kind's macro and put it on an action bar), the item it uses now and
--- how many the bags hold, a check box to turn the kind on or off, and the options. Movable; Escape closes it; it
--- closes when a fight starts and opens only out of one.
-
 local _, ns = ...
 
 local INFO, KINDS = ns.INFO, ns.KINDS
@@ -54,8 +49,6 @@ local function Check(parent, label, onClick)
 	return c
 end
 
--- An item's name; one the game has not loaded yet is asked for once (GET_ITEM_INFO_RECEIVED then refreshes the
--- panel), so a load that fails cannot start a loop of asks and refreshes.
 local asked = {}
 local function ItemName(id)
 	if C_Item and C_Item.GetItemNameByID then
@@ -81,7 +74,6 @@ local function ItemIcon(id)
 	return ICON
 end
 
--- The choices of the Buff Food button: Auto, Any, then each stat that some buff food gives.
 local function BuffChoices()
 	local present = {}
 	for _, rec in pairs(ns.ITEMS or {}) do
@@ -280,7 +272,6 @@ function ns.MakePanel()
 		self:StopMovingOrSizing()
 		SavePlace()
 	end)
-	-- Escape closes it: the panel hears keys while shown and lets every other key through to the game.
 	panel:EnableKeyboard(true)
 	panel:SetScript("OnKeyDown", function(self, key)
 		if key == "ESCAPE" and not ns.InCombat() then
@@ -378,7 +369,6 @@ function ns.MakePanel()
 	foot:SetText("Drag an icon to an action bar, or bind keys in Key Bindings > Provisions. "
 		.. "Nothing changes in a fight: the game forbids it.")
 
-	-- The entry in the game's Settings, AddOns list: a page of its own with a button that opens the panel.
 	if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
 		local page = CreateFrame("Frame")
 		local head = Text(page, "GameFontNormalLarge")
@@ -430,7 +420,6 @@ SlashCmdList.PROVISIONS = function()
 	Toggle()
 end
 
--- Key Bindings > Provisions (Bindings.xml).
 BINDING_HEADER_PROVISIONS = "Provisions"
 for _, kind in ipairs(KINDS) do
 	_G["BINDING_NAME_CLICK " .. INFO[kind].button .. ":LeftButton"] = INFO[kind].label

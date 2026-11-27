@@ -1,80 +1,11 @@
 local _, ns = ...
 
--- Pet target frame (off by default, Pet frame page): a small frame of Flat UI's own for what the pet attacks, the unit pettarget, which the game has
--- no frame for (Blizzard_UnitFrame has frames for the target of the target and of the focus, none for pettarget). It is a secure button of the
--- addon's own (SecureActionButtonTemplate) with no global name: a left click targets the unit (type1 target and unit pettarget, which the template
--- reads, Blizzard_FrameXML/SecureTemplates.lua:201-212 and 506-519, as SecureUnitButton_OnLoad sets up the game's own unit frames, :828-839), and a
--- Shift-click sets it as your focus (shift-type1 focus, which the template finds before type1, SecureButton_GetModifiedAttribute :119-127, and whose
--- action calls FocusUnit, :521-524), so a hunter can focus the sheep the pet broke without targeting it first, in a fight too. It
--- takes the release of the mouse button (RegisterForClicks AnyUp) with useOnKeyDown false, as the secure buttons of Reload.lua do: the game gives an
--- addon's button no isKeyPress or isSecureAction (SecureTemplates.xml:6-8), so while ActionButtonUseKeyDown is on, as it is by default, the button
--- would act on the press, which it does not hear, and the release would do nothing (SecureTemplates.lua:792-826). The game shows it only while
--- pettarget exists: RegisterUnitWatch hands it to the game's secure state driver, which shows and hides it in a fight too, at once, then every 0.2
--- seconds and at once again when a pet or a target changes (Blizzard_RestrictedAddOnEnvironment/SecureStateDriver.lua:38-44, 56-63, 73-90, 119-139,
--- 166-170, 182-196), so no code of Flat UI's shows or hides it while it is watched. A secure button is protected, and setting or taking away the
--- watch writes an attribute of the game's protected state driver (:38-49, 178): the button is made, sized, placed and given attributes, and watched
--- or no longer watched, only out of combat, and a change asked for in a fight, a login in one included, waits for its end (ns.OutOfCombat); while the
--- options window is open, chat says once a fight that the frame changes when the fight ends (the row turned on or off, a new width). Off, the
--- watch is taken away (UnregisterUnitWatch, :47-49) and the button hidden, out of combat.
--- A right click opens the unit's menu (type2 togglemenu, which the game's secure code opens, SecureTemplates.lua:269-321, so Set Focus in it works): the
--- target menu, with Set Focus and the raid markers, while the unit is also your target, a player's menu for a player, and none for another creature,
--- for which the game names no menu (:288-310). Under the mouse it shows the unit's tooltip as the game's unit frames do (Mainline/UnitFrame.lua:
--- 387-410): GameTooltip at its default anchor, set again every 0.2 seconds through UpdateTooltip, a field of this button of the addon's own, and
--- hidden as the mouse leaves while the button still owns it.
--- Its children: a health bar in the reaction colour of Flat UI's unit frames (ns.ReactionColour; the Health colour of the Unit frames page when the
--- game withholds it, as UnitFrameLooks.lua falls back), full and grey with Dead at its right end while the unit is plainly dead, as the raid cells
--- draw a dead member, the name on it, the health in percent at its right end, and Flat UI's outline around it in the look of the Unit frames page.
--- The outline and the fill take the corners of Corners (UnitFrames.lua Round and Shape: a rounded line and background, and a mask of the radius on
--- the fill), out of combat. The raid marker of the unit sits just left of the frame while Raid marker on target, focus, boss and pet target frames
--- is on (the index of GetRaidTargetIndex goes unread to SetSpriteSheetCell, as UnitGroupMarks.lua has it, and the icon shows only when the client
--- took it), drawn again on RAID_TARGET_UPDATE. While the mouse is over the button and Highlight under the mouse is on, a white layer of its own over
--- the bar brightens it by the amount the unit frames use (UnitFrameLooks.lua, X.hoverAlpha), in the shape of the corners; the button is the addon's
--- own, so its OnEnter and OnLeave show and hide it. The name takes the face, size and outline of the name rows and the percent the face, outline and
--- colour of the bar text rows of the Unit frames page (UnitText.lua, X.ownSpec), both at Small frame text size as on the pet frame beside it, and the
--- percent at 85% with no outline (unless Bar text outline gives one) under Smaller, lighter bar text, as on the game's small frames (UnitFrames.lua
--- ApplyText); a change of those rows paints them again at once.
--- Border while it is not your target (on by default): a frame of its own over the bar, with edges of its own just outside the frame (and the rounded
--- line of Corners in their place while the corners are rounded) in Not your target colour (amber), shows while the pet's target is not your target,
--- you having none included, and hides once you are both on the same unit, also in a fight: the answer of UnitIsUnit(pettarget, target), which the game
--- may withhold, goes unread to SetAlphaFromBoolean, on each write of the frame and on PLAYER_TARGET_CHANGED. The sample of test mode shows it.
--- UnitHealth is always withheld and UnitHealthMax, UnitHealthPercent and UnitName may be (UnitDocumentation.lua:1472-1475, 1506-1529, 2489-2491): they
--- go unread to SetMinMaxValues, SetValue, SetFormattedText and SetText, which take them (SimpleStatusBarAPIDocumentation.lua:229-237, 355-363;
--- SimpleFontStringAPIDocumentation.lua:664-673), on a bar with a texture, which a bar needs to take them (HealthColour.lua, Probe). The value glides to
--- each new one (the interpolation ExponentialEaseOut of SetValue, never withheld, SimpleStatusBarConstantsDocumentation.lua:27-28) where the client has
--- it, but is set at once for a new unit and after a dead one, so the bar never slides from the last unit's health. They are written at once when the
--- frame shows, when the pet changes its target (UNIT_TARGET for pet) and when the player's pet changes (UNIT_PET for player; UnitDocumentation.lua:
--- 4448-4457, 4868-4877), and gliding on a step of 0.2 seconds while it shows, since the game sends no health event for pettarget; the step stops when
--- the frame hides. As the game shows the button, the whole frame fades in as one over 0.15 seconds: its bar and words, its border and background, and
--- the border of Border while it is not your target, each through an Alpha animation of a frame of the addon's own (the bar; a frame under it that holds
--- the outline, which is drawn on it and not on the button; a frame inside the one whose opacity SetAlphaFromBoolean sets), so it plays in a fight too.
--- The secure button itself is never animated, and the game still shows and hides it at once.
--- Test mode (TestMode.lua, TM.Register): a sample of the frame, a plain frame of the addon's own on UIParent that takes no mouse, with the same children,
--- painted and placed as the button is and filled with fixed values (Training Dummy at 65% in the hostile colour, with a Skull), shows while test mode is on, the row is
--- on and the game does not show the button; the button wins as soon as the game shows it. Nothing of it touches the secure button.
--- /flatui move places it (FlatUIPetTarget in Movers.lua: the frame's top left corner is the top left corner of the box, which is as wide as the frame,
--- ns.PetTargetWidth, and takes a new Pet target width at once while the boxes are open). With no spot saved the box is right of the pet frame where
--- the game's default layout puts it, its left edge fixed and a wider frame growing to the right (ns.PetTargetStart); a saved spot keeps its bottom
--- middle, as every box does. Nothing of the game is changed and none of the game's frames is touched; the button reads and writes nothing of the
--- click path of the game's action buttons (TaintScan.lua).
--- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Core/SharedAnchors.lua:124-128, the pet target anchor
--- on Forever; EnhanceQoLUnitFrames/UF_Helper.lua:320-328, the colours of a unit that is no player for pettarget on Forever;
--- UF_StandaloneCastbar.lua:57-60, its anchor for a cast bar): a pet target frame in the reaction colour. Its frame code is not in the package, and
--- its cast bar is left out.
-
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
 local PART = "Pet target frame"
 local MOVER = "FlatUIPetTarget"
 local UNIT = "pettarget"
--- The box of the handle in Movers.lua: the frame at the default width, its bottom middle this far from the bottom middle of the screen, right of
--- the bars of the pet frame in the game's default layout: the player frame, 232 by 100, has its bottom right corner 300 left of and 250 above the
--- bottom middle of the screen (Blizzard_EditMode/Mainline/EditModePresetLayouts.lua:249-260, Blizzard_UnitFrame/Mainline/PlayerFrame.xml:13-14),
--- and the pet frame, 120 by 49, lies in the container under it, 160 wide with its top 30 right of and 25 above the frame's bottom middle
--- (PlayerFrame.xml:477-484, Shared/PlayerFrameTemplates.xml:4-10, PetFrame.xml:11-16), its bars 11 and 7 tall (Camelot/PetFrame.lua:14-22,
--- Mainline/PetFrame.xml:133-134).
 local BOX_W, BOX_H, BOX_X, BOX_Y = 120, 20, -246, 238
--- The height of the frame, the room between its edge and the name, the step while it shows, the seconds of the fade of its bar as it shows, and the
--- font of the name.
 local HEIGHT, INSET, TICK, FADE_IN = 20, 4, 0.2, 0.15
 local FONT = "GameFontHighlightSmall"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
@@ -82,19 +13,13 @@ local MARKER = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local LINE_BROKEN = "Unit frames: Pet target frame: the game did not make the frame, so it does not show until /reload."
 local LINE_NO_WATCH = "Unit frames: Pet target frame: this client has no unit watch, so the frame does not show."
 local LINE_WAITS = "Unit frames: Pet target frame: a change waits for the end of the fight."
--- What chat says, once a fight and only while the options window is open, when a change to the frame waits for the end of the fight (Tell).
 local TELL_WAITS = "Flat UI: the pet target frame changes when the fight ends."
--- The grey of a dead unit's bar, the hostile colour of the sample while the Colours page has no reaction colours of its own (the game's, UnitSelectionColor),
--- and the sample of test mode: its name and how full its bar is, in percent.
 local GREY = 0.5
 local HOSTILE = { 1, 0, 0 }
 local SAMPLE = { name = "Training Dummy", share = 65 }
 
 local IsSecret = ns.IsSecret
 
--- button: the secure button once made (frame: the same), broken: it could not be made and is not tried again. bar, name, pct, outline: its children.
--- watched: the game watches it. width, placed, file: what was last set. later: a change waits for the end of the fight. ticker: the token of the step.
--- S: the sample of test mode, with the same fields.
 local P = { button = nil, broken = false, watched = false, later = false }
 local S = {}
 
@@ -102,8 +27,6 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- True in combat lockdown (RestrictedActionsDocumentation.lua:45-52), when nothing may change on a secure button. A withheld answer counts as a
--- fight.
 local function Fighting()
 	if type(InCombatLockdown) ~= "function" then
 		return false
@@ -112,7 +35,6 @@ local function Fighting()
 	return not ok or IsSecret(value) or value == true
 end
 
--- A timer of the client, false when there is none or it raises.
 local function After(seconds, fn)
 	return type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, seconds, fn)
 end
@@ -129,7 +51,6 @@ local function Shown()
 	return ok and not IsSecret(shown) and shown == true
 end
 
--- The fill of the bar: the texture of the frames' health bars, a white image for a solid fill.
 local function File()
 	local file = X.fillFile("health")
 	if file == nil then
@@ -138,19 +59,14 @@ local function File()
 	return file or WHITE
 end
 
--- What is shown --------------------------------------------------------------------------------------------------------------------------------
-
--- True when the client says so plainly: a withheld answer is no.
 local function Yes(ok, value)
 	return ok and not IsSecret(value) and value == true
 end
 
--- The format of the percent, the one the bar texts of the unit frames write (UnitText.lua, X.formats).
 local function Format()
 	return type(X.formats) == "table" and X.formats.pct or "%.0f%%"
 end
 
--- Sets the value of a bar, gliding to it where the client has the interpolation, at once where it has not. False when the client refuses the value.
 local function Glide(bar, value)
 	local list = type(Enum) == "table" and Enum.StatusBarInterpolation or nil
 	local how = type(list) == "table" and list.ExponentialEaseOut or nil
@@ -164,7 +80,6 @@ local function Percent(pct)
 	pct:SetFormattedText(Format(), UnitHealthPercent(UNIT, true, CurveConstants.ScaleTo100))
 end
 
--- The cell of a marker on the sheet of the eight icons, 4 by 4 (UnitGroupMarks.lua Cell). True when the icon shows a marker.
 local function Cell(icon, index)
 	if type(icon.SetSpriteSheetCell) == "function" then
 		return (pcall(icon.SetSpriteSheetCell, icon, index, 4, 4))
@@ -175,8 +90,6 @@ local function Cell(icon, index)
 	return false
 end
 
--- The raid marker of the unit, or of the sample (index 8, Skull), while Raid marker on target, focus, boss and pet target frames is on. The index the game
--- withholds goes unread to the icon.
 local function Marker(t, sample)
 	local icon = t.marker
 	if icon == nil then
@@ -196,9 +109,6 @@ local function Marker(t, sample)
 	icon:SetShown(shown)
 end
 
--- The border of Border while it is not your target: shown while the pet's target is not your target, or the sample's while the row is on. The
--- answer of UnitIsUnit, which the game may withhold (UnitDocumentation.lua:2410-2425), goes unread to SetAlphaFromBoolean, which takes it
--- (SimpleFrameAPIDocumentation.lua:1145-1155). No answer, or the row off, hides it.
 local function Warn(t, sample)
 	local warn = t.warn
 	if warn == nil then
@@ -218,8 +128,6 @@ local function Warn(t, sample)
 	warn:SetAlpha(0)
 end
 
--- The health, the percent, the name, the colour and the raid marker of the unit, unread where the game withholds them. A unit that is plainly dead has a
--- full grey bar and says Dead. jump: a new unit, or a bar that just showed, takes its value at once; so does the first living unit after a dead one.
 local function Fill(jump)
 	local bar, name, pct = P.bar, P.name, P.pct
 	if not bar then
@@ -268,8 +176,6 @@ local function Fill(jump)
 	Warn(P)
 end
 
--- The step of 0.2 seconds while the frame shows. A client without NewTicker gets a timer that sets the next one while the token is the step's, as
--- the Healer mana list has it.
 local function Step()
 	if Shown() then
 		Fill()
@@ -308,8 +214,6 @@ local function Tick(on)
 	end
 end
 
--- The whole frame fades in as the game shows the button: the Alpha animations of the bar, of the frame of its outline and of the inner frame of the
--- border of Border while it is not your target (Children), together. None is a protected frame, so they play in a fight too.
 local function FadeIn(t)
 	for _, group in ipairs(t.fades or {}) do
 		pcall(group.Stop, group)
@@ -317,7 +221,6 @@ local function FadeIn(t)
 	end
 end
 
--- The game showed or hid the button. The sample of test mode makes way for it, and comes back after it.
 local function OnShow()
 	X.run(PART, Fill, true)
 	FadeIn(P)
@@ -333,10 +236,6 @@ local function OnHide()
 	X.run(PART, P.SampleOn)
 end
 
--- The button ------------------------------------------------------------------------------------------------------------------------------------
-
--- The unit's tooltip, as the game's unit frames give it (Mainline/UnitFrame.lua:387-410): at the default anchor, and set again by the tooltip every 0.2
--- seconds through UpdateTooltip while the mouse stays.
 local function Tooltip(self)
 	if type(GameTooltip_SetDefaultAnchor) ~= "function" or type(GameTooltip) ~= "table" then
 		return
@@ -347,7 +246,6 @@ local function Tooltip(self)
 	self.UpdateTooltip = Tooltip
 end
 
--- The layer of Highlight under the mouse shows while the mouse is over the button and the row is on.
 local function OnEnter(self)
 	if P.lit then
 		P.lit:SetShown(Opt("hoverHighlight") == true)
@@ -370,7 +268,6 @@ local function OnLeave(self)
 	end
 end
 
--- The fade of a frame of the addon's own as the button shows (FadeIn): from 0 to 1, nil where the client makes no animation.
 local function FadeOf(region)
 	local okGroup, group = pcall(region.CreateAnimationGroup, region)
 	local okFade, fade = false, nil
@@ -383,9 +280,6 @@ local function FadeOf(region)
 	return nil
 end
 
--- The children of the button or of the sample, on frame, into t: the bar, the percent at its right end, the name left of it, the outline on a frame of
--- its own under the bar, the mask that cuts the fill to the corners, the raid marker left of the frame and the layer of Highlight under the mouse, and the
--- fades of the frames that fade in as one (t.fades). Raises when the game refuses one.
 local function Children(frame, t)
 	local bar = CreateFrame("StatusBar", nil, frame)
 	ns.Own[bar] = true
@@ -405,7 +299,6 @@ local function Children(frame, t)
 	t.frame, t.bar, t.name, t.pct, t.file = frame, bar, name, pct, WHITE
 	t.fades = {}
 	t.fades[#t.fades + 1] = FadeOf(bar)
-	-- The border and background of the frame, drawn on a frame of the addon's own at the button's level, under the bar, so that they fade with it.
 	local level = frame:GetFrameLevel()
 	local skin = X.frame(frame, X.number(level) and level or nil)
 	skin:SetAllPoints(frame)
@@ -432,8 +325,6 @@ local function Children(frame, t)
 	lit:SetVertexColor(1, 1, 1, X.hoverAlpha or 0.12)
 	lit:Hide()
 	t.lit = lit
-	-- The border of Border while it is not your target: a frame over the bar, at alpha 0 until Warn sets it, and inside it a frame of its own that
-	-- fades in with the rest, with edges of its own (no background) just outside the frame and a texture for the rounded line of Corners in their place.
 	local warn = X.frame(frame, X.number(level) and level + 2 or nil)
 	warn:SetAllPoints(frame)
 	warn:SetAlpha(0)
@@ -451,7 +342,6 @@ local function Children(frame, t)
 	t.fades[#t.fades + 1] = FadeOf(inner)
 end
 
--- Made once, out of combat: the button, its bar, the name and the percent on it and the outline. False when the game refuses it, which is not tried again.
 local function Make()
 	if P.button then
 		return true
@@ -470,10 +360,8 @@ local function Make()
 		button:SetFrameStrata("LOW")
 		button:SetSize(BOX_W, HEIGHT)
 		button:RegisterForClicks("AnyUp")
-		-- The game runs a click on the key press by default (ActionButtonUseKeyDown); the button listens for the release.
 		button:SetAttribute("useOnKeyDown", false)
 		button:SetAttribute("type1", "target")
-		-- Shift-click sets the unit as your focus (SECURE_ACTIONS.focus, SecureTemplates.lua:521-524), in a fight too.
 		button:SetAttribute("shift-type1", "focus")
 		button:SetAttribute("type2", "togglemenu")
 		button:SetAttribute("unit", UNIT)
@@ -492,8 +380,6 @@ local function Make()
 	return true
 end
 
--- The corners of Corners on the outline and the fill of the button or the sample (UnitFrames.lua, X.ownCorners), out of combat as Paint is, and the
--- highlight in the same shape (the crisp square while the corners are square).
 local function Corners(t)
 	if type(X.ownCorners) ~= "function" then
 		return
@@ -509,8 +395,6 @@ local function Corners(t)
 	end
 end
 
--- The colour of the border of Border while it is not your target, and its edges, or the rounded line of Corners in their place while the frame's own
--- outline draws its rounded line (as HealthColour.lua Rounded has it for the low health border).
 local function PaintWarn(t)
 	local edges, line = t.warnOutline, t.warnLine
 	if edges == nil or line == nil then
@@ -539,13 +423,11 @@ local function PaintWarn(t)
 	end
 end
 
--- The width of the frame: Pet target width, or the default while the row has no plain number.
 local function Width()
 	local width = Opt("petTargetWidth")
 	return ns.Finite(width) and width > 0 and width or BOX_W
 end
 
--- The width of its row, the look of the Unit frames page, its corners and the text rows, on the button or the sample. True when the width changed.
 local function Paint(t)
 	local width, resized = Width(), false
 	if t.width ~= width and pcall(t.frame.SetSize, t.frame, width, HEIGHT) then
@@ -567,8 +449,6 @@ local function Paint(t)
 	end
 	PaintWarn(t)
 	if type(X.ownSpec) == "function" then
-		-- Small frame text size, as the pet frame beside it has it (UnitFrames.lua ApplyText and ApplyNameSize), and the percent at 85% with no outline
-		-- under Smaller, lighter bar text, unless Bar text outline gives one.
 		local size = tonumber(Opt("smallTextSize")) or 100
 		local light = Opt("lookLightText") == true
 		ns.TextStyle(t.name, X.ownSpec("name", { percent = size }))
@@ -581,7 +461,6 @@ local function Paint(t)
 	return resized
 end
 
--- The open boxes of /flatui move take a new width at once (Movers.lua, BoxSize), and the frame is placed again from the box's new spot.
 local function Resized()
 	P.placed, S.placed = nil, nil
 	if type(ns.MoverRelabel) == "function" then
@@ -589,7 +468,6 @@ local function Resized()
 	end
 end
 
--- Puts the button or the sample at the spot of its handle: its top left corner at the top left corner of the box.
 local function Place(t)
 	local x, y
 	if type(ns.MoverSpot) == "function" then
@@ -613,7 +491,6 @@ local function Place(t)
 	end
 end
 
--- Hands the button to the game's unit watch, which shows it at once if the pet has a target.
 local function Watch()
 	if P.watched then
 		return true
@@ -630,9 +507,6 @@ end
 
 local Off
 
--- While the options window is open, chat says once a fight that a change to the frame waits for its end, as Hide.lua and /flatui move say theirs, so
--- a row turned on or a new width in a fight does not look broken. A refresh in a fight with the window closed (zoning, a change of the group) stays
--- silent. The flag goes once the fight is over.
 local told = false
 
 local function Tell()
@@ -646,7 +520,6 @@ local function Tell()
 	end)
 end
 
--- A change asked for in a fight waits for its end, once. A module that stopped in the fight runs nothing more, so its button is put away then.
 local function Later()
 	if P.later then
 		return
@@ -662,7 +535,6 @@ local function Later()
 	end)
 end
 
--- Takes the watch away and hides the button, out of combat.
 function Off()
 	if not P.button then
 		return
@@ -683,14 +555,12 @@ function Off()
 	Tick(false)
 end
 
--- After each Refresh of the unit frames, and when the spot changed: the button made, sized, placed and watched out of combat, or put away.
 function P.Update()
 	if not Wanted() then
 		Off()
 		return
 	end
 	if Fighting() then
-		-- Said only when the frame itself would change: made and watched for a row turned on, or a new width.
 		if not P.button or not P.watched or P.width ~= Width() then
 			Tell()
 		end
@@ -709,10 +579,6 @@ function P.Update()
 	end
 end
 
--- Test mode -------------------------------------------------------------------------------------------------------------------------------------
-
--- The sample: a plain frame of the addon's own on UIParent, made once out of combat, that takes no mouse. False when the game refuses it, which is not
--- tried again.
 local function SampleMake()
 	if S.frame then
 		return true
@@ -735,7 +601,6 @@ local function SampleMake()
 	return true
 end
 
--- The fixed values of the sample: its name, 65% and the hostile colour of the unit frames (the Colours page's own while Custom reaction colours is on).
 local function SampleFill()
 	local bar = S.bar
 	bar:SetMinMaxValues(0, 100)
@@ -754,8 +619,6 @@ local function SampleFill()
 	Warn(S, true)
 end
 
--- Shows the sample, painted, placed and filled, while test mode is on, the row is on and the game does not show the button, and hides it otherwise. Its
--- Start, and each change of a setting while it runs.
 function P.SampleOn()
 	local TM = ns.TestMode
 	if not (TM and TM.IsOn() and Wanted() and not Shown()) then
@@ -779,25 +642,18 @@ function P.SampleOff()
 	end
 end
 
--- The movers ----------------------------------------------------------------------------------------------------------------------------------
-
--- True while the frame has a handle in the movers: while the row is on.
 function ns.PetTargetShown()
 	return ns.Enabled(KEY) and Opt("petTarget") == true
 end
 
--- The width of the box of the handle (widthOf in Movers.lua): the frame's own, Pet target width.
 function ns.PetTargetWidth()
 	return Width()
 end
 
--- Where the box starts while no spot is saved (start in Movers.lua): its bottom middle moved by half of what the frame is wider than the default, so
--- that its left edge stays where the game's layout leaves room right of the pet frame, and the frame grows to the right.
 function ns.PetTargetStart(x, y)
 	return x + (Width() - BOX_W) / 2, y
 end
 
--- The movers set or put back the spot, which the button takes out of combat.
 function ns.PetTargetMoved()
 	P.placed, S.placed = nil, nil
 	if S.frame and S.frame:IsShown() then
@@ -812,8 +668,6 @@ function ns.PetTargetMoved()
 	end
 end
 
--- The pet changed its target, or the player's pet changed (jump: a new unit, whose value is set at once), or a raid marker or your target changed:
--- the frame, if it shows, is written again.
 local function Changed(jump)
 	if Shown() then
 		Fill(jump)
@@ -833,7 +687,6 @@ end)
 ns.AddEvent(KEY, "RAID_TARGET_UPDATE", function()
 	X.run(PART, Changed)
 end)
--- Your target changed: the border of Border while it is not your target follows at once.
 ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
 	X.run(PART, Changed)
 end)

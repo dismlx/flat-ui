@@ -1,18 +1,5 @@
 local _, ns = ...
 
--- The welcome screen: what a new character sees at login and what /flatui welcome opens. It is also the one picker of the ready-made looks
--- (ns.OpenProfiles: /flatui profiles, Ready-made on Home, the Profiles page and the list of setup open it) and the card that says what setup's Finish or
--- a look did (ns.SetupAfter). One frame of Flat UI's own with three views: start (the player's frame drawn as the profile in use draws it, then Set up
--- my screen, Ready-made looks and Keep this look), tiles (a drawn card of each ready-made look: a click puts it in use) and after (the profile in use,
--- what needs a reload, Back to the profile in use before a look was picked or setup's Finish made a new profile, or Undo setup after a Finish saved
--- into the profile in use, then Reload, Change it, Move frames, Options and Done). The tiles, the
--- profile in use and the flag come from Setup.lua (S.Presets, S.UseReady, S.Flag), the drawings from SetupDraw.lua (D.PaintIn with the frames build's
--- mock-player, D.Card). When the screen shows and
--- what Keep this look keeps are settings in the Setup section of the Options and setup tab of the Flat UI page (Config.lua). It hides when a fight starts, and no look is put in
--- use in one; a screen a fight hid says so in chat and opens again on the same view when the fight ends (the after card with the same result, the
--- ticks as they were), unless it was opened or closed meanwhile. It fades in with the game's window sounds, as the options window does, its title row
--- drags it while it is open, and Close at its top right closes it and chooses nothing, as Escape does.
-
 local kit = ns.PanelKit
 local S = ns.Setup
 local D = ns.SetupDraw
@@ -23,20 +10,15 @@ local GAME = "Game look"
 local COMBAT = "In combat. Pick a look after combat."
 local WIDTH, PAD, MARK, GAP, TILE_GAP, FOOT, SAME_W = 640, 16, 28, 8, 10, 18, 200
 local INNER = WIDTH - 2 * PAD
--- The band of the start view: its top, its height and the box the drawing fits in, at most 1.8 times its size (SetupDraw.lua, D.PaintIn).
 local BAND_Y, BAND_H, DRAW_H, MOST = 92, 120, 112, 1.8
--- The ground behind the drawing while SetupDraw.lua gives none.
 local GROUND = { 0.32, 0.27, 0.20 }
--- The size of a drawn card (SetupDraw.lua) and the room under it for a name and a line of three rows.
 local CARD_W, CARD_H, TEXT_H = 336, 112, 62
--- How long the screen takes to fade in as it opens, in seconds, as the options window does (Panel.lua's FADE_IN).
 local FADE_IN = 0.12
 
 local function IsText(value)
 	return not ns.IsSecret(value) and type(value) == "string"
 end
 
--- The height of a text as it wraps now, or `fallback` when the client does not say.
 local function Height(text, fallback)
 	local ok, height = pcall(text.GetStringHeight, text)
 	if ok and not ns.IsSecret(height) and type(height) == "number" and height > 0 and height < 1000 then
@@ -45,8 +27,6 @@ local function Height(text, fallback)
 	return fallback
 end
 
--- True for a character the screen is for: the offer rule of Setup.lua with Profile on a new character at its first line ("ask", the welcome screen),
--- and with First login on the account only while no character of the account has a profile.
 function ns.WelcomeWanted()
 	if not S.Offerable(true) then
 		return false
@@ -54,8 +34,6 @@ function ns.WelcomeWanted()
 	return ns.Get("setup.welcomeWhen") ~= "account" or (next(ns.Account().profileOf) == nil and not (S.Store() or {}).welcomed)
 end
 
--- Puts the profile named Game look in use: the profile of that name as it is, else a new one with every module off, Custom UI scale off (on by
--- default, it is no module) and no frame moved (not the positions a new profile starts with). Returns true, or false and why.
 function W.GameLook()
 	local found = S.FindProfile(GAME)
 	if found then
@@ -71,8 +49,6 @@ function W.GameLook()
 	return ns.NewProfile(GAME, nil, picks, {})
 end
 
--- A choice of the screen ends here: the flag is set and the screen closes, or with `keep` stays for the after view. A ticked "Do not show on new
--- characters" makes Default profile the choice for later characters, unless the box of the tiles already named a profile for them.
 function W.Done(named, keep)
 	S.Flag()
 	local store = S.Store(true)
@@ -87,8 +63,6 @@ function W.Done(named, keep)
 	end
 end
 
--- The screen closes and Flat UI setup opens (Setup.lua), at this character's draft or at its first stop. Setup is told the view it came from, so that
--- Back on its first screen opens this view again (ns.WelcomeReturn).
 function W.OpenSetup()
 	local view = W.view
 	W.frame:Hide()
@@ -97,8 +71,6 @@ function W.OpenSetup()
 	end
 end
 
--- Back from the first screen of a setup started here (Setup.lua, S.Leave): the view it was started from again, the start view or the after view with
--- what was done. In a fight it opens after combat, as the screen hides in one.
 function ns.WelcomeReturn(view)
 	if InCombatLockdown() then
 		print("Flat UI: The welcome screen opens after combat.")
@@ -108,7 +80,6 @@ function ns.WelcomeReturn(view)
 	end)
 end
 
--- Set up my screen sets no flag: setup left without a choice keeps no draft, so the screen comes back at the next login. The tick still counts.
 function W.Setup()
 	if W.tick then
 		ns.Set("setup.newCharacter", "default")
@@ -116,7 +87,6 @@ function W.Setup()
 	W.OpenSetup()
 end
 
--- Keep this look: the profile in use as it is, or with Keep this look uses at The game's look, the profile named Game look.
 function W.Keep()
 	local game = ns.Get("setup.welcomeSkip") == "game"
 	if game then
@@ -137,16 +107,12 @@ function W.Keep()
 	end
 end
 
--- After a look is put in use here (a tile, Same as, Use the game's look): setup, while it has the options window, closes so the screen shows the look.
--- Its draft is kept, and the next opening (Change it) starts it on the look.
 function W.Used()
 	if type(ns.PanelInMode) == "function" and ns.PanelInMode() then
 		kit.Hide()
 	end
 end
 
--- The rows that apply only after /reload (the reload field of Config.lua), each with the value it has now. A tile switches the profile at once, so
--- the after view compares these with the values of the look put in use, as Finish compares the profile with the draft (S.ReloadLines).
 function W.ReloadBefore()
 	local before = {}
 	for _, page in ipairs(type(ns.PAGES) == "table" and ns.PAGES or {}) do
@@ -159,7 +125,6 @@ function W.ReloadBefore()
 	return before
 end
 
--- The reload lines after a switch, { label, field } as S.ReloadLines gives them: "off" for a switch turned off, "change" for a row whose value changed.
 function W.ReloadSince(before)
 	local lines = {}
 	for _, page in ipairs(type(ns.PAGES) == "table" and ns.PAGES or {}) do
@@ -176,8 +141,6 @@ function W.ReloadSince(before)
 	return lines
 end
 
--- A click on a tile: its look is put in use (S.UseReady sets the flag and says it in chat), and the after view says which, with Reload when the look
--- changes a row that applies only after /reload, and Back to the profile that was in use before (W.Back). In combat the line says so and nothing changes.
 function W.Pick(index)
 	local tile = W.tiles[index]
 	if not tile then
@@ -199,8 +162,6 @@ function W.Pick(index)
 		previous = previous ~= ns.Profile() and previous or nil, shared = W.share and shared or nil })
 end
 
--- Back to: the profile in use before the look was picked is put in use again, and new characters get what they got before when the look was given
--- to them too. The look stays in the list of profiles. Chat says which profile is in use, and the screen closes.
 function W.Back()
 	local finished = W.finished or {}
 	local name = finished.previous and S.FindProfile(finished.previous)
@@ -219,8 +180,6 @@ function W.Back()
 	W.frame:Hide()
 end
 
--- True while setup's Finish saved into the profile in use and Bring back can still put that profile back as it was (Core.lua, ns.LostProfile): no
--- other loss came since, the profile is in use, and no reload came between.
 function W.CanUndo(finished)
 	if finished.new or finished.ready then
 		return false
@@ -229,9 +188,6 @@ function W.CanUndo(finished)
 	return type(lost) == "table" and lost.inUse == true and lost.what == "setup's Finish"
 end
 
--- Undo setup: the profile in use goes back to what it held before setup's Finish (ns.BringBackProfile, which Bring back on the Profiles page also
--- calls, and which can make the change again). Game settings and the lists setup changed are not part of a profile and stay. Chat says it, and
--- the screen closes; a refusal (a fight) is said on the card.
 function W.UndoSetup()
 	local finished = W.finished or {}
 	local ok, why = ns.BringBackProfile()
@@ -245,7 +201,6 @@ function W.UndoSetup()
 	W.frame:Hide()
 end
 
--- Same as: the profile most characters of the account use, put in use as it is.
 function W.Same()
 	local name = W.sameName
 	if not name then
@@ -269,7 +224,6 @@ function W.Same()
 	W.Used()
 end
 
--- Move frames: the screen closes and the handles open, as /flatui move opens them.
 function W.Move()
 	W.frame:Hide()
 	local module = ns.modules and ns.modules.movers
@@ -282,7 +236,6 @@ function W.Move()
 	end
 end
 
--- Options: the screen closes and the options window opens at its pages. A setup that has the window leaves it first.
 function W.Options()
 	W.frame:Hide()
 	if type(ns.PanelInMode) == "function" and ns.PanelInMode() then
@@ -293,8 +246,6 @@ function W.Options()
 	end
 end
 
--- The Reload button of the after view, made the first time a reload is needed and only out of combat: Reload.lua lays its secure button over it
--- then (ns.SecureReload) and takes it off the screen while a fight lasts.
 function W.ReloadButton()
 	if not W.reload and not InCombatLockdown() then
 		W.reload = kit.Button(W.frame, "Reload", 90, function()
@@ -307,7 +258,6 @@ function W.ReloadButton()
 	return W.reload
 end
 
--- What the after view says first: the look put in use, the new profile, or the profile saved and how many characters use it.
 function W.AfterLine(finished)
 	local name = IsText(finished.name) and finished.name ~= "" and finished.name or tostring(ns.Profile())
 	if finished.ready then
@@ -322,9 +272,6 @@ function W.AfterLine(finished)
 	return ("%s is saved."):format(name)
 end
 
--- The notes of the after view, one a line: each setting that needs a reload (S.ReloadText of an entry of S.ReloadLines, or the sentence itself), each
--- game setting the game kept (its text, or an entry { text, path, value }), each problem of the lists that ran at Finish. The second answer is true
--- when a reload is needed.
 function W.AfterNotes(finished)
 	local texts, reload = {}, false
 	local function List(value)
@@ -354,13 +301,10 @@ function W.AfterNotes(finished)
 	return texts, reload
 end
 
--- The after view, for what setup's Finish or a tile did: `finished` is { name, new, ready, users, reloadLines, kept, problems, game, previous }
--- (Setup.lua, S.Finish), game the count of game settings Finish wrote and previous the profile in use before.
 function W.ShowAfter(finished)
 	return W.Open("after", type(finished) == "table" and finished or {})
 end
 
--- Setup's Finish hands over here once the options window has closed, so the card sits over the screen it changed. Out of combat only, as Finish is.
 function ns.SetupAfter(finished)
 	if InCombatLockdown() then
 		return false
@@ -368,12 +312,9 @@ function ns.SetupAfter(finished)
 	return W.ShowAfter(finished)
 end
 
--- The ready-made looks: the tiles view, for any character. Nothing is chosen until a click.
 function ns.OpenProfiles()
 	return W.Open("tiles")
 end
-
--- The building ---------------------------------------------------------------------------------------------
 
 local function Tick(parent, text, onClick)
 	local box = kit.Frame(parent)
@@ -403,7 +344,6 @@ function W.BuildTiles(frame)
 			kit.Backing(edge, "raised")
 		end)
 		entry.frame = tile
-		-- The picture of the look; without the card of SetupDraw.lua the tile keeps its name and line.
 		if type(card) == "function" and type(cardView) == "function" then
 			entry.card = card(tile, cardView(function()
 				return entry.values
@@ -416,7 +356,6 @@ function W.BuildTiles(frame)
 		entry.name:SetText(profile.label)
 		entry.line = kit.Dim(kit.Label(tile, "GameFontHighlightSmall", "LEFT", nil, true))
 		entry.line:SetText(profile.line)
-		-- The tag is on a frame of its own, above every frame of the picture.
 		local tag = kit.Frame(tile)
 		tag:SetFrameLevel(tile:GetFrameLevel() + 10)
 		tag:SetSize(88, 16)
@@ -443,7 +382,6 @@ function W.BuildTiles(frame)
 	end
 end
 
--- The band of the start view: the ground, and over it a holder that clips a stage of its own, which draws under the profile in use (ns.LiveView).
 function W.BuildBand(frame)
 	local band = kit.Frame(frame)
 	band:SetSize(INNER, BAND_H)
@@ -460,8 +398,6 @@ function W.BuildBand(frame)
 	end
 end
 
--- Draws the player's frame in the band as the profile in use draws it: the drawing mock-player of the frames build, fitted with D.PaintIn. True when it
--- drew; without either the band shows its ground only.
 function W.Paint()
 	if not (W.ctx and type(D.PaintIn) == "function") then
 		return false
@@ -479,8 +415,6 @@ function W.Build()
 	ns.Own[frame] = true
 	frame:SetPoint("TOP", UIParent, "TOP", 0, -100)
 	frame:SetFrameStrata("HIGH")
-	-- Above the options window, which is in the same strata at level 500 (Panel.lua's LEVEL), and the drawings on its rows, and above the frames of
-	-- the HUD and the stand-ins of test mode there, which lie under that window.
 	frame:SetFrameLevel(800)
 	frame:EnableMouse(true)
 	local outline = ns.Outline(frame, frame, true)
@@ -488,7 +422,6 @@ function W.Build()
 		kit.Backing(outline, "window", 0.98)
 	end)
 	W.frame = frame
-	-- Its title row drags it for as long as it is open (W.Open puts it back at the top of the screen as it opens); the client keeps no place of its own.
 	frame:SetMovable(true)
 	frame:SetClampedToScreen(true)
 	pcall(frame.SetDontSavePosition, frame, true)
@@ -505,12 +438,10 @@ function W.Build()
 		frame:StopMovingOrSizing()
 		pcall(frame.SetUserPlaced, frame, false)
 	end)
-	-- Close, at the top right of every view, closes it and chooses nothing, as Escape does.
 	W.close = kit.Button(frame, "Close", 60, function()
 		frame:Hide()
 	end)
 	W.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, -(PAD + (MARK - kit.BUTTON) / 2))
-	-- The mark: an accent square with a notch cut from one corner.
 	W.mark = kit.Fill(frame, "ARTWORK")
 	W.mark:SetSize(MARK, MARK)
 	W.notch = kit.Fill(frame, "OVERLAY")
@@ -522,7 +453,6 @@ function W.Build()
 	end)
 	W.title = kit.Label(frame, "GameFontNormalLarge", "LEFT", 400)
 	W.line = kit.Label(frame, "GameFontHighlight", "LEFT", INNER, true)
-	-- The start view: the band, its caption and three buttons.
 	W.BuildBand(frame)
 	W.caption = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", INNER))
 	W.caption:SetText("Your frame as Flat UI draws it now.")
@@ -532,10 +462,7 @@ function W.Build()
 		W.Update()
 	end)
 	W.keep, W.keepText = kit.Button(frame, "Keep this look", INNER, W.Keep)
-	-- The tiles view: the tiles are made the first time it shows (W.BuildTiles).
 	W.same, W.sameText = kit.Button(frame, "Same as", SAME_W, W.Same)
-	-- Back returns to the start view when the tiles were opened from it; opened from anywhere else (Home, the Profiles page, setup's list,
-	-- /flatui profiles), there is nothing to go back to, so it reads Close and closes the screen.
 	W.back, W.backText = kit.Button(frame, "Back", 100, function()
 		W.share = false
 		if W.fromStart then
@@ -549,19 +476,16 @@ function W.Build()
 		W.share = not W.share
 		W.shareMark:SetShown(W.share)
 	end)
-	-- The after view: Reload is made the first time a reload is needed (W.ReloadButton).
 	W.change = kit.Button(frame, "Change it", 110, W.OpenSetup)
 	W.move = kit.Button(frame, "Move frames", 110, W.Move)
 	W.options = kit.Button(frame, "Options", 90, W.Options)
 	W.done = kit.Button(frame, "Done", 90, function()
 		frame:Hide()
 	end)
-	-- Back to or Undo setup, whichever the after view shows (W.LayoutAfter sets W.backAction).
 	W.backTo, W.backToText = kit.Button(frame, "Back to", SAME_W, function()
 		local action = W.backAction or W.Back
 		action()
 	end)
-	-- The foot and the tick, under the start and tiles views.
 	W.foot = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", 220))
 	W.foot:SetText("Open it again with /flatui setup.")
 	W.foot:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, PAD + 2)
@@ -572,12 +496,8 @@ function W.Build()
 	W.tickBox:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, PAD)
 	W.tickLabel:SetPoint("RIGHT", W.tickBox, "LEFT", -8, 0)
 	W.tickLabel:SetJustifyH("RIGHT")
-	-- Every part a view may show, hidden before each layout.
 	W.parts = { W.band, W.caption, W.setup, W.ready, W.keep, W.same, W.back, W.shareBox, W.shareLabel, W.change, W.move, W.options, W.done, W.backTo,
 		W.foot, W.tickBox, W.tickLabel }
-	-- The view is set before the screen shows (W.Open); the ticks start empty each time.
-	-- It fades in over FADE_IN with the game's sound of a window opening, and plays the sound of one closing as it hides; the reopen after a fight and
-	-- the hide a fight starts play neither (W.reopening, W.fighting).
 	frame:SetScript("OnShow", function()
 		W.tick, W.share = false, false
 		W.tickMark:Hide()
@@ -598,15 +518,12 @@ function W.Build()
 			pcall(PlaySound, SOUNDKIT.IG_MAINMENU_OPEN)
 		end
 	end)
-	-- The events go to a frame of their own: the screen hides itself, and a hidden frame still hears them.
 	local listener = CreateFrame("Frame")
 	ns.Own[listener] = true
 	listener:RegisterEvent("PLAYER_REGEN_DISABLED")
 	listener:RegisterEvent("PLAYER_REGEN_ENABLED")
 	listener:RegisterEvent("UI_SCALE_CHANGED")
 	listener:RegisterEvent("DISPLAY_SIZE_CHANGED")
-	-- A screen a fight hides is kept in W.fought, after the hide (OnHide forgets it, so a screen closed on purpose stays closed), and opens again
-	-- on the same view when the fight ends.
 	frame:SetScript("OnHide", function()
 		W.fought = nil
 		frame:SetScript("OnUpdate", nil)
@@ -633,7 +550,6 @@ function W.Build()
 				W.reopening = true
 				W.Open(fought.view, W.finished)
 				W.reopening = nil
-				-- The screen comes back as it was left: Back of the tiles and the two ticks (OnShow clears them).
 				W.fromStart = fought.fromStart
 				W.tick, W.share = fought.tick == true, fought.share == true
 				W.tickMark:SetShown(W.tick)
@@ -644,17 +560,14 @@ function W.Build()
 			W.Update()
 		end
 	end)
-	-- Escape closes it and chooses nothing, so the start view shows again at the next login.
 	if type(UISpecialFrames) == "table" then
 		table.insert(UISpecialFrames, "FlatUIWelcome")
 	end
 	frame:Hide()
-	-- From here on its hiding plays the game's sound (the hide just above was the build's own).
 	W.built = true
 	return frame
 end
 
--- Puts a part of the screen at y below its top, at x (PAD when nil).
 function W.At(object, y, x)
 	object:ClearAllPoints()
 	object:SetPoint("TOPLEFT", W.frame, "TOPLEFT", x or PAD, -y)
@@ -667,14 +580,12 @@ local function ShowFoot()
 	W.tickMark:SetShown(W.tick == true)
 end
 
--- The start view: the line, the band with the player's frame (painted on every layout), its caption, the three buttons, the foot and the tick.
 function W.LayoutStart(y)
 	W.title:SetText("Welcome to Flat UI")
 	W.line:SetText("Flat UI is on. Walk round your screen and pick how each part looks: six short stops, about two minutes.")
 	y = math.max(BAND_Y, y + Height(W.line, 30) + 4)
 	W.At(W.band, y)
 	W.band:Show()
-	-- The caption only describes a frame that was drawn.
 	W.caption:SetShown(W.Paint())
 	y = y + BAND_H + 6
 	W.At(W.caption, y)
@@ -689,8 +600,6 @@ function W.LayoutStart(y)
 	return y + 20 + FOOT + PAD
 end
 
--- The tiles view: a drawn card of each ready-made look, three to a row, with its name, its line and a tag (In use, else Suggested), then the box that
--- gives new characters the same look, Same as, Back, the foot and the tick.
 function W.LayoutTiles(y)
 	W.title:SetText("Ready-made looks")
 	W.line:SetText(InCombatLockdown() and COMBAT or "Click a look to use it.")
@@ -745,9 +654,6 @@ function W.LayoutTiles(y)
 	return y + 20 + FOOT + PAD
 end
 
--- The after view: what is in use now, a note a line, Back to on a line of its own after a look or a new profile of setup's Finish that took the place
--- of another profile, or Undo setup there after a Finish that saved into the profile in use (while Bring back still can), then the buttons in a row
--- (Reload only when a reload is needed, Change it only after a look). No foot and no tick.
 function W.LayoutAfter(y)
 	local finished = W.finished or {}
 	W.title:SetText("Your screen is set")
@@ -796,8 +702,6 @@ function W.LayoutAfter(y)
 	return y + kit.BUTTON + PAD
 end
 
--- Lays out the view the screen is in and reads everything again: the title, the line, then the parts of the start, tiles or after view. The height
--- fits what is shown.
 function W.Update()
 	local frame = W.frame
 	if not frame then
@@ -825,11 +729,9 @@ function W.Update()
 	frame:SetSize(WIDTH, layout(y))
 end
 
--- Shows the screen in a view: "start", "tiles" or "after" (with what was done), built the first time. Returns true when it shows.
 function W.Open(view, finished)
 	local frame = W.frame or W.Build()
 	W.view = view
-	-- Tiles opened here come from outside the start view; the start view's own button sets this again.
 	W.fromStart = false
 	if view == "after" then
 		W.finished = finished
@@ -837,7 +739,6 @@ function W.Open(view, finished)
 	if frame:IsShown() then
 		W.Update()
 	else
-		-- A screen dragged aside opens at the top of the screen again, unless it comes back after a fight, where it was.
 		if not W.reopening then
 			frame:ClearAllPoints()
 			frame:SetPoint("TOP", UIParent, "TOP", 0, -100)
@@ -851,14 +752,12 @@ function W.Show()
 	return W.Open("start")
 end
 
--- At login, a second after the other windows: the start view, for a character it is for. Setup.lua hands it here.
 function ns.WelcomeShow()
 	if ns.WelcomeWanted() and not InCombatLockdown() then
 		W.Open("start")
 	end
 end
 
--- /flatui welcome: the start view, for any character. Nothing is chosen until a button is pressed.
 function ns.OpenWelcome()
 	if InCombatLockdown() then
 		print("Flat UI: The welcome screen opens after combat.")

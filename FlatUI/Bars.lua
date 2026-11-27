@@ -1,26 +1,10 @@
 local _, ns = ...
 
--- Personal resource display, swing timers and cast bars. Each has a frame texture around the
--- bar and a background behind it. Both go, and a backdrop and thin edges replace them.
--- Every Apply below puts Blizzard's art back when its bar is turned off.
--- The fills are flat too: a solid fill on swing timers and resource bars, and on cast bars a
--- texture laid over the game's fill. The chosen bar texture is an image file in place of the solid colour. While Heroic Strike, Cleave, Maul
--- or Raptor Strike waits for the next swing, a texture of the addon's own lays Queued ability colour over the main hand timer's fill (Q, below).
--- With Flat fill off, a thin strip of the addon's own along the bottom of the target and focus bars takes the colour of the player's interrupt
--- for an enemy cast that can be interrupted (Interrupt strip, below), Interrupt strip height thick.
--- The spell icon of the player and pet bars and the latency zone of the player bar show with or without Flat fill: on the cover's marks with it
--- (PaintMarks), and on a set of the addon's own without it (Cast marks without Flat fill, below), the zone in Latency zone colour (red at first,
--- LatencyTint). Since 0.5.42 the icon stays on the bar once the cast ends, through its finish fade and its Interrupted hold, and goes as the bar
--- hides or the next cast gives its own; the zone goes as the cast ends. The game's own small icon of those bars, which
--- Edit Mode's Lock to player frame shows on the same spot, is faded meanwhile (ApplyCastIcon).
--- The names and numbers on the bars are sized and hidden with the font and the alpha of their font strings.
-
 local BAR_BACKGROUND = "UI-HUD-CoolDownManager-Bar-BG"
 
 local seen = setmetatable({}, { __mode = "k" })
 local counted = setmetatable({}, { __mode = "k" })
 
--- Counts a frame for /flatui status once, however many ways it is styled.
 local function Count(key, frame)
 	if not counted[frame] then
 		counted[frame] = true
@@ -28,7 +12,6 @@ local function Count(key, frame)
 	end
 end
 
--- State kept for a Blizzard frame, counted for /flatui status the first time.
 local function Own(key, frame)
 	local own = seen[frame]
 	if not own then
@@ -39,7 +22,6 @@ local function Own(key, frame)
 	return own
 end
 
--- The image file a bar texture row asks for: nil for the texture of the Flat UI page, false for a solid colour.
 local function TextureOf(path)
 	local id = ns.Get(path)
 	if id == "default" then
@@ -48,12 +30,8 @@ local function TextureOf(path)
 	return ns.BarTexture(id) or false
 end
 
--- Labels this addon has hidden. The game shows and hides these labels itself and never sets their alpha.
 local hiddenLabels = setmetatable({}, { __mode = "k" })
 
--- Sets the size of a label and hides or shows it. A label is touched for its alpha only while it is
--- hidden here or was. style has the colour of the text (r, g, b) when the row has its own. outline is the id of a text outline row: the game's
--- own flags stay for "game" or none.
 local function StyleLabel(key, label, percent, hide, style, outline)
 	if label == nil or ns.IsSecret(label) then
 		return
@@ -70,20 +48,13 @@ local function StyleLabel(key, label, percent, hide, style, outline)
 	end
 end
 
--- Personal resource display -------------------------------------------------------------------
-
 local gameOffsets = setmetatable({}, { __mode = "k" })
 local setOffsets = setmetatable({}, { __mode = "k" })
--- Per bar: the game's colour (gr, gg, gb, ga) and the custom colour set on it (sr, sg, sb).
 local colours = setmetatable({}, { __mode = "k" })
--- The bars whose custom colour is on, each with its option, "health" or "power".
 local followed = setmetatable({}, { __mode = "k" })
--- Starts or stops the one frame that follows custom colours and cast bars; defined with it below.
 local Watch
--- Follows what the game does to the resource display and the swing timers, with no hook on a frame method; defined after the swing timers.
 local WatchGame
 
--- The frame art of each bar is one unnamed background texture.
 local function ApplyResourceBar(bar, option)
 	local on = ns.Enabled("resource") and ns.Get("resource." .. option)
 	if not on and not seen[bar] then
@@ -101,8 +72,6 @@ local function ApplyResourceBar(bar, option)
 	ns.SetFaded(own.art or nil, on)
 end
 
--- The game anchors each lower bar by its TOP to the BOTTOM of the bar above, 4 units down.
--- The default art covered that space. Joined, the two bars share one border.
 local function JoinBar(bar, option, above)
 	local ok, point, relativeTo, relativePoint, x, y = pcall(bar.GetPoint, bar, 1)
 	if not ok or ns.IsSecret(point) or ns.IsSecret(relativeTo) or ns.IsSecret(relativePoint) or ns.IsSecret(x) or ns.IsSecret(y) then
@@ -112,10 +81,8 @@ local function JoinBar(bar, option, above)
 		return
 	end
 	if setOffsets[bar] == nil or math.abs(y - setOffsets[bar]) > 0.001 then
-		-- Not the offset this addon last set, so the game set it.
 		gameOffsets[bar] = y
 	end
-	-- Joined only when this bar and the one above both have their thin border.
 	local join = ns.Enabled("resource") and ns.Get("resource.join") and ns.Get("resource." .. option) and ns.Get("resource." .. above)
 	local wanted = join and -ns.Pixels(bar, ns.Get("general.thickness")) or gameOffsets[bar]
 	if wanted and math.abs(y - wanted) > 0.001 then
@@ -130,13 +97,10 @@ local function JoinBars(display)
 		ns.Each("resource", JoinBar, power, "power", "health")
 	end
 	if alt and not ns.Forbidden(alt) then
-		-- Under the power bar, or under the health bar when the power bar is hidden.
 		ns.Each("resource", JoinBar, alt, "alt", display.hidePower == true and "health" or "power")
 	end
 end
 
--- The fill is white when flat, and an image file is white too, so the colour the game sets on the bar is
--- the colour seen.
 local function ApplyResourceFill(bar)
 	if ns.Enabled("resource") and ns.Get("resource.flat") then
 		local flat, refused = ns.FlatFill(bar, 1, 1, 1, nil, true, TextureOf("resource.texture"))
@@ -151,7 +115,6 @@ local function ApplyResourceFill(bar)
 	end
 end
 
--- The percentage and the amount on a bar. The game sets them with SetText, Show and Hide only.
 local RESOURCE_TEXTS = { "TextString", "LeftText", "RightText" }
 
 local function ApplyResourceText(bar)
@@ -162,7 +125,6 @@ local function ApplyResourceText(bar)
 		style = { r = r, g = g, b = b }
 	end
 	for _, name in ipairs(RESOURCE_TEXTS) do
-		-- The percentage is the left text, the amount the right one and the whole string.
 		local part = ns.Get(name == "LeftText" and "resource.percent" or "resource.value")
 		local hide = on and not (ns.Get("resource.text") and part)
 		StyleLabel("resource", bar[name], on and ns.Get("resource.textSize") or 100, hide, style and { r = style.r, g = style.g, b = style.b },
@@ -170,7 +132,6 @@ local function ApplyResourceText(bar)
 	end
 end
 
--- The alternate power bar reads its own fill once while the game sets it up, so it waits for that.
 local function FillAlternate(display)
 	if ns.Forbidden(display) or display.hasBeenSetup ~= true then
 		return
@@ -181,7 +142,6 @@ local function FillAlternate(display)
 	end
 end
 
--- Red, green, blue and alpha of a bar's colour, or nil when the game withholds them.
 local function ReadColour(bar)
 	local ok, r, g, b, a = pcall(bar.GetStatusBarColor, bar)
 	if ok and not ns.IsSecret(a) and a == nil then
@@ -200,8 +160,6 @@ end
 
 local CLASS_NOTE = "Personal resource display: the game withholds your class here, so Class colour is not used."
 
--- The colour the player chose for the health or power bar, or nil for the game's. Class colour on the health bar comes before Custom health colour
--- and is left to the game's colour while the class is withheld.
 local function ChosenColour(option)
 	if not ns.Enabled("resource") then
 		return nil
@@ -226,11 +184,7 @@ local function ChosenColour(option)
 	return nil
 end
 
--- Keeps a custom colour on the health or power bar. The game sets the colour of these bars again
--- now and then, so a colour that is not the custom one is the game's: it is kept, and put back
--- when the custom colour is switched off. option is "health" or "power".
 local function FollowColour(bar, option)
-	-- Colour health by health left paints the health bar itself (HealthColour.lua).
 	if option == "health" and ns.ResourceHealthLeft and ns.ResourceHealthLeft() then
 		return
 	end
@@ -261,8 +215,6 @@ local function FollowColour(bar, option)
 	end
 end
 
--- Applies the custom colour of a bar, or puts the game's back. A bar whose custom colour is on
--- is followed every frame.
 local function ApplyColour(bar, option)
 	local wanted = ChosenColour(option) ~= nil
 	followed[bar] = wanted and type(bar.SetStatusBarColor) == "function" and option or nil
@@ -271,7 +223,6 @@ local function ApplyColour(bar, option)
 	end
 end
 
--- Runs every frame while a custom colour is on. A bar the game has made forbidden since is dropped.
 local function PollColours()
 	local dropped
 	for bar, option in pairs(followed) do
@@ -315,7 +266,6 @@ local function RefreshResource()
 			end
 		end
 	end
-	-- The game sets its own spacing again in Setup, after a change of its settings and when a bar is shown or hidden: a pass on the next frame follows each.
 	WatchGame("resource")
 	Watch()
 	if ns.HealthLeftSync then
@@ -330,17 +280,12 @@ ns.Register("resource", {
 	Resized = RefreshResource,
 })
 
--- Swing timers --------------------------------------------------------------------------------
-
--- Blizzard sets the alpha of Border and Background when the target goes in and out of range,
--- so they are hidden instead of faded. Nothing shows them again.
 local SWING_TIMERS = {
 	{ "SwingTimerMainHandFrame", "main" },
 	{ "SwingTimerOffHandFrame", "off" },
 	{ "SwingTimerRangedFrame", "ranged" },
 }
 
--- True while the bar of a timer is hidden: out of combat with "combat", or not swinging with "hide". The game sets swingEndTime when a swing starts and clears it when it ends.
 local function SwingIdle(timer)
 	local mode = ns.Enabled("swing") and ns.Get("swing.idle")
 	if mode ~= "hide" and mode ~= "combat" then
@@ -357,7 +302,6 @@ local function SwingIdle(timer)
 	return not ns.IsSecret(ending) and ending == nil
 end
 
--- The border switch each timer was applied with, for the hooks that apply it again.
 local swingOption = setmetatable({}, { __mode = "k" })
 
 local function ApplySwingTimer(timer, option)
@@ -371,8 +315,6 @@ local function ApplySwingTimer(timer, option)
 	if not on and not own then
 		return
 	end
-	-- Around the bar, which dims out of range, or around the whole timer. Each outline is made
-	-- the first time it is wanted.
 	local whole = ns.Get("swing.outline") == "frame"
 	local barOutline = (own and own.bar) or (on and not whole and ns.Outline(bar, bar)) or nil
 	local wholeOutline = (own and own.whole) or (on and whole and ns.Outline(timer, timer)) or nil
@@ -384,11 +326,8 @@ local function ApplySwingTimer(timer, option)
 	ns.SetHidden(timer.Background, on)
 end
 
--- Bars whose spark or label shadow this addon has hidden.
 local sparksFaded = setmetatable({}, { __mode = "k" })
 
--- The fill is solid whatever the border switches say. The spark and the label shadow belong to
--- the game's fill, so they are hidden or shown only while the fill is flat.
 local function ApplySwingFill(timer, option)
 	local bar = timer.StatusBar
 	if bar == nil or ns.Forbidden(bar) then
@@ -403,7 +342,6 @@ local function ApplySwingFill(timer, option)
 		if r == nil then
 			r, g, b = ns.Colour("swing." .. option .. "Colour")
 		end
-		-- The atlas the game draws, if the fill does not say.
 		local atlas = timer.barTexture
 		if ns.IsSecret(atlas) or type(atlas) ~= "string" then
 			atlas = nil
@@ -428,7 +366,6 @@ local function ApplySwingFill(timer, option)
 	end
 end
 
--- The name and the time left of a timer. The game sets their text, colour and shown state, never their font or alpha.
 local SWING_TEXTS = { { "TypeLabel", "swing.name" }, { "TimeLabel", "swing.time" } }
 
 local function ApplySwingText(timer)
@@ -442,14 +379,10 @@ local function ApplySwingText(timer)
 	end
 end
 
--- What this addon has set on a timer: alpha (the opacity set while out of range), colour (true while it sets the text colour), reverse, idle.
 local swingSet = setmetatable({}, { __mode = "k" })
--- The labels of a timer and the colours the game gives them: white in range, red out of range (Blizzard_SwingTimer.lua:440-447).
 local SWING_LABELS = { "TypeLabel", "TimeLabel" }
 local GAME_RANGE_ALPHA = 0.4
 
--- The game sets isOutOfRange itself, treats a timer in Edit Mode as in range, and keeps the in range look while a swing is in progress:
--- swingDuration is set while it runs (Blizzard_SwingTimer.lua:306-308, 379-390).
 local function SwingOut(timer)
 	local out, editing, swinging = timer.isOutOfRange, timer.isInEditMode, timer.swingDuration
 	if ns.IsSecret(out) or out ~= true or ns.IsSecret(editing) or editing == true then
@@ -472,8 +405,6 @@ local function GameTextColour(out)
 	return 1, 1, 1
 end
 
--- The opacity of the bar and the colour of the labels while the target is out of range. The game sets both when the range changes, and
--- this runs after it; with the game's own values it makes no call, and puts the game's values back for what it changed.
 local function ApplySwingRange(timer)
 	local bar = timer.StatusBar
 	if bar == nil or ns.Forbidden(bar) then
@@ -498,7 +429,6 @@ local function ApplySwingRange(timer)
 		end
 		set.alpha = changed or nil
 	else
-		-- The game sets the alpha again when the range changes.
 		set.alpha = nil
 	end
 	for _, name in ipairs(SWING_LABELS) do
@@ -514,7 +444,6 @@ local function ApplySwingRange(timer)
 	set.colour = colour or nil
 end
 
--- The fill from the right, and the spark at the end of the fill.
 local function ApplySwingReverse(timer)
 	local bar = timer.StatusBar
 	if bar == nil or ns.Forbidden(bar) then
@@ -542,7 +471,6 @@ local function ApplySwingReverse(timer)
 	end
 end
 
--- The bar of a timer that is not swinging, hidden or shown.
 local function ApplySwingIdle(timer)
 	local bar = timer.StatusBar
 	if bar == nil or ns.Forbidden(bar) then
@@ -560,15 +488,10 @@ local function ApplySwingIdle(timer)
 	end
 end
 
--- Auto Shot: a shot is the reload and then half a second of aim at the end of the ranged swing. Moving or casting a spell in that half second
--- delays the shot, which clips it. A band over the end of the ranged bar marks the half second, as long as its share of the swing: the swing that
--- runs (swingDuration, Blizzard_SwingTimer.lua:340-346) or the speed of the ranged weapon while none runs (192-199). The band is a texture of the
--- bar, above the fill and under the spark and the labels, and it is at the end the fill grows to: the left one with Fill from the right.
 local AUTO_SHOT_AIM = 0.5
 local AUTO_SHOT_ALPHA = 0.5
 local autoBands = setmetatable({}, { __mode = "k" })
 
--- The length of the ranged swing in seconds, or nil when the game withholds it.
 local function RangedSwing(timer)
 	local duration = timer.swingDuration
 	if ns.Finite(duration) and duration > 0 then
@@ -619,22 +542,11 @@ local function ApplyAutoShot(timer, option)
 	band:Show()
 end
 
--- Next melee ability: while Heroic Strike, Cleave, Maul or Raptor Strike waits for the next swing (C_Spell.IsCurrentSpell, true "if the spell is
--- currently being cast or is queued to be cast", SpellDocumentation.lua:741-754, asked by name, C_Spell.GetSpellName of each first rank, so every
--- rank counts, as CombatText.lua's next swing finds them), the fill of the main hand timer takes Queued ability colour while Queued next melee
--- ability is on (by default) and the player is a warrior, druid or hunter. It is a texture of the addon's own on the timer's bar over the fill
--- (ARTWORK 6, under the Auto Shot band's 7 and the pip and labels), anchored to the fill region once, out of a fight on a bar the game may protect,
--- as the cast cover is, and painted with the swing texture (else the Flat UI page's, or white) in that colour; in a fight only its Show, Hide,
--- texture and colour change. A frame of its own hears CURRENT_SPELL_CAST_CHANGED (SpellBookDocumentation.lua:841), ACTIONBAR_UPDATE_STATE,
--- PLAYER_SWING and PLAYER_REGEN_ENABLED only while the row is on for such a class, and looks on the next frame, after the game has taken the
--- event: the colour comes as the ability is queued and goes as the swing lands. Nothing of the game is written or called but CreateTexture.
 local Q = {}
 do
 	local SPELLS = { 78, 845, 6807, 2973 }
 	local CLASSES = { WARRIOR = true, DRUID = true, HUNTER = true }
 	local EVENTS = { "CURRENT_SPELL_CAST_CHANGED", "ACTIONBAR_UPDATE_STATE", "PLAYER_SWING", "PLAYER_REGEN_ENABLED" }
-	-- frame and hearing: the frame of its own and whether it hears; pending: a look waits for the next frame; names: the plain names of the four
-	-- spells, kept once all four answer; covers[timer]: { tex, region (the fill it hangs on), key (its look) }, false when it could not be made.
 	local state = { frame = nil, hearing = false, pending = false, names = nil, covers = setmetatable({}, { __mode = "k" }) }
 
 	function Q.Wanted()
@@ -665,7 +577,6 @@ do
 		return names
 	end
 
-	-- True while one of the four waits for the swing: a plain true, never a withheld answer.
 	local function Waiting()
 		local ask = type(C_Spell) == "table" and C_Spell.IsCurrentSpell or nil
 		local names = Names()
@@ -681,7 +592,6 @@ do
 		return false
 	end
 
-	-- The texture of a timer, made and hung on its fill out of a fight; while the bar may be protected in a fight, the one it has (or none).
 	local function Cover(timer)
 		local cover = state.covers[timer]
 		if cover == false then
@@ -725,7 +635,6 @@ do
 		end
 	end
 
-	-- The main hand timer in Queued ability colour while one waits, its own fill otherwise; the other timers have none.
 	function Q.Apply(timer, option)
 		if option ~= "main" then
 			return
@@ -782,18 +691,14 @@ do
 	end
 end
 
--- After the game starts, ends or lays out a timer, and sets its range look: what it did is looked at again.
 local function SwingLooks(timer)
 	ns.Each("swing", ApplySwingTimer, timer, swingOption[timer] or "main")
 	ns.Each("swing", ApplySwingIdle, timer)
 end
 
--- Timers whose width Flat UI set, and the ones waiting for the end of a fight.
 local swingSized = setmetatable({}, { __mode = "k" })
 local swingQueued = setmetatable({}, { __mode = "k" })
 
--- The width of the personal resource display, or the width Edit Mode has for the timer. Edit Mode sets the width again only for a changed setting
--- (EditModeSystemTemplates.lua:2817-2824), and UpdateSystemSettingWidth lays the frames out again (2779-2783), so the layout value is read and set here.
 local function ApplySwingWidth(timer)
 	if ns.EditModeOpen() then
 		return
@@ -848,17 +753,11 @@ local function RefreshSwing()
 		end
 	end
 	Q.Hear(Q.Wanted())
-	-- The game starts, ends and lays out a swing, and sets its range look, with no call that is followed: events, and a look every frame while one is needed.
 	WatchGame("swing")
 end
 
 ns.Register("swing", { label = "Swing timers", Start = RefreshSwing, Refresh = RefreshSwing })
 
--- What the game does to these frames is followed without a hook on any of their methods. The game's own calls (UpdatePowerBarAnchor,
--- UpdateAdditionalBarAnchors, ApplyRangePresentation, ClearSwingTimer, ResetSwingTimer) are copies in each frame, so a hook on one is a
--- field written on a game frame. A script hooked with HookScript, an event and the end of Edit Mode say when the game has changed them
--- (Blizzard_PersonalResourceDisplay.lua:124, 713-715, 751-752; Blizzard_SwingTimer.lua:141-161), and the pass runs on the next frame,
--- after the game's code has finished. EllesmereUI hooks the script of a game frame the same way (EllesmereUIResourceBars.lua:11600).
 local gameFrame
 local gameEvents = false
 local gamePolling = false
@@ -867,7 +766,6 @@ local editing = false
 local editWatched = false
 local passOwner = {}
 local scriptsHooked = setmetatable({}, { __mode = "k" })
--- Per timer: whether its bar was idle when it was last looked at.
 local idleSeen = setmetatable({}, { __mode = "k" })
 
 local SWING_EVENTS = { "PLAYER_SWING", "PLAYER_SWING_RANGE_UPDATE", "PLAYER_TARGET_CHANGED", "WEAPON_SLOT_CHANGED", "PLAYER_ENTERING_WORLD", "PLAYER_IN_COMBAT_CHANGED" }
@@ -881,7 +779,6 @@ local function EachTimer(fn)
 	end
 end
 
--- A swing setting that is not the game's own needs the timers followed.
 local function SwingWanted()
 	if not ns.Enabled("swing") then
 		return false
@@ -890,9 +787,6 @@ local function SwingWanted()
 		or ns.Get("swing.reverse") or false
 end
 
--- The Auto Shot window alone needs only the length of each ranged swing and of the ranged weapon: a ranged swing that starts (PLAYER_SWING
--- carries its length and its type, SwingTimerDocumentation.lua:43-51), and a change of attack speed or of weapon, which the game's timers follow
--- too (Blizzard_SwingTimer.lua:142-163). No range event is heard, so at the defaults nothing else runs on a swing.
 local AUTO_SHOT_EVENTS = { "PLAYER_SWING", "WEAPON_SLOT_CHANGED", "PLAYER_ENTERING_WORLD" }
 local autoFrame
 local autoEvents = false
@@ -902,7 +796,6 @@ local function AutoShotWanted()
 	return ns.Enabled("swing") and ns.Get("swing.autoShot") == true
 end
 
--- On the next frame, after the game's own timer has taken the event: the band of each timer again. The full pass sets it as well.
 local function AutoShotPass()
 	autoQueued = false
 	if gameEvents then
@@ -915,7 +808,6 @@ end
 
 local function AutoShotEvent(_, event, ...)
 	if event == "PLAYER_SWING" then
-		-- A melee swing leaves the band as it is.
 		local _, swingType = ...
 		local ranged = Enum and Enum.PlayerSwingType and Enum.PlayerSwingType.Ranged
 		if ranged ~= nil and not ns.IsSecret(swingType) and swingType ~= ranged then
@@ -933,8 +825,6 @@ local function AutoShotEvent(_, event, ...)
 	end
 end
 
--- True while a timer is swinging and the end of the swing changes what Flat UI shows: the idle bar is hidden, or the range look is not the
--- game's. The game ends a swing from its OnUpdate and sets its range look then, with no event (Blizzard_SwingTimer.lua:310-325, 361-370).
 local function SwingInFlight()
 	if not ns.Enabled("swing") then
 		return false
@@ -954,7 +844,6 @@ end
 
 local HookBars
 
--- The layout of the display, and the fill of the alternate bar, after the game's own.
 local function ResourcePass()
 	local display = PersonalResourceDisplayFrame
 	if display ~= nil and scriptsHooked[display] and not ns.Forbidden(display) and not ns.IsStopped("resource") then
@@ -964,13 +853,11 @@ local function ResourcePass()
 	end
 end
 
--- A timer that raises when read counts as not idle.
 local function SafeIdle(timer)
 	local ok, idle = pcall(SwingIdle, timer)
 	return ok and idle
 end
 
--- Idle and range of the timers, which a swing or Edit Mode changes.
 local function SwingLight(timer)
 	local idle = SafeIdle(timer)
 	if idleSeen[timer] ~= idle then
@@ -1002,7 +889,6 @@ end
 local function RunPass()
 	passQueued = false
 	ResourcePass()
-	-- The cast bar and the swing timers take the width of the display.
 	if ns.StackWidths then
 		pcall(ns.StackWidths)
 	end
@@ -1024,7 +910,6 @@ local function QueuePass()
 	end
 end
 
--- Every frame while Edit Mode is open (its settings change with no event) and while a swing runs.
 function GamePoll()
 	if editing then
 		ResourcePass()
@@ -1058,8 +943,6 @@ local function HookShown(frame, ...)
 	scriptsHooked[frame] = ok or nil
 end
 
--- The display's Setup runs once and sets scripts on these two (Blizzard_PersonalResourceDisplay.lua:153-164, 713-715, 751-752), which clears a hook
--- made before it; they are hooked once it has run, from the pass its OnShow queues.
 function HookBars(display)
 	if display.hasBeenSetup == true then
 		HookShown(display.AlternatePowerBar, "OnShow", "OnHide")
@@ -1067,7 +950,6 @@ function HookBars(display)
 	end
 end
 
--- The pass runs on the events of Edit Mode. The cast bars call this too, so a profile with cast bars on and no swing or resource module follows the display.
 function ns.WatchEditModePass()
 	if not editWatched and type(EventRegistry) == "table" and not ns.IsSecret(EventRegistry) and type(EventRegistry.RegisterCallback) == "function" then
 		editWatched = pcall(function()
@@ -1096,11 +978,8 @@ function WatchGame(kind)
 		for _, event in ipairs(SWING_EVENTS) do
 			pcall(gameFrame.RegisterEvent, gameFrame, event)
 		end
-		-- The game's own list has them too (Blizzard_SwingTimer.lua:10-13, 157-163): a change of attack speed or of the player's gear shows or hides a
-		-- timer, can turn its range check off and sets its range look again.
 		pcall(gameFrame.RegisterUnitEvent, gameFrame, "UNIT_ATTACK_SPEED", "player")
 		pcall(gameFrame.RegisterUnitEvent, gameFrame, "UNIT_INVENTORY_CHANGED", "player")
-		-- The full pass sets the Auto Shot window too.
 		if autoEvents then
 			autoEvents = false
 			pcall(autoFrame.UnregisterAllEvents, autoFrame)
@@ -1121,10 +1000,6 @@ function WatchGame(kind)
 	PollState()
 end
 
--- Cast bars -----------------------------------------------------------------------------------
-
--- The target and focus bars can be anchored to the aura rows, where addon frames may not be
--- attached, so their edges are textures of the bar itself.
 local CAST_BARS = {
 	{ "PlayerCastingBarFrame", "player" },
 	{ "OverlayPlayerCastingBarFrame", "player" },
@@ -1133,13 +1008,11 @@ local CAST_BARS = {
 	{ "FocusFrameSpellBar", "focus", true },
 }
 
--- False when the game refused to anchor an edge, which raises no error.
 local function Placed(outline)
 	local ok, points = pcall(outline.top.GetNumPoints, outline.top)
 	return not ok or ns.IsSecret(points) or type(points) ~= "number" or points > 0
 end
 
--- Per cast bar: its outline, its place (player, pet, target or focus) and what this addon has set on its parts.
 local outlineOf = setmetatable({}, { __mode = "k" })
 local barOption = setmetatable({}, { __mode = "k" })
 local castParts = setmetatable({}, { __mode = "k" })
@@ -1149,7 +1022,6 @@ local function ApplyCastBar(bar, option, direct)
 	if not on and not seen[bar] then
 		return
 	end
-	-- Nothing is created or anchored on a protected bar in combat, so its default frame stays until the border can be made.
 	if not seen[bar] and InCombatLockdown() and ns.MaybeProtected(bar) then
 		ns.OutOfCombat(function()
 			ns.Each("castbars", ApplyCastBar, bar, option, direct)
@@ -1160,7 +1032,6 @@ local function ApplyCastBar(bar, option, direct)
 	outlineOf[bar] = outline
 	Own("castbars", bar)
 	if on and not Placed(outline) then
-		-- No border could be drawn, so the default frame stays.
 		ns.Note("castbars", "Cast bars: the game refused a border on one bar, which keeps its default frame.")
 		on = false
 	end
@@ -1171,7 +1042,6 @@ local function ApplyCastBar(bar, option, direct)
 	ns.SetFaded(bar.TextBorder, on and not ns.Get("castbars.textPlate"))
 end
 
--- A number the game gave, or nil for a withheld value or another type.
 local function PlainNumber(value)
 	if ns.IsSecret(value) or type(value) ~= "number" or value ~= value then
 		return nil
@@ -1179,7 +1049,6 @@ local function PlainNumber(value)
 	return value
 end
 
--- A part of a cast bar that may not be there.
 local function BarPart(bar, name)
 	local ok, part = pcall(function()
 		return bar[name]
@@ -1190,8 +1059,6 @@ local function BarPart(bar, name)
 	return nil
 end
 
--- Fades a part while it is hidden here, and puts it back. The game only shows and hides the spark, the shield, the spell name and the icon, and
--- never sets their alpha (CastingBarFrame.lua:680-719, 824-829, 902-919).
 local function FadePart(bar, state, name, hide)
 	if hide or state[name] then
 		ns.SetFaded(BarPart(bar, name), hide)
@@ -1201,8 +1068,6 @@ end
 
 local JUSTIFY = { left = "LEFT", center = "CENTER", right = "RIGHT" }
 
--- The alignment of the spell name. The game's own is read before it is changed and put back for "As the game has it". The game gives the
--- string a new font object whenever it lays the bar out, so a value that is not the one set here is the game's.
 local function AlignText(text, state, wanted)
 	local ok, current = pcall(text.GetJustifyH, text)
 	if not ok or ns.IsSecret(current) or type(current) ~= "string" then
@@ -1225,7 +1090,6 @@ local function AlignText(text, state, wanted)
 	return true
 end
 
--- The colour of the spell name, the same way: the game sets none itself, but a new font object brings its own.
 local function ColourText(text, state, wanted)
 	local ok, r, g, b, a = pcall(text.GetTextColor, text)
 	r, g, b, a = PlainNumber(r), PlainNumber(g), PlainNumber(b), PlainNumber(a)
@@ -1253,7 +1117,6 @@ local function ColourText(text, state, wanted)
 	return true
 end
 
--- The spell name of a cast bar: shown, aligned, coloured. Called again by CastBarSize.lua after the game lays the bar out.
 function ns.CastText(bar)
 	local on = ns.Enabled("castbars")
 	local hide = on and not ns.Get("castbars.textShow")
@@ -1275,12 +1138,6 @@ function ns.CastText(bar)
 	end
 end
 
--- The icon of the target and focus bars: where the game has it, on the right of the bar, or hidden. The game anchors the icon once, in its
--- XML (CastingBarFrame.xml:247-252), and does not anchor it again. The bars hang from protected frames, so the anchor waits for the end of combat.
--- On the player and pet bars the game's own 16x16 icon, which their UNITFRAME look under Edit Mode's Lock to player frame shows
--- (PlayerFrame.lua:34-48, CastingBarFrame.lua:886-899) on the very spot of Flat UI's bar-tall one, is faded while Spell icon on player and pet bars
--- is on and Flat UI draws its own, so only one icon shows; the game only ever shows and hides it, so the fade (SetAlpha) also holds in a fight.
--- A move of the target and focus icons that waits for the end of a fight says so once that fight in chat while the options window shows (0.5.41).
 local iconTold = false
 local function ApplyCastIcon(bar, option)
 	if option == "player" or option == "pet" then
@@ -1341,7 +1198,6 @@ local function ApplyCastIcon(bar, option)
 			end
 			state.iconGame = { point, relativeTo, relativePoint, x, y }
 		end
-		-- The game's icon is 5 units left of the bar; this one is 5 units right of it.
 		if not pcall(function()
 			icon:ClearAllPoints()
 			icon:SetPoint("LEFT", bar, "RIGHT", 5, 0)
@@ -1371,7 +1227,6 @@ local function ApplyCastIcon(bar, option)
 	end
 end
 
--- The parts of a cast bar that have a switch of their own.
 local function ApplyCastParts(bar, option)
 	barOption[bar] = option
 	local state = castParts[bar]
@@ -1389,10 +1244,6 @@ local function ApplyCastParts(bar, option)
 	ApplyCastIcon(bar, option)
 end
 
--- The game draws the fill of a cast bar again on every cast, interrupt and finish, with colours
--- that are part of its art, and sometimes from a name it withholds. So the fill is left alone and
--- a texture of this addon's lies over it, the size of the fill, coloured by what the cast is doing.
--- The state of a cast is read from the atlas the fill draws.
 local CAST_STATES = {
 	["ui-castingbar-filling-standard"] = "cast",
 	["ui-castingbar-full-standard"] = "cast",
@@ -1411,11 +1262,8 @@ local CAST_COLOURS = {
 	craft = "castbars.craftColour",
 }
 
--- Per cast bar: { key = the module it belongs to, on, fill, cover, state, hex, shown, failed, objects, kind }
 local casts = setmetatable({}, { __mode = "k" })
--- The records of the bars that are on, which is all the poll visits.
 local following = setmetatable({}, { __mode = "k" })
--- Per module, filled again on every poll: whether its bars are followed.
 local verdicts = {}
 
 local function Protected(frame)
@@ -1423,7 +1271,6 @@ local function Protected(frame)
 	return not ok or ns.IsSecret(protected) or protected == true
 end
 
--- False when the game refused to anchor a texture, which raises no error.
 local function Anchored(region)
 	local ok, points = pcall(region.GetNumPoints, region)
 	if not ok or ns.IsSecret(points) or type(points) ~= "number" then
@@ -1432,9 +1279,6 @@ local function Anchored(region)
 	return points > 0
 end
 
--- Makes the cover the first time its bar is shown: the game gives some bars their fill only when
--- they first cast. Returns false when it is not made, and tries again on a later frame unless the
--- game refused it.
 local function CastCover(bar, record)
 	if record.failed then
 		return false
@@ -1443,7 +1287,6 @@ local function CastCover(bar, record)
 	if not fill or (InCombatLockdown() and Protected(bar)) then
 		return false
 	end
-	-- Set before the calls that can raise, so a bar that fails is not tried every frame.
 	record.failed = true
 	local layer, sublevel = "ARTWORK", 0
 	local ok, drawLayer, drawSublevel = pcall(fill.GetDrawLayer, fill)
@@ -1461,26 +1304,20 @@ local function CastCover(bar, record)
 	end
 	record.fill, record.cover, record.failed = fill, cover, nil
 	if record.key == "castbars" then
-		-- The nameplates count their own plates.
 		Count("castbars", bar)
 	end
 	return true
 end
 
--- True for a plain true, never for a withheld value.
 local function IsTrue(value)
 	return not ns.IsSecret(value) and value == true
 end
 
--- What the cast on a bar is doing: cast, channel, shield, interrupted, craft, or none for no
--- cover. The state "withheld" comes with the withheld answer that decides it and the state
--- it is when that answer is false.
 local function CastState(bar, record)
 	local fill = record.fill
 	if IsTrue(bar.reverseChanneling) then
 		return "none"
 	end
-	-- A fill that is hidden shows nothing, so nothing is laid over it.
 	local shownOk, fillShown = pcall(fill.IsShown, fill)
 	if shownOk and not ns.IsSecret(fillShown) and fillShown == false then
 		return "none"
@@ -1492,18 +1329,14 @@ local function CastState(bar, record)
 		end
 		return CAST_STATES[atlas:lower()] or "cast"
 	end
-	-- The name is withheld. The game sets these fields from event names, so they are plain.
 	local casting, channeling = bar.casting, bar.channeling
 	local spark = bar.Spark
 	if not ns.IsSecret(casting) and not ns.IsSecret(channeling) and not casting and not channeling and spark ~= nil then
-		-- The game shows the spark again on an interrupt and hides it on a finish.
 		local sparkOk, sparkShown = pcall(spark.IsShown, spark)
 		if sparkOk and IsTrue(sparkShown) then
 			return "interrupted"
 		end
 	end
-	-- The game clears the fields when a cast ends and keeps the bar up while it fades, so the kind of
-	-- the cast is kept from the frames in which it was set.
 	if IsTrue(channeling) then
 		record.kind = "channel"
 	elseif IsTrue(casting) then
@@ -1524,9 +1357,6 @@ local function CastState(bar, record)
 	return otherwise
 end
 
--- The colour of a state of a cast on one bar, and a key that changes with it: the class colour for casts and channels on the player bar, the own
--- colours of the target and focus bars, otherwise the cast colours of the Flat UI page. An enemy's cast or channel takes the colour of the player's
--- interrupt before those, ready, ready while the caster is out of its range ("far") or on cooldown, while record.kick holds that answer (PaintCast).
 local function CastColour(record, state)
 	if record.kick ~= nil and (state == "cast" or state == "channel") then
 		local path = record.kick == "far" and "castbars.interruptFar" or (record.kick and "castbars.interruptReady" or "castbars.interruptCooling")
@@ -1548,7 +1378,6 @@ local function CastColour(record, state)
 	return r, g, b, ns.Get(CAST_COLOURS[state])
 end
 
--- A colour object for SetVertexColorFromBoolean, made again only when the colour changed.
 local function ColourObject(record, state)
 	local r, g, b, hex = CastColour(record, state)
 	record.objects = record.objects or {}
@@ -1560,13 +1389,10 @@ local function ColourObject(record, state)
 	return object.colour
 end
 
--- The border of a bar in the colour of the cast, or in the Flat UI colour for none.
 local function PaintBorder(bar, r, g, b)
 	ns.SetOutlineColour(outlineOf[bar], r, g, b)
 end
 
--- The marks of a cast bar of the Cast bars page: the spell icon on the player and pet bars and the latency zone on the player bar. They are
--- textures of the addon's own on the bar, so they hide with it.
 local function HideMarks(record)
 	if record.marks then
 		for _, name in ipairs({ "icon", "latency" }) do
@@ -1578,8 +1404,6 @@ local function HideMarks(record)
 	end
 end
 
--- Latency zone colour (0.5.41, red at first; always red before) at 60% opacity on the zones given, set again only when the row changed since the
--- last time on that holder (a cover's record or a set of marks, its latencyHex). A widget call on textures of the addon's own, so also in a fight.
 local function LatencyTint(holder, ...)
 	local hex = ns.Get("castbars.latencyColour")
 	if holder.latencyHex == hex then
@@ -1598,7 +1422,6 @@ local function LatencyTint(holder, ...)
 	holder.latencyHex = hex
 end
 
--- A texture of the addon's own on the bar, laid over the cover. Nil while the bar cannot take one yet or when the game refused its anchor.
 local function MakeMark(bar, record, name, anchor)
 	if record.markFailed or (InCombatLockdown() and Protected(bar)) then
 		return nil
@@ -1616,10 +1439,6 @@ local function MakeMark(bar, record, name, anchor)
 	return mark
 end
 
--- The spell icon and the latency zone for the cast on a bar of the player or the pet. Their numbers come from UnitCastingInfo and
--- UnitChannelInfo, which the game withholds for every unit but the player and the pet (SecretPredicatesDocumentation.lua:115-118), and each is
--- tested before it is used. Once both give a plain nil, the cast has ended while the bar still shows: the latency zone goes, and the icon stays on
--- the bar (a texture of it, so it fades with the game's FadeOutAnim or HoldFadeOutAnim) until the bar hides or the next cast gives its own (0.5.42).
 local function Marks(bar, record, wantIcon, wantLatency)
 	local unit = record.option == "pet" and "pet" or "player"
 	local name, _, texture, startMs, endMs = UnitCastingInfo(unit)
@@ -1700,7 +1519,6 @@ end
 
 local function PaintMarks(bar, record, state)
 	local option = record.key == "castbars" and record.option
-	-- The icon stays through the Interrupted hold (0.5.42); the latency zone goes, as Marks hides it once the cast has ended.
 	local wantIcon = (option == "player" or option == "pet") and ns.Get("castbars.playerIcon")
 	local wantLatency = option == "player" and state ~= "interrupted" and ns.Get("castbars.latency")
 	if not wantIcon and not wantLatency then
@@ -1710,9 +1528,6 @@ local function PaintMarks(bar, record, state)
 	end
 end
 
--- The cover is plain white, or the image file of the chosen bar texture. The colour is a tint on top of
--- either, and is painted again after a change of picture. The bars of the Cast bars and of the nameplates
--- each take the texture row of their own page.
 local function CoverArt(record)
 	local key = record.key
 	local row = key == "castbars" and "castbars.texture" or key == "nameplates" and "nameplates.castTexture" or nil
@@ -1731,9 +1546,6 @@ local function BarUnit(bar)
 	return bar.unit
 end
 
--- Whether the player's interrupt is ready for the cast on a bar, from Interrupt.lua: true, "far" (ready, out of range) or false for the target and
--- focus bars and the bar of a nameplate, whose unit is the field the game set (CastingBarFrame.lua:224-226), while their unit is an enemy; nil for
--- any other bar or state.
 local function Kick(bar, record, state)
 	if (state ~= "cast" and state ~= "channel" and state ~= "withheld") or type(ns.InterruptReady) ~= "function" then
 		return nil
@@ -1751,12 +1563,6 @@ local function Kick(bar, record, state)
 	return ns.InterruptReady(unit)
 end
 
--- Finish flash: the game's glow as a cast or channel ends, the Flash of the bar (ADD-blended, CastingBarFrame.xml:306-311), which the game gives the
--- glow of the bar's kind and shows at every finish and stop (Shared/CastingBarFrame.lua:467-472, 585-590). The game sets only its atlas, alpha and
--- shown state, never its colour, so a tint set here holds through its animations. In the cast colour (the default): desaturated and tinted the
--- colour of the cover, so the flash matches the flat fill; for a state the game withholds, tinted from the same answer as the cover
--- (SetVertexColorFromBoolean). Off: black, which adds nothing. The game's: white and not desaturated, as the game draws it, which is also what
--- it gets back when the cover goes. The texture is called only when the tint changes (record.flashTint), but for a withheld state.
 local function SetFlash(bar, record, tint, r, g, b, shield, otherwise)
 	if tint ~= "withheld" and record.flashTint == tint then
 		return
@@ -1788,8 +1594,6 @@ local function PaintFlash(bar, record, state, r, g, b, shield, otherwise)
 	end
 end
 
--- Colours the cover for the state of the cast. The texture is called only when the state or its
--- colour changed.
 local function PaintCast(bar, record)
 	if not record.cover and not CastCover(bar, record) then
 		return
@@ -1812,10 +1616,8 @@ local function PaintCast(bar, record)
 	end
 	record.kick = Kick(bar, record, state)
 	if state == "withheld" then
-		-- The answer goes to the texture untouched, so it is asked every frame.
 		cover:SetVertexColorFromBoolean(shield, ColourObject(record, "shield"), ColourObject(record, otherwise))
 		record.state, record.hex = state, nil
-		-- The border keeps the Flat UI colour: the colour of the cast is not known.
 		PaintBorder(bar, nil)
 		PaintFlash(bar, record, state, nil, nil, nil, shield, otherwise)
 	else
@@ -1838,14 +1640,12 @@ local function PaintCast(bar, record)
 	PaintMarks(bar, record, state)
 end
 
--- A bar that is not shown has no cast. A bar the game has made forbidden since is not read.
 local function PollCast(bar, record)
 	local ok, forbidden = pcall(bar.IsForbidden, bar)
 	if not ok or ns.IsSecret(forbidden) or forbidden ~= false then
 		return
 	end
 	local shown = bar:IsShown()
-	-- A withheld answer counts as shown.
 	if ns.IsSecret(shown) or shown == true then
 		PaintCast(bar, record)
 	else
@@ -1855,15 +1655,10 @@ local function PollCast(bar, record)
 	end
 end
 
--- The part of a module that stops when its cast bar fills keep failing: the flat fill of the Cast
--- bars, or the cast bar fill among the fills of the nameplates.
 local function CastFillPart(key)
 	return key == "castbars" and "flat fill" or "cast bar fill"
 end
 
--- Runs every frame while a cast bar wants a flat fill. An error stops the flat fill and not the
--- module the bar belongs to. A bar that fails, or whose module or flat fill has stopped, gets its
--- look back. A flat fill that stops in the middle of a poll gives back the bars after it without a line.
 local function PollCasts()
 	for key in pairs(verdicts) do
 		verdicts[key] = nil
@@ -1890,10 +1685,7 @@ local function PollCasts()
 	end
 end
 
--- A flat fill on one cast bar for the module named by key: nameplate cast bars come here too.
--- The colours are the cast colours on the Flat UI page, whether or not the Cast bars page is switched on.
 function ns.CastFill(key, bar, on)
-	-- A withheld value raises when it is used as a table key.
 	if ns.IsSecret(bar) then
 		return
 	end
@@ -1920,7 +1712,6 @@ function ns.CastFill(key, bar, on)
 		HideMarks(record)
 	end
 	if not on and record.flashTint ~= nil and not forbidden then
-		-- The game's own flash again.
 		SetFlash(bar, record, nil)
 	end
 	if changed then
@@ -1932,27 +1723,12 @@ local function ApplyCastFill(bar)
 	ns.CastFill("castbars", bar, ns.Enabled("castbars") and ns.Get("castbars.flat") and not ns.PartStopped("castbars", "flat fill"))
 end
 
--- Interrupt strip (0.5.37): with Flat fill off there is no cover to colour, so while Interrupt readiness on enemy casts is on and an interrupt is
--- known (ns.InterruptKnown, Interrupt.lua), the target and focus bars get a thin strip of the addon's own along their bottom edge (Interrupt strip
--- height, 1 to 6 screen pixels, 2 at first, set out of a fight only: a change in one waits for its end, and says so once in chat while the options
--- window shows, 0.5.41; OVERLAY), made and anchored out of a
--- fight, since these bars hang from protected unit frames (ns.MaybeProtected, as ApplyCastIcon
--- waits). A frame of its own looks at the two bars every 0.1 s while the strip is wanted (ns.CastKickSync, called by Interrupt.lua's Sync, which
--- the refresh of the cast bars and the interrupt row run): the strip shows while the bar's casting or channeling is a plain true and
--- ns.InterruptReady answers for its unit, in Interrupt ready colour, Interrupt out of range colour or Interrupt on cooldown colour as CastColour
--- picks them for a cover. It hides on a plain shown BorderShield (a cast that cannot be interrupted), and takes a withheld answer of it with
--- SetAlphaFromBoolean (SimpleRegionAPIDocumentation.lua:134-145), as Interrupt.lua's border does. With Flat fill on, the cover takes the colour
--- and no strip shows. Only Show, Hide, SetColorTexture, SetAlpha and SetAlphaFromBoolean reach it in a fight.
 do
 	local KICK_BARS = { { "TargetFrameSpellBar", "target" }, { "FocusFrameSpellBar", "focus" } }
-	-- KICK_PX: the height of the strip in screen pixels when Interrupt strip height has no number.
 	local KICK_EVERY, KICK_PX = 0.1, 2
-	-- strips: per bar, its strip { tex, hex, alpha, shown, px }, or false when the game refused it. queued: a make waits for the end of the fight.
-	-- resized: a new height waits for the end of the fight.
 	local strips, queued = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
 	local kickFrame, kickClock, kicking, resized = nil, 0, false, false
 
-	-- Interrupt strip height (0.5.39, 1 to 6 screen pixels, 2 at first).
 	local function StripPx()
 		local px = ns.Get("castbars.interruptStrip")
 		if ns.Finite(px) and px >= 1 and px <= 6 then
@@ -1973,7 +1749,6 @@ do
 		end
 	end
 
-	-- The strip of a bar, made once out of a fight; nil while it cannot be made.
 	local function MakeStrip(bar)
 		local strip = strips[bar]
 		if strip ~= nil then
@@ -2010,7 +1785,6 @@ do
 		return strip
 	end
 
-	-- One look at one bar: shown in the colour of the player's interrupt while its unit casts something that can be interrupted.
 	local function PaintStrip(bar, unit)
 		local strip = strips[bar]
 		if not strip then
@@ -2045,7 +1819,6 @@ do
 			strip.hex = hex
 		end
 		if ns.IsSecret(locked) then
-			-- The answer goes to the texture untouched, so it is given every look.
 			if not (tex.SetAlphaFromBoolean and pcall(tex.SetAlphaFromBoolean, tex, locked, 0, 1)) then
 				tex:SetAlpha(1)
 			end
@@ -2066,7 +1839,6 @@ do
 			return
 		end
 		kickClock = 0
-		-- A row, the page or the interrupt gone since: the strips hide and the look stops.
 		if not KickWanted() then
 			ns.CastKickSync()
 			return
@@ -2085,7 +1857,6 @@ do
 		end
 	end
 
-	-- The strips are made, sized and looked at while they are wanted, and hidden while they are not.
 	function ns.CastKickSync()
 		local wanted = KickWanted()
 		for _, entry in ipairs(KICK_BARS) do
@@ -2098,8 +1869,6 @@ do
 						pcall(strip.tex.SetHeight, strip.tex, ns.Pixels(bar, px))
 						strip.px = px
 					elseif strip and strip.px ~= px and not resized then
-						-- A height changed in a fight is set as it ends, once however many changes asked, and one chat line says so while the
-						-- options window shows (0.5.41), as CastBarSize.lua says it of a bar's size.
 						resized = true
 						if type(ns.PanelShown) == "function" and ns.PanelShown() == true then
 							print("Flat UI: the interrupt strip takes its new height when the fight ends.")
@@ -2127,22 +1896,9 @@ do
 	end
 end
 
--- Cast marks without Flat fill (0.5.39): with Flat fill off there is no cover, so PaintMarks never runs. While the page is on, Flat fill is off and
--- Latency zone on the player bar or Spell icon on player and pet bars is on, the player bars (PlayerCastingBarFrame, OverlayPlayerCastingBarFrame)
--- and the pet bar get a set of marks of the addon's own each: the spell icon 5 units left of the bar, and on the player bars two latency zones,
--- one hung on the bar's right edges for a cast and one on its left edges for a channel, so that no anchor changes in a fight (Lock to player
--- frame hangs the player bar on the protected player frame). They are made and anchored out of a fight (ns.MaybeProtected, as the strip above):
--- at every refresh of the cast bars (ns.CastMarksSync) and at the end of a fight while some are missing. A frame of its own looks at the three
--- bars every 0.05 s while the marks are wanted and does what Marks does for a cover: UnitCastingInfo, else UnitChannelInfo, of the player or the
--- pet, each answer tested before it is used; the zone of the cast's side shows, as wide a share of the bar as the world latency (GetNetStats)
--- is of the cast, and the icon takes the spell's texture and the bar's height. The zones take Latency zone colour (LatencyTint, 0.5.41). Only Show,
--- Hide, SetWidth, SetTexture, SetSize and SetColorTexture (when that row changed) reach them in a fight. With Flat fill on, the cover's
--- PaintMarks does this and these stay hidden.
 do
 	local MARK_BARS = { { "PlayerCastingBarFrame", "player" }, { "OverlayPlayerCastingBarFrame", "player" }, { "PetCastingBarFrame", "pet" } }
 	local MARK_EVERY, MARK_PART, MARK_NAMES = 0.05, "cast marks", { "icon", "cast", "channel" }
-	-- sets: per bar, { unit, icon, cast, channel (the zones, none on the pet bar), shown and widths (per mark), file, size }, or false when the game
-	-- refused them. queued: a make waits for the end of the fight.
 	local sets, queued = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
 	local markFrame, markClock, marking = nil, 0, false
 
@@ -2171,7 +1927,6 @@ do
 		end
 	end
 
-	-- A texture of the addon's own on a bar, placed by place; nil when the game refused it or its anchor.
 	local function NewMark(bar, sublevel, place)
 		local ok, mark = pcall(bar.CreateTexture, bar, nil, "OVERLAY", nil, sublevel)
 		if not ok or ns.IsSecret(mark) or type(mark) ~= "table" then
@@ -2185,7 +1940,6 @@ do
 		return Anchored(mark) and mark or nil
 	end
 
-	-- A latency zone hung on one side of the bar, which only its width changes after.
 	local function NewZone(bar, side)
 		return NewMark(bar, 0, function(mark)
 			mark:SetColorTexture(1, 0, 0, 0.6)
@@ -2195,7 +1949,6 @@ do
 		end)
 	end
 
-	-- The set of a bar, made once out of a fight; nil while it cannot be made.
 	local function MakeSet(bar, unit)
 		local set = sets[bar]
 		if set ~= nil then
@@ -2227,7 +1980,6 @@ do
 		return set
 	end
 
-	-- One look at one bar, as Marks does it for a cover.
 	local function PaintSet(bar, set, wantIcon, wantLatency)
 		local name, _, texture, startMs, endMs = UnitCastingInfo(set.unit)
 		local channel = false
@@ -2239,7 +1991,6 @@ do
 			HideSet(set)
 			return
 		elseif name == nil then
-			-- The cast has ended: while the bar still shows (its fade, its Interrupted hold) the icon stays and the zones go (0.5.42).
 			local ok, shown = pcall(bar.IsShown, bar)
 			if ok and not ns.IsSecret(shown) and shown == true then
 				ShowMark(set, "cast", false)
@@ -2294,7 +2045,6 @@ do
 			return
 		end
 		markClock = 0
-		-- A row, the page or Flat fill changed since: the marks hide and the look stops.
 		if not MarksWanted() then
 			pcall(ns.CastMarksSync)
 			return
@@ -2316,7 +2066,6 @@ do
 		end
 	end
 
-	-- The sets are made while they are wanted and hidden while they are not, and the look runs only while they are wanted.
 	function ns.CastMarksSync()
 		local wanted = MarksWanted()
 		for _, entry in ipairs(MARK_BARS) do
@@ -2361,8 +2110,6 @@ end
 
 ns.Register("castbars", { label = "Cast bars", Start = RefreshCastBars, Refresh = RefreshCastBars })
 
--- One frame follows the cast bars and the custom colours of the resource bars, only while one
--- of them is wanted.
 local pollFrame
 local polling = false
 

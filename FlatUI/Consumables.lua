@@ -1,115 +1,21 @@
 local _, ns = ...
 
--- Drink and health macros: two macros of Flat UI's own in the account's macro list, Flat UI Drink and Flat UI Health, kept up to date out of
--- combat. Flat UI Drink drinks the best drink in the bags that the level allows, conjured water first, and in a fight, where nobody can drink,
--- takes the best mana potion the level allows (Mana potion in a fight), after a mage's best mana gem (Mana gem first in a fight: a cast
--- sequence of the gem, then the potion, that starts again when the fight ends, as Flat UI Health's; the gems are GEMS, the ranks of the mage's
--- Mana gem of ClassData.lua, and a gem and a potion each have a cooldown of their own). Flat UI Health takes the best healthstone, then at the
--- next press the best healing potion (a cast sequence that starts again when the fight ends); out of combat it eats the best food instead,
--- conjured food first (Eat out of combat). The ranks are those of ns.COOLDOWN_ITEMS for the potions and healthstones (CooldownData.lua) and of ns.CONSUMABLE_KINDS
--- for the drinks and foods (ConsumableData.lua). An item counts when the bags hold one (C_Item.GetItemCount, ItemDocumentation.lua:451-468)
--- and the level allows it: the level it needs is the fifth value of C_Item.GetItemInfo (ItemDocumentation.lua:626-657), as Cooldowns.lua:384-391
--- reads it for a potion, else the level of the data; the player's is UnitLevel (UnitDocumentation.lua:2474-2487). A healthstone still cooling
--- (C_Item.GetItemCooldown, ItemDocumentation.lua:434-448) goes after a potion that is ready, or that will be ready before it, since a cast
--- sequence waits on an item that is not ready: it moves on only when the spell of that item succeeds (CastSequenceManager.lua:62-95), and
--- nothing writes the macro when the potion's cooldown ends. The healthstone goes first again when it is ready. A mana gem still cooling goes
--- after a mana potion the same way, and first again when it is ready. A macro uses items by their ID
--- (item:159), so it works in every language, and #showtooltip gives its button the icon, the count and the tooltip of the item it uses. A
--- character without mana (UnitPowerMax, UnitDocumentation.lua:2801-2817, a value the game may withhold) leaves Flat UI Drink as it is.
---
--- Conjured water or food goes first when no drink or food bought in the bags needs a higher level. A conjured and a bought item that need the
--- same level are of one rank: Questie's Classic item table (Database/Classic/classicItemDB.lua of Questie 10.0.0) gives them one item level,
--- Conjured Purified Water (2136) and Melon Juice (1205) need 15 and are of item level 25, Conjured Spring Water (3772) and Sweet Nectar (1708)
--- need 25 and are of 35, and an item that needs a higher level is of a higher item level. So the water of a mage of a lower level, or water
--- kept from earlier levels, waits while the bags hold a drink of a higher rank, which restores more. EnhanceQoL puts first only its mage food,
--- which it counts as the whole mana bar (Drinks.lua:509-512, 644-645), and its Forever build chooses food for the level and the healing amount
--- (Locales/enUS.lua:2946-2947).
---
--- The macros are written again when the bags change (BAG_UPDATE_DELAYED, a unique event after the bag updates, ContainerDocumentation.lua:
--- 675-679), when the level changes (PLAYER_LEVEL_CHANGED, once the game has the new level: UnitDocumentation.lua:3818-3828, as Cooldowns.lua:
--- 1894-1898 reads it), on entering the world, and when a row of the page changes. Never in a fight: a change waits for its end
--- (InCombatLockdown, RestrictedActionsDocumentation.lua:45-53, then ns.OutOfCombat). Never while the game's macro window is open either
--- (MacroFrame, asked with the widget call IsShown): it hears UPDATE_MACROS while shown and loads the text of the macro it has picked again
--- (Blizzard_MacroUI.lua:110-117, 132-136, 285-300), which would throw away what the player is typing there; a step of one second waits for it to
--- close. A macro is made with CreateMacro(name, icon, body, false), an account macro as the game's own New button makes one
--- (Blizzard_MacroIconSelector.lua:109), written with EditMacro(index, nil, nil, body), which keeps its name and icon (Blizzard_MacroUI.lua:364),
--- and deleted with DeleteMacro(index) (Blizzard_MacroUI.lua:317), each found by name (GetMacroIndexByName) and read back with GetMacroInfo
--- (Blizzard_MacroUI.lua:299); a body that is already the one wanted is not written. The icon is the question mark (fileID 134400, the file of
--- QUESTION_MARK_ICON, Blizzard_FrameXMLBase/Constants.lua:588), which #showtooltip replaces. The account list holds 120 macros
--- (Constants.MacroConsts.MAX_ACCOUNT_MACROS, MacroConstantsDocumentation.lua:10; Blizzard_MacroUI.lua:166, 182-196): when it is full, chat says
--- so once a session and /flatui status says so, and UPDATE_MACROS (UIMacrosDocumentation.lua:67-72) tries again once the
--- player has deleted one. Flat UI only touches the macros it made: their names are kept in FlatUIDB.consumables from the moment they are made,
--- and a macro of the same name that Flat UI did not make is left alone, said once in chat. The game keeps the account's macros with the
--- account's data on its servers (Enum.AccountData.Macros, AccountConstantsDocumentation.lua:17), so they come back after the WTF folder is
--- deleted and are there on another computer, where FlatUIDB, a file of one computer, does not name them: a macro of Flat UI's name whose body is
--- one Flat UI writes (#showtooltip, then the /use and /castsequence lines of item IDs of DrinkBody and HealthBody) is taken as one it made, and
--- kept in FlatUIDB.consumables from then on.
--- Say when a macro changes (on by default): once a macro of Flat UI's is written again with another drink or food (by item ID), or another set
--- of items in its cast sequence or fight line (a cooldown that only reorders them does not count), or with none left, chat says so ("Flat UI:
--- Flat UI Drink now drinks Morning Glory Dew."). The first write of the session (login, /reload) says nothing, and nor does one that follows a
--- change of the rows the macro follows (Mana potion in a fight, Mana gem first in a fight, Eat out of combat), or one Flat UI did not write.
--- It also says once, as you drink or eat out of combat, when the bags hold LOW (5) or fewer drinks for Flat UI Drink, or foods for Flat UI
--- Health while it eats out of combat ("Flat UI: Flat UI Drink has 5 drinks left in your bags."), counting every rank of conjured and bought the
--- level allows (Supply), and again only after the bags held more than LOW; none left is the line above.
--- Turned off (its row, the page, a profile without it, or a stop after errors) in a session that kept it, a macro Flat UI made is deleted, out
--- of combat, for every character of the account, whose list it is; a character whose profile has it off at login leaves it alone. A delete
--- takes the macro off every action slot that holds it, as when a player deletes a macro, so a macro that an action slot or the cursor still
--- holds is not deleted: it stays as it is, chat says once a session that a bar holds it, /flatui status says so while it is off, and once the
--- player has dragged it off the bar and let it go, which the game does in its own code, Flat UI deletes it. Turned on again before that, the
--- same macro is kept; turned on after, a new macro is made, to be put on the bar again. The wait lasts the session: a later one with it off at
--- login leaves the macro alone, as above.
---
--- The game's action buttons write action, which the click of an action button reads (TaintScan.lua), when ACTIONBAR_SLOT_CHANGED names their
--- slot (ActionButton.lua:981-984, 1109-1112, 538-545), and the game raises that event inside the call that changes a slot (SynchronousEvent,
--- ActionBarFrameDocumentation.lua:1082-1091; ErrandsRanks.lua says what that does). Each later write reads action first, so it stays Flat UI's
--- until /reload: a right click on that button reads it before it uses the action (ActionButton.lua:1404), and so does the update the button
--- makes when the mouse comes over it (ActionButton.lua:1447-1450), whose attribute and show calls (531, 558, 562; ActionBar.lua:210) the game
--- refuses in a fight and blames on Flat UI. A delete of a macro on a bar changes that slot, so the 180 slots of the game's bars (15 pages,
--- MultiActionBars.lua:6-8, of 12 slots, ActionButtonUtil.lua:3) are read first, each with GetActionInfo, which names a macro "macro"
--- (ActionButton.lua:1476), and C_ActionBar.GetActionText, which gives its name (ActionButton.lua:625-626). The cursor is the game's to change
--- too (CURSOR_CHANGED is a SynchronousEvent, CursorDocumentation.lua:31-42), and GetCursorInfo gives "macro" and the macro's place
--- (SharedUIPanelTemplates.lua:1961-1962). While a delete waits, a second frame of the addon's own hears ACTIONBAR_SLOT_CHANGED and
--- CURSOR_CHANGED and asks again, and only then. Writing a macro changes no slot, but a macro on a bar may be drawn again. So a frame of the
--- addon's own hears ACTIONBAR_SLOT_CHANGED during each macro call of this file, and only then. Should the game raise it inside one, chat and
--- /flatui status say that /reload makes the bars clean again, and Flat UI writes no more macros on that build of the client
--- (FlatUIDB.consumables.slotWrite); turning the page off still deletes them. No secure button, binding or global of Flat UI's is made, and
--- nothing of the game's is hooked or written.
---
--- Built on the drink and health macros of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Modules/Food/Food.lua,
--- Init.lua:412-435, EnhanceQoLHealthMacro.lua, Health.lua), with the choice its Forever build makes for the health macro: food out of combat
--- (Core/Cleanup.lua:195-198, the locale healthUseFoodForever). Left out: Recuperate, mage food and Earthen food (none on Forever), the flask and
--- buff food macros, the order of the health macro as a choice, its reset choices, custom spells and the potion priority list. The level an item
--- needs is the client's first and the data's only when the client gives none, and a vanilla catalogue replaces the retail one.
-
 local KEY = "consumables"
 local KINDS = { "drink", "health" }
 local NAMES = { drink = "Flat UI Drink", health = "Flat UI Health" }
 local ICON = 134400
 local ACCOUNT_MACROS = 120
--- The action slots of the game's bars, read before a delete.
 local SLOTS = 180
--- A burst of events is written once, this long after the first. The step while the game's macro window is open.
 local SOON, WAIT = 0.2, 1
--- A cooldown this short is the one every item shares after a use, not the item's own.
 local SHORT = 1.5
 local LABEL = "Drink and health macros"
--- A mage's mana gems, lowest to highest: Mana Agate, Mana Jade, Mana Citrine, Mana Ruby (the Mana gem of ClassData.lua).
 local GEMS = { 5514, 5513, 8007, 8008 }
 
--- What each macro uses now ({ drink, potion, gem, order } or { stone, potion, food, order }), and why one is not kept ("mana", "taken", "full",
--- "blocked") or not deleted yet ("bar", "cursor"), by kind.
 local using, why = {}, {}
--- Lines already said in chat this session.
 local said = {}
--- The kinds Flat UI kept this session. Only those are deleted when their row or the page goes off: the macros are the account's, so a character
--- whose profile has a row off at login leaves alone the macro another character keeps.
 local kept = {}
--- A run waiting for the end of the fight, for the macro window, or for a burst of events to end.
 local fight, window, soon = false, false, false
--- A macro put a cooling healthstone or mana gem after the potion: by kind, the time to write it again, or true while its cooldown has not started.
 local wakeAt, held = {}, {}
--- The slot guard: true while a macro call of this file runs, and whether the game raised ACTIONBAR_SLOT_CHANGED inside one this session, in a
--- write (slotTripped) or in a delete (slotDeleted).
 local writing, slotSeen, slotTripped, slotDeleted = false, false, false, false
 
 local guard = CreateFrame("Frame")
@@ -120,8 +26,6 @@ guard:SetScript("OnEvent", function()
 	end
 end)
 
--- The watch: a frame of its own, since Call unregisters the guard after each call. It hears slot and cursor changes while a delete waits for
--- the player to take the macro off the bars, and only then (Watch, below).
 local watch = CreateFrame("Frame")
 ns.Own[watch] = true
 local watching = false
@@ -130,7 +34,6 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- Up to five values the client gives, each nil when the client withholds it (a secret); all nil when the call is missing or raises.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -159,8 +62,6 @@ local function Say(key, text)
 	end
 end
 
--- FlatUIDB.consumables: drink and health hold the name of the macro Flat UI made, slotWrite the build on which a macro call made the game
--- write an action slot. Nil before the saved variables are loaded, and while nothing is kept unless make is set.
 local function Store(make)
 	local db = ns.Account()
 	if type(db) ~= "table" then
@@ -185,14 +86,11 @@ local function Blocked()
 	return slotTripped or (store ~= nil and store.slotWrite == Build())
 end
 
--- The player ------------------------------------------------------------------------------------------------------------------------------
-
 local function Level()
 	local level = Ask(UnitLevel, "player")
 	return ns.Finite(level) and level or nil
 end
 
--- False only when the game says the player has no mana.
 local function HasMana()
 	local mana = type(Enum) == "table" and type(Enum.PowerType) == "table" and Enum.PowerType.Mana or 0
 	local most = Ask(UnitPowerMax, "player", mana)
@@ -202,14 +100,11 @@ local function HasMana()
 	return true
 end
 
--- Items ------------------------------------------------------------------------------------------------------------------------------------
-
 local function Count(id)
 	local n = Ask(C_Item and C_Item.GetItemCount, id, false, false)
 	return ns.Finite(n) and n or 0
 end
 
--- True when the level allows the item, and the level it needs: the client's, else fallback; a level nobody knows (0) allows it.
 local function Allowed(id, fallback, level)
 	local needs = fallback
 	local call = C_Item and C_Item.GetItemInfo
@@ -225,7 +120,6 @@ local function Allowed(id, fallback, level)
 	return level == nil or needs <= level, needs
 end
 
--- The highest rank of a kind of ns.CONSUMABLE_KINDS that the bags hold and the level allows, and the level it needs, or nil.
 local function BestOf(key, level)
 	for _, kind in ipairs(type(ns.CONSUMABLE_KINDS) == "table" and ns.CONSUMABLE_KINDS or {}) do
 		if type(kind) == "table" and kind.key == key and type(kind.ranks) == "table" then
@@ -244,7 +138,6 @@ local function BestOf(key, level)
 	return nil
 end
 
--- How many of a conjured kind (water, bread) and the kind bought (drink, food) the bags hold, of every rank the level allows.
 local function Supply(conjured, bought, level)
 	local total = 0
 	for _, kind in ipairs(type(ns.CONSUMABLE_KINDS) == "table" and ns.CONSUMABLE_KINDS or {}) do
@@ -263,8 +156,6 @@ local function Supply(conjured, bought, level)
 	return total
 end
 
--- The best of a conjured kind (water, bread) and the kind bought (drink, food): the conjured item, unless the bought one needs a higher level
--- and so is of a higher rank (above).
 local function Prefer(conjured, bought, level)
 	local made, madeNeeds = BestOf(conjured, level)
 	local other, otherNeeds = BestOf(bought, level)
@@ -274,7 +165,6 @@ local function Prefer(conjured, bought, level)
 	return other
 end
 
--- The same for a kind of ns.COOLDOWN_ITEMS (healing, mana, healthstone), whose ranks have no level of their own.
 local function BestItem(key, level)
 	for _, kind in ipairs(type(ns.COOLDOWN_ITEMS) == "table" and ns.COOLDOWN_ITEMS or {}) do
 		if type(kind) == "table" and kind.key == key and type(kind.items) == "table" then
@@ -289,7 +179,6 @@ local function BestItem(key, level)
 	return nil
 end
 
--- The best mana gem that the bags hold and the level allows, or nil.
 local function BestGem(level)
 	for index = #GEMS, 1, -1 do
 		local id = GEMS[index]
@@ -300,8 +189,6 @@ local function BestGem(level)
 	return nil
 end
 
--- Seconds until an item is ready again: 0 when it is, math.huge for a cooldown that has not started yet (enableCooldownTimer false, as for a
--- potion drunk in a fight), nil when the client does not say.
 local function Left(id)
 	local start, duration, enable = Ask(C_Item and C_Item.GetItemCooldown, id)
 	if not (ns.Finite(start) and ns.Finite(duration)) then
@@ -320,9 +207,6 @@ local function Left(id)
 	return math.max(0, start + duration - now)
 end
 
--- The macros --------------------------------------------------------------------------------------------------------------------------------
-
--- The body of Flat UI Drink, what it uses, and in how many seconds it wants writing again (a cooling mana gem put after the potion).
 local function DrinkBody(level)
 	local drink = Prefer("water", "drink", level)
 	local potion = Opt("manaPotion") == true and BestItem("mana", level) or nil
@@ -336,7 +220,6 @@ local function DrinkBody(level)
 	end
 	if gem and potion then
 		local gemLeft, potionLeft = Left(gem), Left(potion)
-		-- As in Flat UI Health: a potion that is ready, or that will be ready before the gem, goes first.
 		if gemLeft and potionLeft and gemLeft > 0 and potionLeft < gemLeft then
 			order, wake = { potion, gem }, gemLeft
 		end
@@ -353,7 +236,6 @@ local function DrinkBody(level)
 	return table.concat(lines, "\n"), { drink = drink, potion = potion, gem = gem, order = order }, wake
 end
 
--- The body of Flat UI Health, what it uses, and in how many seconds it wants writing again (a cooling healthstone put after the potion).
 local function HealthBody(level)
 	local stone, potion = BestItem("healthstone", level), BestItem("healing", level)
 	local food = Opt("food") == true and Prefer("bread", "food", level) or nil
@@ -366,8 +248,6 @@ local function HealthBody(level)
 	end
 	if stone and potion then
 		local stoneLeft, potionLeft = Left(stone), Left(potion)
-		-- A potion that is ready, or that will be ready before the stone, goes first. Nothing writes the macro when the potion's cooldown
-		-- ends, so a fight that starts or is on then takes the potion at the next press, the stone waiting behind it.
 		if stoneLeft and potionLeft and stoneLeft > 0 and potionLeft < stoneLeft then
 			order, wake = { potion, stone }, stoneLeft
 		end
@@ -390,7 +270,6 @@ local function MacroCalls()
 		and type(CreateMacro) == "function" and type(EditMacro) == "function" and type(DeleteMacro) == "function"
 end
 
--- The place of the macro of that name in the macro lists, 0 when there is none, nil when the client does not say.
 local function Index(name)
 	local index = Ask(GetMacroIndexByName, name)
 	if ns.Finite(index) and index >= 0 then
@@ -404,11 +283,9 @@ local function BodyAt(index)
 	return type(body) == "string" and body or nil
 end
 
--- The lines DrinkBody and HealthBody write after #showtooltip.
 local OUR_LINES = { "^/use item:%d+$", "^/use %[combat%] item:%d+$", "^/use %[nocombat%] item:%d+$",
 	"^/castsequence reset=combat item:%d+, item:%d+$", "^/castsequence %[combat%] reset=combat item:%d+, item:%d+$" }
 
--- True for a body Flat UI writes: #showtooltip, then lines of OUR_LINES. Empty lines are passed over.
 local function Ours(body)
 	if type(body) ~= "string" then
 		return false
@@ -446,7 +323,6 @@ local function WindowOpen()
 	return ok and not ns.IsSecret(shown) and shown == true
 end
 
--- A macro call, with the slot guard listening while it runs. True when the client took it.
 local function Call(deleting, fn, ...)
 	local listening = pcall(guard.RegisterEvent, guard, "ACTIONBAR_SLOT_CHANGED")
 	slotSeen, writing = false, true
@@ -472,7 +348,6 @@ local function Call(deleting, fn, ...)
 	return ok
 end
 
--- A run that waited for a timer or the end of a fight (below).
 local Again
 
 local function Named(id)
@@ -480,10 +355,6 @@ local function Named(id)
 	return type(name) == "string" and name ~= "" and name or ("item " .. tostring(id))
 end
 
--- Say when a macro changes ---------------------------------------------------------------------------------------------------------------
-
--- The IDs of a list in one text, sorted, so a list whose order alone changed (a healthstone or a mana gem still cooling goes after the potion,
--- and first again when it is ready) reads the same.
 local function Set(list)
 	local ids = {}
 	for index, id in ipairs(list or {}) do
@@ -501,7 +372,6 @@ local function Listed(list)
 	return table.concat(names, ", then ")
 end
 
--- The rows a macro of a kind follows: a change of them is the player's own, and says nothing.
 local function Rows(kind)
 	if kind == "drink" then
 		return tostring(Opt("manaPotion")) .. tostring(Opt("manaGem"))
@@ -509,8 +379,6 @@ local function Rows(kind)
 	return tostring(Opt("food"))
 end
 
--- The lines chat says when a macro moves to other items: the drink or the food it takes (by ID), and the items of its cast sequence or fight
--- line (as a set, so a cooldown that only reorders them says nothing), or that it has none left. Nil when nothing changed.
 local function Change(kind, old, new)
 	if type(old) ~= "table" or type(new) ~= "table" then
 		return nil
@@ -540,15 +408,9 @@ local function Change(kind, old, new)
 	return #lines > 0 and lines or nil
 end
 
--- primed: the kinds kept once this session, so the first write after login or /reload says nothing. rowsAt: the rows each followed then.
--- lowSaid: the kinds whose low supply chat has told, until the bags hold more than LOW again.
 local primed, rowsAt, lowSaid = {}, {}, {}
--- At this many drinks (or foods) left, or fewer, chat says how many.
 local LOW = 5
 
--- Chat says once how many drinks Flat UI Drink has left, or foods Flat UI Health (while it eats out of combat), at LOW or fewer; again only
--- after the bags held more than LOW. None left is Change's line. speak: the write is not the first of the session and Say when a macro changes
--- is on.
 local function Low(kind, level, uses, speak)
 	local drink = kind == "drink"
 	if not (drink and uses.drink or not drink and uses.food) then
@@ -564,7 +426,6 @@ local function Low(kind, level, uses, speak)
 	end
 end
 
--- Makes or writes the macro of a kind, as its row wants it.
 local function Keep(kind)
 	why[kind] = nil
 	local store = Store()
@@ -595,8 +456,6 @@ local function Keep(kind)
 			end)
 		end
 	end
-	-- What chat says once the macro is written: only after the first write of the session, while Say when a macro changes is on, and not for a
-	-- change of the rows the macro follows.
 	local rows, changes = Rows(kind), nil
 	local speak = primed[kind] == true and Opt("say") == true
 	if speak and rowsAt[kind] == rows then
@@ -612,7 +471,6 @@ local function Keep(kind)
 	if index == nil then
 		return
 	end
-	-- Flat UI's own macro, made on another computer or before the WTF folder was deleted (above).
 	if index > 0 and not (store and store[kind] == name) and Ours(BodyAt(index)) then
 		store = Store(true)
 		if store then
@@ -646,8 +504,6 @@ local function Keep(kind)
 	Low(kind, level, uses, speak)
 end
 
--- What still holds the macro of that name and place: "bar" when an action slot does, "cursor" when the cursor does, else nil. A macro slot
--- whose name the client withholds counts as holding it, and so does a macro on the cursor whose place it withholds.
 local function HeldBy(name, index)
 	local text = C_ActionBar and C_ActionBar.GetActionText
 	for slot = 1, SLOTS do
@@ -665,7 +521,6 @@ local function HeldBy(name, index)
 	return nil
 end
 
--- Deletes the macro of a kind that Flat UI made and kept this session, and forgets it once it is gone. One that a bar or the cursor holds waits.
 local function Remove(kind)
 	using[kind], why[kind] = nil, nil
 	held[kind], wakeAt[kind] = false, nil
@@ -698,7 +553,6 @@ local function Remove(kind)
 	end
 end
 
--- The watch on while a delete waits, off otherwise.
 local function Watch(on)
 	if on == watching then
 		return
@@ -720,7 +574,6 @@ end
 
 local Run
 
--- A run that waited: through ns.Try, or as it is for a stopped module, which still deletes what it made.
 Again = function()
 	if ns.IsStopped(KEY) then
 		pcall(Run)
@@ -729,7 +582,6 @@ Again = function()
 	end
 end
 
--- Each macro as its row and the page want it: out of combat, with the game's macro window closed.
 Run = function()
 	if not MacroCalls() then
 		return
@@ -766,7 +618,6 @@ Run = function()
 	Watch(Waiting())
 end
 
--- An event: a burst is written once, a moment after the first.
 local function Soon()
 	if soon then
 		return
@@ -781,15 +632,12 @@ local function Soon()
 	end
 end
 
--- A slot or the cursor changed while a delete waits: the player may have taken the macro off the bars.
 watch:SetScript("OnEvent", function()
 	local ok, err = pcall(Soon)
 	if not ok then
 		geterrorhandler()(err)
 	end
 end)
-
--- /flatui status --------------------------------------------------------------------------------------------------------------------------
 
 local function Line(kind)
 	local name, reason, uses = NAMES[kind], why[kind], using[kind]
@@ -832,8 +680,6 @@ end
 
 local function Status()
 	local lines = {}
-	-- A delete that waits, with the page on or off. A kind turned on again has none while its run waits for the fight or the macro window:
-	-- that run keeps the macro.
 	for _, kind in ipairs(KINDS) do
 		local off = not (ns.Enabled(KEY) and Opt(kind) == true)
 		if off and why[kind] == "bar" then
@@ -865,9 +711,6 @@ local function Status()
 	return lines
 end
 
--- A macro call that made the game write an action slot this session leaves the bars to a reload, a delete as much as a write: the button
--- writes action under the call either way (ActionButton.lua:981-984, 1109-1112, 538-545). A delete comes when the page or a row goes off, and
--- then Status above says nothing of it, so this line is the one /flatui status keeps whatever the page.
 ns.ClickPathReporter(function()
 	if slotTripped then
 		return LABEL .. ": the game updated an action button inside a macro write of Flat UI. /reload makes it clean."
@@ -887,13 +730,11 @@ ns.Register(KEY, {
 		BAG_UPDATE_DELAYED = Soon,
 		PLAYER_LEVEL_CHANGED = Soon,
 		PLAYER_ENTERING_WORLD = Soon,
-		-- The cooldown of a healthstone or mana gem put after the potion has started, so the time it ends is known.
 		BAG_UPDATE_COOLDOWN = function()
 			if held.drink or held.health then
 				Soon()
 			end
 		end,
-		-- The player made room in the macro list, or renamed the macro that had Flat UI's name.
 		UPDATE_MACROS = function()
 			if why.drink == "full" or why.health == "full" or why.drink == "taken" or why.health == "taken" then
 				Soon()

@@ -1,9 +1,5 @@
 local _, ns = ...
 
--- Cards and the controls that sit on them: the card of a section (a header that folds, a count of changed rows, the rows on a panel), the
--- segmented choice and the chip set. Panel.lua hands the drawing of these to this file; the widgets are the ones of ns.PanelKit. The Sections
--- setting (Cards or Lines) picks between a card and the heading with a line under it.
-
 local Cards = {}
 ns.PanelCards = Cards
 
@@ -19,7 +15,6 @@ function Cards.On()
 	return Look.Get("sections") == "cards"
 end
 
--- The saved paths that setup tiers as rare (a row of tier r in SetupSteps.lua).
 local rare
 function Cards.IsRare(path)
 	if not rare then
@@ -35,7 +30,6 @@ function Cards.IsRare(path)
 	return path ~= nil and rare[path] == true
 end
 
--- Four short bars that make a triangle: pointing down for a card that is open, to the right for a card that is folded.
 local function Arrow(parent)
 	local bars = {}
 	for index = 1, 4 do
@@ -58,10 +52,6 @@ local function Arrow(parent)
 	end
 end
 
--- Segmented choice ----------------------------------------------------------------------------------
-
--- A row of segments in place of a dropdown, for a choice that has a few short lines. The chosen segment is in the accent. Returns the function
--- that shows the saved value.
 function Cards.Segments(row, item)
 	local box = kit.Frame(row.frame)
 	box:SetHeight(SEG)
@@ -123,9 +113,6 @@ function Cards.Segments(row, item)
 	end
 end
 
--- Chip set ---------------------------------------------------------------------------------------------
-
--- The switches of items (bool settings of page) as chips that wrap inside width. Returns the block: its height h, Place(top), Show and Update().
 local function Chips(parent, page, items, width)
 	local block = kit.Frame(parent)
 	local chips, x, line = {}, 0, 0
@@ -135,7 +122,6 @@ local function Chips(parent, page, items, width)
 		local label = kit.Label(frame, "GameFontHighlight", "LEFT")
 		label:SetPoint("LEFT", frame, "LEFT", 10, 0)
 		label:SetText(text)
-		-- The width of the text as the game draws it, or a guess when the game gives none.
 		local ok, measured = pcall(label.GetStringWidth, label)
 		if not (ok and type(measured) == "number" and not ns.IsSecret(measured) and measured > 0) then
 			measured = 7.2 * #text
@@ -208,10 +194,6 @@ local function Chips(parent, page, items, width)
 	return object
 end
 
--- Cards ------------------------------------------------------------------------------------------------
-
--- The cards of a page. Section(item, y, page, index) is called for each heading, Row(row, item, y) for each row built, and Finish(y) at the end.
--- A page with a block of its own (the Trackers editor) is laid out as it is built and its cards do not fold, since the block cannot move.
 function Cards.New(entry, view, scroller, width)
 	local parent = scroller.child
 	local cards = { list = {}, chipped = {}, seen = {}, static = false }
@@ -238,7 +220,6 @@ function Cards.New(entry, view, scroller, width)
 			kit.Backing(card.outline, "card", 1, "line")
 		end)
 		if card.name then
-			-- Two sections of a page with one name fold apart: the second has its place in the id.
 			cards.seen[card.name] = (cards.seen[card.name] or 0) + 1
 			card.id = "card:" .. entry.key .. ":" .. card.name .. (cards.seen[card.name] > 1 and (":" .. cards.seen[card.name]) or "")
 			card.folded = not cards.static and Look.Folded(card.id)
@@ -299,7 +280,6 @@ function Cards.New(entry, view, scroller, width)
 		cards.card = nil
 	end
 
-	-- A heading: the card starts here. Returns the y under its header, and under its chips when the section is a chip set.
 	function cards.Section(item, y, page, index)
 		cards.Close(y)
 		local top = y + (#cards.list > 0 and GAP or 0)
@@ -331,14 +311,12 @@ function Cards.New(entry, view, scroller, width)
 		return y
 	end
 
-	-- The link at the end of a card's plain rows. The rare rows of the card sit under it while it is open.
 	local function MoreLink(card)
 		local frame = kit.Frame(parent)
 		frame:SetHeight(kit.ROW)
 		local label = kit.Tint(kit.Label(frame, "GameFontHighlightSmall", "LEFT", 240), "accent")
 		label:SetPoint("LEFT", frame, "LEFT", 16, 0)
 		card.opened = card.id ~= nil and Look.Folded("more:" .. card.id)
-		-- A rare row that is not at its default has its dot and reset hidden while the link is shut, so the link says so.
 		local function Text()
 			if card.opened then
 				return "Fewer choices"
@@ -392,7 +370,6 @@ function Cards.New(entry, view, scroller, width)
 		end
 	end
 
-	-- A block of the page was built: a card with no heading holds it when no heading came before.
 	function cards.Static()
 		if not cards.card then
 			Open(TOP)
@@ -448,9 +425,7 @@ function Cards.New(entry, view, scroller, width)
 		return cards.Layout()
 	end
 
-	-- The count at the right of a header: the rows of the card that are not at their default, as Reset page counts them.
 	function cards.Update()
-		-- A page with a block of its own: the last card follows the height of the block.
 		local last = cards.list[#cards.list]
 		if cards.static and last then
 			last.Bottom(scroller.content - kit.PAD)
@@ -474,7 +449,6 @@ function Cards.New(entry, view, scroller, width)
 		end
 	end
 
-	-- A jump from the sidebar to a card that is folded opens it.
 	local function Unfold(card)
 		if card.folded then
 			card.folded = false
@@ -492,7 +466,6 @@ function Cards.New(entry, view, scroller, width)
 		end
 	end
 
-	-- A jump from the search to a row in a folded card opens the card.
 	function view.RevealItem(item)
 		for _, card in ipairs(cards.list) do
 			for _, each in ipairs(card.items) do
@@ -500,7 +473,6 @@ function Cards.New(entry, view, scroller, width)
 					Unfold(card)
 				end
 			end
-			-- A rare row found by the search opens the rows behind More choices.
 			for _, each in ipairs(card.rare or {}) do
 				if each.item == item and not card.opened then
 					card.opened = true

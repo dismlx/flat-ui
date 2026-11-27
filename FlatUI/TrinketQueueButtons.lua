@@ -1,48 +1,9 @@
 local _, ns = ...
 
--- The squares beside the trinket slots of the Character window (0.5.36): the part "slot buttons" of the trinkets module, while Buttons by the
--- trinket slots is on (trinkets.slotButtons). Two buttons of Flat UI's own, without names, made on UIParent (CreateFrame, WL/apis.yaml:35213),
--- 14 by 14 in the window's units, each hung right of its slot, 3 clear of it (SetPoint on its own frame with the slot as the frame it hangs from):
--- CharacterTrinket0Slot for the top slot and CharacterTrinket1Slot for the bottom one, 37 by 37 slots of the right column
--- (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:850-859; Blizzard_ItemButton/ItemButtonTemplate.xml:15), which hangs 20 in from the right edge
--- of the left pane (PaperDollFrame.xml:820-822), so 3 and 14 fit. The left side of a slot is the game's: its flyout button (16 by 32, its right at
--- the slot's left less 5) and its socket display lie there (Camelot/PaperDollFrame.lua:1977-1988; PaperDollFrame.xml:141-151;
--- EquipmentFlyout.xml:28-36). Show thorns hangs under the second trinket slot, not beside it (CharacterThorns.lua:544-545).
--- They are never parented to the Character window and write nothing on it or on the slots: of CharacterFrame and the slots they read only whether
--- they are visible (IsVisible, so they hide with the slots on the Reputation and Skills tabs; IsShown for the window), the slot's scale
--- (GetEffectiveScale; where a slot is they never read, as each hangs from its slot with SetPoint), the window's strata (GetFrameStrata) and
--- whether the game protects them (IsProtected). Each takes the slot's scale against UIParent's (SetScale on its own frame, as GearButton.lua does,
--- GearButton.lua:161-178, 506-511), and lies one strata above the window's at a level of its own (GearButton.lua:553-577), so the window, which
--- the game raises when clicked, never covers it. While the game protects the window or the slot in a fight, only its alpha changes until the
--- fight's end (ns.OutOfCombat), as GearButton.lua's Blocked (GearButton.lua:120-133).
--- The driver is GearButton.lua's (GearButton.lua:611-722): a frame whose OnUpdate looks four times a second while the buttons are wanted (the module
--- runs, the part is not stopped and the row is on), started at once by ShowUIPanel and HideUIPanel, which it follows (ns.FollowGlobal,
--- hooksecurefunc; several followers of a name are fine, Core.lua's FollowOnce), and by ns.TrinketButtonsChanged (the row's changed, and each refresh
--- of the module, TrinketQueue.lua). It registers no event.
--- The look is the Windows page's: Button and slot colour, a thin border (ns.Outline, SetOutlineArea "windows"), the Highlight colour under the
--- cursor (alpha HOVER), and a dot of 6 by 6 in the middle that says the state of its slot (TrinketQueue.lua's Q.Tone): grey while the slot's Auto
--- queue is off, the Highlight colour while it is on with nothing to wait for, amber while a swap waits for a fight, a cast, the cursor, busy bags
--- or a delay (and in a fight whenever Auto queue is on), red while the queue is paused, the slot is held or stopped, or the game refused a trinket.
--- The colour is never all that says it: the tooltip says it in words.
--- Clicks: a left click opens the Trinket queue window on that slot, shows it there while the window shows the other slot, and closes it while it
--- shows this one (ns.TrinketWindowToggle, TrinketQueueWindow.lua); a Shift-click is Queue now for that slot (Q.Now, as the window's Queue now
--- button, with one line in chat, 0.5.37, which in a fight says the queue looks again as the fight ends, 0.5.39), which clears a red square (held,
--- held empty, refused); a right click turns the slot's Auto queue on or off (Q.SetAuto), a Shift-right click pauses or resumes every swap
--- (Q.SetPaused); a trinket dropped on it (OnReceiveDrag), or clicked on it from the cursor, goes in that slot's list (Q.Add), and one lifted from
--- a bag or a worn slot goes back there with ClearCursor, as GearButton.lua's Compare (GearButton.lua:300-356).
--- Its tooltip is GameTooltip (SetOwner, AddLine, Show, and Hide only while IsOwned says the button owns it), never in a fight (GearButton.lua:285-298).
--- While the cursor is on a button (over, from OnEnter to OnLeave or OnHide), each click and each look of the driver out of a fight says the
--- tooltip again as soon as its words changed (0.5.37): a click's change shows at once, and a cooldown or the next trinket's time counts down.
--- Everything runs as the part "slot buttons" (ns.EachPart, a count of its own first), so three faults stop the buttons alone with a line for
--- /flatui status, and they hide then. Every frame, texture and font string here is Flat UI's own. There is no movers entry: the buttons belong to
--- their slots, as the item levels on the slots have none, and the slots never move.
-
 local KEY, PART, ROW = "trinkets", "slot buttons", "trinkets.slotButtons"
--- The slots of each list, the button's side and its gap from the slot, the dot's side, the alpha of the light under the cursor.
 local SLOTS = { top = "CharacterTrinket0Slot", bottom = "CharacterTrinket1Slot" }
 local ORDER = { "top", "bottom" }
 local SIDE, GAP, DOT, HOVER = 14, 3, 6, 0.18
--- The stratas from the lowest, the one above the window's is the buttons' (never TOOLTIP); their level in it; how often the driver looks.
 local STRATA = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG" }
 local LEVEL, EVERY = 20, 0.25
 local DIM, PLAIN = { 0.66, 0.68, 0.62 }, { 1, 1, 1 }
@@ -59,9 +20,6 @@ local T = {
 	REPORT = "Flat UI, Trinket queue buttons, %s: %s",
 }
 
--- The buttons by slot ({ button, dot, hover, outline, anchored, scale, strata, level, tone, over, said: the words of the tooltip it showed });
--- the driver and its clock; whether the buttons are wanted and the window shows at the last look; whether a change waits for the end of a
--- fight; the look painted.
 local B = { top = {}, bottom = {}, driver = nil, clock = 0, wanted = false, shown = false, waiting = false, look = nil, runs = 0, faults = {} }
 
 local Start
@@ -102,7 +60,6 @@ local function Step(_, fn, ...)
 	return fn(...)
 end
 
--- Runs fn as this part, with a count of its own first: true when it ran without a fault.
 local function Run(fn, ...)
 	B.runs = B.runs + 1
 	local ok, err = ns.EachPart(KEY, PART, Step, B.runs, fn, ...)
@@ -122,7 +79,6 @@ local function Fighting()
 	return not ok or IsSecret(fighting) or fighting == true
 end
 
--- True when the game would refuse a change to this frame now: in a fight, one it protects, or one that will not say.
 local function Blocked(frame)
 	if not Fighting() then
 		return false
@@ -131,7 +87,6 @@ local function Blocked(frame)
 	return not ok or IsSecret(protected) or protected == true
 end
 
--- A frame of the game by its name, once the game has made it, while addons may read it.
 local function Game(name)
 	local frame = _G[name]
 	if type(frame) ~= "table" or IsSecret(frame) or ns.Forbidden(frame) then
@@ -145,7 +100,6 @@ local function Answer(frame, method)
 	return ok and not IsSecret(answer) and answer == true
 end
 
--- Units of UIParent for each unit of a frame, to a thousandth, or nil.
 local function Scale(frame)
 	local ok, scale = pcall(frame.GetEffectiveScale, frame)
 	local okBase, base = pcall(UIParent.GetEffectiveScale, UIParent)
@@ -155,8 +109,6 @@ local function Scale(frame)
 	return math.floor(scale / base * 1000 + 0.5) / 1000
 end
 
--- Looks -----------------------------------------------------------------------------------------------------------------------------------------
-
 local function RGB(path, r, g, b)
 	local ok, cr, cg, cb = pcall(ns.Colour, path)
 	if ok and Finite(cr) and Finite(cg) and Finite(cb) then
@@ -165,7 +117,6 @@ local function RGB(path, r, g, b)
 	return r, g, b
 end
 
--- What the look is made of now, so a change of one of those rows paints the buttons again.
 local function Look()
 	local pr, pg, pb = RGB("windows.panel", 0.12, 0.12, 0.12)
 	local ar, ag, ab = RGB("windows.accent", 0.85, 0.85, 0.85)
@@ -181,7 +132,6 @@ local function Paint(b)
 	b.tone = nil
 end
 
--- The dot in the colour of its slot's tone.
 local function PaintDot(b, n)
 	local q = Q()
 	local tone = q and q.Tone(n) or "off"
@@ -196,8 +146,6 @@ local function PaintDot(b, n)
 	end
 	b.dot:SetColorTexture(colour[1], colour[2], colour[3], 1)
 end
-
--- The tooltip ----------------------------------------------------------------------------------------------------------------------------------
 
 local function Tooltip()
 	local tip = _G.GameTooltip
@@ -218,8 +166,6 @@ local function Untip(b)
 	end
 end
 
--- The lines of a slot's tooltip, each { text, colour }: the title, the slot's state in words, the next trinket when known, Pause all, and dim
--- lines; and their words in one string, which says whether the tooltip changed.
 local function Lines(q, n)
 	local state = q.State(n)
 	local lines = { { T.TITLE[n], PLAIN }, { q.Sentence(n, state), PLAIN } }
@@ -240,7 +186,6 @@ local function Lines(q, n)
 	return lines, table.concat(words, "\n")
 end
 
--- The tooltip of a slot's button; never in a fight.
 local function Say(b, n)
 	local tip, q = Tooltip(), Q()
 	if Fighting() or not (tip and q) then
@@ -258,8 +203,6 @@ local function Say(b, n)
 	b.said = said
 end
 
--- While the cursor is on a button, out of a fight: its tooltip is said again once its words changed (a click, a swap, a countdown), and once a
--- fight that held it back ended. Never while another frame took the tooltip.
 local function Again(b, n)
 	local tip, q = Tooltip(), Q()
 	if not (b.over and tip and q) or Fighting() then
@@ -277,9 +220,6 @@ local function Again(b, n)
 	end
 end
 
--- Clicks and drops -----------------------------------------------------------------------------------------------------------------------------
-
--- The item on the cursor: its ID and link, or nil.
 local function Held()
 	if type(GetCursorInfo) ~= "function" then
 		return nil
@@ -291,7 +231,6 @@ local function Held()
 	return id, not IsSecret(link) and type(link) == "string" and link or nil
 end
 
--- True when the item on the cursor was lifted from a bag, the bank or a worn slot (header), as GearButton.lua's Lifted.
 local function Lifted()
 	local get, locked = Fn(_G.C_Cursor, "GetCursorItem"), Fn(_G.C_Item, "IsLocked")
 	if not (get and locked) then
@@ -316,8 +255,6 @@ local function Lifted()
 	return okLocked and not IsSecret(held) and held == true
 end
 
--- An item on the cursor goes in the slot's list, and back to its slot when it was lifted from one; a message the queue gives is printed. False
--- when the cursor holds no item.
 local function Drop(n)
 	local id, link = Held()
 	local q = Q()
@@ -349,14 +286,12 @@ local function Click(n, mouse)
 		B[n].tone = nil
 		return
 	end
-	-- Shift-click: Queue now for this slot (header).
 	if shift then
 		if not q.Running() then
 			print(T.OFF)
 			return
 		end
 		q.Now(n)
-		-- In a fight no trinket changes, so the line says when it will (0.5.39).
 		print((Fighting() and T.NOW_FIGHT or T.NOW):format(n))
 		B[n].tone = nil
 		return
@@ -366,8 +301,6 @@ local function Click(n, mouse)
 		toggle(n)
 	end
 end
-
--- Making and placing ---------------------------------------------------------------------------------------------------------------------------
 
 local function Texture(parent, layer)
 	local texture = parent:CreateTexture(nil, layer)
@@ -389,7 +322,6 @@ local function Make(n)
 	hover:SetAllPoints(button)
 	b.button, b.dot, b.hover = button, dot, hover
 	b.outline = ns.SetOutlineArea(ns.Outline(button, button), "windows")
-	-- After a click or a drop the tooltip says the change at once (header).
 	button:SetScript("OnClick", function(_, mouse)
 		Run(Click, n, mouse)
 		if b.over then
@@ -419,7 +351,6 @@ local function Make(n)
 	Paint(b)
 end
 
--- Hangs a button right of its slot at the slot's scale, when that changed: false while the game would refuse it or the slot has no scale.
 local function Place(b, slot)
 	local k = Scale(slot)
 	if not (k and k > 0) then
@@ -441,7 +372,6 @@ local function Place(b, slot)
 	return true
 end
 
--- The strata above the window's, at a level of its own, looked at each time.
 local function Level(b, frame)
 	if Blocked(b.button) then
 		return
@@ -465,7 +395,6 @@ local function Level(b, frame)
 	end
 end
 
--- After a fight the driver looks again, so a change the fight held back is made (once, however many waited).
 local function Later()
 	if not B.waiting then
 		B.waiting = true
@@ -476,7 +405,6 @@ local function Later()
 	end
 end
 
--- Shows or hides a button; while the game would refuse it, only its alpha changes until the fight ends.
 local function Shown(b, shown)
 	local button = b.button
 	if not button then
@@ -497,7 +425,6 @@ local function Shown(b, shown)
 	end
 end
 
--- One look of the driver: whether the buttons are wanted (else the driver stops), whether the window shows, and each slot's button.
 local function Looks()
 	local frame = Game("CharacterFrame")
 	B.wanted = Wanted()
@@ -531,7 +458,6 @@ local function Looks()
 	end
 end
 
--- Hides both buttons at once, whatever the state of the part, as the part stops.
 local function Off()
 	for _, n in ipairs(ORDER) do
 		if B[n].button then
@@ -560,8 +486,6 @@ local function Drive(_, elapsed)
 	end
 end
 
--- Starts the driver, which looks on the next frame and then four times a second while the buttons are wanted; the first look hangs them again
--- and paints them in the Windows page's colours of now.
 function Start()
 	if not B.driver then
 		B.driver = CreateFrame("Frame")
@@ -576,14 +500,12 @@ function Start()
 	B.driver:Show()
 end
 
--- ShowUIPanel or HideUIPanel ran on the Character window: the driver starts at once.
 local function Panel(frame)
 	if frame ~= nil and not IsSecret(frame) and rawequal(frame, _G.CharacterFrame) then
 		Start()
 	end
 end
 
--- Buttons by the trinket slots changed (its row's changed, Config.lua), or the module refreshed (TrinketQueue.lua): the driver looks at once.
 function ns.TrinketButtonsChanged()
 	Start()
 end

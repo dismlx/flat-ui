@@ -1,29 +1,7 @@
 local _, ns = ...
 
--- Action buttons are protected frames: their regions can be recoloured at any time, but nothing
--- may be laid out on them in combat. Everything here runs out of combat. Nothing is hooked on a button or a bar: a hook on a
--- function of a protected frame runs inside the game's secure calls, and a Hide from one on MainActionBar ends in
--- ADDON_ACTION_BLOCKED at the next fight (EllesmereUIActionBars/EllesmereUIActionBars.lua:1069-1090, 1861-1880 and 1286-1291). The art
--- of a button is set again by UpdateButtonArt only when the button loads and when Edit Mode applies Hide bar art (ActionButton.lua:1610,
--- EditModeSystemTemplates.lua:1110-1121), so every button is styled again on the next frame after the events that run those: entering
--- the world, a layout update and the end of Edit Mode. The dividers the game lays out are faded by a frame of the addon's own.
--- The flat panel of Bar background is a frame of the addon's own behind a bar, shown with it and as faint as it: behind Flat UI's own bar in
--- place of the main bar and bars 2 to 8 while Flat UI's buttons are in use (the game's bars are parked at alpha 0 under them), else behind the
--- game's bar.
--- Test mode (TM.Register "actionbars", Action buttons): while it is on, every 5 s, the first four shown buttons of Flat UI's main bar that hold
--- something (ns.ButtonSamples; with fewer there, the next of bars 2 to 8) play samples of their looks, all on Flat UI's own frames and out of
--- combat: button 1 fills as a 2 s cast that lands, button 2 flashes as an interrupt and then shows the proc glow for 3 s in the look of Proc glow,
--- button 3 pulses as an aim (ButtonEffects.lua), and button 4, or the last when there are fewer than four, runs a 4 s sweep in the Sweep colour
--- and opacity, with its edge line and numbers, that ends with the ready flash (ButtonStates.lua). A change of an action bar row or of the cast
--- bar's colours gives the samples that show the new look and plays the others; a change of profile plays them all again. Each part plays only
--- while its row is on. Moving off on the bar of test mode holds them mid-way (button 1's fill at about 60%, button 2's proc glow up, button 3's
--- pulse bright, the sweep at 2 s of its 4 with its edge and numbers) so a look can be judged, and Moving on carries on from there. With test mode off, a change of one of those rows with the options window open plays its sample once
--- (ns.ButtonStatesChanged, ns.ButtonEffectsChanged). A Refresh (a change of profile among them) tells OwnBars.lua to place the page arrows again
--- (ns.OwnPagerChanged).
-
 local KEY = "actionbars"
 
--- Button name, count, and the option that switches the group.
 local BUTTONS = {
 	{ "ActionButton", 12, "main" },
 	{ "MultiBarBottomLeftButton", 12, "extra" },
@@ -40,29 +18,22 @@ local BUTTONS = {
 	{ "ExtraActionButton", 1, "ability" },
 }
 
--- The bars that can have a flat panel behind them: the frame, and the group switch that goes with it.
 local PLATES = {
 	{ "MainActionBar", "main" }, { "MultiBarBottomLeft", "extra" }, { "MultiBarBottomRight", "extra" }, { "MultiBarRight", "extra" },
 	{ "MultiBarLeft", "extra" }, { "MultiBar5", "extra" }, { "MultiBar6", "extra" }, { "MultiBar7", "extra" },
 	{ "StanceBar", "stance" }, { "PetActionBar", "pet" },
 }
 local plates = {}
--- Whether the last panel that was made failed.
 local plateFailed = false
--- The buttons whose HasAction answer the game withheld, or gave as no true or false.
 local withheldBy = setmetatable({}, { __mode = "k" })
 
 local groups = setmetatable({}, { __mode = "k" })
 local styled = setmetatable({}, { __mode = "k" })
 local queued = setmetatable({}, { __mode = "k" })
--- How often the dividers of the main bar are looked at, in seconds.
 local DIVIDER_EVERY = 0.25
--- How often the bars are looked at for their panels, in seconds.
 local PLATE_EVERY = 0.2
 local dividers = { clock = 0 }
 
--- Marks on buttons: marks[button][source] = { r, g, b }, source "missing", "alert" or "proc". The map of what each button holds is made when asked
--- for and dropped when a button changes. The listeners hear of that once per frame.
 local marks = setmetatable({}, { __mode = "k" })
 local MARK_PX = 2
 local map, listeners, heard = nil, {}, false
@@ -84,9 +55,6 @@ local function IsOn(button)
 	return ns.Enabled(KEY) and Opt(groups[button]) and true or false
 end
 
--- Flat UI's own buttons (OwnBars.lua) are found through the contract of that file: ns.OwnOn, ns.OwnButtons, ns.OwnBar, ns.OwnSlot, ns.OwnTwin and
--- ns.OnOwnSlots, and painted through ns.OwnPainter (OwnPaint.lua). Those files load after this one, so every call is looked up when it is made.
--- ownOf[button] is the bar number of a button found to be Flat UI's own.
 local ownOf = setmetatable({}, { __mode = "k" })
 local ownLook = setmetatable({}, { __mode = "k" })
 local ownAttached = { painter = false, slots = false }
@@ -107,7 +75,6 @@ local function OwnList()
 	return ok and type(list) == "table" and list or {}
 end
 
--- The bar number (1 to 8) of one of Flat UI's own buttons, or nil for any other frame.
 local function OwnBarOf(button)
 	if type(button) ~= "table" or ns.IsSecret(button) then
 		return nil
@@ -126,18 +93,14 @@ local function OwnBarOf(button)
 	return nil
 end
 
--- The frame art Blizzard puts back whenever it updates a button.
 local function FadeArt(button, on)
 	ns.SetFaded(Texture(button, "NormalTexture", "GetNormalTexture"), on)
 	ns.SetFaded(button.SlotArt, on)
 	ns.SetFaded(button.SlotBackground, on)
-	-- The element ring of a totem button and the style art of the extra action button (MultiCastActionBarFrame.xml:32, ExtraActionBar.lua:15, 34, 54).
-	-- Alpha of the button's own art only; the alpha of ExtraActionBarFrame is the game's.
 	ns.SetFaded(button.overlayTex, on)
 	ns.SetFaded(button.style, on)
 end
 
--- A state texture becomes a flat tint over the icon. Blizzard still shows and hides it. place: lay it over the icon as well as colouring it.
 local function Tint(texture, icon, r, g, b, a, place)
 	if texture == nil or ns.IsSecret(texture) then
 		return
@@ -149,9 +112,6 @@ local function Tint(texture, icon, r, g, b, a, place)
 	end
 end
 
--- Whether the slot of a button holds nothing: true or false, or nil when the game does not say. Only a plain true or false counts; anything else
--- is a withheld answer and is remembered for /flatui status. The game asks the same question in ActionButton.lua:1470-1471
--- (ActionBarActionButtonMixin:HasAction) and ActionBar.lua:208.
 local function Empty(button)
 	local api = C_ActionBar and C_ActionBar.HasAction
 	if type(api) ~= "function" then
@@ -174,9 +134,7 @@ local function Empty(button)
 	return not has
 end
 
--- The opacity of the outline of an empty button: texture calls only, so this is allowed in combat.
 local function Fill(button)
-	-- The empty look of one of Flat UI's buttons is the alpha of the whole button, given by the empty painter (OwnPaint.lua).
 	if OwnBarOf(button) then
 		withheldBy[button] = nil
 		return
@@ -199,13 +157,10 @@ local function Fill(button)
 	ns.SetOutlineAlpha(own.outline, alpha, back)
 end
 
--- The edges of the outline of a button: its border option, and always while a mark is drawn.
 local function EdgesWanted(button)
 	return Opt("border") or (marks[button] ~= nil and IsOn(button))
 end
 
--- With Restyle action bars off, one of Flat UI's buttons is drawn as the game draws a button of a bar: the frame art at 46 by 45 and the slot art
--- (ActionButtonOverrides.lua:6-16). Plain calls on the button's own regions, out of combat.
 local function GameLook(button)
 	if ownLook[button] == "game" then
 		return
@@ -231,7 +186,6 @@ local function GameLook(button)
 	end
 end
 
--- With Restyle action bars off the module does not run, so a plain frame gives Flat UI's buttons the game's look when the world and the fights are over.
 local function GameLookAll()
 	if not OwnOn() or ns.Enabled(KEY) then
 		return
@@ -281,7 +235,6 @@ local function Place(button)
 	FadeArt(button, on)
 	local crop = on and Opt("crop") / 100 or 0
 	icon:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
-	-- The rounded mask goes with Blizzard's rounded frame, so it comes back with it.
 	local square = on and Opt("square")
 	if button.IconMask and own.masked ~= not square and icon.RemoveMaskTexture and icon.AddMaskTexture then
 		own.masked = not square
@@ -306,8 +259,6 @@ local function Place(button)
 	if Opt("tints") then
 		local first = not own.tints
 		own.tints = true
-		-- Blizzard colours the equipped outline green and the attack flash red itself. The colours of the state textures come from the
-		-- Highlights rows; a change is painted again here when the page refreshes, and a texture is laid over the icon once.
 		if first then
 			Tint(button.Border, icon, 1, 1, 1, 0.35, true)
 			Tint(button.Flash, icon, 1, 0, 0, 0.3, true)
@@ -326,15 +277,11 @@ local function Place(button)
 			own.checked = checked
 			Tint(Texture(button, "CheckedTexture", "GetCheckedTexture"), icon, cr, cg, cb, 0.3, first)
 		end
-		-- Blizzard sets the pressed art again on every art update.
 		local pr, pg, pb = ns.Colour(KEY .. ".pressedColour")
 		Tint(Texture(button, "PushedTexture", "GetPushedTexture"), icon, pr, pg, pb, 0.25, true)
 	end
 end
 
--- A mark is the outline's own colour at once, and its thickness out of combat: the thickness lays out the outline's edges, which are
--- children of a protected button. In a fight the colour changes and the thickness follows when the fight ends. A button with no outline,
--- or one that is not restyled, keeps the record and is marked when it is laid out.
 local markQueued = setmetatable({}, { __mode = "k" })
 local DrawMark
 
@@ -367,7 +314,6 @@ function DrawMark(button)
 		ns.SetOutlineColour(own.outline, nil, nil, nil)
 		Thickness(button, nil)
 	end
-	-- A mark shows its colour and thickness with the border off.
 	ns.SetOutlineEdges(own.outline, drawn or Opt("border"))
 	return drawn
 end
@@ -379,7 +325,6 @@ local function Hear()
 	end
 end
 
--- The buttons hold something else: the map is made again when it is next asked for.
 local function Changed()
 	map = nil
 	if #listeners == 0 or heard then
@@ -404,8 +349,6 @@ local function Style(button)
 	if ns.Forbidden(button) then
 		return
 	end
-	-- A button that has its outline is faded or restored at once, which is allowed in combat.
-	-- One that has none yet keeps Blizzard's art until Layout has made the outline.
 	if styled[button] then
 		FadeArt(button, IsOn(button))
 	end
@@ -416,7 +359,6 @@ local function Style(button)
 	ns.OutOfCombat(function()
 		queued[button] = nil
 		if ns.IsStopped(KEY) then
-			-- Stopped while this waited: Layout puts Blizzard's art back.
 			pcall(Layout, button)
 		else
 			ns.Each(KEY, Layout, button)
@@ -424,7 +366,6 @@ local function Style(button)
 	end)
 end
 
--- Records the group of a button. Nothing is hooked.
 local function Remember(button, group)
 	groups[button] = group
 end
@@ -433,8 +374,6 @@ local passQueued = false
 
 local Plates
 
--- The empty painter: an empty slot of one of Flat UI's buttons is drawn at the Empty buttons setting, as alpha (the fourth value). The game shows the
--- twin of an empty slot while Edit Mode's Always show buttons is on or an action is dragged (ActionBar.lua:202-217), so a shown twin means normal.
 local function EmptyPainter(button, state)
 	if not IsOn(button) or type(state) ~= "table" or state.empty ~= true or state.grid == true then
 		return nil
@@ -455,7 +394,6 @@ local function EmptyPainter(button, state)
 	return 1, 1, 1, mode == "hidden" and 0 or Opt("emptyAlpha") / 100
 end
 
--- The painter and the slot watch of OwnPaint.lua and OwnBars.lua are joined once they exist.
 local function Attach()
 	if not ownAttached.painter and type(ns.OwnPainter) == "function" then
 		ownAttached.painter = pcall(ns.OwnPainter, "empty", EmptyPainter)
@@ -467,14 +405,12 @@ local function Attach()
 	end
 end
 
--- Flat UI's buttons that have been built are remembered, in group main (bar 1) or extra (bars 2 to 8). True when one is new.
 local function SyncOwn()
 	if not OwnOn() then
 		return false
 	end
 	Attach()
 	local fresh = false
-	-- The game's buttons of bars 1 to 8 are key targets only: one that was remembered before Flat UI's buttons were built is given back its look.
 	for _, entry in ipairs(BUTTONS) do
 		if entry[3] == "main" or entry[3] == "extra" then
 			for index = 1, entry[2] do
@@ -504,8 +440,6 @@ local function SyncOwn()
 	return fresh
 end
 
--- The bar a panel goes behind: Flat UI's own bar in place of the main bar and bars 2 to 8 while Flat UI's buttons are in use (ns.OwnBarOf,
--- OwnBars.lua), since the game's bar is parked at alpha 0 under it, else the game's bar. The stance and pet bars are always the game's.
 local function PlateBar(name)
 	if OwnOn() and type(ns.OwnBarOf) == "function" then
 		local ok, own = pcall(ns.OwnBarOf, name)
@@ -516,7 +450,6 @@ local function PlateBar(name)
 	return _G[name]
 end
 
--- A panel on the bar it goes behind, out of combat: made on the game's bar before Flat UI's buttons were built, it goes over to Flat UI's bar.
 local function PlateAnchor(state, bar)
 	state.anchor = bar
 	state.frame:ClearAllPoints()
@@ -524,8 +457,6 @@ local function PlateAnchor(state, bar)
 	state.frame:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 4, -4)
 end
 
--- What the game does to a bar, copied to its panel: shown with the bar and as faint as the bar. Only a plain answer is used. SetShown and
--- SetAlpha are calls on the addon's own frame, so this is allowed in combat.
 local function PlateSync(state, bar)
 	local ok, visible = pcall(bar.IsVisible, bar)
 	if ok and not ns.IsSecret(visible) and type(visible) == "boolean" then
@@ -537,7 +468,6 @@ local function PlateSync(state, bar)
 	end
 end
 
--- The flat panel behind one bar, made out of combat and shown with the bar.
 local function Plate(entry)
 	local name = entry[1]
 	local bar = PlateBar(name)
@@ -562,7 +492,6 @@ local function Plate(entry)
 				end
 			end)
 			if not done then
-				-- A bar whose panel failed is tried again at the next pass, and /flatui status says so.
 				plates[name] = nil
 				plateFailed = true
 				return
@@ -583,7 +512,6 @@ local function Plate(entry)
 	PlateSync(state, bar)
 end
 
--- Whether a bar gets a panel of its own: the bar block gives a panel to the bars it holds when its own Background panel is on.
 local function PlateWanted(entry)
 	local bar = _G[entry[1]]
 	if bar == nil or not ns.Enabled(KEY) or not Opt("plate") or not Opt(entry[2]) or ns.Forbidden(bar) then
@@ -614,10 +542,6 @@ function Plates()
 	PlateWatcher(any)
 end
 
--- The game shows, hides and fades bars on events this module does not hear (the pet bar on PET_BAR_UPDATE and UNIT_PET, PetActionBar.lua:71-80,
--- the stance bar in its Update, StanceBar.lua:30-48, Edit Mode visibility, and Fade.lua) and a bar can be held or let go by the bar block
--- at any time. A frame of the addon's own looks at the bars four times a second while Bar background is on. It reads IsVisible and GetAlpha of
--- a bar, writes SetShown and SetAlpha on the panel, and goes through Plates again when a bar's wish for a panel has changed.
 local function PlateStep(_, elapsed)
 	plateWatch.clock = plateWatch.clock + elapsed
 	if plateWatch.clock < PLATE_EVERY then
@@ -635,7 +559,6 @@ local function PlateStep(_, elapsed)
 		end
 		local state = plates[name]
 		if state and state.outline and plateWatch.wanted[name] then
-			-- Flat UI's buttons were built since the panel was put: Plates puts it on their bar, out of combat.
 			local bar = PlateBar(name)
 			if state.anchor ~= bar and not InCombatLockdown() then
 				Plates()
@@ -666,7 +589,6 @@ function PlateWatcher(any)
 	end
 end
 
--- The empty buttons are looked at again.
 local function FillAll()
 	for button in pairs(groups) do
 		if styled[button] then
@@ -675,7 +597,6 @@ local function FillAll()
 	end
 end
 
--- Every remembered button is styled again, in one pass.
 local function Restyle()
 	passQueued = false
 	Plates()
@@ -690,7 +611,6 @@ local function Restyle()
 	end
 end
 
--- A pass on the next frame: the game's code that runs on these events has finished by then.
 local function RestyleLater()
 	if passQueued then
 		return
@@ -703,13 +623,11 @@ local function RestyleLater()
 	end
 end
 
--- hide: whether the dividers are faded or given back. force: every divider is set, not only the ones the game made visible.
 local function FadeDividers(bar, hide, force)
 	for _, key in ipairs({ "HorizontalDividersPool", "VerticalDividersPool" }) do
 		local pool = bar[key]
 		if pool and pool.EnumerateActive then
 			for divider in pool:EnumerateActive() do
-				-- While the dividers are hidden, only one the game has made visible is touched.
 				local ok, alpha = pcall(divider.GetAlpha, divider)
 				if force or not hide or not ok or ns.IsSecret(alpha) or alpha ~= 0 then
 					ns.SetFaded(divider, hide)
@@ -719,9 +637,6 @@ local function FadeDividers(bar, hide, force)
 	end
 end
 
--- The dividers are laid out by the game when the grid of the bar changes, in combat as well. A frame of the addon's own looks at them four
--- times a second while the main bar is shown and Hide dividers is on, and fades any that is not faded. SetAlpha is all it calls on a divider,
--- and it reads no option: the options are read when the page is refreshed (DividerWatch).
 local function DividerStep(_, elapsed)
 	dividers.clock = dividers.clock + elapsed
 	if dividers.clock < DIVIDER_EVERY then
@@ -738,7 +653,6 @@ local function DividerStep(_, elapsed)
 	FadeDividers(bar, true)
 end
 
--- The frame runs only while dividers are hidden on a bar that can be touched.
 local function DividerWatch(bar, hide)
 	local wanted = hide == true and not ns.Forbidden(bar)
 	dividers.on, dividers.bar = wanted, wanted and bar or nil
@@ -771,7 +685,6 @@ end
 
 local watched = false
 
--- The end of Edit Mode, which applies Hide bar art again. The game triggers it from inside its own exit, so the pass waits a frame.
 local function Watch()
 	if watched or type(EventRegistry) ~= "table" or type(EventRegistry.RegisterCallback) ~= "function" then
 		return
@@ -782,10 +695,8 @@ end
 local function Refresh()
 	ns.Each(KEY, StyleBar)
 	Plates()
-	-- With Flat UI's own buttons the game's buttons of bars 1 to 8 are hidden key targets: nothing styles them.
 	local own = OwnOn()
 	SyncOwn()
-	-- Chosen at login, the game's buttons of bars 1 to 8 are left alone from the start, so no code of Flat UI's runs on them before its buttons exist.
 	local hands = own
 	if not hands and type(ns.OwnWanted) == "function" then
 		local ok, wanted = pcall(ns.OwnWanted)
@@ -808,18 +719,14 @@ local function Refresh()
 		end
 	end
 	Watch()
-	-- A switch (the module, a bar group) or a profile reaches the button text here.
 	if type(ns.ButtonTextRefresh) == "function" then
 		ns.ButtonTextRefresh()
 	end
-	-- A profile that turns Page arrows on the main bar on or off reaches the arrows here: Core's Apply refreshes the module, not the row.
 	if type(ns.OwnPagerChanged) == "function" then
 		pcall(ns.OwnPagerChanged)
 	end
 end
 
--- The restyled buttons, bar by bar.
--- True when the button's group is switched on.
 function ns.ButtonIsOn(button)
 	return groups[button] ~= nil and IsOn(button)
 end
@@ -847,19 +754,15 @@ function ns.ActionButtons()
 	return list
 end
 
--- Flat UI's buttons failed to build: the game's buttons are styled and hooked as without them.
 function ns.OwnButtonsChanged()
 	Changed()
 	RestyleLater()
 end
 
--- True for one of Flat UI's own buttons.
 function ns.ButtonIsOwn(button)
 	return OwnBarOf(button) ~= nil
 end
 
--- True while only Flat UI's own buttons are styled: nothing of the game's button code then needs a hook. It holds from the choice of Flat UI's
--- buttons (ns.OwnWanted), before they are built, so a session that uses them never installs the hooks.
 function ns.OwnLookOnly()
 	local own = OwnOn()
 	if not own and type(ns.OwnWanted) == "function" then
@@ -882,8 +785,6 @@ function ns.OwnLookOnly()
 	return true
 end
 
--- What a button holds: "spell", the spell ID and its name, or "item" and the item ID. A macro that casts a spell is that spell. Nothing
--- for anything else, a withheld value or a failed call. GetActionInfo answers as ActionButton.lua:921-928 and 1037-1058 read it.
 function ns.ButtonAction(button)
 	local action
 	if OwnBarOf(button) and type(ns.OwnSlot) == "function" then
@@ -929,7 +830,6 @@ local function Map()
 	return map
 end
 
--- The restyled buttons that hold a spell, by its name in lower case (every rank has the name), or an item, by its ID.
 function ns.ButtonsFor(kind, key)
 	local found = (kind == "spell" or kind == "item") and Map()[kind][key] or nil
 	local list = {}
@@ -939,13 +839,10 @@ function ns.ButtonsFor(kind, key)
 	return list
 end
 
--- The group a remembered button is in: "main", "extra", "pet", "stance", "totem" or "ability", or nil.
 function ns.ActionButtonGroup(button)
 	return button ~= nil and groups[button] or nil
 end
 
--- A mark on a button from one source: "missing", "alert" or "proc", the proc over the alert over the missing. No colour takes that source's mark away, and a button
--- with none left goes back to its own outline. True when the mark is drawn, false when it is kept for the button's layout.
 function ns.SetButtonMark(button, source, r, g, b)
 	if button == nil or (source ~= "missing" and source ~= "proc" and source ~= "alert") then
 		return false
@@ -966,7 +863,6 @@ function ns.SetButtonMark(button, source, r, g, b)
 	return DrawMark(button)
 end
 
--- fn() runs after the map of the buttons is made again, once a frame at most.
 function ns.OnButtonsChanged(fn)
 	if type(fn) == "function" then
 		listeners[#listeners + 1] = fn
@@ -983,9 +879,6 @@ local function Marked()
 	return n
 end
 
--- The first shown buttons of Flat UI's main bar that hold something, at most four, in the bar's order, then as many as are missing from bars 2 to 8
--- in bar order: the buttons the samples of test mode and of a change of a row play on, so a character with few spells on the main bar sees them
--- too. The first is the main bar's first when it has one. Empty without Flat UI's buttons.
 function ns.ButtonSamples()
 	local list = {}
 	if not OwnOn() then
@@ -1009,7 +902,6 @@ function ns.ButtonSamples()
 	return list
 end
 
--- The game's own code that runs on these events has finished one frame later: the empty buttons and the bars are looked at then.
 local laterQueued = false
 
 local function LaterPass()
@@ -1050,9 +942,7 @@ ns.Register(KEY, {
 			RestyleLater()
 		end,
 		EDIT_MODE_LAYOUTS_UPDATED = RestyleLater,
-		-- The game applies the layout again on this event without EDIT_MODE_LAYOUTS_UPDATED (EditModeManager.lua:203-206).
 		PLAYER_SPECIALIZATION_CHANGED = RestyleLater,
-		-- Flat UI's buttons made at the end of a fight (a reload in combat) are styled when it ends.
 		PLAYER_REGEN_ENABLED = function()
 			if OwnOn() then
 				RestyleLater()
@@ -1081,8 +971,6 @@ ns.Register(KEY, {
 	end,
 })
 
--- Test mode: the samples of the looks of Flat UI's buttons, every 5 s while it is on (the header above). force starts each again; without it a sample
--- that shows goes on.
 local function Sample(force)
 	if not OwnOn() then
 		return
@@ -1091,7 +979,6 @@ local function Sample(force)
 	if type(ns.ButtonEffectsSample) == "function" then
 		ns.ButtonEffectsSample({ cast = list[1], interrupt = list[2], aim = list[3], glow = list[2] }, force)
 	end
-	-- With fewer than four buttons, the sweep plays on the last one.
 	local sweep = list[4] or list[#list]
 	if sweep and type(ns.ButtonStatesSample) == "function" then
 		ns.ButtonStatesSample(sweep, force)
@@ -1107,14 +994,11 @@ local function SampleOff()
 	end
 end
 
--- The cast bar's colours that the samples take, and the rows whose sample plays on buttons 1 to 3 (the role, the button's place in the list).
 local SAMPLE_COLOURS = { ["castbars.castColour"] = true, ["castbars.channelColour"] = true, ["castbars.interruptedColour"] = true,
 	["castbars.playerClass"] = true, ["castbars.flat"] = true }
 local SAMPLE_ROWS = { ["actionbars.castAnim"] = { "cast", 1 }, ["actionbars.interruptAnim"] = { "interrupt", 2 }, ["actionbars.aimAnim"] = { "aim", 3 },
 	["actionbars.proc"] = { "glow", 2 }, ["actionbars.procColour"] = { "glow", 2 } }
 
--- Moving on the bar of test mode: off holds the samples still, the fill at about 60%, the aim pulse bright and the sweep at half its time with its
--- edge and numbers, and holds the ones that start meanwhile the same way; on carries on from there.
 local function Hold(held)
 	if type(ns.ButtonEffectsSampleHold) == "function" then
 		ns.ButtonEffectsSampleHold(held)
@@ -1129,10 +1013,6 @@ local function Still()
 	return mode ~= nil and type(mode.Moving) == "function" and not mode.Moving()
 end
 
--- A change while test mode is on: a change of profile plays every sample again; Cast fill animation, Interrupt flash or Aim highlight plays its own
--- unless it shows; a cast bar colour colours the samples that show; a usability or range row paints the first sample button in its colour for 2 s
--- (ns.ButtonStatesTint); any other action bar row gives the sweep sample its look, or plays it. Moving
--- off holds them (every sample started again, then held mid-way, so each look shows), and Moving on lets them go on.
 local function SampleChanged(path)
 	if path == "*" then
 		Sample(true)
@@ -1160,7 +1040,6 @@ local function SampleChanged(path)
 			ns.ButtonEffectsSample({ [row[1]] = button })
 		end
 	elseif type(ns.ButtonStatesTint) == "function" and ns.ButtonStatesTint(ns.ButtonSamples()[1], path) then
-		-- A usability or range row paints the first sample button in its colour (ButtonStates.lua), as with test mode off; the sweep is left alone.
 		return
 	elseif path:match("^actionbars%.") then
 		local list = ns.ButtonSamples()

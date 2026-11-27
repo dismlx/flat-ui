@@ -1,20 +1,5 @@
 local _, ns = ...
 
--- The setup drawings of the tracker, proc, cooldown, party cooldown and enemy cooldown steps: mock-tracker, mock-tracker-states, mock-proc,
--- mock-cooldown-row, mock-party-cooldowns and mock-enemy-cooldowns. A drawing is { build(stage), draw(stage), parts, extent(stage) }.
--- build makes its frames once on the stage, all of them marked ns.Own; draw reads the settings only through ns.Get (so it draws the draft
--- under a view) and puts every part where the module would put it; parts maps a saved path to the region a hover brackets;
--- extent(stage) gives the width and height of the drawing in UIParent units, so that a stage that is too small can scale it.
--- Numbers are fixed samples: the game withholds a buff's stacks and times (UnitAuraDocumentation.lua:208-212) and gives a spell's cooldown
--- as a duration object, not as numbers (SpellDocumentation.lua:327), both under client/ui/Interface/AddOns/Blizzard_APIDocumentationGenerated.
--- A stage with a field `section` of "trackers" or "defensives" shows only that part of mock-tracker.
--- Sweeps are Cooldown frames set to a start and a length, then paused (FrameAPICooldownDocumentation.lua:251), so a sample time stays put.
--- The layout of each part is the one of its module: Trackers.lua 2920-2985 and TrackerShapes.lua for trackers, Cooldowns.lua 940-980 for the
--- row of cooldowns, PartyCooldowns.lua 541-600 for the rows beside the party frames, EnemyCooldowns.lua E.Spot, E.Fit and E.PlaceBar for the
--- rows of enemy abilities, ProcArt.lua (G, Spot and PlaceHolder) for the proc art, ProcGlow.lua for the glow, whose soft look it makes with
--- ns.ProcGlowSoft and shows still at the top of its breath. The player portrait is SetPortraitTexture
--- (UnitDocumentation.lua:572) and the clip of the proc screen is SetClipsChildren (SimpleFrameAPIDocumentation.lua:1218).
-
 ns.SetupDrawings = ns.SetupDrawings or {}
 
 local PAD = 8
@@ -31,7 +16,6 @@ local CLASS = {
 	DRUID = { 1, 0.49, 0.04 }, ROGUE = { 1, 0.96, 0.41 }, SHAMAN = { 0, 0.44, 0.87 },
 }
 
--- The helpers, in one table so that the file stays under the limit of locals.
 local U = {}
 
 local function Own(object)
@@ -55,7 +39,6 @@ function U.Str(parent, font, justify)
 	return text
 end
 
--- A region or frame shown or hidden, and put at a point of another one: always the whole form of SetPoint.
 function U.Show(region, on)
 	region:SetShown(on and true or false)
 end
@@ -65,7 +48,6 @@ function U.At(region, point, relative, relativePoint, x, y)
 	region:SetPoint(point, relative, relativePoint, x or 0, y or 0)
 end
 
--- A flat rectangle of a colour, placed from the top left corner of its parent.
 function U.Box(parent, x, y, w, h, r, g, b, a, layer, sub)
 	local tex = U.Tex(parent, layer or "ARTWORK", sub or 0)
 	tex:SetColorTexture(r, g, b, a or 1)
@@ -74,7 +56,6 @@ function U.Box(parent, x, y, w, h, r, g, b, a, layer, sub)
 	return tex
 end
 
--- Red, green and blue of a class: the game's colour table when it has one, else the sample.
 function U.Class(class)
 	local colour = type(RAID_CLASS_COLORS) == "table" and RAID_CLASS_COLORS[class] or nil
 	if type(colour) == "table" and type(colour.r) == "number" and not ns.IsSecret(colour.r) and type(colour.g) == "number" and type(colour.b) == "number" then
@@ -84,7 +65,6 @@ function U.Class(class)
 	return sample[1], sample[2], sample[3]
 end
 
--- "1:05" for a minute and more, "45" under it, "2h" for hours (TrackerShapes.lua Seconds).
 function U.Seconds(left)
 	local whole = math.ceil(left)
 	if whole >= 3600 then
@@ -96,7 +76,6 @@ function U.Seconds(left)
 end
 
 local scratch
--- The width of a text in the small font at a height, measured on a string that is never shown.
 function U.Width(text, height)
 	if not scratch then
 		local frame = U.Frame(UIParent)
@@ -112,7 +91,6 @@ function U.Width(text, height)
 	return #text * height * 0.6
 end
 
--- A sweep that has run `elapsed` seconds of `length`, and stays there.
 function U.Sweep(cooldown, elapsed, length)
 	if not cooldown then
 		return
@@ -130,7 +108,6 @@ function U.NoSweep(cooldown)
 	end
 end
 
--- A Cooldown frame on a frame, or nil when the game refuses one. No edge, no bling, a dark square swipe.
 function U.Cooldown(frame)
 	local ok, cooldown = pcall(CreateFrame, "Cooldown", nil, frame, "CooldownFrameTemplate")
 	if not ok or type(cooldown) ~= "table" then
@@ -144,13 +121,11 @@ function U.Cooldown(frame)
 	return cooldown
 end
 
--- The scale a drawing is laid out at is 1: its extent is the real size in units. A drawing that is not shown has an extent of 1 by 1.
 function U.Finish(s, w, h)
 	s.w, s.h = math.max(1, math.ceil(w)), math.max(1, math.ceil(h))
 	s.root:SetSize(s.w, s.h)
 end
 
--- The tick that marks the middle of a row: its x from the left of the box a row of `total` units fills.
 function U.Tick(grow, total)
 	local x = PAD + 6
 	if grow == "left" then
@@ -161,7 +136,6 @@ function U.Tick(grow, total)
 	return x
 end
 
--- Registers a drawing: spec.build(stage) -> state with .root and .parts, spec.draw(state, stage) puts everything where the settings say.
 function U.Register(id, spec)
 	local drawing = { id = id, parts = {} }
 	local built = setmetatable({}, { __mode = "k" })
@@ -172,7 +146,6 @@ function U.Register(id, spec)
 		end
 		s = spec.build(stage)
 		built[stage] = s
-		-- drawing.parts holds the marks of the first stage built; later stages (tiles, hovers) are asked with partsOf.
 		if not drawing.filled then
 			drawing.filled = true
 			for path, region in pairs(s.parts) do
@@ -207,23 +180,18 @@ local function Root(stage)
 	return root
 end
 
--- Samples ------------------------------------------------------------------------------------------
-
--- The trackers drawn: a buff with charges and a time, a buff with a time, an item with a count.
 local TRACKERS = {
 	{ name = "Lightning Shield", icon = ICONS .. "Spell_Nature_LightningShield", count = 2, top = 3, left = 541, length = 600 },
 	{ name = "Fortitude", icon = ICONS .. "Spell_Holy_WordFortitude", left = 1500, length = 3600 },
 	{ name = "Mana Potion", icon = ICONS .. "INV_Potion_76", count = 4, top = 5 },
 }
 
--- Defensives on you: icon, time left, caster and the class of the caster.
 local DEFENSIVES = {
 	{ icon = ICONS .. "Spell_Holy_PowerWordShield", left = 14, name = "Alari", class = "PRIEST" },
 	{ icon = ICONS .. "Spell_Holy_SealOfProtection", left = 6, name = "Tomas", class = "PALADIN" },
 	{ icon = ICONS .. "Spell_Nature_Regeneration", left = 9, name = "Leaf", class = "DRUID" },
 }
 
--- Spells of the cooldown row: icon, seconds left and length of a cooldown (none for a ready spell), a charge count, and the key on its button.
 local SPELLS = {
 	{ "Ability_Kick", nil, nil, nil, "1" }, { "Spell_Frost_IceShock", 12, 30, nil, "2" }, { "Spell_Holy_PowerWordShield", nil, nil, nil, "3" },
 	{ "Spell_Arcane_Blink", 14, 15, 2, "4" }, { "Ability_Warrior_ShieldWall", 48, 120, nil, "5" }, { "Spell_Frost_Frost", nil, nil, nil, "Q" },
@@ -234,14 +202,10 @@ local SPELLS = {
 local TRINKETS = { { "INV_Jewelry_Trinket_05", nil, nil, nil, "T" }, { "INV_Misc_Rune_01", 30, 90, nil, "Y" } }
 local NUMBER_FONTS = { small = "NumberFontNormalSmall", normal = "NumberFontNormal", large = "NumberFontNormalLarge", huge = "NumberFontNormalHuge" }
 
--- A tracker ----------------------------------------------------------------------------------------
-
 local function TextHeight(height)
 	return math.max(7, math.min(14, height - 4))
 end
 
--- The parts of one tracker in all three shapes, made once: the icon with its sweep, count, word and rim, and the plate with its strings of a bar
--- and of text.
 function U.NewCell(parent)
 	local cell = { frame = U.Frame(parent), parts = {} }
 	local frame = cell.frame
@@ -288,7 +252,6 @@ function U.NewCell(parent)
 	return cell
 end
 
--- The rim hugs a frame, two units thick.
 function U.FitRim(cell, anchor)
 	local rim, thick = cell.rim, 2
 	U.At(rim[1], "TOPLEFT", anchor, "TOPLEFT", 0, 0)
@@ -305,7 +268,6 @@ function U.FitRim(cell, anchor)
 	rim[4]:SetWidth(thick)
 end
 
--- The missing tracker pulses: an alpha animation on the icon or the plate, and the alpha it has in the middle of a pulse on a picture that stands still.
 function U.Pulse(cell, target, on)
 	cell.groups = cell.groups or {}
 	local old = cell.pulseTarget
@@ -341,8 +303,6 @@ function U.Pulse(cell, target, on)
 	cell.pulseTarget = target
 end
 
--- Draws a cell: spec = { shape, state = "fine" | "low" | "missing", sample, size, width, height, fill, colour, counts, names, numbers, missing,
--- count, left }. Returns the width and height of the cell.
 function U.ApplyCell(cell, spec)
 	local shape = (spec.shape == "bar" or spec.shape == "text") and spec.shape or "icon"
 	local sample, state = spec.sample, spec.state
@@ -450,7 +410,6 @@ function U.ApplyCell(cell, spec)
 		cell.word:SetTextHeight(size)
 		anchor = part.body
 	end
-	-- The sweep and the number it counts down: an icon only, and only while the buff has a time.
 	if cell.sweep then
 		U.Show(cell.sweep, shape == "icon")
 		cell.sweep:SetHideCountdownNumbers(not (spec.numbers and shape == "icon"))
@@ -471,7 +430,6 @@ function U.ApplyCell(cell, spec)
 	return width, height
 end
 
--- What the tracker settings say, read once for a drawing.
 function U.Look()
 	local read = ns.Get
 	local hex = read("trackers.colour")
@@ -496,8 +454,6 @@ function U.Spec(look, sample, state, extra)
 	return spec
 end
 
--- Defensives on you ----------------------------------------------------------------------------------
-
 function U.NewDefensives(parent)
 	local part = { frame = U.Frame(parent), icons = {} }
 	local frame = part.frame
@@ -518,7 +474,6 @@ function U.NewDefensives(parent)
 		icon.name = U.Str(icon.top, "GameFontNormalSmall", "CENTER")
 		part.icons[index] = icon
 	end
-	-- What the row hangs from: the player frame, the personal resource display, or a handle of its own.
 	part.player = U.Frame(frame)
 	part.player:SetSize(150, 26)
 	part.playerOutline = ns.Outline(part.player, part.player)
@@ -547,7 +502,6 @@ function U.NewDefensives(parent)
 	return part
 end
 
--- Puts the defensives part in its place: `top` units below the top of the root, from x. Returns its height.
 function U.DrawDefensives(part, root, x, top)
 	local read = ns.Get
 	local place, caster = read("defensives.place"), read("defensives.caster") == true
@@ -602,8 +556,6 @@ function U.DrawDefensives(part, root, x, top)
 	return anchored and (below + stub) or 16
 end
 
--- mock-tracker ---------------------------------------------------------------------------------------------
-
 local SHAPES = { "icon", "bar", "text" }
 local SHAPE_LABELS = { icon = "Icon", bar = "Bar", text = "Text" }
 
@@ -613,7 +565,6 @@ local function BuildTracker(stage)
 	s.trackers = U.Frame(root)
 	s.trackerLabel = U.Str(s.trackers, "GameFontNormalSmall", "LEFT")
 	s.trackerLabel:SetText("Trackers")
-	-- The first tracker in each of the three shapes, the chosen one marked.
 	s.shapeRow = U.Frame(s.trackers)
 	for index, shape in ipairs(SHAPES) do
 		s.shapes[index] = U.NewCell(s.shapeRow)
@@ -621,7 +572,6 @@ local function BuildTracker(stage)
 		s.captions[index]:SetText(SHAPE_LABELS[shape])
 	end
 	s.mark = U.Tex(s.shapeRow, "OVERLAY", 0)
-	-- The three trackers in a row in the chosen shape, with a tick at the middle of the row.
 	s.row = U.Frame(s.trackers)
 	s.tick = U.Tex(s.trackers, "ARTWORK", 0)
 	s.tick:SetColorTexture(0.55, 0.55, 0.55, 0.8)
@@ -659,7 +609,6 @@ local function DrawTracker(s, stage)
 		U.At(s.trackers, "TOPLEFT", s.root, "TOPLEFT", PAD, -PAD)
 		s.trackerLabel:SetWidth(200)
 		U.At(s.trackerLabel, "TOPLEFT", s.trackers, "TOPLEFT", 0, 0)
-		-- The shapes: icon, bar and text, side by side.
 		local x, high, chosen = 0, 0, nil
 		for index, shape in ipairs(SHAPES) do
 			local cell = s.shapes[index]
@@ -688,7 +637,6 @@ local function DrawTracker(s, stage)
 		local cell = s.shapes[chosen or 1]
 		s.mark:SetSize(math.max(cell.width, 36), 2)
 		U.At(s.mark, "TOPLEFT", cell.frame, "BOTTOMLEFT", math.min(0, (cell.width - math.max(cell.width, 36)) / 2), -3)
-		-- The row: the three trackers in the chosen shape, laid out as Trackers.lua lays a holder out.
 		local sizes, total, tallest = {}, spacing * (#TRACKERS - 1), 0
 		for index, sample in ipairs(TRACKERS) do
 			local w, h = U.ApplyCell(s.cells[index], U.Spec(look, sample, "fine"))
@@ -724,8 +672,6 @@ local function DrawTracker(s, stage)
 end
 
 U.Register("mock-tracker", { build = BuildTracker, draw = DrawTracker })
-
--- mock-tracker-states --------------------------------------------------------------------------------------
 
 local STATES = { "fine", "low", "missing" }
 local STATE_LABELS = { fine = "Fine", low = "Low", missing = "Missing" }
@@ -769,8 +715,6 @@ end
 
 U.Register("mock-tracker-states", { build = BuildStates, draw = DrawStates })
 
--- mock-proc ------------------------------------------------------------------------------------------------
-
 local PROC = { long = 204.8, short = 102.4, arc = "Interface\\AddOns\\FlatUI\\Media\\ProcArc.tga", atlas = "UI-HUD-ActionBar-Proc-Loop-Flipbook",
 	scene = 410, height = 204 }
 
@@ -784,7 +728,6 @@ end
 
 local function BuildProc(stage)
 	local s = { root = Root(stage), parts = {} }
-	-- The screen: a clipped square, with the art holder at its middle and the character in the holder.
 	s.scene = U.Frame(s.root)
 	s.scene:SetSize(PROC.scene, PROC.height)
 	U.At(s.scene, "TOPLEFT", s.root, "TOPLEFT", PAD, -PAD)
@@ -815,8 +758,6 @@ local function BuildProc(stage)
 	if type(SetPortraitTexture) == "function" then
 		pcall(SetPortraitTexture, s.portrait, "player")
 	end
-	-- The action button that glows: an icon with the outline of the addon, the border of the proc and its glow, the soft look of ProcGlow.lua
-	-- or the game's loop (Glow style).
 	s.button = U.Frame(s.root)
 	s.button:SetSize(44, 44)
 	s.buttonIcon = U.Tex(s.button, "ARTWORK", 0)
@@ -834,7 +775,6 @@ local function BuildProc(stage)
 		local asked, info = pcall(C_Texture.GetAtlasInfo, PROC.atlas)
 		s.glowFile = asked and info ~= nil
 		if s.glowFile and type(info) == "table" then
-			-- The flipbook is a sub-rectangle of its sheet (TextureUtilsDocumentation.lua:207-224).
 			s.glowRect = { info.leftTexCoord, info.rightTexCoord, info.topTexCoord, info.bottomTexCoord }
 		end
 	end
@@ -872,7 +812,6 @@ local function DrawProc(s)
 	s.buttonLabel:SetWidth(120)
 	U.At(s.buttonLabel, "TOP", s.button, "BOTTOM", 0, -14)
 	U.Show(s.glow, glow)
-	-- Soft, or As the game has it on a client without the game's loop, as ProcGlow.lua's LookOf chooses.
 	local soft = s.soft ~= nil and (read("trackers.glowStyle") ~= "game" or not s.glowFile)
 	s.glowTex:SetShown(not soft)
 	if s.soft then
@@ -882,7 +821,6 @@ local function DrawProc(s)
 	end
 	if s.glowFile then
 		pcall(s.glowTex.SetAtlas, s.glowTex, PROC.atlas)
-		-- First cell of the 5 by 6 flipbook (ProcGlow.lua, Cell), inside the atlas rectangle.
 		local rect = s.glowRect
 		if rect and type(rect[1]) == "number" and type(rect[2]) == "number" and type(rect[3]) == "number" and type(rect[4]) == "number" then
 			s.glowTex:SetTexCoord(rect[1], rect[1] + (rect[2] - rect[1]) * 0.2, rect[3], rect[3] + (rect[4] - rect[3]) / 6)
@@ -903,8 +841,6 @@ end
 
 U.Register("mock-proc", { build = BuildProc, draw = DrawProc })
 
--- mock-cooldown-row ----------------------------------------------------------------------------------------
-
 local MOST_ICONS = #SPELLS + #TRINKETS
 
 function U.NewIcon(parent)
@@ -912,7 +848,6 @@ function U.NewIcon(parent)
 	if not icon then
 		return nil
 	end
-	-- The game's countdown font, read before any change, so the choice Game's own can put it back (Cooldowns.lua:307-332).
 	local fs = icon.cooldown.GetCountdownFontString and icon.cooldown:GetCountdownFontString()
 	if fs and fs.GetFont then
 		local ok, file, size, flags = pcall(fs.GetFont, fs)
@@ -958,7 +893,6 @@ local function BuildCooldowns(stage)
 	s.managerCaption:SetText("Cooldown manager")
 	local first = s.icons[1] and s.icons[1].frame or s.holder
 	local second = s.icons[2] and s.icons[2].frame or first
-	-- The settings of the row and its icons bracket the first icon; the ones that act on an icon that is cooling bracket the second.
 	local cooling = { numbers = true, numbersFont = true, sweep = true, sweepAlpha = true, dim = true, dimDesat = true, dimDarkness = true, coolAlpha = true }
 	for _, key in ipairs({ "trinkets", "size", "spacing", "perRow", "grow", "rows", "crop", "border", "numbers", "dim", "dimDesat", "dimDarkness", "coolAlpha",
 		"readyAlpha", "idleAlpha", "borderState", "readyColour", "coolingColour", "flash", "numbersFont", "sweep", "sweepAlpha", "countSize", "keybind",
@@ -970,7 +904,6 @@ local function BuildCooldowns(stage)
 	return s
 end
 
--- One icon of the row: sample = { icon file, seconds left, length, charges, key }.
 function U.DrawSpell(icon, sample, look, hide)
 	if not icon then
 		return
@@ -1082,7 +1015,6 @@ local function DrawCooldowns(s)
 			end
 		end
 	end
-	-- The icons of the cooldown manager: flat and square with the option on, the game's round look with it off.
 	local managerOn = read("cooldowns.manager") == true
 	local mx = PAD + 6 + widest + 30
 	s.manager:SetSize(80, 80)
@@ -1115,12 +1047,6 @@ end
 
 U.Register("mock-cooldown-row", { build = BuildCooldowns, draw = DrawCooldowns })
 
--- Abilities of party members and enemies --------------------------------------------------------------
-
--- The kinds of CooldownData.lua: 1 interrupt, 2 defensive, 3 defensive cast on others, 4 crowd control, 5 crowd control break, 6 ward or immunity,
--- 7 mobility, 8 offensive cooldown, 9 group cooldown.
-
--- Party members: name, class and one ability of each kind a switch shows.
 local MEMBERS = {
 	{ "Bren", "WARRIOR", { 1, "Ability_Kick" }, { 2, "Ability_Warrior_ShieldWall" }, { 2, "Spell_Nature_Regeneration" }, { 6, "Spell_Shadow_ShadowWard" },
 		{ 3, "Spell_Holy_SealOfProtection" }, { 5, "Spell_Holy_SealOfValor" }, { 9, "Ability_Warrior_RallyingCry" } },
@@ -1135,12 +1061,10 @@ local MEMBERS = {
 }
 local YOU = { "You", "SHAMAN", { 1, "Ability_Kick" }, { 2, "Spell_Nature_LightningShield" }, { 2, "Spell_Holy_SealOfProtection" }, { 6, "Spell_Shadow_ShadowWard" },
 	{ 3, "Spell_Holy_PowerWordShield" }, { 5, "Spell_Holy_SealOfValor" }, { 9, "Spell_Nature_Bloodlust" } }
--- The switch each kind belongs to, and the place of its switch in the row (PartyCooldowns.lua 24 and 241-251).
 local PARTY_SWITCH = { [1] = { "interrupts", 1 }, [2] = { "defensives", 2 }, [6] = { "defensives", 2 }, [3] = { "externals", 3 }, [5] = { "breaks", 4 }, [9] = { "group", 5 } }
 local PARTY_GAP, PARTY_BELOW, PARTY_SPACING = 4, -1, 2
 local FRAME_W, FRAME_H, FRAME_STEP = 120, 28, 6
 
--- The abilities a person shows, in order: the ones whose switch is on, by the place of the switch, as many as Icons per row says.
 function U.PartyItems(member, count)
 	local list = {}
 	for index = 3, #member do
@@ -1163,7 +1087,6 @@ function U.PartyItems(member, count)
 	return items
 end
 
--- Puts items on a row of icons: kind border, a sweep on every other one, the rest ready.
 function U.PaintItems(row, items, size, direction)
 	local shown = {}
 	for index, icon in ipairs(row.icons) do
@@ -1198,8 +1121,6 @@ function U.NewRow(parent, most)
 	end
 	return row
 end
-
--- mock-party-cooldowns -------------------------------------------------------------------------------------
 
 local function BuildParty(stage)
 	local s = { root = Root(stage), parts = {}, members = {} }
@@ -1272,10 +1193,6 @@ end
 
 U.Register("mock-party-cooldowns", { build = BuildParty, draw = DrawParty })
 
--- mock-enemy-cooldowns -------------------------------------------------------------------------------------
-
--- One ability of each kind a switch of Enemy cooldowns shows, in the order of SWITCHES in EnemyCooldowns.lua: kind, icon, seconds left and
--- length. The second, a second interrupt, is the one whose timer has just ended.
 local ENEMY = {
 	{ switch = "interrupts", kind = 1, icon = "Ability_Kick", left = 7, length = 24 },
 	{ switch = "interrupts", kind = 1, icon = "Spell_Frost_IceShock", ended = true },
@@ -1285,12 +1202,9 @@ local ENEMY = {
 	{ switch = "mobility", kind = 7, icon = "Ability_Rogue_Sprint", left = 9, length = 15 },
 	{ switch = "offensive", kind = 8, icon = "Spell_Nature_Bloodlust", left = 90, length = 180 },
 }
--- The crowd control break of an arena opponent, one more icon on the bar of the target and focus: no kind, so no coloured border.
 local ENEMY_ARENA = { icon = "INV_Jewelry_TrinketPVP_01", left = 60, length = 120 }
 local ENEMY_SPACING, ENEMY_BELOW, ENEMY_BAR_UP, ENEMY_PLATE_MOST, ENEMY_BAR_MOST = 2, 1, 4, 4, 8
 local PLATE_W, PLATE_H, TARGET_W, TARGET_H = 110, 12, 150, 36
--- The height of the name over the mock plate, and the space between the plate and a row beside it, which stands for the level box and the
--- room the game keeps for its own icons there (EnemyCooldowns.lua E.Spot).
 local PLATE_NAME, ENEMY_SIDE = 18, 6
 
 local function BuildEnemy(stage)
@@ -1336,7 +1250,6 @@ local function BuildEnemy(stage)
 	return s
 end
 
--- The icons a row shows: the switches that are on, in order, and the ability whose timer has ended only when a flash is chosen.
 function U.EnemyItems(most)
 	local read = ns.Get
 	local items = {}
@@ -1345,7 +1258,6 @@ function U.EnemyItems(most)
 			items[#items + 1] = sample
 		end
 	end
-	-- Over the limit, ready icons go first (EnemyCooldowns.lua E.Items).
 	if #items > most then
 		for index = #items, 1, -1 do
 			if items[index].ended then
@@ -1360,7 +1272,6 @@ function U.EnemyItems(most)
 	return cut
 end
 
--- Paints a row; its icons grow from the middle, or to the right or the left from its edge (ns.IconLayout).
 function U.PaintEnemy(row, items, size, direction)
 	local read = ns.Get
 	local shown = {}
@@ -1396,12 +1307,9 @@ function U.PaintEnemy(row, items, size, direction)
 	return width
 end
 
--- The mock plate and its row, by Place on nameplates (EnemyCooldowns.lua E.Spot): the width and height of the two, the left and top of the
--- plate in them, and where the row hangs from the plate.
 function U.EnemyPlate(platePlace, size)
 	local rowW = ENEMY_PLATE_MOST * size + (ENEMY_PLATE_MOST - 1) * ENEMY_SPACING
 	if platePlace == "right" or platePlace == "left" then
-		-- The row is as high as an icon, its middle on the middle of the plate.
 		local top = math.max(PLATE_NAME, size / 2 - PLATE_H / 2)
 		local height = top + math.max(PLATE_H, PLATE_H / 2 + size / 2)
 		local width = PLATE_W + ENEMY_SIDE + rowW

@@ -1,39 +1,13 @@
 local _, ns = ...
 
--- Show durability: the durability of all the gear you wear in one percent, on the character page of the Character window, under the left column
--- of slots (the lowest is the wrist, Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:779-818). It is white above 80%, the game's yellow for worn
--- gear above 50% and its red for broken gear at 50% and below (Blizzard_DurabilityFrame/DurabilityFrame.lua:14-16), after the game's word for it;
--- and since 0.5.35 red while any item is broken (0%, so it gives no stats) and at least yellow while any is at 20% or less, as the minimap's lowest
--- item line colours (MapText.lua), so one broken weapon among whole gear never reads white. Where the game rule RepairArmorDisabled is on (gear
--- does not wear out, C_GameRules.IsGameRuleActive) the line is hidden, as the minimap's and the game's own durability figure are.
--- The percent is the sum of what GetInventoryItemDurability gives for each worn slot over the sum of their most, the call the game's own repair
--- checks make (Camelot/PaperDollFrame.lua:1594-1602, Blizzard_FrameXML/Mainline/EquipmentManager.lua:234); a slot without durability counts
--- for nothing, and gear with none at all is 100%. A value the client withholds hides the text. The text is this addon's, on a frame of its own
--- made out of a fight on the item frame of the character page (PaperDollItemsFrame, PaperDollFrame.xml:777), so it shows only on that page. It is
--- read when the settings are applied, at each loading screen and on the events that say the durability or the worn gear changed:
--- UPDATE_INVENTORY_DURABILITY, UPDATE_INVENTORY_ALERTS and PLAYER_EQUIPMENT_CHANGED (PaperDollInfoDocumentation.lua:384-392, 436-446), as the game's
--- own durability figure is (DurabilityFrame.lua:20-29), so it is right whenever the page opens and nothing runs while nothing changes. Nothing of the
--- game's is written, and on a client without the call nothing is made. The frame is as wide as the words. Pointing at it lists in GameTooltip
--- (SetOwner, AddLine, AddDoubleLine, Show, and Hide only while IsOwned says the frame owns it), never in a fight, as Show thorns does, first a red
--- line with the number of broken items while there is one, then each worn item that wears out, lowest first, its icon (GetInventoryItemTexture)
--- and its name in its quality's colour without brackets (from GetInventoryItemLink) and its percent in white, yellow or red, then All
--- items and, where the worn items' tooltip data gives one (repairCost of C_TooltipInfo.GetInventoryItem, the figure the game's repair tooltip
--- shows, TooltipDataRules.lua:151-156), the sum of their repair costs; clicks go through to the page. This follows the durability of EnhanceQoL by
--- Philipp Barth (R41Z0R) on its Character frame, adapted with his permission. Not a module: the windows module calls ns.CharacterDurability.Apply
--- whenever it applies its settings.
-
 local KEY, PART, ROW = "windows", "durability", "windows.durability"
--- The worn slots, head to tabard (INVSLOT_FIRST_EQUIPPED and INVSLOT_LAST_EQUIPPED, Blizzard_FrameXMLBase/Constants.lua:136, 154-155).
 local FIRST_SLOT, LAST_SLOT = 1, 19
 local WHITE, YELLOW, RED = { 1, 1, 1 }, { 1, 0.82, 0.18 }, { 0.93, 0.07, 0.07 }
 local HIGH, LOW = 80, 50
--- An item at this percent or less turns the line at least yellow, as the minimap's lowest item line does (MapText.lua).
 local WORN = 20
 local FONT = "GameFontHighlightSmall"
--- The frame lies this far under the wrist slot, and where the slot is not found, this far from the bottom left of the page, beside the weapons.
 local GAP, FALLBACK_X, FALLBACK_Y = -12, 24, 40
 local WIDTH, HEIGHT = 120, 16
--- The name of each worn slot where its item gives no link (GlobalStrings).
 local SLOT_WORDS = { "HEADSLOT", "NECKSLOT", "SHOULDERSLOT", "SHIRTSLOT", "CHESTSLOT", "WAISTSLOT", "LEGSSLOT", "FEETSLOT", "WRISTSLOT",
 	"HANDSSLOT", "FINGER0SLOT", "FINGER1SLOT", "TRINKET0SLOT", "TRINKET1SLOT", "BACKSLOT", "MAINHANDSLOT", "SECONDARYHANDSLOT", "RANGEDSLOT",
 	"TABARDSLOT" }
@@ -42,8 +16,6 @@ local DIM = { 0.66, 0.68, 0.62 }
 local CharacterDurability = {}
 ns.CharacterDurability = CharacterDurability
 
--- The frame and its text, made once. broken: the game refused one of them, and nothing is tried again. waiting: the making waits for the end of a
--- fight.
 local state = { frame = nil, text = nil, broken = false, waiting = false }
 
 local function Wanted()
@@ -54,7 +26,6 @@ local function Usable(value)
 	return value ~= nil and not ns.IsSecret(value) and type(value) == "table"
 end
 
--- True when the game would refuse a frame made on this one now.
 local function Blocked(frame)
 	if not InCombatLockdown() then
 		return false
@@ -63,7 +34,6 @@ local function Blocked(frame)
 	return not ok or ns.IsSecret(protected) or protected == true
 end
 
--- The durability of all worn gear in one percent, rounded, or nil when the client has no call, it raises or it withholds a value.
 local function Percent()
 	local call = _G.GetInventoryItemDurability
 	if type(call) ~= "function" then
@@ -95,7 +65,6 @@ local function Colour(percent)
 	return RED
 end
 
--- The game's word (DURABILITY, GlobalStrings), in English when the client has none, and the percent.
 local function Words(percent)
 	local word = _G.DURABILITY
 	if ns.IsSecret(word) or type(word) ~= "string" or word == "" then
@@ -104,7 +73,6 @@ local function Words(percent)
 	return ("%s %d%%"):format(word, percent)
 end
 
--- Each worn item that wears out: { slot, percent }, lowest first, or nil when the client has no call or withholds a value.
 local function Items()
 	local call = _G.GetInventoryItemDurability
 	if type(call) ~= "function" then
@@ -129,9 +97,6 @@ local function Items()
 	return items
 end
 
--- True where the game rule that keeps gear from wearing out is on (Enum.GameRule.RepairArmorDisabled, C_GameRules.IsGameRuleActive), as the
--- minimap's durability line reads it (MapText.lua; the game's own durability figure hides there too, DurabilityFrame.lua:51-55). An answer the game
--- withholds or does not give counts as off.
 local function NoWear()
 	local rules, enum = _G.C_GameRules, _G.Enum
 	local kinds = Usable(enum) and enum.GameRule or nil
@@ -143,8 +108,6 @@ local function NoWear()
 	return ok and not ns.IsSecret(on) and on == true
 end
 
--- The colour of the line: red while any item is broken (at 0%, so it gives no stats), at least yellow while any is at WORN% or less, else the
--- colour of the percent of all items, so one broken weapon among whole gear is never white.
 local function LineColour(percent, items)
 	local lowest = items and items[1] and items[1].percent or nil
 	if lowest ~= nil and lowest <= 0 then
@@ -157,8 +120,6 @@ local function LineColour(percent, items)
 	return colour
 end
 
--- Reads the percent and shows it, or hides the text when it cannot be read or gear does not wear out here; the frame answers the mouse only while
--- the text shows, so no empty spot does. The frame takes the width of the words, so the mouse finds them.
 local function Update()
 	local text, frame = state.text, state.frame
 	if text == nil then
@@ -186,10 +147,6 @@ local function Update()
 	end
 end
 
--- The tooltip ---------------------------------------------------------------------------------------------------------------------------------
-
--- The item in a slot: its icon (GetInventoryItemTexture) and its name in its quality's colour without the brackets of a link, else its link as it
--- comes, else the slot's name.
 local function ItemName(slot)
 	local ok, link = pcall(_G.GetInventoryItemLink, "player", slot)
 	if ok and not ns.IsSecret(link) and type(link) == "string" and link ~= "" then
@@ -209,7 +166,6 @@ local function ItemName(slot)
 	return not ns.IsSecret(word) and type(word) == "string" and word ~= "" and word or ("Slot %d"):format(slot)
 end
 
--- The sum of the repair costs the worn items' tooltip data gives, or nil when none gives one.
 local function RepairCost(items)
 	local info = _G.C_TooltipInfo
 	local call = type(info) == "table" and not ns.IsSecret(info) and info.GetInventoryItem or nil
@@ -229,7 +185,6 @@ local function RepairCost(items)
 	return total
 end
 
--- An amount of copper as the game writes money, with its coins; plain gold, silver and copper where the client has no money string.
 local function Money(copper)
 	copper = math.floor(copper)
 	local errands = ns.Errands
@@ -261,7 +216,6 @@ local function Untip()
 	end
 end
 
--- Each item with its percent, All items and the repair cost, and first, while any item is broken, a red line that says how many. Not in a fight.
 local function Say()
 	local tip, frame = Tooltip(), state.frame
 	local items = Wanted() and not NoWear() and Items() or nil
@@ -307,7 +261,6 @@ local function Refuse(text)
 	ns.Note(KEY, text)
 end
 
--- Makes the frame and its text on the item frame of the character page. True when they are there.
 local function Make(page)
 	local ok, frame = pcall(CreateFrame, "Frame", nil, page)
 	if not ok or not Usable(frame) then
@@ -329,7 +282,6 @@ local function Make(page)
 	end
 	pcall(text.SetPoint, text, "LEFT", frame, "LEFT", 0, 0)
 	pcall(text.SetWordWrap, text, false)
-	-- Over the line the mouse lists the items; clicks go through to the page.
 	pcall(frame.EnableMouse, frame, true)
 	pcall(frame.SetMouseClickEnabled, frame, false)
 	pcall(frame.SetScript, frame, "OnEnter", function()
@@ -370,7 +322,6 @@ local function Applied()
 	Update()
 end
 
--- Shows the frame while the row is on, or hides it.
 function CharacterDurability.Apply()
 	if ns.PartStopped(KEY, PART) and state.frame then
 		pcall(state.frame.Hide, state.frame)
@@ -378,7 +329,6 @@ function CharacterDurability.Apply()
 	ns.EachPart(KEY, PART, Applied)
 end
 
--- The durability or the gear changed.
 local function Changed()
 	if state.frame and Wanted() then
 		ns.EachPart(KEY, PART, Update)

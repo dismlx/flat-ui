@@ -1,22 +1,5 @@
 local _, ns = ...
 
--- The flash of a new target's nameplate, a part of Nameplates.lua (ns.PlateExtra). With Flash as you change target (on by default, on the Marks and
--- icons tab of Nameplates, under Target and focus, while Health bar border and Target and focus border are on), the health bar border of the plate
--- you take as your target flashes once in Target colour as you change target: an outline of Flat UI's own, GROW screen pixels thicker than Target
--- and focus border thickness, that starts whole and fades out over SECONDS (an Alpha animation of its own frame, smoothed out, keeping its end),
--- leaving behind the target border Nameplates.lua's Mark draws. Setting a focus flashes the focus's plate the same way in Focus colour. So with Tab
--- in a pack the eye sees at once which plate it took. The plates are found as frames (ns.PlateUnitFrame of "target" and "focus"), so no unit
--- comparison the client can withhold is needed, and only a plate Flat UI restyles (Nameplates.lua's own record of it, own.styleOn) flashes, since
--- only it has that border.
--- Combat: the flash's frame is a child of the plate's health bar, so it hides with the bar (a plate at names only) and moves, scales and fades with
--- the plate. It is made and anchored only out of combat on a plate the game may protect (ns.MaybeProtected, Movers.lua): it is made on every plate as
--- the plate shows while the row is on, so a target taken in a fight has it, and a plate first seen in a fight gets it when the fight ends (/flatui
--- status counts those). In a fight only its colour, its thickness (Flat UI's own edges) and its animation change, so it plays in a fight. A plate
--- that leaves, a refresh of the rows and the part going off stop a flash on its way. Nothing of the game is written: every call on the game only
--- reads.
--- Events: PLAYER_TARGET_CHANGED and PLAYER_FOCUS_CHANGED, added to Nameplates.lua's own (ns.AddEvent). ns.PlateTargetFlash also makes the flash of
--- the Target and Focus samples of setup's drawings (SetupDrawPlates.lua's P.TargetFlash).
-
 local KEY = "nameplates"
 local PART = "Target flash"
 local EXTRA = ns.PlateExtra
@@ -24,16 +7,10 @@ if type(EXTRA) ~= "table" then
 	return
 end
 
--- SECONDS: how long the flash takes to fade. GROW: the screen pixels it is thicker than Target and focus border thickness. LEVEL: frame levels above
--- the health bar, over its border and the line inside a Rare Elite's.
 local K = { SECONDS = 0.35, GROW = 2, LEVEL = 8 }
 
--- recs[unitFrame]: holder (the flash's frame), outline, flash (its animation group, nil on a client without one) and waiting (for the end of a fight).
--- Kept when the plate leaves, so a plate's flash is made once.
 local recs = setmetatable({}, { __mode = "k" })
--- owns[unitFrame]: Nameplates.lua's own record of the plate (own.styleOn), from the show hook; only read.
 local owns = setmetatable({}, { __mode = "k" })
--- S: on (the part runs), waited (plates that waited for the end of a fight) and played (flashes played), for /flatui status.
 local S = { on = false, waited = 0, played = 0 }
 local Prepare
 
@@ -46,14 +23,12 @@ local function Wanted()
 		and Opt("targetFlash") == true
 end
 
--- The flash's thickness in screen pixels: Target and focus border thickness (1 when it cannot be read) and GROW.
 local function Thickness()
 	local px = Opt("targetThickness")
 	px = ns.Finite(px) and px >= 1 and math.floor(px + 0.5) or 1
 	return px + K.GROW
 end
 
--- The plate's health bar, or nil when it is missing, withheld or forbidden.
 local function Bar(unitFrame)
 	local container = unitFrame.HealthBarsContainer
 	if ns.IsSecret(container) or type(container) ~= "table" or ns.Forbidden(container) then
@@ -66,14 +41,10 @@ local function Bar(unitFrame)
 	return bar
 end
 
--- SetPoint is protected on a plate the game protects in a fight (SimpleScriptRegionResizingAPIDocumentation.lua:22-30): nothing is made or anchored
--- there in a fight. Movers.lua has ns.MaybeProtected; before it loads every frame counts as protected.
 local function Locked(unitFrame, bar)
 	return InCombatLockdown() and (type(ns.MaybeProtected) ~= "function" or ns.MaybeProtected(unitFrame) or ns.MaybeProtected(bar))
 end
 
--- The flash: an Alpha animation of `holder` from whole to nothing over SECONDS, smoothed out and keeping its end, so the frame rests unseen. Not
--- protected on a frame of Flat UI's own, so it plays in a fight. Nil when the client will not make it. Also the flash of setup's samples.
 function ns.PlateTargetFlash(holder)
 	local ok, group = pcall(function()
 		local made = holder:CreateAnimationGroup()
@@ -109,7 +80,6 @@ local function Wait(unitFrame)
 	end)
 end
 
--- The flash of a plate, made the first time the plate needs one; nil while it waits for the end of a fight or has no health bar.
 local function Make(unitFrame)
 	local rec = recs[unitFrame]
 	if rec and rec.holder then
@@ -141,7 +111,6 @@ local function Make(unitFrame)
 	return rec
 end
 
--- A flash on its way stops, and the frame rests unseen.
 local function Still(rec)
 	if not (rec and rec.holder) then
 		return
@@ -152,7 +121,6 @@ local function Still(rec)
 	rec.holder:SetAlpha(0)
 end
 
--- A plate Flat UI restyles gets its flash ready, so a target taken in a fight flashes at once.
 function Prepare(unitFrame)
 	if not S.on or ns.Forbidden(unitFrame) then
 		return
@@ -164,7 +132,6 @@ function Prepare(unitFrame)
 	Make(unitFrame)
 end
 
--- The plate of `unit` flashes once in the colour of `row` (targetColour or focusColour).
 local function Play(unit, row)
 	if not (S.on and Wanted()) or type(ns.PlateUnitFrame) ~= "function" then
 		return
@@ -189,7 +156,6 @@ local function Play(unit, row)
 	end
 end
 
--- Every flash stopped: the row, the page or the part went off.
 local function StandDown()
 	for unitFrame, rec in pairs(recs) do
 		if not ns.Forbidden(unitFrame) then
@@ -198,8 +164,6 @@ local function StandDown()
 	end
 end
 
--- Starts or stops the part as the rows say, readies the flash of every plate shown (one Flat UI now restyles, such as a friendly plate as Restyle
--- friendly nameplates turns on, gets its own), and stops every flash on its way, which takes the thickness of the rows.
 local function Sync()
 	S.on = Wanted()
 	if S.on and type(ns.EachPlate) == "function" then
@@ -225,8 +189,6 @@ ns.AddEvent(KEY, "PLAYER_FOCUS_CHANGED", function()
 		ns.EachPart(KEY, PART, Play, "focus", "focusColour")
 	end
 end)
-
--- Hooks into the plates ------------------------------------------------------------------------------------------------------------------------
 
 EXTRA.show[#EXTRA.show + 1] = function(unitFrame, own)
 	if type(own) == "table" then

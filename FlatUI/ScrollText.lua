@@ -1,71 +1,20 @@
 local _, ns = ...
 
--- Scroll areas for combat text: Outgoing for your hits and Incoming for what happens to you. A number starts at the handle of its area
--- (FlatUICombatOut and FlatUICombatSelf in the movers) and moves by the style of the area for a time that Speed sets. CombatText.lua works
--- out what a hit report shows and passes it here; this file places it, pops it and fades it. A number is a font string with a Scale
--- animation in Vertex mode, so the pop is smooth, and a second font string that holds the partial effect, such as (Glancing), which
--- appears when the pop ends. A record is made on first use and reused, and no table is made for a hit. The lengths, times and sizes below
--- are choices of this file, not the game's: the design is research/reports/2026-10-20-scrolling-text/design.md, sections 2.1, 2.2 and 2.6.
--- Each number of an area starts at the spot of its lane or row and follows the path of its style from there, and nothing moves a number
--- once it is on its way: each frame its place is worked out again from its own start time and spot (GetTime, so the frame rate does not
--- matter). A Straight or Arc number that would start within a line of a number still near the start takes the next free lane, the same
--- path moved sideways by about the width of a number, first away from the character and then to the other side, four lanes at most
--- (SHAPE.lanes), and starts at once, so a burst shows side by side. An Outgoing number with a spell name after it (Spell names After every spell,
--- 0.5.42) takes a lane as wide as its name (half a height more for each letter) and only the first two lanes, on its path and away from the
--- character, so a burst of named numbers reads as two clean columns. Only when every lane is busy near the start does it wait, see-through
--- and still at its start, for the lane that frees first, and start there: SHAPE.wait seconds at most after it came or after the number
--- ahead of it in that lane started, and never more than SHAPE.most seconds after it came, so a flood of hits that goes on is never further
--- behind (ns.ScrollLane). No number starts lower or higher than its spot (up to 0.5.23 a number in a burst started a line further back
--- and kept that place all the way), and none is left out while the area has a record free. A Horizontal or Static number takes a free
--- row, and when every row is busy the oldest number in a row goes and the new one takes its row. When every record of an area is alive,
--- the oldest number goes.
--- Outgoing direction and Incoming direction (Up or Down; Outgoing up and Incoming down by default, the areas' own dir) set which way the
--- numbers of an area move and which way the rows of a Horizontal or Static area stack, read as each number starts, so a number on its way keeps
--- the direction it started with.
--- Size of your text sizes the numbers of the Incoming area. Size of the Outgoing area (outSize) sizes those of the Outgoing area: Same as numbers
--- over enemies (the default, the Size row of the numbers over enemies, as up to 0.5.34), Same as your text, or Smaller than numbers over enemies
--- (three quarters of it), read as each number starts (ns.ScrollSize).
--- The icon of an amount is written in its text (a texture escape), so that a withheld zero, which the client writes as nothing, draws no icon,
--- name or (Extra attack) either; a word has the icon beside it, a texture of the record's own.
--- A secret amount or name goes to SetText and SetFormattedText only; nothing here compares, counts or measures it.
-
 local KEY = "combattext"
 
--- Length of an area on a screen 768 units high, the share of it an arc and a horizontal number move sideways, the seconds a number lives at
--- each Speed, the seconds a Static number lives, the share of the life at which the fade begins (a Static number fades earlier), the share
--- of the life the fade in takes, the height of a line as a share of the height of a number, the rows a Horizontal or Static area has,
--- the heights of a number a Horizontal number must travel before another may start in its row, the width of a lane in heights of a number
--- at the Size of its area (about the width of a number), the lanes a Straight or Arc number takes in turn, in lane widths to the side the
--- numbers of its area go (away from the character): its path, one lane out, one lane in and two lanes out, the seconds such a number
--- may wait for a lane when every lane is busy, after it came or after the number ahead of it in that lane started, and the most seconds
--- it waits in all.
 local SHAPE = { length = 240, arc = 0.2, arcs = { narrow = 0.2, wide = 0.35 }, reach = 0.6, life = { fast = 1.6, normal = 2.2, slow = 3.0 }, still = 1.5, hold = 0.75, stillHold = 0.7,
 	fadeIn = 0.03, line = 1.04, rows = 5, clear = 2.5, lane = 3, lanes = { 0, 1, -1, 2 }, wait = 0.3, most = 1.2 }
--- The styles whose numbers follow a path from the start, in lanes side by side.
 local PATH = { straight = true, arc = true }
--- The pop: the scale at its peak, and the seconds up and down. A critical hit is this much larger than a hit. A partial effect is drawn at
--- this share of the number, this many units to the right of it.
 local POP = { peak = 1.15, up = 0.05, down = 0.10 }
 local CRIT, WORD, GAP = 1.25, 0.75, 4
--- The share of the Size of the numbers over enemies the Outgoing area takes with Size of the Outgoing area on Smaller.
 local SMALLER = 0.75
--- The setup drawing of combat text moves its sample numbers by the same shape. ST.ClearSamples takes test mode's samples off the screen.
 SHAPE.crit = CRIT
 ns.CombatShape.scroll = SHAPE
--- The height of a message in the game's combat text (CombatTextConstants.lua:6).
 local TEXT_HEIGHT = 25
--- The colours of a partial effect (CombatFeedback.lua:41-58 gives the sizes; the colours are a choice of this file).
 local PARTIAL = { GLANCING = { 0.7, 0.7, 0.7 }, CRUSHING = { 1, 0.4, 0.2 }, RESIST = { 0.79, 0.3, 0.85 }, BLOCK = { 0.6, 0.7, 1 },
 	BLOCK_REDUCED = { 0.6, 0.7, 1 }, ABSORB = { 1, 0.85, 0.4 } }
--- The words of an extra swing (the flag EXTRA), in orange (1, 0.6, 0.15), written after its number in the same text, so that a zero draws neither.
 local EXTRA_TEXT = "|cffff9926(Extra attack)|r"
--- The icon of a spell in the text of a number: a texture escape as high as the text, its edge trimmed as the icon beside a word is (5 to 59
--- of the 64 texels), and a space after it.
 local INLINE = "|T%d:0:0:0:0:64:64:5:59:5:59|t "
--- The two areas: the name of the handle, the row of the style, the row of the size (and for Outgoing the row that says which size it takes,
--- ns.ScrollSize), the row of the direction and the direction when that row gives none (1 up, -1 down), the side an arc and a
--- horizontal number go to, the most numbers alive, those that wait for a lane too (room for a burst of 20 and the numbers still on screen
--- before it), and, with no handle to take the place from, where the area starts as units from the middle of the screen.
 local AREAS = {
 	out = { label = "Outgoing", mover = "FlatUICombatOut", style = "outStyle", size = "size", sizeRow = "outSize", dir = 1, dirRow = "outDir", side = 1,
 		max = 32, dx = 170, dy = -30 },
@@ -78,9 +27,7 @@ for key, area in pairs(AREAS) do
 end
 
 local host, ticker
--- The count of numbers given to the areas, which orders them by age.
 local serial = 0
--- Numbers on screen in all areas, and numbers that had no place to start from.
 local active, unplaced = 0, 0
 
 local function Opt(key)
@@ -91,9 +38,6 @@ local function Plain(value, kind)
 	return not ns.IsSecret(value) and type(value) == kind
 end
 
--- Where a number is at u, the share of its life, as units from its start: straight along the direction, along it and out to the side in a
--- half sine for an arc (width is the share of the length it bows out, SHAPE.arc when nil), out to the side for horizontal, nowhere for
--- static. dir is 1 up and -1 down, side 1 right and -1 left.
 function ns.ScrollPath(style, u, length, dir, side, width)
 	if style == "straight" then
 		return 0, dir * length * u
@@ -105,7 +49,6 @@ function ns.ScrollPath(style, u, length, dir, side, width)
 	return 0, 0
 end
 
--- The opacity of a number at u: in over the first share of its life, whole until hold, then down to nothing.
 function ns.ScrollAlpha(u, hold)
 	if u < SHAPE.fadeIn then
 		return u / SHAPE.fadeIn
@@ -125,8 +68,6 @@ local function Host()
 	end
 end
 
--- The scale animation of a number, in Vertex mode (UISharedDocumentation.lua:6-15): up to the peak and back, played unless How a number
--- appears is Plainly. A client that has no such animation on a font string gives a number with no pop.
 local function MakePop(item)
 	local ok, group = pcall(function()
 		local text = item.text
@@ -158,7 +99,6 @@ local function Make(area)
 	pcall(text.SetJustifyV, text, "MIDDLE")
 	pcall(word.SetJustifyH, word, "LEFT")
 	word:SetPoint("LEFT", text, "RIGHT", GAP, 0)
-	-- The icon of the spell, left of the number. One texture for each record, made once.
 	local icon = host:CreateTexture(nil, "OVERLAY", nil, 0)
 	ns.Own[icon] = true
 	icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -169,9 +109,6 @@ local function Make(area)
 	return item
 end
 
--- Puts the look of the settings on both font strings of a number. A font object brings a justification of its own, so the number is
--- centred again after it: the pop in Vertex mode grows from the middle of a centred number (UISharedDocumentation.lua:14), and its
--- middle is the point on the path.
 local function Style(item, look)
 	local object = look.object or look.name
 	pcall(item.text.SetFontObject, item.text, object)
@@ -204,8 +141,6 @@ local function Release(area, index)
 	end
 end
 
--- A record that is free, or a new one while the area has fewer than its most, else the oldest number, which goes and is counted unless it
--- is a sample.
 local function Take(area)
 	for _, item in ipairs(area.items) do
 		if not item.on then
@@ -225,8 +160,6 @@ local function Take(area)
 	return oldest
 end
 
--- Where a number is now: the start, the path of its style and its lane or row. A number that waits for a lane is at its start,
--- see-through.
 local function Place(item, now)
 	local t = now - item.start
 	local waiting = t < 0
@@ -248,7 +181,6 @@ local function Place(item, now)
 	end
 end
 
--- The pop of a number as it starts, unless How a number appears is Plainly.
 local function Begin(item)
 	item.cue = false
 	if item.group and Opt("pop") == "pop" then
@@ -274,7 +206,6 @@ local function Tick()
 	ns.Try(KEY, Step)
 end
 
--- The place a number starts: the middle of the handle of its area, else the middle of the screen moved by the place the handle starts at.
 local function Spot(area)
 	if type(ns.MoverSpot) == "function" then
 		local x, y = ns.MoverSpot(area.mover, "CENTER")
@@ -289,17 +220,6 @@ local function Spot(area)
 	return nil
 end
 
--- The lane a Straight or Arc number of this height takes, and the time it starts. newest holds the newest number of each lane (an index of
--- SHAPE.lanes), or nothing, each with its start, height, life, length and serial (its place in the order the numbers came). A lane is busy
--- while its newest number is less than a line on from the start (the mean of the two heights, times SHAPE.line); the two move along the
--- direction at the same steady speed, so the line between them stays. The number takes the first lane that is not busy, in the order of
--- SHAPE.lanes, and starts now. When every lane is busy it takes the lane that frees first, on a tie the lane whose newest number started
--- first and then the lane of the oldest of those numbers, and starts when that lane frees, but SHAPE.wait seconds at most after now or
--- after the number there starts, whichever is later, so that no two start together in one lane, and SHAPE.most seconds at most after now.
--- A burst of up to 20 numbers in one frame starts four at a time, each four a line or SHAPE.wait (the sooner) after the four before; in a
--- flood of hits that goes on a wait does not grow past SHAPE.most, and a number held to it covers some of the number ahead of it in its
--- lane, or all of it in a burst of more than 20. The setup drawing of combat text takes its lanes from here too.
--- count, when given, takes only the first lanes of SHAPE.lanes: a named number of the Outgoing area takes the first two (0.5.42, Add).
 function ns.ScrollLane(newest, height, now, count)
 	local pick, at, first, age
 	for lane = 1, count or #SHAPE.lanes do
@@ -319,8 +239,6 @@ function ns.ScrollLane(newest, height, now, count)
 	return pick, at
 end
 
--- True when the number in a row has gone far enough for another to start there: a Horizontal number after SHAPE.clear heights, a Static
--- number when it begins to fade.
 local function Clear(occupant, height, now)
 	if not occupant.on then
 		return true
@@ -332,8 +250,6 @@ local function Clear(occupant, height, now)
 	return u >= occupant.hold
 end
 
--- How far from its start a Horizontal or Static number begins, along the direction of its area: the first row whose number has gone far
--- enough, else the row of the oldest number, which goes, so that two numbers never lie on each other; one line further on for each row.
 local function Row(area, item, now)
 	local pick, oldest
 	for row = 0, SHAPE.rows - 1 do
@@ -360,7 +276,6 @@ local function Row(area, item, now)
 	return item.dir * pick * item.height * SHAPE.line
 end
 
--- The direction of an area's numbers now: its row, Up 1 or Down -1, else the area's own.
 local function Direction(area)
 	local choice = Opt(area.dirRow)
 	if choice == "up" then
@@ -371,9 +286,6 @@ local function Direction(area)
 	return area.dir
 end
 
--- The Size of an area in percent: Incoming takes Size of your text; Outgoing takes Size of the Outgoing area, the Size of the numbers over enemies
--- (the default), Size of your text, or three quarters of the Size of the numbers over enemies. The setup drawing of combat text sizes its Outgoing
--- column by it too.
 function ns.ScrollSize(key)
 	local area = AREAS[key]
 	if area == AREAS.out then
@@ -387,8 +299,6 @@ function ns.ScrollSize(key)
 	return Opt(area.size)
 end
 
--- The height of a number in an area: the game's height at the Size of the area, times scale (a smaller partial effect) and a quarter
--- more for a critical hit.
 local function Height(area, crit, scale)
 	return TEXT_HEIGHT * ns.ScrollSize(area.key) / 100 * (scale or 1) * (crit and CRIT or 1)
 end
@@ -400,11 +310,6 @@ local function Fill(item, height, kind, value, format, r, g, b, flag, icon, valu
 	if kind == "word" then
 		text:SetText(value)
 	else
-		-- A withheld amount is written by the client with what the format puts around it, its icon in front, and as nothing when it is zero
-		-- (CombatText.lua, ns.CombatWithheld), so a zero draws no icon, name or (Extra attack) either. value2, the other report of a next melee
-		-- ability, is written beside it the same way with a space in front, which the client writes only with its digits: one of the two is the
-		-- swing it replaced, a zero, and two that are not zero stay two numbers. The format has one %s for the amount, and %% for a percent sign
-		-- in an ability name.
 		local done, withheld = false, nil
 		local spec = (format or "%s") .. (extra and (" " .. EXTRA_TEXT) or "")
 		local lead = hasIcon and INLINE:format(icon) or ""
@@ -449,8 +354,6 @@ local function Fill(item, height, kind, value, format, r, g, b, flag, icon, valu
 	end
 	word:Hide()
 	item.height = height
-	-- The icon of a word is as high and as wide as the word, and the text moves right by half of it and the gap, so the pair is centred on the
-	-- path. An amount has its icon in its text.
 	item.hasIcon = kind == "word" and hasIcon
 	if item.hasIcon then
 		item.icon:SetTexture(icon)
@@ -487,10 +390,6 @@ local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, 
 	item.length = SHAPE.length * ns.CombatWorldScale()
 	item.life = style == "static" and SHAPE.still or SHAPE.life[Opt("speed")] or SHAPE.life.normal
 	item.hold = style == "static" and SHAPE.stillHold or SHAPE.hold
-	-- A Straight or Arc number takes a lane, moved sideways from its path and never along it; a Horizontal or Static number takes a row. An
-	-- amount of the Outgoing area with a spell name after it (After every spell: a format of "%s " and the name, CombatText.lua) takes a lane as
-	-- wide as its name, half a height a letter more, as the numbers over enemies estimate a name, and only the two lanes on its path and away
-	-- from the character, so a burst reads as two columns and the rest wait their turn (0.5.42).
 	local start, lane, named = now, nil, 0
 	if area.key == "out" and kind == "amount" and type(format) == "string" and not ns.IsSecret(format) and format ~= "%s" then
 		named = math.max(0, #format - 3)
@@ -511,7 +410,6 @@ local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, 
 	end
 	item.on = true
 	area.live[#area.live + 1] = item
-	-- The lane knows its newest number only once the number is on screen, so a number that failed on its way holds no lane.
 	if lane then
 		area.lanes[lane] = item
 	end
@@ -525,7 +423,6 @@ local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, 
 	if active == 1 then
 		ticker:SetScript("OnUpdate", Tick)
 	end
-	-- The pop plays as the number starts: now, or once it has waited for its lane (Step).
 	if start <= now then
 		Begin(item)
 	else
@@ -537,12 +434,10 @@ end
 local ST = {}
 ns.ScrollText = ST
 
--- True while the Outgoing area shows hits, which is also when the movers have a handle for where it starts.
 function ns.CombatOutShown()
 	return ST.On("out")
 end
 
--- True while the area shows numbers: Outgoing unless Where your hits show is Over enemies, Incoming unless Combat text for you is Off.
 function ST.On(key)
 	if not ns.Enabled(KEY) then
 		return false
@@ -552,10 +447,6 @@ function ST.On(key)
 	return Opt("own") ~= "off"
 end
 
--- Shows one number in an area. kind is "amount" or "word"; format is the format of an amount, with its sign; flag is the plain flag of
--- the hit, which gives the partial effect (EXTRA for an extra swing), and icon is the file of the spell icon left of the number, or nil. value2
--- is a second withheld amount written in the same text (the other report of a next melee ability). True when the number is on screen, or
--- waits there for a lane. A sample is not counted as shown. An error is counted and does not go up.
 function ST.Show(key, kind, value, format, crit, r, g, b, scale, flag, sample, icon, value2)
 	local area = AREAS[key]
 	local ok, shown = pcall(Add, area, kind, value, format, crit, r, g, b, scale, flag, icon, value2, sample)
@@ -566,7 +457,6 @@ function ST.Show(key, kind, value, format, crit, r, g, b, scale, flag, sample, i
 	return false
 end
 
--- Takes the numbers of one area, or of both, off the screen.
 function ST.Clear(key)
 	for _, area in ipairs(ORDER) do
 		if key == nil or key == area.key then
@@ -577,7 +467,6 @@ function ST.Clear(key)
 	end
 end
 
--- Takes the samples off the screen in both areas (test mode's, when it ends or pauses for a fight), and leaves every other number.
 function ST.ClearSamples()
 	for _, area in ipairs(ORDER) do
 		for index = #area.live, 1, -1 do
@@ -588,13 +477,10 @@ function ST.ClearSamples()
 	end
 end
 
--- The numbers of one area on screen, those that wait for a lane too.
 function ST.Live(key)
 	return #AREAS[key].live
 end
 
--- The lines /flatui combat has about the areas: the count of the Outgoing area, and in either the numbers that waited for a lane, the
--- numbers taken off early to make room for a new one and the numbers that failed.
 function ST.Lines()
 	local lines = {}
 	for _, area in ipairs(ORDER) do
@@ -616,12 +502,10 @@ function ST.Lines()
 	return lines
 end
 
--- The numbers that had no place to start from, in both areas.
 function ST.Unplaced()
 	return unplaced
 end
 
--- The numbers an area has shown since login.
 function ST.Shown(key)
 	return AREAS[key].shown
 end

@@ -1,77 +1,19 @@
 local _, ns = ...
 
--- Cooldown pulse: when the cooldown of one of your spells or items ends, its icon fades in and out in the middle of the screen, on a frame of
--- the addon's own that takes no mouse and that /flatui move places (FlatUIPulse in Movers.lua). A module of its own, on by default, whose page
--- is listed under Cooldowns. Nothing of the game is changed.
---
--- Pulse spots: up to three spots, each a frame of its own with its own handle in /flatui move (FlatUIPulse, FlatUIPulse2 and FlatUIPulse3 in
--- Movers.lua), its own Icon size (pulse.size for spot 1, as before, then pulse.size2 and pulse.size3) and its own queue, so two spots pulse at once.
--- What pulses is one list for every spot: a spell or item pulses at spot 1, or at the spot it was given (Spot of one spell or item, /flatui pulse
--- spot), kept for the character in FlatUICharDB.pulseSpots by the key of its entry as its sound is; one whose spot is not in use pulses at spot 1.
---
--- What pulses: each spell of the player's spell book that is not passive and whose base cooldown (GetSpellBaseCooldown, which the client
--- has though Blizzard's documentation does not list it) is Shortest cooldown or longer, the ranks of a spell counted as one by their name as
--- on the Cooldown icons list (Cooldowns.lua); the two trinkets worn; any item the player uses, which the game names in its cooldown event
--- (SPELL_UPDATE_COOLDOWN gives the item of a cast, SpellBookDocumentation.lua:924-936, and the game's own cooldown manager reads it so,
--- CooldownViewer.lua:2182-2186), until that cooldown is over; and, when the page goes on and after a loading screen, the items in the bags
--- whose cooldown runs, one for each cooldown they share. A cooldown read out of combat that is shorter than Shortest cooldown does not pulse,
--- nor the global cooldown, nor what is left out. While test mode is on (TestMode.lua) a test pulse shows at each spot in use every 3 seconds, with
--- the sound the first time only. Out of combat, a change of a row of the look or of Pulse spots shows a test pulse in the new look
--- (ns.PulseLookChanged), and a pick of Sound or Spot of one spell or item pulses that one at its spot with its sound (P.Preview), an item's
--- name in its quality colour as its real pulse has it; a new pick takes the place of a test pulse that shows there. The test pulses at two or
--- three spots each show another of the spells watched, named "Spot 2: Frost Nova" while more than one spot is in use (P.Test).
---
--- The end of a cooldown is found without reading what the game withholds in a fight. The flags of a spell's cooldown are never withheld
--- (isEnabled, isActive and isOnGCD, SpellSharedDocumentation.lua:19-31), and isOnGCD is believed only inside SPELL_UPDATE_COOLDOWN, the one
--- place the game says it holds (SpellSharedDocumentation.lua:30). While a cooldown runs, an invisible Cooldown frame of the addon's own holds
--- the game's duration object of it with the global cooldown left out (C_Spell.GetSpellCooldownDuration(id, true), SpellDocumentation.lua:327-342),
--- handed on unread, and its OnCooldownDone says the cooldown is over, as on the icons of Cooldowns.lua and IconRow.lua. An item's start and
--- length are plain numbers (C_Item.GetItemCooldown, ItemDocumentation.lua:434-449, marks nothing secret), which its Cooldown frame takes.
--- A spell with charges pulses when its last charge is back, and one the game holds until a buff of it ends (isEnabled false) waits for that.
---
--- Cooldowns that end together at one spot pulse one after another, at most 32 waiting and none twice. A spot's frame is shown only while it pulses. Its fade
--- is an animation group of the game's: an Alpha animation sets the opacity itself, from a frame at none, as the game's own alerts fade in
--- (Blizzard_FrameXML/Mainline/AlertFrameSystems.xml:1090, 1205-1206), so the frame is unseen once it ends. A timer of the length of a pulse
--- starts the next. Nothing of the module runs while nothing shows but the events it hears and the Cooldown frames, which the game runs.
--- A pulse plays Sound, or the sound a spell or item has of its own (Sound of one spell or item, /flatui pulse sound): one of the seven sounds or
--- none, kept for the character in FlatUICharDB.pulseSounds by the key of its entry, a spell by its name, so every rank shares it, an item by its ID.
---
--- Adapted from the Cooldown Pulse of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLCooldownPulse/Runtime.lua
--- and Observers.lua): its tracking of the whole spell book and the trinkets, its list of what is left out, its observers fed duration objects
--- and its queue, and its sound for one spell over the one of all (Runtime.lua:89-101, Core.lua:114-123, Editor.lua:171-207). Its notification
--- groups, each a frame of its own with its own spot, icon size and queue (Core.lua:168-175, Runtime.lua:26-43 and 138-153, Editor.lua:246-250),
--- are the pulse spots here, which share one list of what pulses and give each spell or item the spot it pulses at. Flat UI has one look in place
--- of its styles, glows and editor: the icon, the name of the spell or item under it (Name under the icon, a FontString of the frame, so it
--- fades with it), and with Grow as it fades a Scale animation of the frame that swells it by a quarter while it fades out, from its middle,
--- the border with it, since its edges are textures of the frame itself; and the sounds of its other pages in place of a choice of files and
--- channels. Opacity sets how solid a pulse is at its height (70% by default, EnhanceQoL's), and an item's name takes its quality's colour.
-
 local KEY = "pulse"
 local MOVER = "FlatUIPulse"
 local CROP = 0.08
--- The opacity at the height of a pulse where Opacity has no plain value, and the share of its time it takes to come in; the rest it fades out
--- (EnhanceQoLCooldownPulse/Core.lua:13: 0.3 seconds in, 0.7 out, 0.7 at most).
 local PEAK, RISE = 0.7, 0.3
--- How much larger a pulse grows as it fades with Grow as it fades, the room between the icon and its name, and the font of the name.
 local GROW, NAME_GAP, NAME_FONT = 1.25, 4, "GameFontHighlightLarge"
--- A cooldown of this many seconds or fewer is the global cooldown (EnhanceQoLCooldownPulse/Runtime.lua:254 counts items over 2 seconds).
 local GCD = 2
--- Pulses waiting at most (EnhanceQoLCooldownPulse/Runtime.lua:147), items watched at most, spells and items left out at most.
 local MOST_WAITING, MOST_ITEMS, MOST_LEFT = 32, 40, 100
 local MAX_ID = 2147483647
--- How far before the numbers of a cooldown its Cooldown frame may say it is over and still count, in seconds. An item used whose cooldown has
--- not run this long after (food, a drink) is forgotten.
 local EARLY, FORGET = 0.1, 10
 local TRINKETS = { 13, 14 }
 local UNKNOWN_ICON = 134400
--- The places of the Sound choices in ns.SOUNDS (IconRow.lua), as EnemyCooldowns.lua has them.
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
--- The lines of Sound of one spell or item once one is chosen: the page's sound, no sound, then each sound of ns.SOUNDS from 3 on, and the line back
--- to what pulses, as Sound of one icon has them (Cooldowns.lua).
 local SOUND_PAGE, SOUND_NONE, SOUND_BACK = 1, 2, -1
 local SOUND_HELP = "/flatui pulse sound Frost Nova bell - its own sound when it pulses: page, none, spell, chimes, bell, warhorn, raid, alarm or whisper"
--- The spots: the name of each among the saved spots of the movers, the row of its Icon size and where it is without Movers.lua, across from the
--- middle of the screen (the defaults of FlatUIPulse, FlatUIPulse2 and FlatUIPulse3 in Movers.lua). The line back of Spot of one spell or item.
 local SPOTS = { { mover = MOVER, size = "size", x = 0 }, { mover = MOVER .. "2", size = "size2", x = -120 }, { mover = MOVER .. "3", size = "size3", x = 120 } }
 local MOST_SPOTS, SPOT_BACK = #SPOTS, -1
 local SPOT_HELP = "/flatui pulse spot Frost Nova 2 - the spot it pulses at: 1, 2 or 3"
@@ -92,17 +34,9 @@ local REFUSED = "Cooldown pulse: the game refused to watch a cooldown, so it may
 
 local IsSecret = ns.IsSecret
 
--- spells: the entries by name. ids: the entry of each spell ID, false for a spell of none. items: the entries by item ID. spots: the pulse spots
--- by their number (P.Spot), each with its queue, the entry that pulses and the token of the pulse a timer belongs to. watching: the entry of each
--- Cooldown frame; free: the Cooldown frames no entry holds. left: what is left out, by spell ID, spell name and item ID. An entry is { kind =
--- "spell" or "item", key, id, name, ranks (spells), cooling (true, false, or nil when unknown), last (the rank whose cooldown runs), length, start
--- (items), short, charged, observer, and for items worn, used (when), seen (its cooldown ran) and held (the game holds its cooldown) }. known: the
--- IDs of the items whose cooldown was watched to its end and that are watched no longer, which the lists still show (P.Listed).
 local P = { spells = {}, ids = {}, items = {}, known = {}, spots = {}, watching = setmetatable({}, { __mode = "k" }), free = {},
 	left = { ids = {}, names = {}, items = {} } }
 ns.Pulse = P
--- The words of the sounds in the order of ns.SOUNDS. P.soundFor, set by Sound of one spell or item, is the key of the entry whose sound it offers
--- next; nil while it offers what pulses. P.spotFor is the same for Spot of one spell or item.
 P.WORDS = {}
 for word, index in pairs(KITS) do
 	P.WORDS[index] = word
@@ -112,9 +46,6 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- Values the game gives ----------------------------------------------------------------------------------------------------------------
-
--- The first answer of a game call, or nil when the call is missing, fails or is withheld.
 function P.Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -126,7 +57,6 @@ function P.Ask(fn, ...)
 	return nil
 end
 
--- A value of a kind, or nil when it is withheld or of another kind.
 function P.Plain(value, kind)
 	if not IsSecret(value) and type(value) == kind then
 		return value
@@ -134,7 +64,6 @@ function P.Plain(value, kind)
 	return nil
 end
 
--- A flag of the game's, true or false, or nil when it is withheld or missing.
 function P.Flag(value)
 	return P.Plain(value, "boolean")
 end
@@ -147,7 +76,6 @@ function P.Timers()
 	return type(C_Timer) == "table" and type(C_Timer.After) == "function"
 end
 
--- fn after `seconds`, or at once on a client without timers.
 function P.After(seconds, fn)
 	if P.Timers() then
 		C_Timer.After(seconds, fn)
@@ -172,7 +100,6 @@ function P.ItemName(id)
 	return "Item " .. id
 end
 
--- The name of a line of the lists: a spell by its ID, an item by its ID below 0.
 function P.Label(id)
 	if id > 0 then
 		return P.SpellName(id) or ("Spell " .. id)
@@ -195,7 +122,6 @@ function P.Icon(entry)
 	return UNKNOWN_ICON
 end
 
--- The base cooldown of a spell in seconds (the client gives milliseconds), or nil when the game does not say.
 function P.Base(id)
 	local milliseconds = P.Ask(GetSpellBaseCooldown, id)
 	if P.Plain(milliseconds, "number") and milliseconds == milliseconds then
@@ -204,10 +130,6 @@ function P.Base(id)
 	return nil
 end
 
--- What is left out -------------------------------------------------------------------------------------------------------------------
-
--- What this character left out: spell IDs, and item IDs below 0, none twice, at most 100. Nothing is saved for a character who left
--- nothing out; make is true to start the list.
 function P.Left(make)
 	local saved = ns.Character()
 	if type(saved) ~= "table" or (saved.pulseLeftOut == nil and not make) then
@@ -224,7 +146,6 @@ function P.Left(make)
 	return list
 end
 
--- A spell is left out with every rank of its name.
 function P.ReadLeft()
 	local left = { ids = {}, names = {}, items = {} }
 	for _, id in ipairs(P.Left()) do
@@ -259,7 +180,6 @@ function P.LeftOut(entry)
 	return false
 end
 
--- The stored IDs that stand for `id`: the same one, or for a spell another rank of the same name.
 function P.Matches(list, id)
 	local name = id > 0 and P.SpellName(id) or nil
 	local found = {}
@@ -271,10 +191,6 @@ function P.Matches(list, id)
 	return found
 end
 
--- The spells and items -----------------------------------------------------------------------------------------------------------------
-
--- One slot of the spell book: a spell that is not passive, by name, with the ID of the rank the game does not call low (the highest) and the
--- IDs of every rank.
 function P.BookSlot(found, book, slot, bank, spellType)
 	local item = P.Ask(book.GetSpellBookItemInfo, slot, bank)
 	if type(item) ~= "table" or item.itemType ~= spellType or item.isPassive == true or item.isOffSpec == true then
@@ -301,8 +217,6 @@ function P.BookSlot(found, book, slot, bank, spellType)
 	end
 end
 
--- The spells of the book by name, or nil when the game lacks a call. The walk is the one of the Add a spell list of Cooldowns.lua: the skill
--- lines the game shows that are not of another specialisation.
 function P.Book()
 	local book = C_SpellBook
 	if not (book and book.GetNumSpellBookSkillLines and book.GetSpellBookSkillLineInfo and book.GetSpellBookItemInfo and Enum and Enum.SpellBookSpellBank
@@ -324,8 +238,6 @@ function P.Book()
 	return found
 end
 
--- The spells and trinkets watched, from the book, the rows and what is left out. An entry that stays keeps its state. A new one is looked at,
--- so a cooldown that runs already is watched to its end; it pulses nothing now.
 function P.Build()
 	P.ReadLeft()
 	local found = P.Book()
@@ -338,7 +250,6 @@ function P.Build()
 	P.spells, P.ids = {}, {}
 	for name, spell in pairs(found or {}) do
 		local base = P.Base(spell.id)
-		-- A spell the game gives no base cooldown is watched: what it reads when the cooldown starts says how long it is.
 		if base == nil or (base > 0 and base >= minimum) then
 			local entry = old[name] or { kind = "spell", key = "spell:" .. name, name = name }
 			entry.id, entry.ranks = spell.id, spell.ranks
@@ -373,7 +284,6 @@ function P.Build()
 	P.Trinkets()
 end
 
--- The entry of a spell ID: a rank in the book, else a spell of the same name (a rank the book does not list). False is kept for a spell of none.
 function P.Entry(id)
 	if not P.Whole(id) then
 		return nil
@@ -387,9 +297,6 @@ function P.Entry(id)
 	return entry or nil
 end
 
--- The entry of an item, made for one the player wears or uses. Nil for an item left out. When 40 are kept, the one used longest ago that is
--- not worn and whose cooldown neither runs nor is held by the game is forgotten to make room: the game names an item each time it is used
--- (SpellBookDocumentation.lua:935), so it is watched again then (P.Used). Nil when none of the 40 can go.
 function P.Item(id)
 	local entry = P.items[id]
 	if entry then
@@ -417,8 +324,6 @@ function P.Item(id)
 	return entry
 end
 
--- The two trinkets worn are watched whatever their use (EnhanceQoLCooldownPulse/Runtime.lua:336-338 adds slots 13 and 14). One taken off stays
--- only when it was used.
 function P.Trinkets()
 	local worn = {}
 	for _, slot in ipairs(TRINKETS) do
@@ -445,7 +350,6 @@ function P.Trinkets()
 	end
 end
 
--- An item the game says a cooldown came from.
 function P.Used(id)
 	local entry = P.Item(id)
 	if entry then
@@ -458,9 +362,6 @@ function P.Shared(start, length)
 	return ("%.1f:%.1f"):format(start, length)
 end
 
--- The items in the bags whose cooldown runs (C_Container.GetContainerItemCooldown, ContainerDocumentation.lua:122-138, plain numbers), one for
--- each cooldown they share: every healing potion shares one. So a hearthstone used before a /reload still pulses. The bags are 0 to
--- NUM_BAG_SLOTS (Blizzard_FrameXMLBase/Constants.lua:168).
 function P.Bags()
 	local container = C_Container
 	local now = P.Ask(GetTime)
@@ -492,11 +393,6 @@ function P.Bags()
 	end
 end
 
--- Reading a cooldown -----------------------------------------------------------------------------------------------------------------
-
--- Whether a spell's cooldown runs, the global cooldown left out. id: the rank to ask about. mode: "named" inside SPELL_UPDATE_COOLDOWN for this
--- spell, "event" inside one for every cooldown, nil anywhere else; isOnGCD is believed only in the event. A cooldown that starts is watched to
--- its end, and one that was watched and is over pulses.
 function P.CheckSpell(entry, id, mode)
 	local spells = C_Spell
 	if not (spells and spells.GetSpellCooldown) then
@@ -508,7 +404,6 @@ function P.CheckSpell(entry, id, mode)
 		return
 	end
 	if P.Flag(info.isEnabled) == false then
-		-- On hold until a buff of the spell ends; the cooldown starts then (SpellSharedDocumentation.lua:25).
 		if entry.cooling then
 			entry.cooling = nil
 			P.Disarm(entry)
@@ -519,7 +414,6 @@ function P.CheckSpell(entry, id, mode)
 	local charges = P.Ask(spells.GetSpellCharges, id)
 	local most = type(charges) == "table" and P.Plain(charges.maxCharges, "number") or nil
 	if most and most > 1 then
-		-- Every charge back is the end (SpellSharedDocumentation.lua:15: isActive is false at the most charges).
 		entry.charged = true
 		cooling = P.Flag(charges.isActive)
 		length = P.Plain(charges.cooldownDuration, "number")
@@ -534,7 +428,6 @@ function P.CheckSpell(entry, id, mode)
 			cooling = false
 		elseif active == true then
 			if gcd == true then
-				-- The global cooldown. It can cover the end of a cooldown that is watched, which its Cooldown frame still tells.
 				if entry.cooling then
 					return
 				end
@@ -544,8 +437,6 @@ function P.CheckSpell(entry, id, mode)
 			elseif length then
 				cooling = length > GCD
 			elseif mode == "named" then
-				-- A spell off the global cooldown may leave isOnGCD out (EnhanceQoLCooldownPulse/Runtime.lua:223-227): the cooldown of the spell
-				-- the event names is its own.
 				cooling = true
 			end
 		end
@@ -554,14 +445,12 @@ function P.CheckSpell(entry, id, mode)
 		return
 	end
 	if cooling then
-		-- A cooldown that runs has a length; 0 says nothing.
 		if length and length <= 0 then
 			length = nil
 		end
 		local fresh = entry.cooling ~= true or entry.last ~= id
 		entry.cooling, entry.last, entry.length = true, id, length
 		entry.short = length ~= nil and length < Opt("minimum")
-		-- A cooldown named again may have started over; one seen in an event for every cooldown is left to its frame.
 		if fresh or mode == "named" or not entry.observer then
 			P.Arm(entry, info)
 		end
@@ -572,8 +461,6 @@ function P.CheckSpell(entry, id, mode)
 	end
 end
 
--- Whether an item's cooldown runs, from its plain start and length. ended: its Cooldown frame says it is over, which numbers that still run
--- overrule.
 function P.CheckItem(entry, ended)
 	local call = C_Item and C_Item.GetItemCooldown
 	if type(call) ~= "function" then
@@ -586,7 +473,6 @@ function P.CheckItem(entry, ended)
 	end
 	entry.held = P.Flag(enabled) == false
 	if entry.held then
-		-- The cooldown starts later, which the game says with BAG_UPDATE_COOLDOWN.
 		return
 	end
 	if length > GCD and start + length > now + (ended and EARLY or 0) then
@@ -603,10 +489,6 @@ function P.CheckItem(entry, ended)
 	end
 end
 
--- The Cooldown frames ----------------------------------------------------------------------------------------------------------------
-
--- The frame the Cooldown frames hang from: 1 by 1 at no opacity, shown, so that the game runs them unseen (EnhanceQoLCooldownPulse/Observers.lua:58-61
--- keeps its observers shown at no opacity for that).
 function P.Holder()
 	local holder = P.holder
 	if not holder then
@@ -633,12 +515,10 @@ function P.MakeObserver()
 	if cooldown.SetHideCountdownNumbers then
 		pcall(cooldown.SetHideCountdownNumbers, cooldown, true)
 	end
-	-- The game says a cooldown is over through this script and no event.
 	cooldown:SetScript("OnCooldownDone", P.Finished)
 	return cooldown
 end
 
--- The Cooldown frame of an entry, made or taken from those no entry holds; nil when the game would not make one.
 function P.Observer(entry)
 	local cooldown = entry.observer
 	if cooldown then
@@ -658,8 +538,6 @@ function P.Observer(entry)
 	return cooldown
 end
 
--- Hands an entry's cooldown to its Cooldown frame: for a spell the game's duration object, unread, or the numbers of `info` when the game has
--- no such object and gives them plain; for an item its plain start and length (FrameAPICooldownDocumentation.lua:281-318).
 function P.Arm(entry, info)
 	local cooldown = P.Observer(entry)
 	if not cooldown then
@@ -673,7 +551,6 @@ function P.Arm(entry, info)
 		if entry.charged and spells.GetSpellChargeDuration then
 			got, duration = pcall(spells.GetSpellChargeDuration, entry.last)
 		elseif spells.GetSpellCooldownDuration then
-			-- True leaves the global cooldown out.
 			got, duration = pcall(spells.GetSpellCooldownDuration, entry.last, true)
 		end
 		if got and duration ~= nil and cooldown.SetCooldownFromDurationObject then
@@ -683,7 +560,6 @@ function P.Arm(entry, info)
 		end
 	end
 	if ok then
-		-- The template hides the frame (Blizzard_FrameXMLUtil/Mainline/Cooldown.xml:3), and nothing says a cooldown shows it.
 		pcall(cooldown.Show, cooldown)
 	else
 		ns.Note(KEY, REFUSED)
@@ -691,7 +567,6 @@ function P.Arm(entry, info)
 	end
 end
 
--- Takes an entry's Cooldown frame back. It is forgotten before it is cleared, so a script the clearing runs finds no entry.
 function P.Disarm(entry)
 	local cooldown = entry.observer
 	if not cooldown then
@@ -711,7 +586,6 @@ function P.Finished(cooldown)
 	end
 end
 
--- A Cooldown frame says its cooldown is over. Numbers the game gives plain that say it still runs are believed over the frame.
 function P.Done(entry)
 	if entry.cooling ~= true then
 		return
@@ -730,7 +604,6 @@ function P.Done(entry)
 		end
 		local start, length, now = P.Plain(info.startTime, "number"), P.Plain(info.duration, "number"), P.Plain(P.Ask(GetTime), "number")
 		if not entry.charged and start and length and now and length > GCD and start + length > now + EARLY then
-			-- Watched again by the numbers, whose end is still to come, so the frame says it once more and not at once.
 			local cooldown = P.Observer(entry)
 			if cooldown and pcall(cooldown.SetCooldown, cooldown, start, length) then
 				pcall(cooldown.Show, cooldown)
@@ -741,7 +614,6 @@ function P.Done(entry)
 	if entry.charged then
 		local charges = P.Ask(spells.GetSpellCharges, entry.last)
 		if type(charges) == "table" and P.Flag(charges.isActive) == true then
-			-- A charge is back and the next one recharges: the game moves to it first (EnhanceQoLCooldownPulse/Observers.lua:21-26).
 			P.After(0, function()
 				if entry.cooling == true and ns.Enabled(KEY) then
 					ns.Try(KEY, P.Arm, entry)
@@ -753,11 +625,6 @@ function P.Done(entry)
 	P.Ready(entry)
 end
 
--- A cooldown is over: it pulses, unless it was shorter than Shortest cooldown or is left out. An item not worn is watched no longer then,
--- only listed (known), and is watched again when the game names it once more (P.Used). The cooldown of an item is the one of its spell's
--- category, which every item of the category reads, used or not: the game names the item that started it (CooldownViewerItemData.lua:174-186,
--- SpellDocumentation.lua:154-170), and the bags show it on each one (Blizzard_UIPanels_Game/Mainline/ContainerFrame.lua:1994). A potion
--- still watched would pulse again with every potion drunk after it, and with one left out.
 function P.Ready(entry)
 	entry.cooling = false
 	P.Disarm(entry)
@@ -769,11 +636,6 @@ function P.Ready(entry)
 	end
 end
 
--- The pulse ----------------------------------------------------------------------------------------------------------------------------
-
--- In, then out: two Alpha animations one after the other (SimpleAnimAlphaAPIDocumentation.lua, SimpleAnimAPIDocumentation.lua SetOrder), and with
--- the second a Scale animation from the middle (SimpleAnimScaleAPIDocumentation.lua: SetOrigin, SetScaleFrom, SetScaleTo), whose end P.Fade sets:
--- the size it had for no grow. A client that refuses the Scale gives a pulse with no grow.
 function P.MakeFade(frame)
 	local group = frame:CreateAnimationGroup()
 	local rise = group:CreateAnimation("Alpha")
@@ -795,7 +657,6 @@ function P.MakeFade(frame)
 	return { group = group, rise = rise, fall = fall, grow = made and grow or nil }
 end
 
--- The number of spots in use: Pulse spots, 1 to 3.
 function P.InUse()
 	local count = tonumber(Opt("spots"))
 	if count == nil or count < 1 then
@@ -804,8 +665,6 @@ function P.InUse()
 	return math.min(MOST_SPOTS, math.floor(count))
 end
 
--- A spot by its number: { index, mover, size (the key of its Icon size row), x, queue (the entries waiting to pulse there), current (the one that
--- pulses), token (the pulse a timer belongs to), and once it has pulsed frame, icon, name, outline and fade }.
 function P.Spot(index)
 	local spot = P.spots[index]
 	if not spot then
@@ -816,8 +675,6 @@ function P.Spot(index)
 	return spot
 end
 
--- The frame of a spot: an icon with Flat UI's thin border, as on the Cooldown icons, above the other frames of the screen, and the line of the
--- name under it. It takes no mouse.
 function P.Frame(spot)
 	local frame = spot.frame
 	if frame then
@@ -842,8 +699,6 @@ function P.Frame(spot)
 		pcall(name.SetShadowColor, name, 0, 0, 0, 1)
 		spot.name = name
 	end
-	-- The edges are textures of the frame itself (a direct outline), as the name is, so the Scale animation of Grow as it fades swells them with
-	-- the icon; an outline on a frame that ignores its parent's scale might not take it.
 	spot.outline = ns.Outline(frame, frame, true)
 	local ok, fade = pcall(P.MakeFade, frame)
 	spot.fade = ok and fade or nil
@@ -851,7 +706,6 @@ function P.Frame(spot)
 	return frame
 end
 
--- Icon size for spot 1, the size of its own for the others.
 function P.Size(spot)
 	if spot.frame then
 		local size = Opt(spot.size)
@@ -859,7 +713,6 @@ function P.Size(spot)
 	end
 end
 
--- At the spot of the movers: spot 1 in the middle of the screen until one is saved, the others beside it.
 function P.Place(spot)
 	local frame = spot.frame
 	if not frame then
@@ -882,7 +735,6 @@ function P.PlaceAll()
 	end
 end
 
--- The opacity at the height of a pulse: Opacity, 30 to 100%, else PEAK.
 function P.Peak()
 	local alpha = Opt("alpha")
 	if ns.Finite(alpha) and alpha >= 30 and alpha <= 100 then
@@ -891,10 +743,7 @@ function P.Peak()
 	return PEAK
 end
 
--- The colour of an item's name: its quality's (C_Item.GetItemQualityByID, C_Item.GetItemQualityColor), else ITEM_QUALITY_COLORS; white for a
--- spell, a test pulse but the preview of an item, or an answer that is withheld or missing.
 function P.NameColour(entry)
-	-- An item's pulse, or the preview of an item picked for its own sound or spot (entry.item, P.Preview).
 	local id = entry.kind == "item" and entry.id or entry.item
 	if not P.Plain(id, "number") or type(C_Item) ~= "table" then
 		return 1, 1, 1
@@ -917,7 +766,6 @@ function P.NameColour(entry)
 	return 1, 1, 1
 end
 
--- The fade of a spot for `seconds`; false when there is none or the game refused it.
 function P.Fade(spot, seconds)
 	local fade = spot.fade
 	if not fade then
@@ -947,7 +795,6 @@ function P.Hide(spot)
 	spot.frame:SetAlpha(0)
 end
 
--- Shows an entry at a spot for Opt("time") seconds, with its sound (its own, none, else Sound), then the next one that waits there.
 function P.Show(spot, entry)
 	if not P.Timers() then
 		spot.current, spot.queue = nil, {}
@@ -965,7 +812,6 @@ function P.Show(spot, entry)
 		local size = Opt(spot.size)
 		spot.name:SetText(Opt("name") ~= false and (entry.label or entry.name) or "")
 		spot.name:SetTextHeight(math.max(10, math.floor((ns.Finite(size) and size or 72) / 5)))
-		-- The frame is used again for every pulse, so the colour is set each time.
 		spot.name:SetTextColor(P.NameColour(entry))
 	end
 	frame:SetAlpha(0)
@@ -973,7 +819,6 @@ function P.Show(spot, entry)
 	if not P.Fade(spot, seconds) then
 		frame:SetAlpha(P.Peak())
 	end
-	-- A test of one spell or item (P.Preview) plays that one's own sound, by its key in soundKey.
 	local sound = not entry.quiet and ns.SOUNDS and ns.SOUNDS[KITS[P.OwnSound(entry.soundKey or entry.key) or Opt("sound")] or 0]
 	if sound and ns.PlayKit then
 		ns.PlayKit(sound[1], KEY)
@@ -993,7 +838,6 @@ function P.Show(spot, entry)
 	end)
 end
 
--- The next pulse that waits at a spot, or none: then its frame hides.
 function P.Next(spot)
 	spot.current = table.remove(spot.queue, 1)
 	if spot.current then
@@ -1003,7 +847,6 @@ function P.Next(spot)
 	end
 end
 
--- A spot stops: nothing waits there and nothing shows.
 function P.Clear(spot)
 	spot.queue, spot.current = {}, nil
 	spot.token = spot.token + 1
@@ -1012,7 +855,6 @@ function P.Clear(spot)
 	end
 end
 
--- Each spot takes its size and place; one no longer in use stops.
 function P.Layout()
 	local count = P.InUse()
 	for index, spot in pairs(P.spots) do
@@ -1024,7 +866,6 @@ function P.Layout()
 	end
 end
 
--- The spot an entry pulses at: the one a test names, else its own while that spot is in use, else spot 1.
 function P.SpotOf(entry)
 	local index = entry.spot or P.OwnSpot(entry.key) or 1
 	if index > P.InUse() then
@@ -1033,7 +874,6 @@ function P.SpotOf(entry)
 	return P.Spot(index)
 end
 
--- An entry waits for its pulse at its spot, unless it pulses or waits there already, or 32 wait there.
 function P.Queue(entry)
 	local spot = P.SpotOf(entry)
 	if spot.current and spot.current.key == entry.key then
@@ -1053,10 +893,6 @@ function P.Queue(entry)
 	end
 end
 
--- Events -----------------------------------------------------------------------------------------------------------------------------
-
--- SPELL_UPDATE_COOLDOWN(spellID, baseSpellID, category, startRecoveryCategory, itemID) (SpellBookDocumentation.lua:924-936): the spell whose
--- cooldown changed, or none for every cooldown (as CooldownViewer.lua:366-369 reads it), and the item a cast came from.
 function P.OnCooldown(spellID, baseSpellID, _, _, itemID)
 	if P.Whole(itemID) then
 		P.Used(itemID)
@@ -1076,7 +912,6 @@ function P.OnCooldown(spellID, baseSpellID, _, _, itemID)
 	end
 end
 
--- isOnGCD does not hold in SPELL_UPDATE_CHARGES; a spell with charges does not read it.
 function P.OnCharges()
 	for _, entry in pairs(P.spells) do
 		if entry.charged then
@@ -1096,7 +931,6 @@ function P.CheckItems()
 	end
 end
 
--- The book changes in bursts (SPELLS_CHANGED): it is read once, a moment after.
 function P.Soon()
 	if P.soon then
 		return
@@ -1115,7 +949,6 @@ function P.World()
 	P.Bags()
 end
 
--- Off: nothing is watched and nothing shows. The Cooldown frames are kept for the next time.
 function P.Stop()
 	for _, entry in pairs(P.spells) do
 		P.Disarm(entry)
@@ -1130,7 +963,6 @@ function P.Stop()
 	ns.ClearNote(KEY, REFUSED)
 end
 
--- A row changed, or the page went on or off. The bags are looked at when the page goes on.
 function P.Refresh()
 	if not ns.Enabled(KEY) then
 		P.Stop()
@@ -1145,8 +977,6 @@ function P.Refresh()
 	end
 end
 
--- The rows, the movers, the commands and the status --------------------------------------------------------------------------------------
-
 local function Sorted(rows)
 	table.sort(rows, function(a, b)
 		local first, second = a[2]:lower(), b[2]:lower()
@@ -1158,8 +988,6 @@ local function Sorted(rows)
 	return rows
 end
 
--- The items of Leave out, /flatui pulse list and the status: those watched, and those whose cooldown was watched to its end, which pulse
--- again when the game names them; none left out.
 function P.Listed()
 	local ids = {}
 	for id in pairs(P.known) do
@@ -1173,7 +1001,6 @@ function P.Listed()
 	return ids
 end
 
--- What pulses now, spells first: a spell by the ID of its highest rank, an item by its ID below 0.
 function ns.PulseCandidates()
 	local spells, items = {}, {}
 	for name, entry in pairs(P.spells) do
@@ -1203,7 +1030,6 @@ function P.Changed()
 	end
 end
 
--- Both work in combat and with the page off, since they change what is saved; a page that is on reads the list again.
 function ns.PulseIgnore(id)
 	if type(id) ~= "number" or not P.Whole(math.abs(id)) then
 		return false, "Choose a spell or an item."
@@ -1232,7 +1058,6 @@ function ns.PulseUnignore(id)
 	for index = #found, 1, -1 do
 		table.remove(list, found[index])
 	end
-	-- The last one put back takes the list with it.
 	local saved = ns.Character()
 	if #list == 0 and type(saved) == "table" then
 		saved.pulseLeftOut = nil
@@ -1241,10 +1066,6 @@ function ns.PulseUnignore(id)
 	return true, ("%s pulses again."):format(P.Label(id))
 end
 
--- Sounds of their own ------------------------------------------------------------------------------------------------------------------
-
--- The sounds this character gave spells and items (FlatUICharDB.pulseSounds), by the key of an entry: "spell:" and its name, "item:" and its ID.
--- Nothing is saved for a character who gave none; make is true to start the table.
 function P.Sounds(make)
 	local saved = ns.Character()
 	if type(saved) ~= "table" then
@@ -1256,7 +1077,6 @@ function P.Sounds(make)
 	return saved.pulseSounds
 end
 
--- The sound an entry pulses with of its own: a word of KITS, or none. Nil plays Sound.
 function P.OwnSound(key)
 	local sounds = P.Sounds()
 	local word = sounds and type(key) == "string" and sounds[key] or nil
@@ -1266,7 +1086,6 @@ function P.OwnSound(key)
 	return nil
 end
 
--- Gives an entry its own sound, or with nil takes it back to Sound. The table goes with the last one.
 function P.SetOwnSound(key, word)
 	local sounds = P.Sounds(word ~= nil)
 	if not sounds then
@@ -1278,7 +1097,6 @@ function P.SetOwnSound(key, word)
 	end
 end
 
--- The name of a sound of ns.SOUNDS (IconRow.lua:17-25) by its word.
 function P.SoundName(word)
 	if word == "none" then
 		return "no sound"
@@ -1287,7 +1105,6 @@ function P.SoundName(word)
 	return type(sound) == "table" and sound[2] or tostring(word)
 end
 
--- What a change of a sound is answered with.
 function P.SoundSaid(name, word)
 	if word == nil then
 		return ("%s plays the page's sound when it pulses."):format(name)
@@ -1295,9 +1112,6 @@ function P.SoundSaid(name, word)
 	return ("%s plays %s when it pulses."):format(name, P.SoundName(word))
 end
 
--- What pulses, as Sound of one spell or item and Spot of one spell or item list it: { line ID, name, key }, a spell by the ID of its highest rank
--- and an item by its ID below 0, as Leave out lists them. With one chosen first (the key in P[field], soundFor or spotFor), the one whose sound
--- or spot comes next; nil when none is, or it pulses no longer.
 function P.Chosen(field)
 	local rows, chosen = {}, nil
 	for _, row in ipairs(ns.PulseCandidates()) do
@@ -1318,8 +1132,6 @@ function P.SoundRows()
 	return P.Chosen("soundFor")
 end
 
--- Sound of one spell or item is one list for two choices, made again each time it opens: what pulses, each with its own sound when it has one,
--- and once one is chosen, the sounds for it (Sound of one icon of Cooldowns.lua works so).
 function ns.PulseSoundLines()
 	local rows, chosen = P.SoundRows()
 	local lines = {}
@@ -1339,7 +1151,6 @@ function ns.PulseSoundLines()
 	return lines
 end
 
--- Works in combat and with the page off, since it changes what is saved.
 function ns.PulseSoundPick(id)
 	local rows, chosen = P.SoundRows()
 	if not chosen then
@@ -1365,7 +1176,6 @@ function ns.PulseSoundPick(id)
 	return true, P.SoundSaid(chosen[2], word)
 end
 
--- /flatui pulse sound: a spell or an item, then page, none or the word of a sound. A spell keeps its sound by its name, so every rank shares it.
 function P.SoundCommand(text)
 	local name, said = text:match("^%s*(.-)%s+(%S+)%s*$")
 	said = said and said:lower()
@@ -1383,7 +1193,6 @@ function P.SoundCommand(text)
 	return P.SoundSaid(label, word)
 end
 
--- The own sounds as the list says them: "Frost Nova (Bell)", sorted.
 function P.SoundList()
 	local own = {}
 	for key in pairs(P.Sounds() or {}) do
@@ -1398,10 +1207,6 @@ function P.SoundList()
 	return own
 end
 
--- Spots of their own -------------------------------------------------------------------------------------------------------------------
-
--- The spots this character gave spells and items (FlatUICharDB.pulseSpots), 2 or 3 by the key of an entry, as the sounds are kept. Nothing is
--- saved for a character who gave none; make is true to start the table.
 function P.SpotTable(make)
 	local saved = ns.Character()
 	if type(saved) ~= "table" then
@@ -1413,7 +1218,6 @@ function P.SpotTable(make)
 	return saved.pulseSpots
 end
 
--- The spot an entry pulses at of its own, 2 or 3; nil for spot 1.
 function P.OwnSpot(key)
 	local spots = P.SpotTable()
 	local index = spots and type(key) == "string" and spots[key] or nil
@@ -1423,7 +1227,6 @@ function P.OwnSpot(key)
 	return nil
 end
 
--- Gives an entry its own spot, or with spot 1 takes it back. The table goes with the last one.
 function P.SetOwnSpot(key, index)
 	if index == 1 then
 		index = nil
@@ -1438,7 +1241,6 @@ function P.SetOwnSpot(key, index)
 	end
 end
 
--- What a change of a spot is answered with.
 function P.SpotSaid(name, index)
 	if index > P.InUse() then
 		return ("%s pulses at spot %d once Pulse spots has it, and at spot 1 until then."):format(name, index)
@@ -1446,8 +1248,6 @@ function P.SpotSaid(name, index)
 	return ("%s pulses at spot %d."):format(name, index)
 end
 
--- Spot of one spell or item is one list for two choices, as Sound of one spell or item is: what pulses, each with its own spot when it has one,
--- and once one is chosen, the spots in use.
 function ns.PulseSpotLines()
 	local rows, chosen = P.Chosen("spotFor")
 	local lines = {}
@@ -1465,7 +1265,6 @@ function ns.PulseSpotLines()
 	return lines
 end
 
--- Works in combat and with the page off, since it changes what is saved.
 function ns.PulseSpotPick(id)
 	local rows, chosen = P.Chosen("spotFor")
 	if not chosen then
@@ -1486,7 +1285,6 @@ function ns.PulseSpotPick(id)
 	return true, P.SpotSaid(chosen[2], id)
 end
 
--- /flatui pulse spot: a spell or an item, then the number of its spot. A spell keeps its spot by its name, so every rank shares it.
 function P.SpotCommand(text)
 	local name, said = text:match("^%s*(.-)%s+(%d+)%s*$")
 	local index = tonumber(said or "")
@@ -1503,7 +1301,6 @@ function P.SpotCommand(text)
 	return P.SpotSaid(label, index)
 end
 
--- The own spots as the list says them: "Frost Nova (spot 2)", sorted.
 function P.SpotList()
 	local own = {}
 	for key in pairs(P.SpotTable() or {}) do
@@ -1518,7 +1315,6 @@ function P.SpotList()
 	return own
 end
 
--- True while spot 1 has a handle in the movers: while the page is on. Spots 2 and 3 have theirs while Pulse spots has them too.
 function ns.PulseShown()
 	return ns.Enabled(KEY)
 end
@@ -1531,15 +1327,12 @@ function ns.PulseShown3()
 	return ns.Enabled(KEY) and P.InUse() >= 3
 end
 
--- The movers set or put back the place of a spot: every spot that has a frame is placed again.
 function ns.PulseMoved()
 	if ns.Enabled(KEY) then
 		ns.Try(KEY, P.PlaceAll)
 	end
 end
 
--- A spell or an item from what was typed: an item link, a spell link, a spell ID, the name of a spell, or the name of an item the game knows.
--- An item comes back as its ID below 0.
 function P.Resolve(text)
 	text = text:match("^%s*(.-)%s*$")
 	local item = tonumber(text:match("item:(%d+)") or "")
@@ -1563,9 +1356,6 @@ function P.Resolve(text)
 	return nil
 end
 
--- One test pulse at each spot in use, each with another of the spells watched, the first three by name (the first again when fewer are
--- watched), and while more than one spot is in use a name that says which spot it is: "Spot 2: Frost Nova". quiet: no sound, else the sound
--- with the first alone.
 function P.Test(quiet)
 	local names = {}
 	for name in pairs(P.spells) do
@@ -1585,31 +1375,21 @@ function P.Test(quiet)
 	end
 end
 
--- A pick of Sound of one spell or item or Spot of one spell or item (chosen: { line ID, name, key } of P.Chosen), out of combat with the page on
--- and test mode off: a test pulse of that spell or item, with its own icon and name, at its spot and with its own sound (soundKey, which
--- P.Show reads), none for no sound. Kind test keeps it out of the real queues, and P.TestEnd takes it away as the other tests. A test pulse
--- that shows or waits at that spot goes first (P.DropTests), so a new pick takes the place of the one that shows.
 function P.Preview(chosen)
 	local mode = ns.TestMode
 	if InCombatLockdown() or not ns.Enabled(KEY) or (mode and mode.IsOn()) or type(chosen) ~= "table" or not P.Plain(chosen[1], "number") then
 		return
 	end
 	local id = chosen[1]
-	-- The spot as P.SpotOf finds it: its own while that spot is in use, else spot 1.
 	local index = P.OwnSpot(chosen[3]) or 1
 	if index > P.InUse() then
 		index = 1
 	end
 	P.DropTests(P.Spot(index))
-	-- An item's name in its quality colour (P.NameColour); the kind stays test, so the test's own rules hold for it.
 	P.Queue({ kind = "test", key = "test", name = "a test", label = chosen[2], icon = P.Icon({ kind = id > 0 and "spell" or "item", id = math.abs(id) }),
 		spot = index, soundKey = chosen[3], item = id < 0 and -id or nil })
 end
 
--- A row of the look changed (Icon size, How long it shows, Opacity, Sound, Name under the icon, Grow as it fades, Pulse spots, the sizes of
--- spots 2 and 3): the page is refreshed, as without a changed function of the row (Core.lua's Changed), and out of combat a test pulse shows
--- at each spot in use in the new look, quiet but for the Sound row, which plays the sound picked. P.Queue drops a test while one shows or waits there, so a
--- slider dragged makes one pulse, not one for each step. Not while test mode is on, whose own test pulses show every 3 seconds.
 function ns.PulseLookChanged(path)
 	ns.Try(KEY, P.Refresh)
 	local mode = ns.TestMode
@@ -1618,14 +1398,11 @@ function ns.PulseLookChanged(path)
 	end
 end
 
--- Test mode (TestMode.lua): the test pulses every 3 seconds while it is on and its bar's Moving is on, each at the size, spot, opacity and time the
--- rows give now, with the sound the first time only (TM.Sound). Off and a pause take the test pulses that wait or show away, and leave the others.
 function P.TestStep()
 	local mode = ns.TestMode
 	P.Test(not (mode ~= nil and mode.Sound("pulse")))
 end
 
--- The test pulses that wait at a spot go, and one that shows there makes way for the next real one.
 function P.DropTests(spot)
 	for index = #spot.queue, 1, -1 do
 		if spot.queue[index].kind == "test" then
@@ -1678,7 +1455,6 @@ function P.Slash(rest)
 		local _, message = (word == "ignore" and ns.PulseIgnore or ns.PulseUnignore)(id)
 		print(message)
 	elseif word == "sound" then
-		-- It changes what is saved, so it works with the page off, as ignore and watch do.
 		print(P.SoundCommand(text))
 	elseif word == "spot" then
 		print(P.SpotCommand(text))
@@ -1759,7 +1535,6 @@ ns.Register(KEY, {
 		SPELL_UPDATE_COOLDOWN = P.OnCooldown,
 		SPELL_UPDATE_CHARGES = P.OnCharges,
 		BAG_UPDATE_COOLDOWN = P.CheckItems,
-		-- A cooldown the game held in the fight may start now.
 		PLAYER_REGEN_ENABLED = P.CheckItems,
 		PLAYER_EQUIPMENT_CHANGED = P.Trinkets,
 		SPELLS_CHANGED = P.Soon,

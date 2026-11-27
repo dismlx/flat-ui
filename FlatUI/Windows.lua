@@ -1,30 +1,11 @@
 local _, ns = ...
 
--- Windows. The border art of a window and its buttons, tabs, scroll bars, check boxes, text
--- boxes, dropdowns, progress bars and item slots is made transparent and replaced by flat
--- boxes with thin borders, drawn with frames and textures of this addon. Each control is
--- recognised by the fields its template gives it. A region keeps the alpha it had, so a part
--- that is switched off puts Blizzard's art back exactly. Nothing is written on a Blizzard
--- frame except the size of a side tab and of its icon, which Side tab size sets and gives back
--- (out of combat when the tab is protected). The state textures of check boxes, item slots,
--- sidebar tabs and list lines are recoloured and re-anchored instead, and only /reload undoes
--- that. An open menu gets a frame of this addon's inside the menu, since the game refuses
--- textures made on it. The Spellbook's parchment is faded too, and its text, written in a dark
--- ink for the parchment, takes a light colour; the colour each text had is kept and given back
--- exactly with the parchment (Spellbook parchment, the ink kind). The quest, gossip and book pages
--- are the game's own dark pages with light text, by its Quest Text Contrast, which Dark quest,
--- gossip and book pages writes and gives back (questPages, the account variable questTextContrast).
-
 local KEY = "windows"
 
--- A sweep of one window stops at these.
 local MAX_DEPTH = 10
 local MAX_FRAMES = 1500
 
--- Fields of Blizzard's templates that hold art.
 local PIECES = { "TopLeftCorner", "TopRightCorner", "BottomLeftCorner", "BottomRightCorner", "TopEdge", "BottomEdge", "LeftEdge", "RightEdge" }
--- The border pieces a frame keeps in its own fields: the older templates name them differently, a backdrop uses the names
--- above and adds a centre, and a basic frame with an inset has a border for the inset too.
 local OWN_PIECES = { "TopBorder", "BotLeftCorner", "BotRightCorner", "BottomBorder", "LeftBorder", "RightBorder", "Center",
 	"InsetBorderTopLeft", "InsetBorderTopRight", "InsetBorderBottomLeft", "InsetBorderBottomRight", "InsetBorderTop", "InsetBorderBottom",
 	"InsetBorderLeft", "InsetBorderRight" }
@@ -43,16 +24,11 @@ local AMMO_RING = "UI-Character-Info-GearSlotSmall"
 local BAR_BACKGROUND = "common-stat-bar-BG"
 local CATEGORY_UPDATE = "LFGListingCategorySelection_UpdateCategoryButtons"
 local FLYOUT_UPDATE = "EquipmentFlyout_UpdateItems"
--- The animated frames of the eye in the Looking For Group window, children of the eye button (Blizzard_LFGUtil/Mainline/LFGEye.xml:254-361;
--- the button is LFGParentFramePortrait, Blizzard_LFGVanilla_ParentFrame.xml:81).
 local EYE_FRAMES = { "EyeInitial", "EyeSearchingLoop", "EyeMouseOver", "EyePokeInitial", "EyePokeLoop", "EyePokeEnd" }
--- The picture each menu style is drawn on, and how far above the bottom of the menu the box ends: the first style leaves a
--- larger gap below its rows than on the other sides.
 local MENU_BACKGROUNDS = { { "common-dropdown-bg", 7 }, { "common-dropdown-c-bg", 0 } }
 local MENU_EVENT = "MenuProxy.OnShow"
 local PUSHED_OUT_EVENT = "UIParentPanelManager.ForcePanelHide"
 
--- Colours that are not options, and the colour of the edge on a broken item.
 local ROLES = {
 	white = { 1, 1, 1 },
 	black = { 0, 0, 0 },
@@ -63,22 +39,14 @@ local CHECK_OFF = { 0.6, 0.6, 0.6, 0.8 }
 local HOVER = { 1, 1, 1, 0.3 }
 local SLOT_PRESSED = { 0.9, 0.8, 0.1, 0.3 }
 
--- What this addon made for a Blizzard frame, by kind.
 local styled = setmetatable({}, { __mode = "k" })
--- The alpha a faded region had.
 local faded = setmetatable({}, { __mode = "k" })
--- The texture coordinates an icon had before it was cropped.
 local texcoords = setmetatable({}, { __mode = "k" })
--- The window each root frame belongs to.
 local roots = setmetatable({}, { __mode = "k" })
--- The item buttons that are styled, for the hooks on the game's item functions.
 local slots = setmetatable({}, { __mode = "k" })
--- The scripts of Blizzard frames that are already hooked, and the global functions.
 local hooked = setmetatable({}, { __mode = "k" })
 local hookedGlobals = {}
--- Kinds whose art was put back after they stopped.
 local released = {}
--- True while a kind is made on a protected frame in combat: its art is faded and nothing is created.
 local dry = false
 
 local KINDS = {}
@@ -87,14 +55,10 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- Reading Blizzard's frames ------------------------------------------------------------------
-
--- A frame or region, unless the client withholds it.
 local function Usable(value)
 	return value ~= nil and not ns.IsSecret(value) and type(value) == "table"
 end
 
--- A field of a frame, unless the client withholds it.
 local function Field(frame, key)
 	local value = frame[key]
 	if ns.IsSecret(value) then
@@ -103,7 +67,6 @@ local function Field(frame, key)
 	return value
 end
 
--- A frame or region held in a field.
 local function Part(frame, key)
 	if not Usable(frame) then
 		return nil
@@ -115,7 +78,6 @@ local function Part(frame, key)
 	return nil
 end
 
--- Only a Texture can be masked. Font strings and mask textures cannot.
 local function IsTexture(region)
 	return Usable(region) and type(region.AddMaskTexture) == "function"
 end
@@ -149,7 +111,6 @@ local function Protected(frame)
 	return not ok or ns.IsSecret(protected) or protected == true
 end
 
--- Red, green and blue of a region's vertex colour.
 local function VertexColour(region)
 	if not Usable(region) then
 		return nil
@@ -172,7 +133,6 @@ local function Children(frame)
 	return ok and list or {}
 end
 
--- The texture in one of a button's states: "Normal", "Pushed", "Disabled", "Highlight", "Checked".
 local function State(button, which)
 	local getter = button["Get" .. which .. "Texture"]
 	if type(getter) ~= "function" then
@@ -185,8 +145,6 @@ local function State(button, which)
 	return nil
 end
 
--- A frame or region named by a path from the globals, such as "CharacterFrame.LeftPaneHost".
--- A forbidden frame on the way ends the path before any of its fields is read.
 local function Path(text)
 	local found
 	local ok = pcall(function()
@@ -205,7 +163,6 @@ local function Path(text)
 	return ok and found or nil
 end
 
--- A frame or region held in a field of a frame that may be forbidden.
 local function Held(frame, key)
 	if ns.Forbidden(frame) then
 		return nil
@@ -213,7 +170,6 @@ local function Held(frame, key)
 	return Part(frame, key)
 end
 
--- A list of the frames and regions among the values, left out when the client withholds them.
 local function Pieces(...)
 	local list = {}
 	for index = 1, select("#", ...) do
@@ -225,7 +181,6 @@ local function Pieces(...)
 	return list
 end
 
--- The frames and regions held in the named fields of a frame that may be forbidden, left out when missing.
 local function Keyed(frame, keys)
 	local list = {}
 	for _, key in ipairs(keys) do
@@ -234,7 +189,6 @@ local function Keyed(frame, keys)
 	return list
 end
 
--- The texture a frame draws in one draw layer and sublevel, for art that has no key.
 local function RegionAt(frame, layer, sublevel)
 	if ns.Forbidden(frame) or type(frame.GetRegions) ~= "function" then
 		return nil
@@ -250,7 +204,6 @@ local function RegionAt(frame, layer, sublevel)
 	return nil
 end
 
--- An edge texture of a text box: by its key, or by the name its template gives it.
 local function EditCap(frame, key)
 	local cap = Part(frame, key)
 	if cap then
@@ -261,10 +214,6 @@ local function EditCap(frame, key)
 	return IsTexture(cap) and cap or nil
 end
 
--- Art ---------------------------------------------------------------------------------------
-
--- Makes a texture transparent and keeps the alpha it had. Turning it off gives that alpha back.
--- With frames true the region may be a frame with the alpha methods, which dims what is drawn on it.
 local function Fade(region, on, frames)
 	if not IsTexture(region) and not (frames and Usable(region) and type(region.GetAlpha) == "function" and type(region.SetAlpha) == "function") then
 		return
@@ -285,7 +234,6 @@ local function Fade(region, on, frames)
 	end
 end
 
--- Fades the textures in an array field.
 local function FadeArray(frame, key, on)
 	local list = Part(frame, key)
 	if list then
@@ -295,8 +243,6 @@ local function FadeArray(frame, key, on)
 	end
 end
 
--- Gives a font string a colour and keeps the colour it had; with no colour, gives that one back, exactly. A colour the client will not report is
--- left as it is, since it could not be given back.
 local inked = setmetatable({}, { __mode = "k" })
 local function Ink(text, colour)
 	if not (Usable(text) and type(text.GetTextColor) == "function" and type(text.SetTextColor) == "function") then
@@ -319,8 +265,6 @@ local function Ink(text, colour)
 	end
 end
 
--- Fades every texture drawn on a frame, and on its children down to `depth`.
--- keep: one texture to leave alone.
 local function Strip(frame, depth, on, keep)
 	if ns.Forbidden(frame) or type(frame.GetRegions) ~= "function" then
 		return
@@ -339,8 +283,6 @@ local function Strip(frame, depth, on, keep)
 	end
 end
 
--- An icon cut to the middle of the rectangle it shows, which is a part of a shared sheet for some
--- icons. The coordinates it had come back when the crop ends.
 local function Crop(icon, fraction)
 	if not IsTexture(icon) then
 		return
@@ -359,7 +301,6 @@ local function Crop(icon, fraction)
 	pcall(icon.SetTexCoord, icon, had[1] + across, had[2] - across, had[3] + down, had[4] - down)
 end
 
--- Takes a mask off a texture while `off` is true and puts it back after. key: the field of own that says it is off.
 local function Unmask(own, key, texture, mask, off)
 	if not mask or not IsTexture(texture) then
 		return
@@ -379,8 +320,6 @@ local function Uncrop(icon)
 	end
 end
 
--- A state texture of a Blizzard button becomes a flat colour. The game shows it by state, so no
--- script is needed. With an inset it is that far inside the target, without one it fills it.
 local function Retint(texture, target, colour, inset)
 	if dry or not Usable(texture) then
 		return
@@ -395,16 +334,11 @@ local function Retint(texture, target, colour, inset)
 	end
 end
 
--- What this addon draws ---------------------------------------------------------------------
-
 local function Mine(object)
 	ns.Own[object] = true
 	return object
 end
 
--- An invisible rectangle for a box that is not the rectangle of a frame. Each side is that far
--- inside the target; a negative number reaches outside it. With a height, the box is that high
--- and centred on the target.
 local function Box(owner, target, left, right, top, bottom, height)
 	if dry then
 		return nil
@@ -430,7 +364,6 @@ local function RoleColour(role)
 	return colour[1], colour[2], colour[3]
 end
 
--- Sets a colour and visibility only when they changed.
 local function Show(paint, shown)
 	local r, g, b = RoleColour(paint.role)
 	if paint.r ~= r or paint.g ~= g or paint.b ~= b then
@@ -443,7 +376,6 @@ local function Show(paint, shown)
 	end
 end
 
--- One flat colour over a target. role: "accent", "white" or "black".
 local function Tint(own, owner, target, layer, role, alpha, blend, manual)
 	if dry then
 		return nil
@@ -458,8 +390,6 @@ local function Tint(own, owner, target, layer, role, alpha, blend, manual)
 	return paint
 end
 
--- Follows a script of one Blizzard frame with HookScript, which writes nothing on the frame, once for each frame, script and function.
--- (EllesmereUI follows script and event passes the same way: EllesmereUIChat/EllesmereUIChat.lua:4410-4417, 6270-6281.)
 local function HookScript(frame, script, fn)
 	if type(frame) ~= "table" or ns.IsSecret(frame) or ns.Forbidden(frame) then
 		return false
@@ -474,8 +404,6 @@ local function HookScript(frame, script, fn)
 	return list[fn]
 end
 
--- Work asked for from a game call or event runs one frame later, once for each function and frame, so that nothing of the addon's runs
--- inside the game's own pass (the way EllesmereUI does it: EllesmereUI_Lite.lua:517-558, EllesmereUIBlizzardSkin.lua:1296-1305).
 local Soon
 do
 	local queued, flushing = {}, false
@@ -512,10 +440,8 @@ do
 	end
 end
 
--- What the calls and events of the game ask to be looked at again: the side tabs, the lists, the bags and the bank.
 local Watch = {}
 
--- A chevron or a cross made of two lines.
 local SHAPES = {
 	x = { { -1, 1, 1, -1 }, { -1, -1, 1, 1 } },
 	up = { { -1, -0.5, 0, 0.5 }, { 0, 0.5, 1, -0.5 } },
@@ -534,7 +460,6 @@ local function Place(glyph, shape)
 	glyph.shape = shape
 end
 
--- spec: layer, shape, role, alpha, size, and optionally point, x and y for its place on target.
 local function Glyph(own, owner, target, spec)
 	if dry then
 		return nil
@@ -550,8 +475,6 @@ local function Glyph(own, owner, target, spec)
 	return glyph
 end
 
--- A thin border and a fill around target, made with the outline Flat UI draws elsewhere.
--- fill: "window" for the window colour and opacity, "panel" for the button and slot colour.
 local function Outlined(own, owner, target, fill)
 	if dry then
 		return nil
@@ -570,7 +493,6 @@ local function Fill(outline, fill)
 		ns.SetOutlineFill(outline, r, g, b, Opt("opacity") / 100)
 	elseif fill == "solid" then
 		local r, g, b = ns.Colour("general.backdrop")
-		-- Menus and lists lie over other windows, so their fill does not follow the window opacity.
 		ns.SetOutlineFill(outline, r, g, b, 0.95)
 	else
 		local r, g, b = ns.Colour(KEY .. ".panel")
@@ -578,25 +500,18 @@ local function Fill(outline, fill)
 	end
 end
 
--- Shows or hides everything a kind drew for one frame, in the current colours.
 local function Reveal(own, on)
 	for _, entry in ipairs(own.outlines) do
 		Fill(entry.outline, entry.fill)
 		ns.SetOutline(entry.outline, on, on)
 	end
 	for _, paint in ipairs(own.paints) do
-		-- A paint with its own rule is shown by the kind that made it.
 		if not paint.manual then
 			Show(paint, on)
 		end
 	end
 end
 
--- Kinds of styled frame ------------------------------------------------------------------------
-
--- label: the name of the part in /flatui status. option: the setting that switches it, besides
--- the window's own. make draws what is needed once. apply shows or hides it, and fades Blizzard's art.
--- host: the frame that make creates things on, when that is not the styled frame itself.
 local function Kind(name, label, option, make, apply, host)
 	KINDS[name] = { label = label, option = option, make = make, apply = apply, host = host }
 end
@@ -606,13 +521,11 @@ local function IsOn(kind, group)
 	return ns.Enabled(KEY) and ns.Get(KEY .. "." .. group) == true and (option == nil or Opt(option) == true)
 end
 
--- Runs a kind's make and apply for a frame. Anything made before a failure is hidden again.
 local function Build(frame, def, own, flag, on)
 	def.make(frame, own, flag)
 	def.apply(frame, own, on)
 end
 
--- Puts back the art of every frame a stopped part had styled.
 local function Release(kind)
 	if released[kind] then
 		return
@@ -628,8 +541,6 @@ local function Release(kind)
 	end
 end
 
--- Applies a kind to a frame it styled. A part that stops on the way gives back the art of every
--- frame it had styled.
 local function Apply(kind, frame, own, on)
 	local def = KINDS[kind]
 	if not ns.EachPart(KEY, def.label, def.apply, frame, own, on) and ns.PartStopped(KEY, def.label) then
@@ -655,13 +566,11 @@ local function Style(kind, frame, group, flag)
 	if not IsOn(kind, group) then
 		return
 	end
-	-- The pass in combat fades Blizzard's art on this record. Make builds on it, or undoes it.
 	local own = { kind = kind, group = group, paints = {}, outlines = {} }
 	local function Make()
 		if styled[frame] and styled[frame][kind] then
 			return
 		end
-		-- Switched off since the pass in combat: Blizzard's art goes back.
 		if not IsOn(kind, group) then
 			pcall(def.apply, frame, own, false)
 			return
@@ -682,7 +591,6 @@ local function Style(kind, frame, group, flag)
 			end
 		end
 	end
-	-- Nothing is created or anchored on a protected frame in combat, but its art can be faded.
 	local host = def.host and def.host(frame, flag) or frame
 	if InCombatLockdown() and (Protected(frame) or Protected(host)) then
 		dry = true
@@ -694,7 +602,6 @@ local function Style(kind, frame, group, flag)
 	end
 end
 
--- Applies a kind again to a frame it styled, after a change Blizzard made.
 local function Again(frame, kind)
 	local entry = styled[frame] and styled[frame][kind]
 	if entry and not entry.broken then
@@ -702,7 +609,6 @@ local function Again(frame, kind)
 	end
 end
 
--- The window a map is drawn in, for the border frame that lies over the map: its fill has to be made under the map.
 local function MapWindow(frame)
 	local parent = ParentOf(frame)
 	if parent and Part(parent, "ScrollContainer") then
@@ -711,9 +617,6 @@ local function MapWindow(frame)
 	return nil
 end
 
--- Window frame. A page fills its window and has no box of its own (flag true). With the flag
--- "parchment" the Bg is a parchment the text is coloured for: it stays, and the rock under it goes.
--- With the flag "solid" the fill does not follow the window opacity.
 Kind("window", "window frames", nil,
 	function(frame, own, flag)
 		if flag == "parchment" then
@@ -752,7 +655,6 @@ Kind("window", "window frames", nil,
 		Fade(Part(frame, "TitleBg"), on)
 		local portrait = Part(frame, "PortraitContainer")
 		Fade(portrait and Part(portrait, "portrait"), on and not Opt("portrait"))
-		-- A dialog keeps its border pieces and its background in one frame.
 		local border = Part(frame, "Border")
 		if border then
 			for _, name in ipairs(PIECES) do
@@ -767,7 +669,6 @@ Kind("window", "window frames", nil,
 		return flag ~= true and MapWindow(frame) or nil
 	end)
 
--- Every texture drawn on a frame, for panels whose art has no field.
 Kind("art", "window backgrounds", nil,
 	function(frame, own, flag)
 		own.depth = flag and flag.depth or 0
@@ -777,7 +678,6 @@ Kind("art", "window backgrounds", nil,
 		Strip(frame, own.depth, on, own.keep)
 	end)
 
--- A list of textures that are shown when an option is on, and faded otherwise.
 Kind("fades", "window pictures", nil,
 	function(frame, own, flag)
 		own.list = flag.list
@@ -790,9 +690,6 @@ Kind("fades", "window pictures", nil,
 		end
 	end)
 
--- Page text: text written for a picture the addon fades, such as the dark ink of the spellbook's parchment, takes a light colour while the picture
--- is faded, and the colour it had comes back exactly with the picture. flag.list holds { font string, colour } pairs, and flag.unless names the
--- setting that keeps the picture, as for the pictures above. Only for text whose colour the game's templates set and its code never sets again.
 Kind("ink", "page text", nil,
 	function(frame, own, flag)
 		own.list = flag.list
@@ -805,8 +702,6 @@ Kind("ink", "page text", nil,
 		end
 	end)
 
--- The eye of the Looking For Group window: with Show the eye off, the button, its picture and its six animated frames are transparent and the
--- button takes no mouse, so the eye does not look at the cursor or answer a click. Its mouse comes back with the setting.
 Kind("eye", "looking for group eye", nil,
 	function(frame, own)
 		own.pieces = Pieces(Held(frame, "texture"))
@@ -829,7 +724,6 @@ Kind("eye", "looking for group eye", nil,
 				own.mouse = ok and not ns.IsSecret(taking) and taking ~= false
 			end
 			if fade then
-				-- Without a readable state the mouse is left as it is: it could not be given back.
 				if own.mouse ~= nil then
 					pcall(frame.EnableMouse, frame, false)
 				end
@@ -853,8 +747,6 @@ Kind("inset", "insets", nil,
 		end
 	end)
 
--- Close button: a cross with no box. With a pane, the same button is a chevron that shows
--- which way the pane opens.
 Kind("close", "close buttons", "buttons",
 	function(frame, own, pane)
 		own.pane = pane
@@ -877,7 +769,6 @@ Kind("close", "close buttons", "buttons",
 		Reveal(own, on)
 	end)
 
--- With the flag "plain" the button has a plate in each state and no parts, as the buttons of pop-ups do.
 Kind("button", "buttons", "buttons",
 	function(frame, own, flag)
 		own.plain = flag == "plain"
@@ -897,10 +788,8 @@ Kind("button", "buttons", "buttons",
 		Reveal(own, on)
 	end)
 
--- Bottom tab: the same box whether selected or not. Blizzard's label colour tells them apart.
 Kind("tab", "tabs", "tabs",
 	function(frame, own)
-		-- A tab that hangs from the top of its window has its edge at the bottom.
 		local top, bottom = 1, 3
 		if Field(frame, "isTabOnTop") == true or Field(frame, "isTopTab") == true then
 			top, bottom = bottom, top
@@ -918,16 +807,9 @@ Kind("tab", "tabs", "tabs",
 		Reveal(own, on)
 	end)
 
--- Side tab size. The icon side in units for each choice of Side tab size; Game's size has none. The game's tab is 5 units
--- larger than its icon: it is the common-sidetab atlas of 55 by 60 without its 5 of empty height, set once when the tab loads
--- (AtlasInfo.lua:3761-3765, SharedUIPanelTemplates.lua:311-331), around the 50 by 50 icon that every SetChecked sets again
--- (SharedUIPanelTemplates.lua:383-401). The windows chain their tabs, each from the bottom left of the one above, so a smaller
--- tab closes the column up and no anchor is written here (CharacterFrame.lua:195, BankFrame.lua:122, Blizzard_Collections.lua:128,
--- Blizzard_ProfessionsFrame.xml:29-39, Blizzard_LFGVanilla_ParentFrame.xml:109-119).
 local TAB_ICONS = { large = 42, medium = 36, small = 30 }
 local TAB_PADDING = 5
 
--- The width and height of a frame or region, unless the client withholds them or they are not a size yet.
 local function SizeOf(region)
 	if not Usable(region) then
 		return nil
@@ -940,8 +822,6 @@ local function SizeOf(region)
 	return nil
 end
 
--- Gives a frame or region a square size, or the size the game gave it. Any size other than the one set here is the
--- game's: the first one read, and the one the game sets again on SetChecked. Nothing is written until the game's is known.
 local function FitSquare(own, key, region, side)
 	local fit = own[key]
 	if not fit then
@@ -967,20 +847,12 @@ local function FitSquare(own, key, region, side)
 	end
 end
 
--- The mask that rounds the corners of the icon (Square side tab icons off) is the atlas of 55 by 60, centred on the tab (Blizzard_SharedXML/
--- Mainline/SharedUIPanelTemplates.xml:1026-1033, AtlasInfo.lua:3770) while the icon sits at the offsets the game gives it, -4 and 0 on Forever
--- (SharedUIPanelTemplates.lua:333-347, Camelot/SharedUIPanelTemplates.lua:12-14), and it is cut for an icon of 50 (SharedUIPanelTemplates.lua:383-389).
--- A smaller icon needs a mask smaller in the same ratio that lies in the same place on the icon, so the mask is scaled about the centre of the icon.
--- SetPoint on the point CENTER moves the anchor the game made, as the game moves the icon's (SharedUIPanelTemplates.lua:354-359), so none is cleared.
--- GetPoint gives withheld values only when the anchoring is withheld (SimpleScriptRegionResizingAPIDocumentation.lua:65-86).
 local ICON_EXTENT = 50
 
 local function Holds(fit)
 	return fit ~= nil and fit.set ~= nil
 end
 
--- Gives the mask of a side tab the size and place it has for an icon of the side given, or the game's when there is none. Nothing is
--- done when the icon is not at the centre of the tab, or the mask's size or the icon's place cannot be read.
 local function FitMask(frame, own, side)
 	local mask, icon = own.mask, own.icon
 	local fit = own.maskFit
@@ -1011,11 +883,6 @@ local function FitMask(frame, own, side)
 	end
 end
 
--- The icon and the tab of a side tab at the chosen size, or at the game's. Only a tab that fills its icon to the interior
--- (fillToInterior, which sets the icon size in UpdateIconInterior) is sized; the others keep the art's own sizes, and nothing waits
--- for them. SetSize and SetPoint are protected functions (SimpleScriptRegionResizingAPIDocumentation.lua:162-173, 135-149), so a protected
--- tab waits for the end of combat, once however often it is asked. A tab whose part stopped in the meantime is given its sizes back there,
--- as Again leaves a stopped entry alone.
 local function SizeSideTab(frame, own, on)
 	local side = on and Field(frame, "fillToInterior") == true and TAB_ICONS[Opt("sideTabSize")] or nil
 	if not side and not (Holds(own.tabFit) or Holds(own.iconFit) or Holds(own.maskFit)) then
@@ -1040,12 +907,8 @@ local function SizeSideTab(frame, own, on)
 	FitMask(frame, own, side and own.mask and not Opt("squareTabs") and side or nil)
 end
 
--- A side tab is read again after the game chose a tab: its checked state is what the game's SetChecked set. The title colour of the
--- character window is set again by the same calls.
 function Watch.ReadSideTab(frame, entry)
 	do
-		-- LargeSideTabButtonTemplate is a Frame with no GetChecked (SharedUIPanelTemplates.xml:1008); SetChecked is a Lua method that shows or
-		-- hides its SelectedTexture (SharedUIPanelTemplates.lua:391-401), so the texture is read. A check button answers GetChecked.
 		if type(frame.GetChecked) == "function" then
 			local ok, checked = pcall(frame.GetChecked, frame)
 			if ok and not ns.IsSecret(checked) and type(checked) == "boolean" then
@@ -1065,7 +928,6 @@ function Watch.ResetSideTab(frame)
 	end
 end
 
--- Choosing one tab unchecks the others, so every styled side tab is read again, not the one that was clicked or shown alone.
 function Watch.RefreshSideTabs()
 	for frame, entries in pairs(styled) do
 		if entries.sideTab then
@@ -1077,8 +939,6 @@ end
 
 Watch.SideTabChanged = Watch.RefreshSideTabs
 
--- Side tab: a square icon with a thin border. flag "sidebar" is a sidebar tab of the character
--- window, a check button whose own checked texture becomes the selected tint.
 Kind("sideTab", "side tabs", "sideTabs",
 	function(frame, own, flag)
 		own.sidebar = flag == "sidebar"
@@ -1095,10 +955,6 @@ Kind("sideTab", "side tabs", "sideTabs",
 		own.mask = Part(frame, "Mask")
 		own.selected = Tint(own, frame, own.icon, "OVERLAY", "white", HOVER[4], "ADD", true)
 		own.checked = Shown(Part(frame, "SelectedTexture"))
-		-- Blizzard sets the icon's texture coordinates and size again on every SetChecked (SharedUIPanelTemplates.lua:391-401), which its windows
-		-- call from their own methods. A tab is looked at again a frame after it is shown or clicked and after the game's functions that
-		-- choose a tab (Watch.RefreshSideTabs, Watch.SideTabChanged), and its checked state is read then. The template has no OnClick: it
-		-- runs OnMouseUp (SharedUIPanelTemplates.lua:361).
 		HookScript(frame, "OnMouseUp", Watch.SideTabChanged)
 		HookScript(frame, "OnShow", Watch.SideTabChanged)
 	end,
@@ -1136,7 +992,6 @@ Kind("sideTab", "side tabs", "sideTabs",
 		end
 	end)
 
--- The item button behind a hook argument, if this addon styled it.
 local function SlotOf(button)
 	if button == nil or ns.IsSecret(button) or type(button) ~= "table" then
 		return nil
@@ -1157,16 +1012,10 @@ local function ItemIcon(button)
 	return name and Part(_G, name .. "IconTexture") or nil
 end
 
--- Red in the red channel only, which is how the game marks an item that is broken or cannot be used.
--- Grey marks an item that is sold out.
 local function IsRed(r, g, b)
 	return type(r) == "number" and r > 0 and g == 0 and b == 0
 end
 
--- Item slot: a box with the quality colour as its edge. The ammo slot has no quality border. With the
--- flag "still" the icon is not cropped: the game puts a picture of an empty slot there and takes it away again.
--- Every item button masks its icon and its pushed texture with the rounded Mask (Shared/ItemButtonTemplate.xml:18-19,
--- Shared/ItemButtonTemplate.lua:16-20). It is off the icon while the slot is square, and off the pushed texture while that has the flat tint.
 Kind("slot", "item slots", "slots",
 	function(frame, own, flag)
 		own.icon = ItemIcon(frame)
@@ -1174,7 +1023,6 @@ Kind("slot", "item slots", "slots",
 		own.still = flag == "still"
 		own.ammo = NameOf(frame) == AMMO_SLOT
 		Outlined(own, frame, frame, "panel")
-		-- Where the game stands now: the border it shows and the colour of the slot's frame.
 		local border = Part(frame, "IconBorder")
 		if Shown(border) then
 			local r, g, b = VertexColour(border)
@@ -1270,8 +1118,6 @@ Kind("check", "check boxes", "checks",
 		Reveal(own, on)
 	end)
 
--- Text box. A single line has its caps on the box and is outlined by its parent, because nothing
--- is created on an edit box. A box with several lines is a scroll frame and outlines itself.
 Kind("edit", "text boxes", "inputs",
 	function(frame, own, flag)
 		own.multi = flag == "multi"
@@ -1307,9 +1153,6 @@ Kind("dropdown", "dropdowns", "inputs",
 		Reveal(own, on)
 	end)
 
--- Since 70425 the fill is drawn inside FillArea, a child frame 6 units in from each side of the bar, and sized on its width
--- (Blizzard_SharedXML/Camelot/ProgressBars/ColoredProgressBar.xml:5-13, 19-24, ColoredProgressBar.lua:33), so the box goes round FillArea
--- and the fill starts and ends with it. A bar without FillArea, as in the older clients, has the box across the whole bar.
 Kind("bar", "progress bars", "bars",
 	function(frame, own)
 		Outlined(own, frame, Box(frame, Part(frame, "FillArea") or frame, 0, 0, 0, 0, 15), "window")
@@ -1332,7 +1175,6 @@ Kind("bar", "progress bars", "bars",
 		Reveal(own, on)
 	end)
 
--- A one pixel line down the left edge of a pane in place of Blizzard's divider. It goes with the other borders.
 Kind("divider", "dividers", nil,
 	function(frame, own)
 		if dry then
@@ -1352,7 +1194,6 @@ Kind("divider", "dividers", nil,
 		own.line:SetShown(on and not ns.Borderless())
 	end)
 
--- A category of the Looking For Group list: the picture stays, with a box around it.
 Kind("category", "category buttons", "buttons",
 	function(frame, own)
 		local icon = Part(frame, "Icon")
@@ -1369,7 +1210,6 @@ Kind("category", "category buttons", "buttons",
 		Reveal(own, on)
 	end)
 
--- A vendor button that shows a picture on a slot: the picture stays, the slot is replaced.
 Kind("iconButton", "vendor buttons", "buttons",
 	function(frame, own)
 		own.icon = Part(frame, "Icon")
@@ -1381,7 +1221,6 @@ Kind("iconButton", "vendor buttons", "buttons",
 		Reveal(own, on)
 	end)
 
--- A header of the character window's stat list: the rounded plate goes and a flat band takes its place.
 Kind("plate", "stat headers", "buttons",
 	function(frame, own)
 		Outlined(own, frame, Box(frame, frame, 0, 0, 0, 0, 22), "panel")
@@ -1391,7 +1230,6 @@ Kind("plate", "stat headers", "buttons",
 		Reveal(own, on)
 	end)
 
--- A header in a list that folds: a plate in the button states, or three slices, and a flat box in their place.
 Kind("header", "list headers", "rows",
 	function(frame, own)
 		Outlined(own, frame, frame, "panel")
@@ -1407,8 +1245,6 @@ Kind("header", "list headers", "rows",
 		Reveal(own, on)
 	end)
 
--- A line in a list that has a stripe, a hover bar and a bar for the selected line: the stripe and the hover bar go, a flat
--- tint takes the hover, and the selected bar, which the game shows and hides, becomes a flat colour.
 Kind("line", "list lines", "rows",
 	function(frame, own)
 		own.selected = Part(frame, "SelectedHighlight") or Part(frame, "SelectedTexture")
@@ -1426,8 +1262,6 @@ Kind("line", "list lines", "rows",
 		Reveal(own, on)
 	end)
 
--- An open menu. The game takes a menu frame from a pool and draws its background on it each time it opens, in a texture that
--- is a row icon the next time. The box lies in a frame of this addon's inside the menu, which stays with the menu.
 Kind("menu", "menus", nil,
 	function(frame, own)
 		if dry then
@@ -1440,8 +1274,6 @@ Kind("menu", "menus", nil,
 		Outlined(own, own.box, own.box, "solid")
 	end,
 	function(frame, own, on)
-		-- The game's background goes only where the box is to take its place, and the box moves only when the gap changes,
-		-- not at all in combat on a menu that hangs from a protected frame.
 		for _, style in ipairs(MENU_BACKGROUNDS) do
 			local background = own.box and ns.RegionWithAtlas(frame, style[1])
 			if background then
@@ -1455,13 +1287,10 @@ Kind("menu", "menus", nil,
 		Reveal(own, on)
 	end)
 
--- Sweeping a window --------------------------------------------------------------------------------
-
 local function IsClose(frame)
 	if type(frame.GetNormalTexture) ~= "function" then
 		return false
 	end
-	-- The Close button of the options window is a push button that the game keys as CloseButton.
 	if Part(frame, "Left") and Part(frame, "Right") then
 		return false
 	end
@@ -1481,7 +1310,6 @@ local function IsClose(frame)
 	return false
 end
 
--- A check box is a check button of about the size of one that has no picture of its own.
 local function IsCheck(frame)
 	if type(frame.GetCheckedTexture) ~= "function" or Part(frame, "Icon") or Part(frame, "icon") or Part(frame, "Name") then
 		return false
@@ -1506,7 +1334,6 @@ local function IsWindow(frame)
 	return Part(frame, "TitleContainer") ~= nil or Part(frame, "CloseButton") ~= nil or Part(frame, "PortraitContainer") ~= nil
 end
 
--- The kind of a Blizzard frame, from the fields its template gives it, and a flag for that kind.
 local function Classify(frame)
 	local track = Part(frame, "Track")
 	if track and Part(track, "Thumb") and Part(frame, "Back") and Part(frame, "Forward") then
@@ -1518,8 +1345,6 @@ local function Classify(frame)
 	if Part(frame, "Left") and Part(frame, "LeftActive") and (Part(frame, "TabTextures") or Part(frame, "RotatedTextures")) then
 		return "tab"
 	end
-	-- A bag slot shows a picture of an empty slot. The 70532 template named it in emptyBackgroundAtlas; the 70790 one has an EmptyBagIcon
-	-- instead and names the picture in its GetItemButtonBackgroundTexture (ContainerFrame.xml:152-154, ContainerFrame.lua:1953-1960).
 	if Part(frame, "IconBorder") and (Part(frame, "icon") or Part(frame, "Icon")) and Part(frame, "NormalTexture") then
 		return "slot", (type(Field(frame, "emptyBackgroundAtlas")) == "string" or Part(frame, "EmptyBagIcon") ~= nil) and "still" or nil
 	end
@@ -1554,7 +1379,6 @@ local function Classify(frame)
 	if Part(frame, "NineSlice") and Part(frame, "Bg") and Field(frame, "layoutType") == "InsetFrameTemplate" then
 		return "inset"
 	end
-	-- The panels of the auction house keep the picture in a Background.
 	if Part(frame, "NineSlice") and Part(frame, "Background") and "InsetFrameTemplate" == Field(frame, "layoutType") then
 		return "inset"
 	end
@@ -1564,7 +1388,6 @@ local function Classify(frame)
 	return nil
 end
 
--- The kind of a row of a list that Classify has no kind for: a line with a selected bar, or a header that folds.
 local function RowKind(frame)
 	if Part(frame, "HighlightTexture") and (Part(frame, "SelectedHighlight") or Part(frame, "SelectedTexture")) then
 		return "line"
@@ -1577,19 +1400,15 @@ local function RowKind(frame)
 	return nil
 end
 
--- Kinds that hold other controls, so the sweep goes on inside them.
 local HOLDS = { inset = true, window = true }
 
--- Hooks the scroll list of a window, and looks at the rows it has.
 local Rows
 
--- Looks at one child. The result is left in state.descend.
 local function Visit(child, group, state)
 	state.descend = false
 	if ns.Forbidden(child) or ns.Own[child] or state.skip[child] then
 		return
 	end
-	-- Cooldowns and models draw their own art.
 	if type(child.SetCooldown) == "function" or type(child.CreateActor) == "function" or type(child.SetDisplayInfo) == "function" then
 		return
 	end
@@ -1603,10 +1422,8 @@ local function Visit(child, group, state)
 	end
 	if kind then
 		Style(kind, child, group, flag)
-		-- A box with several lines holds its scroll bar.
 		state.descend = HOLDS[kind] == true or flag == "multi"
 	else
-		-- A list makes its rows when it is shown: they are looked at after each update of the list.
 		if Part(child, "ScrollTarget") then
 			Rows(child, group)
 		end
@@ -1614,7 +1431,6 @@ local function Visit(child, group, state)
 	end
 end
 
--- True when a frame holds a frame of Blizzard's that a sweep may look at.
 local function HoldsFrames(frame)
 	for _, child in ipairs(Children(frame)) do
 		if not ns.Forbidden(child) and not ns.Own[child] then
@@ -1624,7 +1440,6 @@ local function HoldsFrames(frame)
 	return false
 end
 
--- A window the sweep did not search to the end.
 local function TooLarge(state)
 	ns.Note(KEY, ("Windows: part of the %s window is too large and keeps Blizzard's look."):format(state.title))
 end
@@ -1648,8 +1463,6 @@ local function Walk(frame, group, state, depth)
 	end
 end
 
--- Looks at the children of a frame that nothing has styled yet. The game makes item slots and tabs
--- when it updates a window and keeps them for the next time.
 local function StyleNew(frame, group, skip)
 	local state = { count = 0, title = "", pages = {}, skip = skip or {} }
 	for _, child in ipairs(Children(frame)) do
@@ -1659,7 +1472,6 @@ local function StyleNew(frame, group, skip)
 	end
 end
 
--- The rows that were looked at: a row keeps its template as the list gives it other data.
 local looked = setmetatable({}, { __mode = "k" })
 
 local function StyleRows(box, group)
@@ -1679,9 +1491,6 @@ local function StyleRows(box, group)
 	end
 end
 
--- A scroll box makes its rows when it is shown and again as it scrolls. It announces the end of each of its updates on its own callback
--- registry (Blizzard_SharedXML/Shared/Scroll/ScrollBox.lua:557-558, 795), so each list is looked at a frame after that and when it is shown.
--- (EllesmereUIFriends/EllesmereUIFriends.lua:1098 registers on a scroll box the same way.)
 do
 	local watchedBoxes = setmetatable({}, { __mode = "k" })
 	local boxOwners = setmetatable({}, { __mode = "k" })
@@ -1710,9 +1519,6 @@ function Rows(box, group)
 	ns.EachPart(KEY, "list rows", StyleRows, box, group)
 end
 
--- The pane toggle of the character window follows the pane. Opening or closing the pane runs the game's RefreshDisplay, whose
--- SetChecked gives every mode tab icon 50 again (CharacterFrame.lua:288-289, 253-259, 205-217; the size 50 is set at
--- Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.lua:383-389), so the side tabs are sized again too.
 Watch.toggles = setmetatable({}, { __mode = "k" })
 
 function Watch.PaneChanged()
@@ -1722,7 +1528,6 @@ function Watch.PaneChanged()
 	end
 end
 
--- The tab with the player's portrait draws it again on the game's portrait and talent events and when the window is shown.
 Watch.portraitTabs = setmetatable({}, { __mode = "k" })
 
 function Watch.PortraitChanged()
@@ -1731,9 +1536,6 @@ function Watch.PortraitChanged()
 	end
 end
 
--- Windows with their own parts ------------------------------------------------------------------------
-
--- The stat list is made by a scroll box, so its headers are styled after the box has laid them out.
 local function StyleHeaders(box, group)
 	local target = Held(box, "ScrollTarget")
 	for _, child in ipairs(target and Children(target) or {}) do
@@ -1756,18 +1558,14 @@ local function CharacterExtras(root, group)
 	local toggle = Part(root, "RightPaneToggleButton")
 	if toggle and pane then
 		Style("close", toggle, group, pane)
-		-- The game's UpdateRightPaneToggleButton runs when the window is shown and when the pane opens or closes (CharacterFrame.lua:294-309,
-		-- 710-714); the shape follows the pane, so the toggle is looked at again a frame after each of those.
 		Watch.toggles[toggle] = true
 		HookScript(toggle, "OnClick", Watch.PaneChanged)
 		HookScript(pane, "OnShow", Watch.PaneChanged)
 		HookScript(pane, "OnHide", Watch.PaneChanged)
 		HookScript(root, "OnShow", Watch.PaneChanged)
 	end
-	-- The tab with the player's portrait gets its texture coordinates from the game again.
 	local portraitTab = Held(Held(root, "ModeTabs"), "CharacterTab")
 	if portraitTab then
-		-- The game draws it again when the window is shown and on the portrait and talent events (CharacterFrame.lua:148-152, 368-393).
 		Watch.portraitTabs[portraitTab] = true
 		HookScript(root, "OnShow", Watch.PortraitChanged)
 	end
@@ -1782,7 +1580,6 @@ local function CharacterExtras(root, group)
 	if pane then
 		Style("divider", pane, group)
 	end
-	-- The pet's experience bar is inside the model scene, which the sweep does not enter.
 	local petBar = _G.PetPaperDollFrameExpBar
 	if Usable(petBar) then
 		Style("bar", petBar, group)
@@ -1800,7 +1597,6 @@ local function CharacterExtras(root, group)
 	end
 end
 
--- The categories are made one by one in Lua, so each is styled after the list is updated.
 local function StyleCategories(view)
 	if not Usable(view) or ns.Forbidden(view) then
 		return
@@ -1834,22 +1630,16 @@ local function GroupFinderExtras(root, group)
 	end
 end
 
--- The round picture at the top left of the Friends window is a texture of its own, and Blizzard sets
--- its file again when the tab changes.
 local function FriendsExtras(root, group)
 	Style("fades", root, group, { list = Pieces(_G.FriendsFrameIcon), unless = "portrait" })
 end
 
--- The book at the top left of the quest log popup has no key or name.
 local function QuestLogExtras(root, group)
 	Style("fades", root, group, { list = Pieces(RegionAt(root, "OVERLAY", -1)), unless = "portrait" })
 end
 
--- The seventh item of each side is the slot for the item that is not traded. Its picture stays.
 local NOT_TRADED = { "TradePlayerItem7", "TradeRecipientItem7" }
 
--- The other player's portrait and its ring, the border pieces of the half they sit on, and the
--- art behind the two slots for the item that is not traded.
 local function TradeExtras(root, group)
 	local overlay = Held(root, "RecipientOverlay")
 	Style("fades", overlay, group, { list = Pieces(Held(overlay, "portrait"), Held(overlay, "portraitFrame")), unless = "portrait" })
@@ -1861,7 +1651,6 @@ local function TradeExtras(root, group)
 end
 
 local function MerchantExtras(root, group)
-	-- The bronze strip along the bottom, and the round plates behind the two page buttons.
 	local list = Pieces(_G.MerchantFrameBottomLeftBorder)
 	for _, name in ipairs(PAGE_BUTTONS) do
 		list[#list + 1] = RegionAt(_G[name], "BACKGROUND", 0)
@@ -1875,39 +1664,28 @@ local function MerchantExtras(root, group)
 	end
 end
 
--- The vendor's twelve items each sit on slot and name art that has no field.
 local MERCHANT = { name = "MerchantFrame", title = "Vendor", group = "npc", special = MerchantExtras, strip = {} }
 for index = 1, 12 do
 	MERCHANT.strip[index] = "MerchantItem" .. index
 end
 MERCHANT.strip[13] = "MerchantBuyBackItem"
--- The two plates the money is shown on.
 MERCHANT.strip[14] = "MerchantMoneyBg"
 MERCHANT.strip[15] = "MerchantExtraCurrencyBg"
 
--- The trade window's items on each side sit on the same kind of art. TradeExtras does the seventh.
 local TRADE = { name = "TradeFrame", title = "Trade", group = "npc", special = TradeExtras, strip = {} }
 for index = 1, 6 do
 	TRADE.strip[#TRADE.strip + 1] = "TradePlayerItem" .. index
 	TRADE.strip[#TRADE.strip + 1] = "TradeRecipientItem" .. index
 end
--- The plate the other player's money is shown on.
 TRADE.strip[#TRADE.strip + 1] = "TradeRecipientMoneyBg"
 
--- The guild bank draws its frame, the red marble behind its slots and the seven columns of slots in textures of its own.
 local GUILD_BANK = { name = "GuildBankFrame", title = "Guild bank", group = "guild", addon = "Blizzard_GuildBankUI", strip = { "GuildBankFrame" } }
 for index = 1, 7 do
 	GUILD_BANK.strip[#GUILD_BANK.strip + 1] = "GuildBankFrame.Column" .. index
 end
 
--- The bag windows are shown with a direct Show and make their item slots when they update their items.
--- The game also sets the colour of their flat background each time a bag opens. ContainerFrame_GenerateFrame makes the slots, sets the
--- background and updates the items of a bag it opens (ContainerFrame.lua:1296-1315), and ContainerFrame_UpdateAll updates the items of every
--- open bag (:1270-1273), so a bag is looked at a frame after either, after BAG_UPDATE_DELAYED and BAG_NEW_ITEMS_UPDATED, and when it is shown.
 Watch.bags = setmetatable({}, { __mode = "k" })
 
--- A bag window that Bags keeps under a hidden frame of its own (ns.BagsParked, Bags.lua) is seen by nobody, so it is not looked at; once Bags
--- puts it back, its next OnShow looks at it again. The answer is looked up when asked, since Bags.lua loads after this file.
 function Watch.Parked(root)
 	local call = ns.BagsParked
 	if type(call) ~= "function" then
@@ -1939,17 +1717,12 @@ function Watch.BagsUpdated()
 end
 
 local function BagExtras(root, group)
-	-- The coin box at the bottom is a frame of three pieces.
 	local border = Held(Held(root, "MoneyFrame"), "Border")
 	Style("fades", border, group, { list = Keyed(border, EDIT_CAPS) })
 	Watch.bags[root] = group
 	HookScript(root, "OnShow", Watch.BagChanged)
 end
 
--- The bank takes its page tabs and bag buttons from a pool when it is shown, and its item slots when
--- it lays out a page. The game announces a page it lays out on its registry ("BankPanelMixin.PageInfoChanged", BankFrameTemplates.lua:1080,
--- 1117, 1132) and sends BANK_TABS_CHANGED when the tabs change (Camelot/BankFrame.lua:239-247), so the bank is looked at a frame after
--- either and when it is shown.
 Watch.banks = setmetatable({}, { __mode = "k" })
 
 function Watch.BankChanged(root)
@@ -1979,22 +1752,18 @@ local function BankExtras(root, group)
 	HookScript(root, "OnShow", Watch.BankChanged)
 end
 
--- The plate behind the title of a dialog is a frame of its own.
 local function DialogExtras(root, group)
 	Style("art", Held(root, "Header"), group)
 end
 
--- The background of a pop-up is two textures in a frame of their own.
 local function PopupExtras(root, group)
 	Style("art", Held(root, "BG"), group)
 end
 
--- The dialog that confirms a purchase has the border of a dialog.
 local function AuctionExtras(root, group)
 	Style("window", Held(root, "BuyDialog"), group)
 end
 
--- The guild portrait, and the tabard that takes its place for a guild, are pictures the portrait setting shows.
 local COMMUNITIES_PICTURES = { "Portrait", "TabardBackground", "TabardEmblem", "TabardBorder" }
 
 local function CommunitiesExtras(root, group)
@@ -2006,8 +1775,6 @@ local function CommunitiesExtras(root, group)
 	Style("fades", overlay, group, { list = list, unless = "portrait" })
 end
 
--- The frame around the inspected player's model is nine textures with names and no keys, and the picture behind the model
--- has the keys of the character window's.
 local INSPECT_BORDER = { "TopLeft", "TopRight", "BottomLeft", "BottomRight", "Left", "Right", "Top", "Bottom", "Bottom2" }
 
 local function InspectExtras(root, group)
@@ -2029,10 +1796,6 @@ local function InspectExtras(root, group)
 	end
 end
 
--- Since 70707 the game sets the alpha of the overlay over the race pictures, by the unit's race, each time the character page or the inspect
--- page is shown (Camelot/PaperDollFrame.lua:3367-3391, called at PaperDollFrame.lua:1522 and Blizzard_InspectUI/Mainline/InspectPaperDollFrame.lua:102),
--- also when the player only changes tabs inside an open window and no ShowUIPanel follows (CharacterFrame.lua:106-121, Camelot/Blizzard_InspectUI.lua:154-162).
--- The alpha it set is the one given back when the pictures come back, and the overlay is faded again at once, so it does not show for a frame.
 function Watch.RaceBackground(model)
 	if model == nil or ns.IsSecret(model) or type(model) ~= "table" or ns.Forbidden(model) or not ns.Enabled(KEY) then
 		return
@@ -2051,8 +1814,6 @@ local function DressUpExtras(root, group)
 	Style("fades", root, group, { unless = "raceArt", list = Pieces(Held(root, "ModelBackground")) })
 end
 
--- The portrait, the two bars across the window and the plate behind the selected macro have no keys. The portrait follows
--- the portrait setting.
 local function MacroExtras(root, group)
 	local portrait = _G.MacroFramePortrait
 	Style("fades", root, group, { list = Pieces(portrait), unless = "portrait" })
@@ -2060,29 +1821,15 @@ local function MacroExtras(root, group)
 	Style("window", _G.MacroFrameTextBackground, group, "solid")
 end
 
--- The tip that opens beside a long message is a box with a border of its own.
 local function ToastExtras(root, group)
 	Style("window", Held(root, "TooltipFrame"), group, "solid")
 end
 
--- The spellbook has dark pages with light text while the setting bookPages is off. Its parchment, the bar over it, the bookmark and the turning corner
--- of the book frame (SpellBook/Blizzard_SpellBookFrame.xml:8-27, Camelot/SpellBook/Blizzard_SpellBookTemplates.xml:31-55) are faded, and so are the
--- plate and the divider of each header (Blizzard_SpellBookTemplates.xml:16-34). Every text of the book is written in SPELLBOOK_FONT_COLOR, a dark ink
--- made for the parchment, by the templates alone (Blizzard_SpellBookItem.xml:79-93, Blizzard_SpellBookTemplates.xml:16, and the page number by way of
--- Blizzard_SpellBookFrame.xml:149 and Blizzard_PagingControls.lua:16); no code of the game's colours it again. So the text takes a light colour (ink):
--- a spell's name white, the lines under it grey, a header and the page number gold. bookPages gives the parchment and the dark ink back, exactly.
--- The talent tab has a backdrop, a frame and a class picture of its own, which the setting bookArt gives back.
 local TALENT_ART = { "Background", "BackgroundBorder", "ClassBackground" }
--- art: the pictures of the book frame. header: those of a header. texts: the font strings of a spell or a header, with the colour each takes. page:
--- the colour of the page number.
 local SPELL_BOOK = { art = { "BookBGLeft", "BookBGRight", "BookBGHalved", "TopBar", "Bookmark", "BookCornerFlipbook" }, header = { "Backplate", "Border" },
 	texts = { { "Name", { 1, 1, 1 } }, { "SubName", { 0.75, 0.75, 0.75 } }, { "RequiredLevel", { 0.75, 0.75, 0.75 } }, { "Text", { 1, 0.82, 0 } } },
 	page = { 1, 0.82, 0 } }
 
--- The book shows a page's spells and headers on frames it keeps in pools, and lays them out each time it turns a page, changes tab or searches, with a
--- new list of the frames on show in its frames field each time (DisplayViewsForCurrentPage, Blizzard_PagedContentFrame.lua:494-576). A frame of the
--- addon's own looks at that field on each frame while the book is shown (its OnShow and OnHide followed with HookScript, which writes nothing) and
--- styles what a new list holds. A frame styled once keeps its light ink when the book takes it from its pool again.
 Watch.book = {}
 
 function Watch.Page(book, group)
@@ -2102,7 +1849,6 @@ function Watch.Page(book, group)
 				end
 			end
 			Style("ink", frame, group, { list = texts, unless = "bookPages" })
-			-- A spell's own plate is the game's to fade in and out under the mouse, so only a header's pictures are faded.
 			if Part(frame, "Text") and not Part(frame, "Name") then
 				Style("fades", frame, group, { list = Keyed(frame, SPELL_BOOK.header), unless = "bookPages" })
 			end
@@ -2124,7 +1870,6 @@ function Watch.BookHidden()
 	end
 end
 
--- Styles the book's pictures, its page number and the page on show, and starts looking at its pages.
 function Watch.Book(book, group)
 	local watch = Watch.book
 	watch.target, watch.group, watch.last = book, group, nil
@@ -2157,7 +1902,6 @@ local function SpellsExtras(root, group)
 	end
 end
 
--- Each of the three pages of the Legacy window draws a background of its own, which the setting bookArt gives back.
 local LEGACY_PAGES = { "RewardTrackPage", "ChallengesPage", "TreePage" }
 
 local function LegacyExtras(root, group)
@@ -2168,19 +1912,12 @@ local function LegacyExtras(root, group)
 	Style("fades", root, group, { list = list, unless = "bookArt" })
 end
 
--- The strip behind the number is two textures, which the game shows one at a time.
 local function StackSplitExtras(root, group)
 	Style("fades", root, group, { list = Keyed(root, { "SingleItemSplitBackground", "MultiItemSplitBackground" }) })
 end
 
--- title: what a player calls the window, for /flatui status. group: the setting that switches the
--- window. addon: a load-on-demand addon that has it. pages: frames that fill the window and are
--- stripped of their art. strip: other frames that are, as a path or { path, depth }. skip: frames
--- the sweep leaves alone. bare: the window has no box of its own. solid: the fill ignores the window opacity.
 local WINDOWS = {
 	{ name = "CharacterFrame", title = "Character", group = "character", special = CharacterExtras,
-		-- The rock strip across the top of the left pane is a frame of PaperDollFrame's own (Camelot/PaperDollFrame.xml:556-573). The level
-		-- text in front of it has no background any more (:575-607); the older clients drew one.
 		strip = { "CharacterFrame.LeftPaneHost", { "CharacterFrame.RightPaneHost", 1 }, "PaperDollFrame.TopBackgroundStripHost", "PaperDollLevelInfo",
 			"CharacterStatsPaneScrollBox", "CharacterStatsPanePetScrollBox" } },
 	{ name = "LFGParentFrame", title = "Looking For Group", group = "groupfinder", addon = "Blizzard_GroupFinder_VanillaStyle", special = GroupFinderExtras,
@@ -2194,8 +1931,6 @@ local WINDOWS = {
 	MERCHANT,
 	{ name = "MailFrame", title = "Mail", group = "npc", strip = { "SendMailMoneyBg" } },
 	{ name = "OpenMailFrame", title = "Open Mail", group = "npc" },
-	-- Quest, gossip and book pages keep the game's page: the game sets the colour of each line of their text for the material, and with
-	-- Dark quest, gossip and book pages (questPages, below) it picks its own dark page and light text.
 	{ name = "GossipFrame", title = "Gossip", group = "npc" },
 	{ name = "QuestFrame", title = "Quest", group = "npc" },
 	{ name = "QuestLogPopupDetailFrame", title = "Quest Log", group = "npc", special = QuestLogExtras, parchment = true },
@@ -2223,13 +1958,10 @@ local WINDOWS = {
 	{ name = "MacroFrame", title = "Macros", group = "macros", addon = "Blizzard_MacroUI", special = MacroExtras },
 	{ name = "MacroPopupFrame", title = "Macro icons", group = "macros", addon = "Blizzard_MacroUI" },
 	{ name = "HelpFrame", title = "Help", group = "macros" },
-	-- A map fills its window: the border lies over the map, and the map is not searched.
 	{ name = "WorldMapFrame", title = "Map & Quest Log", group = "maps", bare = true, skip = { "WorldMapFrame.ScrollContainer" } },
 	{ name = "FlightMapFrame", title = "Flight map", group = "maps", addon = "Blizzard_FlightMap", bare = true, skip = { "FlightMapFrame.ScrollContainer" } },
 	{ name = "TaxiFrame", title = "Flight paths", group = "maps" },
 	{ name = "CollectionsJournal", title = "Collections", group = "more", addon = "Blizzard_Collections" },
-	-- The stable draws two bands and a border on the window itself and a divider in each of two frames over it
-	-- (Blizzard_StableUI/Camelot/Blizzard_StableUI.xml:103-127, 265-288).
 	{ name = "PetStableFrame", title = "Stable", group = "more", strip = { "PetStableFrame", "PetStableFrame.TopDividerFrame", "PetStableFrame.BottomDividerFrame" } },
 	{ name = "ItemSocketingFrame", title = "Sockets", group = "more", addon = "Blizzard_ItemSocketingUI" },
 	{ name = "ClickBindingFrame", title = "Click casting", group = "more", addon = "Blizzard_ClickBindingUI" },
@@ -2247,8 +1979,6 @@ local WINDOWS = {
 	{ name = "AchievementFrame", title = "Achievements", group = "more", addon = "Blizzard_AchievementUI", solid = true },
 	{ name = "CalendarFrame", title = "Calendar", group = "more", addon = "Blizzard_Calendar", solid = true, strip = { "CalendarFrame" } },
 	{ name = "ChatConfigFrame", title = "Chat settings", group = "menus", special = DialogExtras },
-	-- The stone band behind the column headers is drawn on the header frame inside the content (Blizzard_PVPMatch/Camelot/PVPMatchScoreboard.xml:32-59,
-	-- Camelot/PVPMatchResults.xml:34-75). Only the art of each frame itself goes: the list, its scroll bar and the tabs are children of the content.
 	{ name = "PVPMatchScoreboard", title = "Scoreboard", group = "more", solid = true, strip = { "PVPMatchScoreboard.Content", "PVPMatchScoreboard.Content.ScrollCategories" } },
 	{ name = "PVPMatchResults", title = "Match results", group = "more", solid = true, strip = { "PVPMatchResults.content", "PVPMatchResults.content.scrollCategories" } },
 	{ name = "CompactRaidFrameManager", title = "Raid manager", group = "social", solid = true, strip = { "CompactRaidFrameManager" } },
@@ -2256,7 +1986,6 @@ local WINDOWS = {
 for index = 1, 7 do
 	WINDOWS[#WINDOWS + 1] = { name = "ContainerFrame" .. index, title = "Bags", group = "bags", special = BagExtras }
 end
--- Pop-ups are not shown through the panel manager.
 local POPUPS = 4
 for index = 1, POPUPS do
 	WINDOWS[#WINDOWS + 1] = { name = "StaticPopup" .. index, title = "Pop-up", group = "menus", special = PopupExtras }
@@ -2319,10 +2048,6 @@ local function SweepAll()
 	end
 end
 
--- Hooks ---------------------------------------------------------------------------------------------
-
--- The windows opened with ShowUIPanel and not closed with HideUIPanel or pushed out by another window since. ShowUIPanel runs
--- the hook again when it finds the window open, and a window is searched in full once each time it opens.
 local opened = setmetatable({}, { __mode = "k" })
 
 local function OnShowUIPanel(frame)
@@ -2330,21 +2055,18 @@ local function OnShowUIPanel(frame)
 		return
 	end
 	local def = roots[frame]
-	-- A window the sweep after its addon loaded did not find is found by its name when it opens.
 	if not def and not ns.Forbidden(frame) then
 		def = BY_NAME[NameOf(frame)]
 	end
 	if not def or not ns.Enabled(KEY) then
 		return
 	end
-	-- Open already: only what the game has added to the window itself is looked at.
 	if opened[frame] then
 		ns.EachPart(KEY, "window details", StyleNew, frame, def.group, PathSet(def.skip))
 		return
 	end
 	opened[frame] = Shown(frame) or nil
 	ns.Each(KEY, SweepWindow, def)
-	-- Some children are made while the window opens.
 	if C_Timer and C_Timer.After then
 		C_Timer.After(0, function()
 			if ns.Enabled(KEY) then
@@ -2360,7 +2082,6 @@ local function OnHideUIPanel(frame)
 	end
 end
 
--- Pop-ups are shown without the panel manager, so those on screen are looked at as one is shown.
 local function OnPopup()
 	if ns.Enabled(KEY) then
 		for index = 1, POPUPS do
@@ -2373,8 +2094,6 @@ local function OnPopup()
 	end
 end
 
--- The game sets an item button's border and its colour again on every update of the item, for every slot of a bag. A slot
--- is drawn again only when the quality colour it shows changes.
 local function OnItemBorder(button, asset)
 	local own = SlotOf(button)
 	if own and own.quality ~= nil and not ns.IsSecret(asset) and asset == nil then
@@ -2404,10 +2123,6 @@ local function OnItemBorderColour(button, r, g, b)
 	Again(button, "slot")
 end
 
--- The game puts the icon's texture coordinates back to the whole texture each time it sets the picture of an item button
--- (SetItemButtonTexture_Base, ItemButtonTemplate.lua:76-97), on every update of a character or vendor slot (PaperDollFrame.lua:2182, 2204,
--- MerchantFrame.lua:301), so a cropped slot is cropped again after it. A bag slot is not cropped, and the bags call the button's own
--- method, which no hook follows (ContainerFrame.lua:1218).
 local function OnItemTexture(button)
 	local own = SlotOf(button)
 	if own and not own.still and IsOn("slot", own.group) and Opt("crop") > 0 then
@@ -2423,7 +2138,6 @@ local function OnItemNormalColour(button, r, g, b)
 	end
 end
 
--- The game sets the colour of the slot and name art of a vendor or trade cell on every update.
 local function OnCellColour(cell)
 	if cell ~= nil and not ns.IsSecret(cell) and type(cell) == "table" then
 		Again(cell, "art")
@@ -2436,7 +2150,6 @@ local function OnCategories(view)
 	end
 end
 
--- The equipment flyout makes a background texture for each row of items and a button for each item as it fills.
 local function OnFlyout()
 	local def = BY_NAME.EquipmentFlyoutFrame
 	local panel = Held(_G.EquipmentFlyoutFrame, "buttonFrame")
@@ -2446,8 +2159,6 @@ local function OnFlyout()
 	end
 end
 
--- Follows a global function of Blizzard's, if the client has it, through ns.FollowGlobal (Core.lua: one hooksecurefunc for each global, and each
--- follower run under pcall with a fault sent to the game's error handler, so a fault here stops no other follower of that global; 0.5.35).
 local function HookGlobal(name, fn)
 	if hookedGlobals[name] or type(_G[name]) ~= "function" then
 		return
@@ -2461,8 +2172,6 @@ local function StyleMenu(menu)
 	Style("menu", menu, "popupMenus")
 end
 
--- The game announces each menu after it has built and shown it. The call comes through its callback registry, so nothing is
--- hooked on the menu code.
 local function OnMenuShown(_, menu)
 	if ns.Enabled(KEY) and Usable(menu) then
 		ns.EachPart(KEY, "menus", StyleMenu, menu)
@@ -2479,8 +2188,6 @@ local function WatchMenus()
 	menusWatched = pcall(EventRegistry.RegisterCallback, EventRegistry, MENU_EVENT, OnMenuShown, menuOwner)
 end
 
--- The panel manager hides a window that another pushes out with Hide, and announces it on its registry without calling
--- HideUIPanel, so the window is marked closed here.
 local function OnPushedOut(_, frame)
 	OnHideUIPanel(frame)
 end
@@ -2521,27 +2228,15 @@ local function InstallHooks()
 	HookGlobal(FLYOUT_UPDATE, OnFlyout)
 	HookGlobal("ContainerFrame_GenerateFrame", Watch.BagGenerated)
 	HookGlobal("ContainerFrame_UpdateAll", Watch.BagsUpdated)
-	-- The game chooses the tab of a character, collections or inspect window in these (PaperDollFrame.lua:3432-3458, CharacterFrame.lua:3,
-	-- Blizzard_CollectionsOverrides.lua:21-31).
 	HookGlobal("PaperDollFrame_UpdateSidebarTabs", Watch.RefreshSideTabs)
 	HookGlobal("CollectionsJournal_SetTab_Internal", Watch.RefreshSideTabs)
 	HookGlobal("ToggleCharacter", Watch.RefreshSideTabs)
 	HookGlobal("SetPaperDollBackground", Watch.RaceBackground)
 end
 
--- Dark quest, gossip and book pages (questPages, on by default, with the vendor, mail, quest, trade and trainer windows). These are the game's own
--- Quest Text Contrast pages at Dark: the account variable questTextContrast at 4 gives the quest giver, gossip, book and letter pages and the
--- quest log details the QuestBG-Parchment-Accessibility4 and QuestDetailsBackgrounds-Accessibility_Dark backgrounds and the light "Stone" text
--- colours, chosen by the game itself as each page fills (QuestTextContrast.lua:11-14, 17-35, 49-63; Mainline/QuestFrame.lua:656-696,
--- GossipFrame.lua, ItemTextFrame.lua:57, 143, QuestInfo.lua:68-71, QuestMapFrame.lua:971, all loaded on Camelot through the Mainline family).
--- While the row and the module are on, the variable is written 4 out of combat, at login and when the row, a switch or the profile changes; the
--- text it had before the first write is kept in FlatUIDB.questContrastGame and written back when the row or the module goes off while the
--- variable still reads 4. A value set meanwhile some other way is left as it is. Nothing is written on a frame: a page already open changes the
--- next time it opens. ItemCompare.lua does the same for alwaysCompareItems.
 do
 	local CVAR = "questTextContrast"
 	local DARK = "4"
-	-- A write waits for combat to end, and how the last one ended while the row was on: nil, "ok" or "refused".
 	local queued, result = false, nil
 
 	local function Calls()
@@ -2552,7 +2247,6 @@ do
 		return nil
 	end
 
-	-- The text of the variable, or nil when the client has no such variable or withholds it.
 	local function Text()
 		local cvar = Calls()
 		if not cvar or type(cvar.GetCVar) ~= "function" then
@@ -2565,7 +2259,6 @@ do
 		return nil
 	end
 
-	-- Writes the text and says whether the variable holds it after.
 	local function Write(text)
 		local cvar = Calls()
 		if not cvar or type(cvar.SetCVar) ~= "function" then
@@ -2590,7 +2283,6 @@ do
 				result = "ok"
 				return
 			end
-			-- What the game had before the first write, kept for the account like the variable itself.
 			if db.questContrastGame == nil then
 				db.questContrastGame = now
 			end
@@ -2598,7 +2290,6 @@ do
 				result = "ok"
 				return
 			end
-			-- The game kept its value: nothing of Flat UI's stands, so there is nothing to put back.
 			db.questContrastGame = nil
 			result = "refused"
 			return
@@ -2606,7 +2297,6 @@ do
 		result = nil
 		local game = db.questContrastGame
 		if type(game) ~= "string" then
-			-- Nothing was written by this addon, so the game's value stays.
 			return
 		end
 		db.questContrastGame = nil
@@ -2615,8 +2305,6 @@ do
 		end
 	end
 
-	-- The Windows refresh calls this, and Core.lua at every login whatever the switch of Windows: the variable is the account's, so a character
-	-- whose profile has the row or the module off gets the game's value back. Nothing is written in combat.
 	function ns.QuestPagesSync()
 		if queued then
 			return
@@ -2638,10 +2326,6 @@ do
 	end
 end
 
--- The module ----------------------------------------------------------------------------------------
-
--- The settings that bring more of the interface under the module when they go on, and whether each
--- was on the last time they were looked at.
 local SWITCHES = { "enabled", "character", "groupfinder", "social", "npc", "bags", "spells", "menus", "buttons", "tabs", "sideTabs", "scroll", "checks", "inputs", "bars", "slots" }
 for _, key in ipairs({ "auction", "guild", "inspect", "macros", "maps", "more", "nameList", "toasts", "rows" }) do
 	SWITCHES[#SWITCHES + 1] = key
@@ -2660,8 +2344,6 @@ local function SwitchedOn()
 	return went
 end
 
--- Applies the options to everything styled. The windows are searched for what is not styled yet when
--- a switch has just gone on, which is the case when the module starts.
 local function Refresh()
 	InstallHooks()
 	ns.Items.Apply()
@@ -2669,7 +2351,6 @@ local function Refresh()
 	local all = {}
 	for frame, entries in pairs(styled) do
 		if entries.sideTab and not entries.sideTab.sidebar and not entries.sideTab.broken then
-			-- The game chose tabs while the module was off and nothing was watching, so the checked state is read now.
 			Watch.ReadSideTab(frame, entries.sideTab)
 		end
 		for kind, own in pairs(entries) do
@@ -2681,8 +2362,6 @@ local function Refresh()
 			Style(item[1], item[2], item[3].group)
 		end
 	end
-	-- The clean up button, the sort direction, the backpack key, the durability and thorns of the Character window and the dark quest pages
-	-- follow their own settings, whatever the switches say.
 	ns.BagSort.Apply()
 	ns.BagKey.Apply()
 	ns.CharacterDurability.Apply()
@@ -2693,7 +2372,6 @@ local function Refresh()
 	end
 end
 
--- Lengths worked out in screen pixels.
 local function Resized()
 	for frame, entries in pairs(styled) do
 		local own = entries.divider
@@ -2718,7 +2396,6 @@ local function IsLoaded(addon)
 	return ok and not ns.IsSecret(loaded) and loaded == true
 end
 
--- What became of a listed window: styled, not open yet, not found, loads later, off, stopped or forbidden.
 local function WindowState(def)
 	if ns.IsStopped(KEY) or ns.PartStopped(KEY, KINDS.window.label) then
 		return "stopped"
@@ -2778,8 +2455,6 @@ ns.Register(KEY, {
 		PLAYER_TALENT_UPDATE = Watch.PortraitChanged,
 		ACTIVE_TALENT_GROUP_CHANGED = Watch.PortraitChanged,
 		BANK_TABS_CHANGED = Watch.BanksChanged,
-		-- BAG_UPDATE reaches a bag's Update and BAG_NEW_ITEMS_UPDATED calls it (ContainerFrame.lua:597-612, 1180-1190), neither through
-		-- ContainerFrame_UpdateAll; BAG_UPDATE_DELAYED follows the updates of one change.
 		BAG_UPDATE_DELAYED = Watch.BagsUpdated,
 		BAG_NEW_ITEMS_UPDATED = Watch.BagsUpdated,
 		UNIT_NAME_UPDATE = function(unit)

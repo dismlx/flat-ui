@@ -1,304 +1,126 @@
 local _, ns = ...
 
--- Movers put a frame where the player wants it. Each frame has a handle of the addon's own on
--- UIParent. Dragging the handle saves a point and offsets, and the game frame is placed with
--- ClearAllPoints and SetPoint to UIParent. The position is applied on events, after the panel
--- manager has placed a window, and by a check twice a second that runs on a frame of the addon's
--- own. A saved spot is never changed by the size of the screen: UIParent has another size under the
--- game's own scale and under a custom one, so a spot is cut to the screen only where it is used or dropped,
--- and a part of the frame stays on the screen. A bag window is also held in far enough for the bags the game
--- hangs from it to be seen whole (win.Carry).
--- An open window also has two frames of the addon's own, children of the window: a title bar two levels above
--- the window, and a grip in the bottom right corner. A press on the title bar, or on an empty part of the window
--- (the game reports every press, and a window is found from the frame under the cursor), places the window the
--- same way while the button is held. The grip sizes it, from 60% to 150%, with the top left corner fixed. The grip
--- is a drawing and takes no mouse once the game has reported a press: a game button or an item slot in the corner of
--- a window would lose its clicks to a frame of the addon's above it, so a press in the corner counts as the grip's
--- only where the frame under the cursor is not a control. The Map & Quest Log window has both while it is small; at full size and
--- in the gamepad interface the game keeps it, with the scale the game gave it.
--- A window with no spot that the game opens over the player or target frame at the top of the screen goes down, with the windows beside it, until
--- it is clear of them (Open windows under the unit frames, win.ClearUnits). Nothing is saved, and nothing is written on the game's panel layout.
--- A frame Edit Mode owns is placed with SetPointBase, ClearAllPointsBase and SetScaleBase, the engine's own
--- widget methods that Edit Mode keeps on the frame when it replaces SetPoint, ClearAllPoints and SetScale with
--- Lua. That Lua is never called by the addon. A frame that is protected (every action bar) is placed inside a SecureHandlerBaseTemplate
--- frame's snippet instead and never with a call of the addon's, out of combat only. Edit Mode lays its frames out again at
--- login, when a layout is applied or changed, on a specialisation change and when it closes, so they are
--- placed again on the next frame, and they are left to Edit Mode while it is open. A frame the player placed or
--- sized in Edit Mode keeps what Edit Mode gave it: its saved spot is dropped when Edit Mode closes. A frame a container lays
--- out and a bar of the action bars are placed again by the game's layout passes, at each edge of a fight among others. Nothing is
--- hooked on them and nothing is placed while a fight is on: the spot goes into the Edit Mode layout in use (LayoutSpots.lua), which
--- the game places the bar from, and on a layout that cannot be written the bar is placed out of combat by the check and the events
--- and goes back to the game's spot in a fight. A frame that hangs from another frame Edit Mode owns goes with that frame.
--- A handle can be put on the horizontal middle of the screen at the height it has: it snaps there while it is dragged, a button on it or Alt
--- and a click puts it there, and the handles that are ticked go together. The dragged handle follows the cursor a frame at a time, which lets
--- it snap. A window dragged by its title snaps there too, which is the way to centre a window that has no handle. A centred frame is saved by
--- the point in the middle column on its row with no offset across, so it stays in the middle at any UI scale (ns.MoverCentred gives that point
--- to the tooltip, which hangs from it at a fixed spot).
--- A module can hold system frames at spots of its own with ns.MoverHold: they are placed like a frame with a saved spot, have no box and keep the
--- saved spots they may also have.
--- Shift and a right-click on a box hides its frame, or shows it again, when the Hidden frames page has a row for it (Hide.lua, ns.HideFrames), and
--- the box of a hidden frame says so, as does the box of a frame that hangs from one. On any other box it resets nothing and says so in chat.
--- A right press on a box, and a press on a button of the bar (Pick a frame, Reset all, Centre ticked, Done), counts only when it is let go over
--- what was pressed (Released), as in the options window; a press slid off first does nothing.
--- /flatui move in a fight (the options window's Move frames row and test mode's Move button give the same command) opens the movers as the
--- fight ends: chat says so once, and a second one in the same fight takes it back (win.waitOpen). Movers a fight paused open again as it
--- ends, and /flatui move in that fight ends their session instead: they stay closed. /flatui grab in a fight opens the movers and starts the
--- pick as the fight ends, and a second one takes it back (win.waitPick). Every chat line of the movers starts with "Flat UI:" (win.Say).
-
 local KEY = "movers"
 local TOOLTIP = "FlatUITooltip"
 local ROW = "FlatUICooldowns"
 local KEEP_EVERY = 0.5
 local HANDLES_EVERY = 0.25
 local PICK_EVERY = 0.1
--- A frame this close to its saved spot is in place, in the units of the frame.
 local TOLERANCE = 0.5
 local MAX_CORRECTIONS = 10
 local XP_NAME = "MainStatusTrackingBarContainer"
 local CORRECTION_WINDOW = 60
 local MIN_SCALE, MAX_SCALE, SCALE_STEP = 0.5, 2, 0.05
--- The size of a handle for a frame that is smaller than MIN_SIZE or has no size to measure.
 local NOMINAL_WIDTH, NOMINAL_HEIGHT = 200, 40
 local MIN_SIZE = 16
--- A saved spot keeps at least this much of a frame on the screen, in the units of UIParent.
 local KEEP_ON_SCREEN = 48
--- The frame levels a box can have: the smaller the box, the higher its level.
 local BOX_LEVELS = 500
 local MAX_DEPTH = 40
--- Reset all asks for a second click within this many seconds.
 local RESET_ASK = 3
--- The size of the Movers panel.
 local BAR_WIDTH, BAR_HEIGHT = 440, 156
--- The window drag and size, in one table so that the file keeps its locals. height and right: the title bar is this high and
--- stops this far short of the right edge of its window, which leaves the close button clear. level: how many levels above its
--- window the title bar lies. start: a press becomes a drag once the cursor has moved this far, in the units of UIParent.
--- corner: the side of the corner grip. min, max and step: the size of a window, in percent. hover: how often a corner
--- grip looks at the cursor. part: the part of the module that makes the grips, for /flatui status. margin: how far in from the
--- corner of a window the grip takes the mouse before the game has reported a press. controls: what keeps its clicks, by object type,
--- loose: the types among them that give a drag to a key the player holds, and scripts: what keeps clicks on a frame of any type,
--- which a held key overrules as well. A model turns with the mouse, and the model of the character window fills the left pane.
 local WIN = { height = 22, right = 28, level = 2, start = 4, corner = 18, min = 60, max = 150, step = 5, hover = 0.1, part = "window titles",
 	margin = 4, noMove = "This window cannot be moved in combat.", noSize = "This window cannot be sized in combat.",
 	controls = { "Button", "EditBox", "Slider", "Model", "ModelScene", "ColorSelect", "SimpleHTML", "MessageFrame", "ScrollingMessageFrame", "MovieFrame", "Minimap" },
 	loose = { Model = true, ModelScene = true },
 	scripts = { "OnMouseDown", "OnMouseUp", "OnDragStart" },
-	-- Windows open clear of the unit frames (win.ClearUnits). units: the frames a window opens under. gap: how far under the lowest of them its top
-	-- goes. floor: how far above the bottom of the screen its bottom stays, the game's own clamp (ClampUIPanelY, UIParentPanelManager.lua:1007-1019).
 	clear = { units = { "PlayerFrame", "TargetFrame" }, gap = 6, floor = 140 } }
 local HOW = "Every frame can be moved here. Drag a handle or a window's title. Ctrl and scroll changes size. Right-click puts it back, Shift and right-click hides a HUD frame of the game. Drag the tab on a bar of a bar block to give it another place in the block, or to put it in another block."
--- A bag has a menu button on its portrait, and another over its title that opens the same menu. The title bar of a bag starts to the right
--- of the portrait, like the title bar of every window two levels above it, so the title drags the bag and the portrait still opens the menu.
 local BAG_GRIP = { left = 44, level = 2 }
--- Centring a handle on the horizontal middle of the screen, in one table so that the file keeps its locals. snap: how close the middle of a
--- handle comes to the middle of the screen before it snaps there, in the units of UIParent. size: the side of the button and of the tick box
--- on a handle. rows: the point in the middle column on a row of the frame (its height from the bottom, as a fraction), which a centred frame is
--- saved by so that it stays in the middle at any UI scale. alpha: the middle line, and the line while a handle is snapped to it. ticked: the
--- handles ticked for Centre ticked, by name. drag: the handle that follows the cursor. button: the button of the Movers panel. line: the middle line.
 local centre = { snap = 8, size = 14, alpha = 0.6, snapped = 1, ticked = {}, rows = { [0] = "BOTTOM", [0.5] = "CENTER", [1] = "TOP" } }
 
--- Addons that move frames too. Two movers on one frame fight each other.
 local OTHER_MOVERS = { "MoveAny", "MoveAnything", "BlizzMove", "EditModeExpanded", "TweaksForever" }
 
--- Where a point of a frame is, as a fraction of its width and height from the bottom left.
 local FRACTION = {
 	TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 },
 	LEFT = { 0, 0.5 }, CENTER = { 0.5, 0.5 }, RIGHT = { 1, 0.5 },
 	BOTTOMLEFT = { 0, 0 }, BOTTOM = { 0.5, 0 }, BOTTOMRIGHT = { 1, 0 },
 }
 
--- Frames offered without the picker. point is the point of the frame and of UIParent that the saved
--- offsets are measured from, so a frame that grows keeps growing the same way. A window gets a
--- handle only while it is open. An own frame is one of the addon's: it has no game frame to place,
--- and it places itself from its spot (ns.MoverSpot). row names the function of ns that gives the
--- frames the handle covers and the frame they hang from, and changed the one that is called when the
--- spot is set or put back. gate names the function of ns that says whether the spot has an effect: an own
--- frame with a gate has a handle only while it returns true. start names the function of ns that is given the
--- x and y of an own frame's entry and gives where it starts while no spot is saved, for its handle and for
--- ns.MoverSpot, when that depends on the screen. from names the frame (a global name) whose top left corner an own frame's spot is
--- measured from instead of UIParent's, for an entry whose point is TOPLEFT: its x and y, what start gives and the spot saved are offsets
--- from that corner, so the frame and its handle go with that frame, and a spot is not centred (Origin). Windows have the names Windows.lua
--- gives them.
--- noScale marks a frame whose scale does not reach what it holds. noBox marks a window with no handle: its
--- title bar moves it, and a handle would cover its buttons. grip sets where the title bar of a window
--- starts and how many levels above the window it lies, for a window with its own controls in the title. A
--- window in this list is placed even where the picker refuses its name.
--- layer names a child of a window whose strata its corner grip shares, for a window whose border and panes lie in a strata above it.
--- fills names a key of a window that is true while the game makes the window fill the screen: then the game sizes and places it, it
--- has no grips, and the addon puts no place and no size of its own on it. The same holds while the gamepad interface is on.
--- system marks a frame Edit Mode owns. While it is hidden and has no saved spot, it has a handle unless it is at the corner
--- Edit Mode starts every frame at or is a bar of the stacks.
--- keptHidden marks one that the game keeps hidden outside Edit Mode and that has its handle all the same.
--- stack marks a bar that Edit Mode's action bar passes place again. panel marks a system frame the panel
--- manager places as well. hideWith names a module that places the frame itself, which has no handle while
--- it is on. ownScale marks a frame whose scale is set elsewhere: a scale saved for it is not applied.
--- scaled names a function of ns that is called on the next frame after the scale of the frame is set or
--- put back, for a frame whose size another frame follows.
 local LIST = {
 	{ name = "AlertFrame", label = "Alerts", point = "BOTTOM", kind = "hud", noScale = true },
 	{ name = "UIErrorsFrame", label = "Error text", point = "TOP", kind = "hud" },
 	{ name = "UIWidgetTopCenterContainerFrame", label = "Top widgets", point = "TOP", kind = "hud" },
 	{ name = "ZoneTextFrame", label = "Zone text", point = "TOP", kind = "hud" },
-	-- The spot of the tooltip when its position is fixed. It starts where the game puts the tooltip.
 	{ name = TOOLTIP, label = "Tooltip", point = "BOTTOMRIGHT", kind = "hud", own = true, noScale = true, width = 250, height = 150, x = -9, y = 85,
 		gate = "TooltipSpotUsed" },
-	-- The row of Cooldown icons. It has no spot until one is saved.
 	{ name = ROW, label = "Cooldown icons", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
 		row = "CooldownRow", changed = "CooldownsMoved" },
-	-- Rows 2 to 4 of Cooldown icons (Cooldowns.lua), each with a handle while it is on and has icons, and no spot until one is saved.
 	{ name = "FlatUICooldowns2", label = "Cooldown icons: row 2", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
 		row = "CooldownRow2", changed = "CooldownsMoved" },
 	{ name = "FlatUICooldowns3", label = "Cooldown icons: row 3", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
 		row = "CooldownRow3", changed = "CooldownsMoved" },
 	{ name = "FlatUICooldowns4", label = "Cooldown icons: row 4", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0,
 		row = "CooldownRow4", changed = "CooldownsMoved" },
-	-- The icon of the cooldown pulse (Pulse.lua): its middle is the middle of the box, at any Icon size. It starts in the middle of the screen.
 	{ name = "FlatUIPulse", label = "Cooldown pulse", point = "CENTER", kind = "hud", own = true, noScale = true, width = 72, height = 72, x = 0, y = 0,
 		gate = "PulseShown", changed = "PulseMoved" },
-	-- Spots 2 and 3 of the cooldown pulse, with a handle while Pulse spots has them. They start left and right of spot 1 (Pulse.lua, SPOTS).
 	{ name = "FlatUIPulse2", label = "Cooldown pulse, spot 2", point = "CENTER", kind = "hud", own = true, noScale = true, width = 72, height = 72, x = -120, y = 0,
 		gate = "PulseShown2", changed = "PulseMoved" },
 	{ name = "FlatUIPulse3", label = "Cooldown pulse, spot 3", point = "CENTER", kind = "hud", own = true, noScale = true, width = 72, height = 72, x = 120, y = 0,
 		gate = "PulseShown3", changed = "PulseMoved" },
-	-- The large proc art beside the character (ProcArt.lua): the middle of its holder, 204.8 square, is the middle of the box, and Art height raises it
-	-- from there. It starts in the middle of the screen, where the game draws its own, and has a box while Art beside the character is on.
 	{ name = "FlatUIProcArt", label = "Proc art", point = "CENTER", kind = "hud", own = true, noScale = true, width = 204.8, height = 204.8, x = 0, y = 0,
 		gate = "ProcArtShown", changed = "ProcArtMoved" },
-	-- Where the player's own combat text starts: the middle of its first number is the middle of the box. The default is left of and
-	-- below the middle of the screen, where the character stands.
 	{ name = "FlatUICombatSelf", label = "Combat text: you", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 40, x = -170, y = -30,
 		gate = "CombatOwnShown" },
-	-- Where the Outgoing scroll area starts, to the right of the character. It has a handle while Where your hits show is not Over enemies.
 	{ name = "FlatUICombatOut", label = "Combat text: your hits", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 40, x = 170, y = -30,
 		gate = "CombatOutShown" },
-	-- Where the combat alerts show (CombatCues.lua): +Combat and -Combat above the middle of the box, No target under it and Low health and Low
-	-- mana under that, above the character; the box reaches from +Combat to Low mana at their 100% size (170 units round its middle, so a spot
-	-- saved with the old 60 stays where it was). It has a handle while No target warning, Low health and mana warning or Entering and leaving
-	-- combat is on.
 	{ name = "FlatUICombatCues", label = "Combat text: alerts", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 170, x = 0, y = 100,
 		gate = "CombatCuesShown", changed = "CombatCuesMoved" },
-	-- The boxes of the action bar blocks: one box for each block of the Bar block page, which moves every bar of that block. Each starts where
-	-- BarBlock.lua puts it, and blocks 2 and 3 have a box only while they have a bar.
 	{ name = "FlatUIBarBlock", label = "Action bar block", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "BarBlockRow", changed = "BarBlockMoved" },
 	{ name = "FlatUIBarBlock2", label = "Action bar block 2", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "BarBlockRow2",
 		changed = "BarBlockMoved2" },
 	{ name = "FlatUIBarBlock3", label = "Action bar block 3", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "BarBlockRow3",
 		changed = "BarBlockMoved3" },
-	-- Flat UI's own experience and reputation bar (XpBar.lua). Its box is the bar's own frame, wherever the bar is; with no spot saved it sits where XpBar.lua puts it.
-	-- While the bar block places it (under block 1 while the block is on) its box is grey, takes no mouse and says it follows the bar block (follows).
 	{ name = "FlatUIXpBar", label = "Experience bar", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "XpBarRow", changed = "XpBarMoved",
 		follows = "XpBarFollows" },
 	{ name = "FlatUITrackers", label = "Trackers", point = "CENTER", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "TrackerRow", changed = "TrackersMoved" },
-	-- Where the row of Your buffs hangs with Place set to Own position: a few icons and the room under them for the time.
 	{ name = "FlatUIOwnBuffs", label = "Your buffs", point = "CENTER", kind = "hud", own = true, noScale = true, width = 120, height = 42, x = 0, y = -150,
 		gate = "OwnBuffsOwnShown", changed = "OwnBuffsMoved" },
-	-- Where the row of Defensives on you hangs from with Place set to Own position: four icons and the room for the caster's name.
 	{ name = "FlatUIDefensives", label = "Defensives on you", point = "CENTER", kind = "hud", own = true, noScale = true, width = 137, height = 48, x = 0, y = 180,
 		gate = "DefensivesOwnShown", changed = "DefensivesMoved" },
-	-- The bars of Absorb shields (Absorbs.lua): they grow down from the middle of the top of the box, or up from the middle of its bottom, so they
-	-- stay centred on it at any width; it has the room of three bars at the default size. It starts under Your buffs. The target's total bar is
-	-- centred on its own box, above the character.
 	{ name = "FlatUIAbsorbs", label = "Absorb shields", point = "CENTER", kind = "hud", own = true, noScale = true, width = 180, height = 52, x = 0, y = -205,
 		gate = "AbsorbsShown", changed = "AbsorbsMoved" },
 	{ name = "FlatUIAbsorbsTarget", label = "Absorb shields: target", point = "CENTER", kind = "hud", own = true, noScale = true, width = 180, height = 16, x = 0, y = 140,
 		gate = "AbsorbsTargetShown", changed = "AbsorbsMoved" },
-	-- Where the party cooldown rows of a raid group stack: the player's own row and the subgroup's, each with the member's name to its left.
 	{ name = "FlatUIPartyRaid", label = "Party cooldowns: raid group", point = "CENTER", kind = "hud", own = true, noScale = true, width = 220, height = 150, x = -420, y = 0,
 		gate = "PartyRaidShown", changed = "PartyRaidMoved" },
-	-- The bars of Enemy cooldowns above the target and focus frames: eight icons, the room of the box is fixed. A bar starts above its frame.
 	{ name = "FlatUIEnemyTarget", label = "Enemy cooldowns: target", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 30, x = 0, y = 220,
 		gate = "EnemyTargetBarShown", changed = "EnemyBarsMoved" },
 	{ name = "FlatUIEnemyFocus", label = "Enemy cooldowns: focus", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 30, x = 0, y = 180,
 		gate = "EnemyFocusBarShown", changed = "EnemyBarsMoved" },
-	-- The row of the group tools (GroupTools.lua), which shows in a group: its top left corner is the top left corner of the box, which has the room
-	-- of every button at the default size in a row, and it grows down and to the right from there. It starts under the top of the screen.
 	{ name = "FlatUIGroupTools", label = "Group tools", point = "TOP", kind = "hud", own = true, noScale = true, width = 327, height = 24, x = 0, y = -100,
 		gate = "GroupToolsShown", changed = "GroupToolsMoved" },
-	-- The ping bar (PingBar.lua), which shows in a group: its top left corner is the top left corner of the box, which has the room of Ping and the
-	-- four pings of the game's wheel at the default size in a row, and it grows down or to the right from there. It starts under the group tools.
 	{ name = "FlatUIPingBar", label = "Ping bar", point = "TOP", kind = "hud", own = true, noScale = true, width = 132, height = 24, x = 0, y = -130,
 		gate = "PingBarShown", changed = "PingBarMoved" },
-	-- The consumables bar (ConsumeBar.lua): the corner of the bar that Grow starts from is that corner of the box (bottom left while it grows right
-	-- or up, bottom right while it grows left, top left while it grows down), which has the room of six buttons at the default size in a row. It
-	-- starts at the left of the screen above the chat window, clear of the action bars.
 	{ name = "FlatUIConsumeBar", label = "Consumables bar", point = "BOTTOMLEFT", kind = "hud", own = true, noScale = true, width = 226, height = 36,
 		x = 20, y = 280, gate = "ConsumeBarShown", changed = "ConsumeBarMoved" },
-	-- The reload notice (Reload.lua), which shows while a change needs a reload: its top left corner is the top left corner of the box, which has the
-	-- notice's size. It starts at the top of the screen, in the middle, and has a box whether or not it shows.
 	{ name = "FlatUIReloadNotice", label = "Reload notice", point = "TOP", kind = "hud", own = true, noScale = true, width = 520, height = 52, x = 0, y = -40,
 		gate = "ReloadNoticeShown", changed = "ReloadNoticeMoved" },
-	-- The line of new spell ranks (ErrandsRanks.lua), which shows after training: its top is the middle of the top of the box, which has the line's
-	-- least size, and it grows to both sides from there. It starts under the game's error text. It has a box while Put new ranks on your bars is on.
 	{ name = "FlatUIUprankNotice", label = "New spell ranks line", point = "TOP", kind = "hud", own = true, noScale = true, width = 360, height = 30, x = 0, y = -186,
 		gate = "ErrandsUprankShown", changed = "ErrandsUprankMoved" },
-	-- The threat list (Threat.lua), which shows only in a fight: its top left corner is the top left corner of the box, which has the room of five
-	-- bars at the default size, and it grows down and to the right from there.
 	{ name = "FlatUIThreat", label = "Threat list", point = "CENTER", kind = "hud", own = true, noScale = true, width = 188, height = 112, x = 420, y = 0,
 		gate = "ThreatListShown", changed = "ThreatListMoved" },
-	-- The healer mana list (HealerMana.lua), which shows in a group that has a healer: its top left corner is the top left corner of the box, which has
-	-- the room of three bars at the default size, under the Threat list, and it grows down and to the right from there.
 	{ name = "FlatUIHealerMana", label = "Healer mana", point = "CENTER", kind = "hud", own = true, noScale = true, width = 158, height = 76, x = 420, y = -130,
 		gate = "HealerManaShown", changed = "HealerManaMoved" },
-	-- The lava tick timer (LavaWalk.lua), which shows after a lava tick: its middle is the middle of the box, which has the bar's default size, just
-	-- under the character, clear of Combat text: alerts and Your buffs. It has a box while Lava tick timer is not Off.
 	{ name = "FlatUILavaTimer", label = "Lava tick timer", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 14, x = 0, y = -100,
 		gate = "LavaTimerShown", changed = "LavaTimerMoved" },
-	-- The game's loot rolls (Hud.lua): the room of four roll frames, 277 by 67, with the game's 100 from one to the next (GroupLootFrame.xml:292,
-	-- GroupLootFrame.lua:15, 125). It starts where the game stacks them, in its bottom stack above the action bars (ns.LootRollsStart). While no spot is
-	-- saved the game lays the rolls out; once one is, Hud.lua hangs them from the box, up from its bottom or down from its top.
 	{ name = "FlatUILootRolls", label = "Loot rolls", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 277, height = 367, x = 0, y = 150,
 		gate = "LootRollsShown", changed = "LootRollsMoved", start = "LootRollsStart" },
-	-- The bag window of Bags (BagsWindow.lua), which shows while the bags are open: its bottom right corner is the bottom right corner of the box, and
-	-- it grows up and to the left from there as its slots change. It starts above the bottom right corner of the screen, where the game's bags open:
-	-- further left while the right action bars stand in their place there (as Edit Mode and the game count them), so it covers none of those
-	-- (ns.BagsWindowStart). Dragging the window by its title sets the spot too.
 	{ name = "FlatUIBags", label = "Flat UI bags", point = "BOTTOMRIGHT", kind = "hud", own = true, noScale = true, width = 360, height = 260, x = -60, y = 110,
 		gate = "BagsWindowShown", changed = "BagsWindowMoved", start = "BagsWindowStart" },
-	-- The bank window of Bags (BagsWindow.lua), which shows at the banker or when asked: its top left corner is the top left corner of the box, and it
-	-- grows down and to the right from there. It starts where the game's bank opens, at the left of the screen.
 	{ name = "FlatUIBank", label = "Flat UI bank", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 420, height = 300, x = 25, y = -110,
 		gate = "BankWindowShown", changed = "BankWindowMoved" },
-	-- The pet target frame (UnitPetTarget.lua), which the game shows while the pet has a target: its top left corner is the top left corner of the box,
-	-- which is as wide as the frame (widthOf: Pet target width, 120 at first), right of the pet frame where the game's default layout puts it, its left
-	-- edge where the default width has it (start). A secure frame: it takes a spot out of combat.
 	{ name = "FlatUIPetTarget", label = "Pet target", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 120, height = 20, x = -246, y = 238,
 		gate = "PetTargetShown", changed = "PetTargetMoved", widthOf = "PetTargetWidth", start = "PetTargetStart" },
-	-- The hit table (HitTable.lua): its box is the table's own frame, and its spot is its top left corner, which stays where it is as lines come and
-	-- go. With no spot saved it hangs under the player frame, under the pet frame and the totems the game hangs there.
 	{ name = "FlatUIHitTable", label = "Hit table", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "HitTableRow",
 		changed = "HitTableMoved" },
-	-- The Gear comparison window (GearWindow.lua), which shows while /flatui gear or its row has it open: its top left corner is the top left corner
-	-- of the box. It starts right of the Character window, which is 631 wide at the left panel's spot, 16 from the left, with the game's 32 between
-	-- panels (Camelot/CharacterFrameConstants.lua:4; UIPanelLayoutFrame.lua:3-4, 8); GearWindow.lua's BOX starts at the same corner. The player sizes
-	-- it with its grip, and its box has the size it keeps for the character (sized: FlatUICharDB.gearWindow, BoxSize), at least 380 by 220, else the
-	-- window's first size, 460 by 420 (GearWindow.lua's SIZE).
 	{ name = "FlatUIGear", label = "Gear comparison", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 460, height = 420,
 		sized = "gearWindow", minWidth = 380, minHeight = 220, x = 680, y = -120, gate = "GearWindowShown", changed = "GearWindowMoved" },
-	-- The item finder (GearSearch.lua) of that window: its top left corner is the top left corner of the box, which has the finder's size as kept for
-	-- the character (sized: FlatUICharDB.gearFinder, BoxSize): its title bar alone while it is minimized, else as tall as the window, at least 540
-	-- (else 344 by 540, GearSearch.lua's L). With no spot saved its box is where the finder starts, docked right of the window or left of it while
-	-- the screen has no room on the right (start: ns.GearSearchStart); a spot saved by a drop of its box or of the finder's title bar is where the
-	-- finder hangs from (changed: ns.GearSearchMoved), until a reset of its box, Dock or a right-click on its title forgets it. It has a handle only
-	-- while the finder shows (ns.GearSearchShown), so a closed finder is never in the way.
 	{ name = "FlatUIGearSearch", label = "Item finder", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 344, height = 540,
 		sized = "gearFinder", x = 1144, y = -120, gate = "GearSearchShown", changed = "GearSearchMoved", start = "GearSearchStart" },
-	-- The Compare gear button (GearButton.lua) on the Character window, with a handle while that window shows and the button is wanted (gate:
-	-- ns.GearButtonShown). Its spot is measured from the Character window's top left corner (from), so the button goes with the window: its top
-	-- left corner is the top left corner of the box, which has the button's room with its words on the window at 100 (the button takes the
-	-- window's scale, GearButton.lua). With no spot saved its box is where the button
-	-- hangs by default, on the title bar right-aligned left of the close cross (start: ns.GearButtonStart, from the window's width as it is
-	-- now; the x here is the window's full 631); a spot saved or put back is told to the button (changed: ns.GearButtonMoved).
 	{ name = "FlatUIGearButton", label = "Compare gear button", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 112, height = 20,
 		x = 485, y = -1, from = "CharacterFrame", gate = "GearButtonShown", changed = "GearButtonMoved", start = "GearButtonStart" },
-	-- The Trinket queue window (TrinketQueueWindow.lua), which shows while /flatui queue, its row or a trinket slot's square has it open: its top left
-	-- corner is the top left corner of the box, 320 by 404, its fixed size. With no spot saved it starts right of the Gear comparison window while
-	-- that shows, and its box right of that window's box while the movers are open, or 28 px right of and under that corner on a screen with no room
-	-- there (start: ns.TrinketWindowStart, 0.5.39), else at the Gear comparison window's corner, right of the Character window (680, -120, as
-	-- FlatUIGear above); a drag of its title bar gives it a spot of its own. It has a handle while the trinket queue runs and its window part is not
-	-- stopped, open or not (gate: ns.TrinketWindowShown), and a spot saved or put back is told to the window (changed: ns.TrinketWindowMoved).
 	{ name = "FlatUITrinkets", label = "Trinket queue", point = "TOPLEFT", kind = "hud", own = true, noScale = true, width = 320, height = 404,
 		x = 680, y = -120, gate = "TrinketWindowShown", changed = "TrinketWindowMoved", start = "TrinketWindowStart" },
-	-- The two data panels (DataPanels.lua). Each box is the panel's own frame, wherever it is, and its spot is the point that stays where it is as the
-	-- panel grows; with no spot saved the top panel sits at the top of the screen and the bottom one in its bottom left corner.
 	{ name = "FlatUIDataTop", label = "Top data panel", point = "TOP", kind = "hud", own = true, noScale = true, width = 0, height = 0, row = "DataPanelTopRow",
 		changed = "DataPanelsMoved" },
 	{ name = "FlatUIDataBottom", label = "Bottom data panel", point = "BOTTOMLEFT", kind = "hud", own = true, noScale = true, width = 0, height = 0,
@@ -321,8 +143,6 @@ local LIST = {
 	{ name = "StanceBar", label = "Stance bar", kind = "hud", system = true, stack = true },
 	{ name = "PetActionBar", label = "Pet bar", kind = "hud", system = true, stack = true },
 	{ name = "PossessActionBar", label = "Possess bar", kind = "hud", system = true, stack = true },
-	-- Since 70425 the totem bar is the last bar of the game's bottom stack (Camelot/EditModeUtil.lua:21), 30 in from the main bar
-	-- (Mainline/EditModePresetLayouts.lua:776), and each time it is shown or hidden the game runs its bottom bar pass (MultiCastActionBarFrame.lua:332-338).
 	{ name = "MultiCastActionBarFrame", label = "Totem bar", kind = "hud", system = true, stack = true },
 	{ name = "MainMenuBarVehicleLeaveButton", label = "Leave vehicle button", kind = "hud", system = true, stack = true },
 	{ name = "MainStatusTrackingBarContainer", label = "Game's experience bar", kind = "hud", system = true, stack = true },
@@ -410,9 +230,6 @@ for _, info in ipairs(LIST) do
 	BY_NAME[info.name] = info
 end
 
--- Frames the picker never takes: placed by the tooltip module, laid out by a container or a manager,
--- or re-anchored by the game on every layout pass. A frame in LIST is taken whatever its name. The map is in LIST, so its
--- title bar and corner grip move and size it; the picker still refuses it.
 local REFUSE = {}
 for _, name in ipairs({
 	"UIParent", "WorldFrame",
@@ -427,17 +244,13 @@ for _, name in ipairs({
 }) do
 	REFUSE[name] = true
 end
--- The roll frames are laid out by GroupLootContainer and hang from the box Loot rolls once it is moved (Hud.lua).
 local REFUSE_PATTERNS = { "^ContainerFrame%d+$", "^ChatFrame%d+$", "^StaticPopup%d+$", "^Boss%dTargetFrameSpellBar$", "^GroupLootFrame%d+$" }
 
 local EVERY_FRAME = "Every frame can be moved here. A grey box moves with the frame it hangs from. A hidden frame the game has not placed yet has no box."
--- What a box of a bar the game lays out says while its Edit Mode layout cannot hold the spot: the layout passes run when a fight starts and ends.
 local BACK_IN_FIGHT = "moved back by the game in combat"
 
--- State. Per-frame state is kept in tables of the addon's own and never on a Blizzard frame.
 local original = setmetatable({}, { __mode = "k" })
 local handles, handleTexts, handleLooks = {}, {}, {}
--- Whether the game places a frame, by name, worked out when it is first asked and again after anything that could change it.
 local placedBy = {}
 local counted, queued, stopped, corrections, refused = {}, {}, {}, {}, {}
 local clock = { keep = 0, handles = 0, pick = 0 }
@@ -445,57 +258,24 @@ local running, open, openedBy, conflict, dragging
 local driver, bar, barMoved, resetPending
 local pick = { steps = 0 }
 local watched = false
--- Whether Reset all is under way, which frame Edit Mode owns it put back: "system", or "layout" for one the
--- game's layout passes place again, and whether a bar of the stacks was left where it is.
 local resettingAll, systemReset, barsLeft = false, false, false
--- The state of the window drag and size, and the functions of the window section further down. grips and corners: the title bar
--- and the corner grip of each window, by the name of the window. art: the two lines of a corner grip. clocks: the time since a
--- corner grip looked at the cursor. levels: the frame levels of an open window and its two frames, for /flatui status. why: why a
--- window has no grips. resizes: how often the game set the size of a window again. heard: whether the game has reported a press
--- and the frame under the cursor. barUsed: whether a press on a title bar has been handled.
--- drag: the move or size under way. waiting: whether a grip waits for the end of combat. toldMove, toldSize: whether the player
--- has been told in this fight that a window cannot be moved or sized. toldHow: whether the player has been told how to move things.
--- last: the last press on a window that started no drag.
 local win = { grips = {}, corners = {}, art = {}, clocks = {}, levels = {}, why = {}, resizes = {}, heard = false, barUsed = false }
--- Every chat line of the movers starts with "Flat UI:", as the rest of the addon's do. waitOpen: the source of a /flatui move given in a fight,
--- which opens the movers as the fight ends (Open; a second one in the same fight takes it back). waitPick: a /flatui grab given in a fight,
--- which opens them and starts the pick as the fight ends.
 function win.Say(text)
 	print("Flat UI: " .. tostring(text))
 end
--- Sizes by hooks. marked: the windows a hook has marked, sized on the next frame. wrote: the windows whose scale the game has written since they
--- were last sized. markers: the two functions hooked on a window, by name. scaleHooked and showHooked: the frames that have each hook. guards: the
--- scale calls of this addon, wrapped so that a hook can tell them from the game's. writing: how many of those are running. sizer: the one hidden
--- frame that sizes the marked windows.
 win.marked, win.wrote, win.markers, win.fixQueued, win.writing = {}, {}, {}, {}, 0
 win.scaleHooked, win.showHooked, win.guards = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
--- The bag windows of the list, which the game lays out together (UpdateContainerFrameAnchors, ContainerFrame.lua:1380-1410).
 win.bags = {}
 for _, info in ipairs(LIST) do
 	if info.grip == BAG_GRIP then
 		win.bags[#win.bags + 1] = info.name
 	end
 end
--- The system frames a module holds at spots of its own (ns.MoverHold). owners: the spots each module gave, by module. by: the spot of each held
--- frame, by name, with the first module in order winning. state: placed, waiting or refused, by name.
 local hold = { owners = {}, by = {}, state = {}, order = { "barblock", "blocks" } }
--- The game's action bars, its two status bars and the frames its bottom bar layout hangs from (the micro menu and the bag bar, which the main bar is
--- anchored to: Camelot/EditModePresetLayoutConstants.lua:5-8 and :46, and the bars of the bottom stack, Camelot/EditModeUtil.lua:11-22, the leave
--- vehicle button and the totem bar last). A click on an action button runs the game's own code on these frames and reads what the game
--- laid out in them; a call of this addon that placed, scaled or laid one out, or that ran inside the game's pass over them, left the click refused
--- (UseAction, ADDON_ACTION_FORBIDDEN, SecureTemplates.lua:357). While Leave the game's action bars alone is on, nothing here places, holds, puts back,
--- queues a layout spot for or offers a handle for one of them, and the game's bottom bar pass is not watched. Their saved spots stay in the profile and are not used.
--- The one exception is an action bar a block of the Bar block page holds (ns.BarBlockHolds, BarBlockLists.lua): the player put it in the block,
--- so the block holds it whatever that row says, as Fading and Hidden frames still fade and hide the bag bar and the micro menu.
--- The micro menu stays among them although Fading fades it and Hidden frames hides it while that row is on (an alpha of the container, and a
--- parent with UIParent's corners for MicroMenu inside it, which leaves the container shown at its size, move nothing): Edit Mode hangs the main bar from it (Mainline/EditModePresetLayouts.lua:32-38 with Camelot's MAIN_ACTION_BAR_RELATIVE_TO)
--- and measures the bottom stack by it (Camelot/EditModeUtil.lua:26-29, Shared/EditModeUtil.lua:71-75, UIParentPanelManager.lua:809), so a
--- point or a scale of this addon's on it places the main bar and the stack, the calls this list keeps away from.
 hold.off = { MainActionBar = true, MultiBarBottomLeft = true, MultiBarBottomRight = true, MultiBarRight = true, MultiBarLeft = true, MultiBar5 = true,
 	MultiBar6 = true, MultiBar7 = true, StanceBar = true, PetActionBar = true, PossessActionBar = true, MultiCastActionBarFrame = true,
 	MainStatusTrackingBarContainer = true, SecondaryStatusTrackingBarContainer = true,
 	MicroMenuContainer = true, BagsBar = true, MainMenuBarVehicleLeaveButton = true }
--- The game's two status bars are left alone as well while Flat UI draws its own experience bar (XpBar.lua parks them), whatever the setting says.
 hold.xp = { MainStatusTrackingBarContainer = true, SecondaryStatusTrackingBarContainer = true }
 function hold.Off(name)
 	if hold.off[name] ~= true then
@@ -507,18 +287,14 @@ function hold.Off(name)
 	return ns.HandsOff() and not (ns.BarBlockHolds ~= nil and ns.BarBlockHolds(name) ~= nil)
 end
 
--- True when the named frame is a game bar that Flat UI leaves alone now.
 function ns.MoverHandsOff(name)
 	return hold.Off(name)
 end
-
--- Helpers ---------------------------------------------------------------------------------------
 
 local function Number(value)
 	return not ns.IsSecret(value) and type(value) == "number" and value == value and value > -math.huge and value < math.huge
 end
 
--- Runs fn on the next frame, or at once when the client has no timer.
 local function Soon(fn)
 	if C_Timer and C_Timer.After then
 		C_Timer.After(0, fn)
@@ -527,17 +303,14 @@ local function Soon(fn)
 	end
 end
 
--- The game may place a frame differently after a layout, a setting or a hook, so what is known of it is worked out again.
 local function ForgetPlaced()
 	placedBy = {}
 end
 
--- A key the client cannot report is not down.
 local function KeyDown(fn)
 	return type(fn) == "function" and fn() and true or false
 end
 
--- The spots of the profile in use.
 local function Saved()
 	return ns.Spots()
 end
@@ -554,8 +327,6 @@ local function Callable(value)
 	return not ns.IsSecret(value) and type(value) == "function"
 end
 
--- The engine's own SetPoint, ClearAllPoints and SetScale of a frame Edit Mode owns, which Edit Mode keeps under
--- these names when it replaces the three with Lua. Nothing for any other frame.
 local function BaseCalls(frame)
 	local ok, setPoint, clear, setScale = pcall(function()
 		return frame.SetPointBase, frame.ClearAllPointsBase, frame.SetScaleBase
@@ -566,18 +337,11 @@ local function BaseCalls(frame)
 	return nil
 end
 
--- True when the client says the frame is protected. A frame that will not say is not taken for protected here: it is still not placed in
--- combat (ns.MaybeProtected).
 local function IsProtectedFrame(frame)
 	local ok, protected = pcall(frame.IsProtected, frame)
 	return ok and not ns.IsSecret(protected) and protected == true
 end
 
--- A protected frame is never placed with a call of this addon's: SetPoint, ClearAllPoints, SetScale and their Base forms on it taint its
--- executions, and a protected call the frame makes after that is refused and blamed on this addon (the button of an action bar ends a click at
--- UseAction, SecureTemplates.lua:357). Each call runs inside a SecureHandlerBaseTemplate frame's snippet instead, where the frame handle is
--- the frame and the call is the engine's own. UIParent is the frame the positioner hangs from, so GetParent in the snippet is UIParent. Out of
--- combat only. The approach is EllesmereUI's (EllesmereUIQoL/EllesmereUIQoL_Shifter.lua:174-232).
 local positioner
 local SNIPPET_CLEAR = [[
 	local f = self:GetFrameRef("f")
@@ -611,7 +375,6 @@ local function Positioner()
 	return positioner or nil
 end
 
--- Runs a snippet on a frame. False when it could not run: in combat, with no positioner, or when the client refused the call.
 local function Secure(frame, snippet, attributes, relativeTo)
 	if InCombatLockdown() then
 		return false
@@ -647,9 +410,6 @@ local function SecurePoint(frame, point, relativeTo, relativePoint, x, y)
 end
 ns.SecurePoint = SecurePoint
 
--- The calls that place a frame: a protected frame is placed in a secure snippet, a frame Edit Mode owns with the engine's own calls, any other
--- frame with its methods.
--- A scale this addon writes is wrapped, so that the SetScale hook of a window does not take it for a write of the game's.
 function win.Guarded(call)
 	local guard = win.guards[call]
 	if not guard then
@@ -677,14 +437,10 @@ local function Calls(frame)
 	return frame.SetPoint, frame.ClearAllPoints, win.Guarded(frame.SetScale)
 end
 
--- True for a frame Edit Mode owns that is left alone now: Edit Mode is open, or the player has turned the game's
--- own frames off.
 local function LeftToEditMode(frame)
 	return BaseCalls(frame) ~= nil and (ns.EditModeOpen() or not ns.Get("movers.systems"))
 end
 
--- True when the client says the frame is shown, false when it says it is not, nil when it will not say. A bar
--- keeps the engine's IsShown as IsShownBase, because its IsShown is Lua.
 local function IsShown(frame)
 	local ok, shown = pcall(function()
 		local call = frame.IsShownBase
@@ -699,9 +455,6 @@ local function IsShown(frame)
 	return shown == true
 end
 
--- True for a bag or bank window of the game that Bags keeps under a hidden frame of its own (ns.BagsParked, Bags.lua): the game may hold it
--- shown, but nobody sees it, so it counts as not shown and gets no handle and no grips. Before Bags.lua has run, and for any frame Bags does
--- not hold, false. The answer is looked up when asked, since Bags.lua loads after this file.
 local function Parked(frame)
 	local call = ns.BagsParked
 	if type(call) ~= "function" then
@@ -711,7 +464,6 @@ local function Parked(frame)
 	return ok and parked == true
 end
 
--- A frame that is protected, or that will not say, cannot be placed in combat.
 function ns.MaybeProtected(frame)
 	local ok, protected = pcall(frame.IsProtected, frame)
 	return not ok or ns.IsSecret(protected) or protected ~= false
@@ -738,7 +490,6 @@ local function ScreenSize()
 	return nil
 end
 
--- Units of a frame for each unit of UIParent.
 local function Ratio(frame)
 	local ok, scale = pcall(frame.GetEffectiveScale, frame)
 	local okBase, base = pcall(UIParent.GetEffectiveScale, UIParent)
@@ -748,7 +499,6 @@ local function Ratio(frame)
 	return nil
 end
 
--- Left, bottom, width and height of a frame in the units of UIParent.
 local function Rect(frame)
 	local k = Ratio(frame)
 	if not k then
@@ -766,7 +516,6 @@ local function PointAt(point, left, bottom, width, height)
 	return left + width * f[1], bottom + height * f[2]
 end
 
--- The offsets from the same point of UIParent to a point of a rectangle.
 local function Offsets(point, left, bottom, width, height)
 	local sw, sh = ScreenSize()
 	if not sw then
@@ -777,7 +526,6 @@ local function Offsets(point, left, bottom, width, height)
 	return x - sw * f[1], y - sh * f[2]
 end
 
--- The rectangle whose point is at the given offsets from the same point of UIParent.
 local function RectAt(point, x, y, width, height)
 	local sw, sh = ScreenSize()
 	if not sw then
@@ -787,7 +535,6 @@ local function RectAt(point, x, y, width, height)
 	return sw * f[1] + x - width * f[1], sh * f[2] + y - height * f[2], width, height
 end
 
--- The point of the screen third that holds a position, so a spot survives a change of resolution.
 local function ThirdPoint(x, y)
 	local sw, sh = ScreenSize()
 	if not sw then
@@ -805,12 +552,6 @@ local function Snap(scale)
 	return math.max(MIN_SCALE, math.min(MAX_SCALE, math.floor(scale / SCALE_STEP + 0.5) * SCALE_STEP))
 end
 
--- The offsets of a saved spot cut to the screen as it is now, so a frame is never out of reach: KEEP_ON_SCREEN
--- units of a frame of the given size stay on the screen, or the point alone where the size is not known. The
--- saved numbers are not cut: a spot saved under a custom scale is past the edge of the screen under the game's
--- own, until the custom scale is set. A frame the game keeps on the screen (an Edit Mode system frame) is also cut to
--- the screen less its clamp insets, since the game draws it no nearer the edge than that (EditModeSystemTemplates.xml:4,
--- EditModeSystemTemplates.lua:174-186). The frame is the sixth argument and is left out for any other spot.
 local function OnScreen(point, x, y, width, height, frame)
 	local sw, sh = ScreenSize()
 	if not sw then
@@ -826,7 +567,6 @@ local function OnScreen(point, x, y, width, height, frame)
 		local okClamp, clamped = pcall(frame.IsClampedToScreen, frame)
 		local ok, left, right, top, bottom = pcall(frame.GetClampRectInsets, frame)
 		if k and okClamp and clamped == true and ok and Number(left) and Number(right) and Number(top) and Number(bottom) then
-			-- The clamp box is the frame less the insets, which stays inside the screen: left + inset >= 0 and right + inset <= width.
 			left, right, top, bottom = left * k, right * k, top * k, bottom * k
 			local clampMinX, clampMaxX = -left - sw * f[1] + width * f[1], sw * (1 - f[1]) - right - width * (1 - f[1])
 			local clampMinY, clampMaxY = -bottom - sh * f[2] + height * f[2], sh * (1 - f[2]) - top - height * (1 - f[2])
@@ -841,10 +581,6 @@ local function OnScreen(point, x, y, width, height, frame)
 	return math.max(minX, math.min(maxX, x)), math.max(minY, math.min(maxY, y))
 end
 
--- The width and height of the box of an own frame. One the player sizes (sized: the key of FlatUICharDB, ns.Character, where its size is kept, as
--- { w, h } or { w = w, h = h }, in the units of UIParent, which the frame on UIParent has) has that size, cut to its least size and to the screen,
--- the least size winning on a screen smaller than it; with no size kept, or one that is no pair of numbers, its entry's. One whose width a row sets
--- (widthOf: a function of ns that gives it) has that width while it gives a plain number above 0.
 local function BoxSize(info)
 	local width, height = info.width, info.height
 	local widthOf = info.widthOf and ns[info.widthOf]
@@ -870,7 +606,6 @@ local function BoxSize(info)
 	return math.max(info.minWidth or 0, w), math.max(info.minHeight or 0, h)
 end
 
--- Width and height of a frame in the units of UIParent, or nothing when the client will not say.
 local function Size(frame)
 	if frame then
 		local _, _, width, height = Rect(frame)
@@ -879,13 +614,6 @@ local function Size(frame)
 	return nil
 end
 
--- The bags the game hangs from a bag window go wherever the window goes: the game puts every bag after the first on the bag before it, on the
--- first bag of its column or, after the combined bag, on that bag's left edge, by one point (UpdateContainerFrameAnchors,
--- ContainerFrame.lua:1390-1405). A window cut to the screen by its own size alone took them past the edge: a combined bag put at the left edge
--- left the reagent bag, the last bag Open All Bags opens (:2141-2148), off the screen on its left, and a moved backpack the bags above or beside
--- it. So the offsets of a bag window, already cut by its own size, are cut again to keep whole on the screen the shown bags it carries that have
--- no spot of their own, found outwards from it by the first point of each. Only the window is placed, and its saved spot stays as it is. Bags
--- that could not all be seen leave the window's own cut, which stays the last word.
 function win.Carry(frame, point, x, y)
 	local bag = false
 	for _, name in ipairs(win.bags) do
@@ -921,8 +649,6 @@ function win.Carry(frame, point, x, y)
 	if not box then
 		return x, y
 	end
-	-- At offsets x, y from the same point of UIParent the window's bottom left corner lies (sw - width) * f[1] + x across and
-	-- (sh - height) * f[2] + y up (RectAt), and the bags it carries keep their distance from that corner.
 	local baseX, baseY = (sw - width) * f[1], (sh - height) * f[2]
 	local fromLeft, toRight, fromBottom, toTop = box[1] - left, box[3] - left, box[2] - bottom, box[4] - bottom
 	if toRight - fromLeft <= sw then
@@ -934,7 +660,6 @@ function win.Carry(frame, point, x, y)
 	return OnScreen(point, x, y, width, height, frame)
 end
 
--- Makes a saved entry valid, or returns nil when it cannot be. The numbers of the spot are kept.
 local function Clean(entry)
 	if type(entry) ~= "table" or FRACTION[entry.point] == nil or not Number(entry.x) or not Number(entry.y) then
 		return nil
@@ -948,14 +673,11 @@ local function Clean(entry)
 	end
 	return entry
 end
--- The profiles keep only spots that pass.
 ns.CleanSpot = Clean
 
--- `entry` is the spot of a frame that has none in the profile in use.
 local function Describe(name, entry)
 	local listed = BY_NAME[name]
 	if listed then
-		-- A bar picked on the Class and item bars page has the name of its block.
 		local own = ns.BlockLabel and ns.BlockLabel(name)
 		if own and own ~= listed.label then
 			local copy = {}
@@ -979,8 +701,6 @@ local function IsWindow(name)
 	return type(UIPanelWindows) == "table" and UIPanelWindows[name] ~= nil
 end
 
--- Where the spot of an own frame is measured from, as offsets from the top left corner of UIParent in the units of UIParent: 0, 0 for an entry
--- with no from (its spot is UIParent's own), else the top left corner of the frame from names, or nothing while that frame has no place.
 local function Origin(info)
 	if not info.from then
 		return 0, 0
@@ -997,9 +717,6 @@ local function Origin(info)
 	return left, bottom + height - sh
 end
 
--- Where an own frame starts while no spot is saved for it: the point, x and y of its entry, or the x and y that the function of ns its entry
--- names in start gives from them (the bag window of Bags, left of the right action bars). A start that fails or gives no plain numbers is the
--- entry's own.
 local function StartsAt(info)
 	local x, y = info.x, info.y
 	local start = info.start and ns[info.start]
@@ -1012,8 +729,6 @@ local function StartsAt(info)
 	return info.point, x, y
 end
 
--- Where the named point of the handle of an own frame is, in the units of UIParent from the bottom left.
--- Nothing for a frame that has no spot and starts nowhere in particular.
 function ns.MoverSpot(name, point)
 	local info, f = BY_NAME[name], FRACTION[point]
 	if not (info and info.own and f) then
@@ -1040,15 +755,11 @@ function ns.MoverSpot(name, point)
 	return PointAt(point, left, bottom, width, height)
 end
 
--- True when the named own frame has a spot saved that the list accepts.
 function ns.MoverSaved(name)
 	local saved = Saved()
 	return BY_NAME[name] ~= nil and saved ~= nil and Clean(saved[name]) ~= nil
 end
 
--- The point in the middle column on the row of `point`, when the spot of the named own frame has been centred: it is saved by a point in the
--- middle column with no offset across. A frame that hangs from that point is on the middle of the screen whatever its width is, which a
--- frame hung from a corner of the box is not. Nothing for a spot that is not centred.
 function ns.MoverCentred(name, point)
 	local info, f = BY_NAME[name], FRACTION[point]
 	local saved = Saved()
@@ -1059,12 +770,8 @@ function ns.MoverCentred(name, point)
 	return nil
 end
 
--- Placing a frame ------------------------------------------------------------------------------
-
 local Passes
 
--- True when the frame has the one point Edit Mode gives a frame at a layout before it has placed it: TOPLEFT of
--- UIParent at 0, 0 (EditModeManager.lua, initSystemAnchor).
 local function AtPlaceholder(frame)
 	local ok, point, relativeTo, relativePoint, x, y = pcall(frame.GetPoint, frame, 1)
 	local okCount, count = pcall(frame.GetNumPoints, frame)
@@ -1072,9 +779,6 @@ local function AtPlaceholder(frame)
 		and Number(x) and Number(y) and point == "TOPLEFT" and relativePoint == "TOPLEFT" and relativeTo == UIParent and x == 0 and y == 0
 end
 
--- The points and scale the game gave a frame, taken before the first move of the session. No points are kept
--- for a bar of the stacks, which the game places again, for a frame Edit Mode has not placed yet, nor for a hidden
--- frame the game's layout passes place: where such a frame is now is not where the game will put it.
 local function Capture(frame, info)
 	local own = original[frame]
 	if own then
@@ -1103,8 +807,6 @@ local function Capture(frame, info)
 			break
 		end
 	end
-	-- The panel manager anchors a small left panel with one TOPLEFT point on UIParent (UpdateUIPanelPositions). Any other point of a
-	-- window that can fill the screen is the point of full size or of the way back from it.
 	if info and info.fills then
 		local first = own.points[1]
 		if #own.points ~= 1 or first[1] ~= "TOPLEFT" or first[2] ~= UIParent or first[3] ~= "TOPLEFT" then
@@ -1114,7 +816,6 @@ local function Capture(frame, info)
 	return own
 end
 
--- True when the frame has one point, the saved one on UIParent, within half a unit of its offsets.
 local function InPlace(frame, entry)
 	local okCount, count = pcall(frame.GetNumPoints, frame)
 	if not okCount or not Number(count) or count ~= 1 then
@@ -1129,7 +830,6 @@ local function InPlace(frame, entry)
 		return false
 	end
 	local wantedX, wantedY = entry.x, entry.y
-	-- A held bar is where its module put it, not cut to the screen.
 	if not entry.held then
 		local width, height = Size(frame)
 		wantedX, wantedY = win.Carry(frame, entry.point, OnScreen(entry.point, entry.x, entry.y, width, height, frame))
@@ -1142,7 +842,6 @@ local function Move(name, frame, entry)
 	win.Rebase(name, frame, own)
 	local setPoint, clear, setScale = Calls(frame)
 	local info = BY_NAME[name]
-	-- A frame with a scale of its own keeps the one the game or its setting gave it, whatever scale an earlier build saved.
 	if (entry.scale ~= nil or own.scaled) and not (info and info.ownScale) then
 		local wanted = (own.scale or 1) * (entry.scale or 1)
 		local ok, current = pcall(frame.GetScale, frame)
@@ -1174,15 +873,12 @@ local function Move(name, frame, entry)
 	end
 end
 
--- False when the points the game had were not readable, so the frame stays where it was put.
 local function Restore(frame, own)
 	local setPoint, clear = Calls(frame)
-	-- A window with no point of the game's to go back to keeps its top left corner where it is, unless the game places it.
 	if own.scaled and own.scale then
 		win.GiveBack(frame, own.scale, #own.points == 0 and not win.Fills(frame))
 	end
 	original[frame] = nil
-	-- A window that fills the screen keeps the point the game gave it there.
 	if win.Fills(frame) then
 		return false
 	end
@@ -1198,7 +894,6 @@ end
 
 local ApplyEntry, Unmovable, KindOf
 
--- A protected frame is not placed in combat. One entry waits for each frame.
 local function Queue(name)
 	if queued[name] then
 		return
@@ -1212,7 +907,6 @@ local function Queue(name)
 	end)
 end
 
--- The spot of a frame as the Edit Mode layout takes it: the point and the offsets Move passes.
 local function SpotOf(frame, entry)
 	local k = Ratio(frame)
 	if not (k and type(entry) == "table") then
@@ -1226,7 +920,6 @@ local function SpotOf(frame, entry)
 	return { point = entry.point, x = x / k, y = y / k }
 end
 
--- Saves the spot of a frame the game lays out in the Edit Mode layout in use, on the next frame.
 local function LayoutSpot(name, frame, entry)
 	local spot = SpotOf(frame, entry)
 	if spot then
@@ -1242,7 +935,6 @@ function ApplyEntry(name)
 	if type(entry) ~= "table" or (info and info.own) or hold.Off(name) then
 		return
 	end
-	-- A window being dragged is placed by the drag.
 	if win.drag and win.drag.name == name then
 		return
 	end
@@ -1261,7 +953,6 @@ function ApplyEntry(name)
 	if LeftToEditMode(frame) then
 		return
 	end
-	-- A frame the game lays out again is neither placed nor written while a fight is on: each edge of one runs a layout pass.
 	local layout = KindOf(name, frame) == "layout"
 	if (layout and InCombatLockdown()) or (not layout and (held and hold.Blocked(frame) or (not held and InCombatLockdown() and ns.MaybeProtected(frame)))) then
 		if held then
@@ -1270,7 +961,6 @@ function ApplyEntry(name)
 		Queue(name)
 		return
 	end
-	-- A window that fills the screen is the game's: it gets the game's scale and is not placed.
 	if win.Fills(frame) then
 		win.Unscale(frame)
 		return
@@ -1299,10 +989,6 @@ local function ApplyAll()
 	end
 end
 
--- Puts a frame the addon placed back where the game had it. Nil when the addon never moved it.
--- The second answer is true when the Edit Mode layout puts the frame back, because the spot was written into it.
--- letGo: a module lets go of a frame it held (ns.MoverHold), which goes back also when it is a game bar Flat UI leaves alone now, as a bar
--- taken out of a block of the Bar block page while Leave the game's action bars alone is on.
 local function RestoreFrame(name, letGo)
 	local frame = GameFrame(name)
 	local info = BY_NAME[name]
@@ -1337,7 +1023,6 @@ local function RestoreFrame(name, letGo)
 	return ok and restored, released
 end
 
--- A bar of the stacks keeps no points to go back to, so it stays where it was put until the game places it again.
 local BARS_STAY = "stay where they are until the game places them again at its next layout or after /reload."
 
 local function RestoreAll()
@@ -1353,7 +1038,6 @@ local function RestoreAll()
 	end
 end
 
--- Takes a frame off the count of moved frames.
 local function Uncount(name)
 	if counted[name] then
 		counted[name] = nil
@@ -1361,7 +1045,6 @@ local function Uncount(name)
 	end
 end
 
--- Puts back the frames Edit Mode owns, for when the player turns the game's own frames off. Their saved spots stay.
 local function ReleaseSystems()
 	local left = false
 	for name in pairs(hold.Names()) do
@@ -1379,13 +1062,10 @@ local function ReleaseSystems()
 	end
 end
 
--- The check -----------------------------------------------------------------------------------
-
 local function Correct(name, hooked)
 	if win.drag and win.drag.name == name then
 		return
 	end
-	-- A return the game's own call announced is not counted: it is the game asking for the frame again, not a fight over it.
 	if not hooked then
 		local now = type(GetTime) == "function" and GetTime() or 0
 		local record = corrections[name]
@@ -1399,7 +1079,6 @@ local function Correct(name, hooked)
 			return
 		end
 	end
-	-- A size the game wrote again is counted for /flatui status.
 	local saved = Saved()
 	if win.Wrong(name, saved and saved[name]) then
 		win.resizes[name] = (win.resizes[name] or 0) + 1
@@ -1407,8 +1086,6 @@ local function Correct(name, hooked)
 	ns.Each(KEY, ApplyEntry, name)
 end
 
--- True when a frame the game lays out has another scale than the one saved for it: the game sets some bars to scale 1 in its layout passes
--- (EditModeManager.lua:619).
 function hold.Scaled(name, frame, entry)
 	local own, info = original[frame], BY_NAME[name]
 	if entry.scale == nil or not own or not own.scale or (info and info.ownScale) or KindOf(name, frame) ~= "layout" then
@@ -1418,24 +1095,20 @@ function hold.Scaled(name, frame, entry)
 	return ok and Number(current) and math.abs(current - own.scale * entry.scale) > 0.0005
 end
 
--- A frame that is shown and not where it was put is placed again. hooked: the game's call that moves it has just been seen.
 function hold.Check(name, entry, hooked)
 	local info = BY_NAME[name]
 	if not stopped[name] and not (info and info.own) and not hold.Off(name) and type(entry) == "table" then
 		local frame = GameFrame(name)
-		-- The game places a window that fills the screen.
 		if frame and not ns.Forbidden(frame) and win.Fills(frame) then
 			frame = nil
 		end
 		if frame and not ns.Forbidden(frame) and not LeftToEditMode(frame) and IsShown(frame) ~= false and (not InPlace(frame, entry) or hold.Scaled(name, frame, entry))
 			and not Unmovable(name, frame) then
 			if InCombatLockdown() and KindOf(name, frame) == "layout" then
-				-- Nothing is placed in a fight: a held frame says that it waits.
 				if entry.held then
 					hold.state[name] = "waiting"
 				end
 			elseif hold.passing and info and info.stack then
-				-- The game's bottom bar pass has just run: hold.PutBack places the bar on the next frame, and that return is not counted.
 				return
 			elseif not (entry.held and hold.Blocked(frame) or (not entry.held and InCombatLockdown() and ns.MaybeProtected(frame))) then
 				Correct(name, hooked)
@@ -1444,15 +1117,8 @@ function hold.Check(name, entry, hooked)
 	end
 end
 
--- The queue eye (QueueStatusButton) is put back by what moves it, not by the half-second check. The game places it in UpdateDefaultAnchor
--- (Blizzard_QueueStatusFrame/Camelot/QueueStatusFrameOverrides.lua:13-35), which Edit Mode calls when it lays the eye out and when the micro
--- menu changes (EditModeSystemTemplates.lua:2467, 2482, 2522, 3812) and the eye calls itself when the minimap scale changes, through a callback
--- that holds the function it had at load (QueueStatusFrame.lua:11-12), so a hook on the method does not see that path: the minimap's own
--- SetEditModeScale, which triggers it (Mainline/Minimap.lua:418-425), is hooked too. A hook can run inside the game's pass over a layout, so it only
--- shows a hidden frame, and that frame puts the eye back in its next OnUpdate, which is still the same drawn frame.
 hold.eye = { name = "QueueStatusButton", hooked = false }
 
--- True for a frame that a hook puts back, which the half-second check leaves alone.
 function hold.Hooked(name)
 	return hold.eye.hooked == true and name == hold.eye.name
 end
@@ -1473,10 +1139,6 @@ local function EyeStep(driver)
 	end
 end
 
--- Hooks the two calls and the eye's OnShow. The game moves the eye while no queue is up and it is hidden (leaving a vehicle bar resets the micro
--- menu, which calls UpdateDefaultAnchor: MainActionBar.lua:14-16, MicroMenuContainer.lua:234-243, EditModeSystemTemplates.lua:394, 2463-2467), and
--- a hidden frame is not placed, so showing it puts it back (QueueStatusFrame.lua:503-513 shows and hides it). Nothing is hooked, and the half-second
--- check keeps the eye, when the game does not have all three.
 function hold.EyeHooks()
 	local eye, cluster = GameFrame(hold.eye.name), GameFrame("MinimapCluster")
 	if not (eye and cluster and Callable(eye.UpdateDefaultAnchor) and Callable(cluster.SetEditModeScale) and Callable(eye.HookScript) and Callable(hooksecurefunc)) then
@@ -1494,7 +1156,6 @@ function hold.EyeHooks()
 	hold.eye.hooked = true
 end
 
--- Every saved or held frame that is shown and not where it was put is placed again.
 local function Check()
 	local saved = Saved()
 	if not saved then
@@ -1513,13 +1174,6 @@ local function Check()
 	win.CheckSizes()
 end
 
--- Edit Mode's bottom bar pass puts every shown bar of the stack that is still flagged as in its default position back on its spot in the stack
--- (EditModeManager.lua:692-706), and a mover drop never clears that flag (EditModeSystemTemplates.lua:882-883). The stack is every bar of
--- Camelot/EditModeUtil.lua:11-22, the totem bar last, and each has the stack flag in LIST. The pass runs at each edge of a fight (ActionBar.lua:266-267,
--- :285-288, :373), at each show, switch or fade of a status bar (StatusTrackingManager.lua:226-231), each time the totem bar is shown or hidden,
--- a vehicle or override bar among the causes (MultiCastActionBarFrame.lua:332-343), and when a layout is applied. Nothing is hooked: the game
--- announces the status bar and totem bar passes through EventRegistry (StatusTrackingManager.lua:230, MultiCastActionBarFrame.lua:336,
--- EditModeManager.lua:64), and the fight ending is an event. The bar is placed on the next frame, out of combat, and these returns are not counted.
 function hold.PutBack()
 	hold.passing = false
 	if not (running and ns.Enabled(KEY)) or InCombatLockdown() then
@@ -1538,7 +1192,6 @@ function hold.PutBack()
 	end
 end
 
--- The game has run, or may have run, its bottom bar pass.
 function hold.Pass()
 	if not (running and ns.Enabled(KEY)) then
 		return
@@ -1553,7 +1206,6 @@ function hold.Pass()
 	end
 end
 
--- Windows are placed after the panel manager has placed them, and the windows with no spot are then taken clear of the unit frames.
 local windowsPending = false
 local function PlaceWindows()
 	local saved = Saved()
@@ -1597,8 +1249,6 @@ local function ApplyAllLater()
 	end)
 end
 
--- Handles and the bar ----------------------------------------------------------------------------
-
 local function Label(parent, font, width)
 	local text = parent:CreateFontString(nil, "OVERLAY", font)
 	if width then
@@ -1608,8 +1258,6 @@ local function Label(parent, font, width)
 	return text
 end
 
--- A press counts only when it is let go over what was pressed, as in the options window (ns.PanelKit.Clickable): the game sends the release to
--- the frame the press began on, wherever the cursor is. A client that will not say whether the cursor is over counts as over.
 local function Released(frame)
 	local ok, over = pcall(frame.IsMouseOver, frame)
 	return not ok or ns.IsSecret(over) or over ~= false
@@ -1649,8 +1297,6 @@ local function MakeButton(parent, text, width, onClick)
 	return button
 end
 
--- The box the icons of an own frame's row cover, and how far the middle of the frame they hang from is
--- from the middle of the box, in the units of UIParent. Nothing while the row has no icon.
 local function RowBox(info)
 	local call = ns[info.row]
 	if type(call) ~= "function" then
@@ -1676,9 +1322,6 @@ local function RowBox(info)
 	return left, bottom, right - left, top - bottom, al + aw / 2 - (left + right) / 2, ab + ah / 2 - (bottom + top) / 2
 end
 
--- True for a frame Edit Mode owns that is not shown and has no saved spot, and is at the corner Edit Mode starts
--- every frame at or is a bar the game's stacks place again: where it is now is not where it will be, so it gets no
--- handle and no spot.
 local function Offstage(name, info, frame)
 	if not info.system or info.keptHidden then
 		return false
@@ -1687,9 +1330,7 @@ local function Offstage(name, info, frame)
 	return IsShown(frame) ~= true and not (saved and type(saved[name]) == "table") and (info.stack == true or AtPlaceholder(frame))
 end
 
--- Where a handle goes: over the game frame, or at the saved spot when the frame has no size to measure.
 local function HandleRect(name, info)
-	-- A held bar has no box: its module places it. A game bar Flat UI leaves alone has none either.
 	if hold.by[name] or hold.Off(name) then
 		return nil
 	end
@@ -1724,11 +1365,9 @@ local function HandleRect(name, info)
 	if not frame or ns.Forbidden(frame) then
 		return nil
 	end
-	-- A window Bags keeps hidden counts as closed (Parked).
 	if info.kind == "window" and (IsShown(frame) ~= true or Parked(frame)) then
 		return nil
 	end
-	-- Edit Mode has boxes of its own while it is open, and a module that places the frame itself needs none.
 	if info.system and (not ns.Get("movers.systems") or ns.EditModeOpen() or (info.hideWith and ns.Enabled(info.hideWith))) then
 		return nil
 	end
@@ -1749,15 +1388,12 @@ local function HandleRect(name, info)
 		local f = FRACTION[point]
 		return x - NOMINAL_WIDTH * f[1], y - NOMINAL_HEIGHT * f[2], NOMINAL_WIDTH, NOMINAL_HEIGHT
 	end
-	-- A game frame that has no place yet would pile up its handle at the middle of the screen.
 	if info.system then
 		return nil
 	end
 	return RectAt(point, 0, 0, NOMINAL_WIDTH, NOMINAL_HEIGHT)
 end
 
--- True for a system frame the game places itself, so a handle could not move it, and for a frame of the addon's that follows another one now
--- (info.follows names the call of ns that says what it follows, in words for its box), which is then the second value.
 local function PlacedByGame(name, info)
 	if info.follows then
 		local call = ns[info.follows]
@@ -1784,9 +1420,6 @@ end
 
 local ShowHandle, ResetFrame, Open, Close, UpdateDriver
 
--- Held frames -----------------------------------------------------------------------------------
-
--- Every frame with a saved or a held spot, by name.
 function hold.Names()
 	local names = {}
 	for name in pairs(Saved() or {}) do
@@ -1798,13 +1431,10 @@ function hold.Names()
 	return names
 end
 
--- True when a held frame cannot be placed now: in a fight a protected frame waits. The client's answer about protected functions is not
--- asked: a bar is never placed in a fight, whatever it says.
 function hold.Blocked(frame)
 	return InCombatLockdown() and ns.MaybeProtected(frame)
 end
 
--- The spots of a module that Movers can hold: system frames of the list, at a BOTTOMLEFT spot with numbers.
 function hold.Valid(spots)
 	local clean = {}
 	for name, spot in pairs(type(spots) == "table" and spots or {}) do
@@ -1816,9 +1446,6 @@ function hold.Valid(spots)
 	return clean
 end
 
--- A module gives the spots of the system frames it holds, by frame name, or nil to let them go. One frame has one owner: the first of
--- hold.order that holds it. A frame whose spot is new or changed is placed on the next frame; one let go goes back to its saved spot, or to
--- the game (always to the game for a game bar Flat UI leaves alone now).
 function ns.MoverHold(owner, spots)
 	local known = false
 	for _, name in ipairs(hold.order) do
@@ -1867,8 +1494,6 @@ function ns.MoverHold(owner, spots)
 	UpdateDriver()
 end
 
--- Whether a frame is held, how its placing stands (placed, waiting for the end of a fight, refused), and whether Edit Mode has it in its
--- default position (nil when the client will not say).
 function ns.MoverHeld(name)
 	local frame = GameFrame(name)
 	local default
@@ -1883,28 +1508,23 @@ function ns.MoverHeld(name)
 	return { held = hold.by[name] ~= nil, state = hold.state[name], default = default }
 end
 
--- True when the client says the frame is shown, false when it says it is not, nil when it will not say.
 function ns.MoverShown(frame)
 	return IsShown(frame)
 end
 
--- The name a frame of the list has on the pages and in /flatui status, nil for a frame not in the list.
 function ns.MoverLabel(name)
 	local info = BY_NAME[name]
 	return info and info.label or nil
 end
 
--- The left, bottom, width and height of a frame in the units of UIParent.
 function ns.MoverRect(frame)
 	return Rect(frame)
 end
 
--- Whether Movers are on, whether they move the game's own frames and whether they keep moved frames in place: a held frame needs all three.
 function ns.MoverHoldGates()
 	return ns.Enabled(KEY) and running == true, ns.Get("movers.systems") == true, ns.Get("movers.keep") == true
 end
 
--- An own frame places itself from its spot, so it is told when the spot is set or put back.
 local function Changed(info)
 	local call = info.own and info.changed and ns[info.changed]
 	if type(call) == "function" then
@@ -1913,9 +1533,6 @@ local function Changed(info)
 	ns.MoversMode.Changed(info.name)
 end
 
--- Saves the spot a handle was dropped on, and moves the game frame there. A centred frame is on the middle of the screen whatever `left`
--- says: it is saved by the point in the middle column on the row of its point, with no offset across, so it stays there at any UI scale.
--- A spot measured from another frame (from) is saved as offsets from that frame's top left corner, where the handle was dropped, centred or not.
 local function Commit(name, info, left, bottom, width, height, centred)
 	local saved = Saved()
 	local ox, oy = Origin(info)
@@ -1942,14 +1559,12 @@ local function Commit(name, info, left, bottom, width, height, centred)
 		x = 0
 	end
 	if info.row then
-		-- The spot of a row is where it hangs from, which is not the middle of its box.
 		local _, _, _, _, shiftX, shiftY = RowBox(info)
 		if not shiftX then
 			return
 		end
 		x, y = x + shiftX, y + shiftY
 	else
-		-- The clamp insets are those of the game frame's own box, not of the handle's.
 		local frameWidth, frameHeight = Size(frame)
 		x, y = OnScreen(point, x, y, frameWidth or width, frameHeight or height, frame)
 	end
@@ -1961,7 +1576,6 @@ local function Commit(name, info, left, bottom, width, height, centred)
 	return true
 end
 
--- The saved entry of a frame, made from where its handle is when it has none.
 local function Ensure(name, info)
 	local saved = Saved()
 	if not saved then
@@ -1970,7 +1584,6 @@ local function Ensure(name, info)
 	if type(saved[name]) ~= "table" and handles[name] then
 		local left, bottom, width, height = Rect(handles[name])
 		if left then
-			-- The step for Undo is the change that follows, so one action is one step.
 			ns.MoversMode.Mute(true)
 			Commit(name, info, left, bottom, width, height)
 			ns.MoversMode.Mute(false)
@@ -1984,7 +1597,6 @@ local function Dropped(name)
 	if info and handle then
 		local left, bottom, width, height = Rect(handle)
 		if left then
-			-- A handle the engine moved is snapped here, and one that followed the cursor has been.
 			local middle = centre.dropMiddle
 			if middle == nil then
 				middle = centre.Snaps(left, width) ~= nil
@@ -2001,7 +1613,6 @@ local function Dropped(name)
 	ShowHandle(name)
 end
 
--- The frames whose scale is a row of the options, and the path of the row. The row follows Ctrl and scroll and the reset of a handle.
 local SCALE_ROWS = { PlayerFrame = "unitframes.playerScale", TargetFrame = "unitframes.targetScale", FocusFrame = "unitframes.focusScale",
 	PartyFrame = "unitframes.partyScale", BossTargetFrameContainer = "unitframes.bossScale", CompactRaidFrameContainer = "unitframes.raidScale" }
 
@@ -2015,11 +1626,9 @@ end
 local function Wheel(name, delta)
 	local info = Describe(name)
 	local scaling = KeyDown(IsControlKeyDown)
-	-- A frame that takes no scale gets no spot saved for Ctrl and scroll.
 	if not info or (scaling and info.noScale) then
 		return
 	end
-	-- Under Every window together a window has no size of its own, so Ctrl and scroll changes the size of every window.
 	if scaling and info.kind == "window" and win.Shared() then
 		ns.Set("movers.windowSize", ns.Get("movers.windowSize") + (delta > 0 and WIN.step or -WIN.step))
 		ns.ResizeAll()
@@ -2033,13 +1642,10 @@ local function Wheel(name, delta)
 	local was = entry.scale
 	if scaling then
 		entry.scale = Snap((entry.scale or 1) + (delta > 0 and SCALE_STEP or -SCALE_STEP))
-		-- A window is sized from 60% to 150%, as the corner grip sizes it.
 		if info.kind == "window" then
 			entry.scale = math.max(WIN.min / 100, math.min(WIN.max / 100, entry.scale))
 		end
 	else
-		-- A nudge starts from the frame as it is on the screen now, and moves it along one axis; a spot measured from another frame (from)
-		-- stays measured from it.
 		local step = ns.Pixels(UIParent, 1)
 		local width, height = Size(handles[name])
 		local ox, oy = Origin(info)
@@ -2058,7 +1664,6 @@ local function Wheel(name, delta)
 	ns.Each(KEY, ApplyEntry, name)
 	Changed(info)
 	if entry.scale ~= was then
-		-- Lengths worked out in the units of a frame, such as one-pixel borders, follow its scale.
 		ns.ResizeAll()
 		if scaling then
 			ScaleRowMoved(name)
@@ -2067,13 +1672,11 @@ local function Wheel(name, delta)
 	ShowHandle(name)
 end
 
--- The scale of a frame as a percent: the saved scale of its spot, or 100.
 function ns.MoverScale(def)
 	local saved = Saved()
 	local entry = saved and type(def) == "table" and saved[def.frame]
 	local info = entry and Describe(def.frame)
 	if not ns.Get("movers.enabled") or (info and info.system and not ns.Get("movers.systems")) then
-		-- Saved spots are not applied while the movers are off.
 		return 100
 	end
 	if type(entry) == "table" and Number(entry.scale) then
@@ -2082,14 +1685,12 @@ function ns.MoverScale(def)
 	return 100
 end
 
--- Sets the scale of a frame as Ctrl and scroll does: the spot is saved with it, and the frame takes both.
 function ns.SetMoverScale(def, percent)
 	local name = type(def) == "table" and def.frame
 	local info = name and Describe(name)
 	if not info or info.noScale or not Number(percent) then
 		return
 	end
-	-- A dragged slider sends every step: one line per drag, then the row goes back to what is applied.
 	local function Refuse(text)
 		local now = GetTime and GetTime() or 0
 		if not ns.moverTold or now - ns.moverTold >= 0.5 then
@@ -2110,7 +1711,6 @@ function ns.SetMoverScale(def, percent)
 	local frame = GameFrame(name)
 	local entry = Ensure(name, info)
 	if not entry and frame and percentNow ~= 100 then
-		-- No handle is open: the spot is taken from the frame as it is.
 		local left, bottom, width, height = Rect(frame)
 		if left and Commit(name, info, left, bottom, width, height) then
 			entry = Saved()[name]
@@ -2134,7 +1734,6 @@ function ns.SetMoverScale(def, percent)
 	ShowHandle(name)
 end
 
--- A box takes the mouse unless the game places its frame or a frame is being picked, so the picker sees what lies under it.
 local function SetMouse(name)
 	local handle, look = handles[name], handleLooks[name]
 	if not handle then
@@ -2154,7 +1753,6 @@ local function HideHandle(name)
 	handles[name]:Hide()
 end
 
--- The smaller a box, the higher its level, so of two boxes on one place the smaller takes the mouse.
 local function LevelOf(width, height)
 	local sw, sh = ScreenSize()
 	if not sw then
@@ -2177,12 +1775,10 @@ local function MakeHandle(name)
 	local text = handle:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	text:SetAllPoints(handle)
 	handleTexts[name] = text
-	-- The look of a handle, and its hover and selection, are in MoversMode.lua.
 	ns.MoversMode.Style(name, handle, outline, text)
 	handle:SetScript("OnDragStart", function(self)
 		if not InCombatLockdown() then
 			dragging = name
-			-- The box follows the cursor, so it is placed again after the drop even where the frame did not move.
 			handleLooks[name].left = nil
 			handleLooks[name].dragged = true
 			ns.Try(KEY, centre.Start, self)
@@ -2191,7 +1787,6 @@ local function MakeHandle(name)
 	handle:SetScript("OnDragStop", function(self)
 		self:StopMovingOrSizing()
 		centre.Stop(self)
-		-- centre.Step may have ended the drag already, and a second stop for the same release does nothing.
 		if open and dragging == name then
 			ns.Try(KEY, Dropped, name)
 		end
@@ -2205,9 +1800,6 @@ local function MakeHandle(name)
 		ns.Try(KEY, ns.MoversMode.Press, name, button)
 	end)
 	handle:SetScript("OnMouseUp", function(self, mouseButton)
-		-- Shift and a right-click hides the frame of the box, or shows it again, as its tick on the Hidden frames page does (Hide.lua). On a box
-		-- that page has no row for it does nothing but say so: only a plain right-click resets. A right press slid off the box before it is let
-		-- go does neither (Released).
 		local right = handleLooks[name].right
 		handleLooks[name].right = false
 		if mouseButton == "RightButton" and not (right and Released(self)) then
@@ -2239,7 +1831,6 @@ function ShowHandle(name)
 		return
 	end
 	local left, bottom, width, height
-	-- A handle exists only while the handles are open.
 	if info and open and not ns.MoversMode.Hidden(name) then
 		left, bottom, width, height = HandleRect(name, info)
 	end
@@ -2254,7 +1845,6 @@ function ShowHandle(name)
 		handles[name] = handle
 	end
 	local look = handleLooks[name]
-	-- A box that has not moved or changed size is left as it is.
 	if look.left ~= left or look.bottom ~= bottom or look.width ~= width or look.height ~= height then
 		look.left, look.bottom, look.width, look.height = left, bottom, width, height
 		handle:ClearAllPoints()
@@ -2265,7 +1855,6 @@ function ShowHandle(name)
 	local saved = Saved()
 	local entry = saved and saved[name]
 	local percent = type(entry) == "table" and entry.scale and Number(entry.scale) and math.floor(entry.scale * 100 + 0.5) or nil
-	-- A box for a frame the game places is grey and takes no mouse.
 	local placedByGame, follows = PlacedByGame(name, info)
 	if look.placedByGame ~= placedByGame then
 		look.placedByGame = placedByGame
@@ -2281,14 +1870,11 @@ function ShowHandle(name)
 		if percent then
 			text = ("%s %d%%"):format(text, percent)
 		end
-		-- A frame the game lays out is moved back in a fight where its layout cannot hold the spot: a preset, or no layout to write.
 		local frame = GameFrame(name)
 		if frame and not ns.Forbidden(frame) and KindOf(name, frame) == "layout" and ns.LayoutSpots.Mode() ~= "layout" then
 			text = ("%s (%s)"):format(text, BACK_IN_FIGHT)
 		end
 	end
-	-- A frame the Hidden frames page hides (Hide.lua) says so on its box, and so does one that hangs from a hidden frame, as the pet frame from
-	-- the player frame, and one unticked that could not come back before a reload.
 	local hidden = ns.HideFrames and ns.HideFrames.Key(name)
 	local frameOf = ns.HideFrames and not (hidden and ns.HideFrames.Hidden(hidden)) and GameFrame(name)
 	local by = frameOf and ns.HideFrames.HeldBy(frameOf)
@@ -2322,19 +1908,15 @@ local function ShowHandles()
 			ns.Each(KEY, ShowHandle, name)
 		end
 	end
-	-- The tabs of the bars of the bar blocks go on the boxes of the blocks (BarBlock.lua), to drag a bar to another place.
 	if ns.BarBlockGrips then
 		ns.Try(KEY, ns.BarBlockGrips, true)
 	end
 end
 
--- The open boxes take the names they have now, after a block picked a bar or let it go.
 function ns.MoverRelabel()
 	ShowHandles()
 end
 
--- Puts one frame back where the game had it, and forgets its saved spot. `was` is the spot it had in the profile that
--- was in use, for a frame that has none in this one.
 function ResetFrame(name, was)
 	local saved = Saved()
 	local info = Describe(name, was)
@@ -2350,12 +1932,10 @@ function ResetFrame(name, was)
 	ScaleRowMoved(name)
 	stopped[name], corrections[name], refused[name] = nil, nil, nil
 	Uncount(name)
-	-- Under Every window together a window with no spot has the one size of every window, and a window with no spot opens clear of the unit frames.
 	if frame and win.IsWindow(name) then
 		ns.Each(KEY, win.SizeWindow, name, frame)
 		PlaceWindowsLater()
 	end
-	-- The panel manager places a window again the next time it opens.
 	if moved and released then
 		if not resettingAll then
 			win.Say(("%s goes back to Edit Mode's spot after a reload."):format(info.label))
@@ -2378,8 +1958,6 @@ function ResetFrame(name, was)
 	UpdateDriver()
 end
 
--- Puts every frame that has a spot back where the game has it. With `was`, the spots that were in use before a change of
--- profile, it puts back the frames that had a spot there and have none now.
 local function ResetAll(was)
 	local saved = Saved()
 	local names = {}
@@ -2405,8 +1983,6 @@ local function ResetAll(was)
 	end
 end
 
--- Centring -----------------------------------------------------------------------------------------
-
 function centre.Snapping()
 	return ns.Get("movers.snap") == "middle"
 end
@@ -2425,8 +2001,6 @@ function centre.Ticks()
 	return ns.Get("movers.centreAll") == "button"
 end
 
--- The left edge a handle of this width has with its middle on the middle of the screen, when snapping is on and its middle is within
--- centre.snap of the middle of the screen. Nothing otherwise.
 function centre.Snaps(left, width)
 	local wide = ScreenSize()
 	if wide and centre.Snapping() and math.abs(left + width / 2 - wide / 2) <= centre.snap then
@@ -2435,8 +2009,6 @@ function centre.Snaps(left, width)
 	return nil
 end
 
--- The middle line is a thin line down the screen at the middle of UIParent. It is shown while a handle or a window is dragged, or while the
--- handles are open, as the setting says, and is brighter while what is dragged is snapped to it. It takes no mouse.
 function centre.MakeLine()
 	local line = CreateFrame("Frame", nil, UIParent)
 	ns.Own[line] = true
@@ -2447,7 +2019,6 @@ function centre.MakeLine()
 	local texture = line:CreateTexture(nil, "OVERLAY", nil, 0)
 	ns.Own[texture] = true
 	texture:SetAllPoints(line)
-	-- As the edges of the outlines: a thin line is not pulled to a pixel.
 	pcall(texture.SetSnapToPixelGrid, texture, false)
 	pcall(texture.SetTexelSnappingBias, texture, 0)
 	local r, g, b = ns.PanelLook.Colour("accent")
@@ -2458,7 +2029,6 @@ end
 
 function centre.LineLook()
 	local mode = ns.Get("movers.middleLine")
-	-- A window is being moved once its drag has placed it: only a move sets `snapped`, and a size does not.
 	local moving = dragging ~= nil or (win.drag ~= nil and win.drag.snapped ~= nil)
 	local wanted = (mode == "always" and open == true) or (mode == "dragging" and moving)
 	local line = centre.line
@@ -2487,8 +2057,6 @@ function centre.LineLook()
 	end
 end
 
--- A handle follows the cursor from where it was taken, a frame at a time, and snaps to the middle on the way. Where the cursor cannot be
--- read the engine moves it, and the drop snaps it.
 function centre.Start(handle)
 	local x, y = win.Cursor()
 	local left, bottom, width, height = Rect(handle)
@@ -2510,7 +2078,6 @@ function centre.Step(handle)
 	if not (drag and drag.handle == handle and x and screenW) then
 		return
 	end
-	-- The button was let go of away from the handle, which the handle did not hear.
 	if win.ButtonUp() then
 		local stop = handle:GetScript("OnDragStop")
 		if stop then
@@ -2541,23 +2108,17 @@ function centre.Stop(handle)
 	end
 end
 
--- Puts a handle and its frame on the horizontal middle of the screen at the height they have, saved as a move is. True when it was done.
--- A handle the game places is left, and so is one that is not shown.
 function centre.Do(name)
 	local info, look = Describe(name), handleLooks[name]
-	-- The left edge is only there for Commit's signature: a centred frame is anchored by its middle.
 	local wide = ScreenSize()
 	if not (info and look and look.shown and not look.placedByGame and wide and look.width) then
 		return false
 	end
-	-- The box is the frame's own, which the handle was put over. The handle is held on the screen, so a frame that hangs over the edge of it
-	-- would lose height if the box were taken from the handle.
 	local done = Commit(name, info, (wide - look.width) / 2, look.bottom, look.width, look.height, true)
 	ShowHandle(name)
 	return done == true
 end
 
--- A click on a handle with Alt held centres it, unless the press was a drag.
 function centre.Click(name)
 	local look = handleLooks[name]
 	local dragged = look.dragged
@@ -2572,7 +2133,6 @@ function centre.Toggle(name)
 	centre.Look(name)
 end
 
--- Centres the handles that are ticked and clears the ticks.
 function centre.Everything()
 	local names = {}
 	for name in pairs(centre.ticked) do
@@ -2598,10 +2158,6 @@ function centre.Everything()
 	end
 end
 
--- Where the button and the tick box hang from a handle, each as its own point, the point of the handle it hangs from and the offsets: inside
--- it, in its top corners, or on a handle too small for them in a pair above it, the box left of the middle and the button right of it, and
--- below it where the screen ends above it, moved in from the edge of the screen where the handle is at it. A frame of the addon's is not cut off
--- by its parent, so the pair takes clicks outside the handle.
 centre.anchors = {
 	inside = { button = { "TOPRIGHT", "TOPRIGHT", -2, -2 }, box = { "TOPLEFT", "TOPLEFT", 2, -2 } },
 	above = { button = { "BOTTOMLEFT", "TOP", 1, 2 }, box = { "BOTTOMRIGHT", "TOP", -1, 2 } },
@@ -2620,8 +2176,6 @@ function centre.Hang(handle, look)
 	end
 end
 
--- How far a pair hung outside a small handle is moved along, in units, so that it stays on the screen where the handle is at the left or the
--- right edge of it. The pair reaches one square and a gap from the middle of the handle on each side.
 function centre.Shift(look)
 	local wide = ScreenSize()
 	if not (wide and look.left) then
@@ -2631,7 +2185,6 @@ function centre.Shift(look)
 	return math.max(0, reach - middle) - math.max(0, middle - (wide - reach))
 end
 
--- A small square of the addon's on a handle: a thin border on a dark fill, like the buttons of the Movers panel.
 function centre.Square(handle, mouse, onClick)
 	local square = CreateFrame("Frame", nil, handle)
 	ns.Own[square] = true
@@ -2654,7 +2207,6 @@ function centre.Square(handle, mouse, onClick)
 	return square
 end
 
--- A bar of the picture on a square.
 function centre.Picture(square, width, height)
 	local bar = square:CreateTexture(nil, "OVERLAY", nil, 0)
 	ns.Own[bar] = true
@@ -2663,7 +2215,6 @@ function centre.Picture(square, width, height)
 	return bar
 end
 
--- The button that centres a handle: a line down the middle with a short bar on each side of it.
 function centre.MakeCentreButton(handle, name, mouse)
 	local square = centre.Square(handle, mouse, function()
 		ns.Try(KEY, centre.Do, name)
@@ -2675,7 +2226,6 @@ function centre.MakeCentreButton(handle, name, mouse)
 	return square
 end
 
--- The tick box of a handle: a square that shows a mark while the handle is ticked.
 function centre.MakeTickBox(handle, name, mouse)
 	local square = centre.Square(handle, mouse, function()
 		ns.Try(KEY, centre.Toggle, name)
@@ -2689,7 +2239,6 @@ function centre.MakeTickBox(handle, name, mouse)
 	return square
 end
 
--- A handle that takes no mouse, for the picker, has a button and a box that take none.
 function centre.Mouse(look, wanted)
 	if look.button then
 		look.button:EnableMouse(wanted)
@@ -2699,8 +2248,6 @@ function centre.Mouse(look, wanted)
 	end
 end
 
--- The button and the tick box of a handle, as the settings ask. A handle the game places has neither. One too small for them has them
--- above it, or below it where the screen ends above it.
 function centre.Look(name)
 	local handle, look = handles[name], handleLooks[name]
 	if not (handle and look) then
@@ -2743,7 +2290,6 @@ function centre.Look(name)
 	end
 end
 
--- The line of the Movers panel that says how to centre, as the settings ask.
 function centre.Words()
 	local how = ns.Get("movers.centreWith")
 	local text = "Click the button on a handle to centre it."
@@ -2758,7 +2304,6 @@ function centre.Words()
 	return text
 end
 
--- The button of the Movers panel is there while the setting asks for the tick boxes, and the line under the hint follows the settings.
 function centre.Panel()
 	if centre.button then
 		centre.button:SetShown(open == true and centre.Ticks())
@@ -2770,7 +2315,6 @@ function centre.Panel()
 	end
 end
 
--- The settings changed: the panel, the line and the handles follow.
 function centre.Refresh()
 	centre.Panel()
 	centre.LineLook()
@@ -2779,7 +2323,6 @@ function centre.Refresh()
 	end
 end
 
--- The handles close: a drag ends, the ticks go, and the line and the button of the panel hide.
 function centre.Closed()
 	local drag = centre.drag
 	if drag then
@@ -2788,8 +2331,6 @@ function centre.Closed()
 	centre.ticked = {}
 	centre.Refresh()
 end
-
--- Starting and stopping the driver -----------------------------------------------------------------
 
 local function HasGameEntries()
 	if win.Sizing() or next(hold.by) ~= nil then
@@ -2831,7 +2372,6 @@ local function Drive(_, elapsed)
 	end
 end
 
--- The check runs only while a saved frame is there to keep, or the handles are open.
 function UpdateDriver()
 	local wanted = running and ns.Enabled(KEY) and (open or (ns.Get("movers.keep") and HasGameEntries()))
 	if wanted and not driver then
@@ -2844,15 +2384,12 @@ function UpdateDriver()
 	end
 end
 
--- The picker ------------------------------------------------------------------------------------
-
 local tag, tagText, box, boxOutline
 
 local function Refused(name)
 	if REFUSE[name] or hold.Off(name) then
 		return true
 	end
-	-- Edit Mode's frames are listed, and some have names that a pattern below would refuse.
 	if BY_NAME[name] and BY_NAME[name].system then
 		return false
 	end
@@ -2872,7 +2409,6 @@ local function NameOf(node)
 	return nil
 end
 
--- The frame and its parents up to UIParent. A frame the addon may not touch ends the walk with nothing.
 local function ChainOf(leaf)
 	local nodes = {}
 	local node = leaf
@@ -2893,7 +2429,6 @@ local function ChainOf(leaf)
 	return nil
 end
 
--- Edit Mode owns these.
 local function IsSystem(node)
 	local ok, found = pcall(function()
 		return node.system ~= nil or node.SetPointBase ~= nil
@@ -2901,8 +2436,6 @@ local function IsSystem(node)
 	return ok and found == true
 end
 
--- A frame a container or manager lays out is placed again by it on every layout pass. A frame the player has
--- moved in Edit Mode is taken out of its container, which sets this field.
 local function IsLaidOut(node, parent)
 	local ok, laid = pcall(function()
 		if node.ignoreFramePositionManager == true then
@@ -2914,7 +2447,6 @@ local function IsLaidOut(node, parent)
 	return not ok or laid == true
 end
 
--- True once Edit Mode has set the frame up.
 local function SetUp(frame)
 	local ok, flag = pcall(function()
 		return frame.systemInfo.isInDefaultPosition
@@ -2922,18 +2454,14 @@ local function SetUp(frame)
 	return ok and not ns.IsSecret(flag) and type(flag) == "boolean"
 end
 
--- True when the game's layout passes place a frame Edit Mode owns again: a bar of the action bar stacks, or a frame
--- a container lays out.
 function Passes(info, frame)
 	return (info ~= nil and info.stack == true) or IsLaidOut(frame)
 end
 
--- A frame Edit Mode owns that the addon may place: Edit Mode has set it up.
 local function Placeable(info, frame)
 	return BaseCalls(frame) ~= nil and SetUp(frame)
 end
 
--- "layout" for a frame the game's layout passes place again, which is kept in the Edit Mode layout; nil for any other frame.
 function KindOf(name, frame)
 	local info = BY_NAME[name]
 	if info == nil then
@@ -2945,10 +2473,6 @@ function KindOf(name, frame)
 	return ns.LayoutSpots.Kind(info, frame, Passes(BY_NAME[name], frame))
 end
 
--- True when the game places the frame itself: it is on the refuse list, a frame Edit Mode owns is above it, Edit
--- Mode has not set it up, or a container lays out a frame that is not Edit Mode's.
--- A saved spot is applied only to a frame that passes. A frame in LIST passes the refuse list: the game places a
--- bag or a menu again on every layout pass, and the check puts it back.
 function Unmovable(name, frame)
 	if Refused(name) and not BY_NAME[name] then
 		return true
@@ -2972,8 +2496,6 @@ local function Answered(ok, value)
 	return ok and not ns.IsSecret(value) and value == false
 end
 
--- The tests a frame must pass before the picker offers it. They only read: GetName is a Lua method on a few
--- frames, a getter that runs in a pcall.
 local function Pickable(node, parent)
 	if ns.Own[node] then
 		return false
@@ -2988,18 +2510,14 @@ local function Pickable(node, parent)
 	if not (Answered(okRestricted, restricted) and Answered(okSecret, secret)) or not Rect(node) then
 		return false
 	end
-	-- The second answer is whether the frame is protected itself and not through a child. A frame Edit Mode owns may
-	-- be, since it is placed out of combat.
 	local okProtected, _, explicit = pcall(node.IsProtected, node)
 	if not (Answered(okProtected, explicit) or BaseCalls(node)) then
 		return false
 	end
-	-- A frame stretched between two anchors loses its size when it has one.
 	local okCount, count = pcall(node.GetNumPoints, node)
 	return okCount and Number(count) and count == 1
 end
 
--- Gives every box the mouse again, or takes it from them.
 local function SetMouseAll()
 	for name in pairs(handles) do
 		SetMouse(name)
@@ -3018,7 +2536,6 @@ local function StopPick()
 	end
 end
 
--- Takes the frame under the mouse: it is saved at its current spot and gets a handle.
 local function Take(frame)
 	local saved = Saved()
 	local name = NameOf(frame)
@@ -3041,7 +2558,6 @@ end
 
 local keys = { shift = false, alt = false }
 
--- Reads the frame under the mouse ten times a second. Nothing is clicked.
 function PickStep()
 	local ok, foci = pcall(GetMouseFoci)
 	local leaf = ok and type(foci) == "table" and foci[1] or nil
@@ -3066,7 +2582,6 @@ function PickStep()
 	end
 end
 
--- Follows the mouse, marks the chosen frame, and reads the keys that step to the next frame and take it.
 function PickShow()
 	local shift, alt = KeyDown(IsShiftKeyDown), KeyDown(IsAltKeyDown)
 	local cands = pick.cands or {}
@@ -3136,12 +2651,8 @@ local function StartPick()
 	win.Say("Point at a frame and press Alt to take it. Shift picks the frame around it.")
 end
 
--- Windows ----------------------------------------------------------------------------------------
-
 local Grips
 
--- Whether the window part of the module is on, whether windows can be dragged, whether they can be sized, whether one size
--- is shared by every window, and whether that size is not 100%.
 function win.On()
 	return running == true and ns.Enabled(KEY) and not ns.PartStopped(KEY, WIN.part)
 end
@@ -3162,7 +2673,6 @@ function win.Sizing()
 	return win.On() and win.Shared() and ns.Get("movers.windowSize") ~= 100
 end
 
--- The windows of the panel manager, by name.
 function win.Panels()
 	local list = UIPanelWindows
 	if not ns.IsSecret(list) and type(list) == "table" then
@@ -3171,12 +2681,10 @@ function win.Panels()
 	return nil
 end
 
--- The panel manager gives a window the whole screen when its area is full.
 function win.Whole(attributes)
 	return not ns.IsSecret(attributes) and type(attributes) == "table" and attributes.area == "full"
 end
 
--- True for a listed window, and for a window of the panel manager that is not listed and does not take the whole screen.
 function win.IsWindow(name)
 	local info = BY_NAME[name]
 	if info then
@@ -3187,7 +2695,6 @@ function win.IsWindow(name)
 	return attributes ~= nil and not win.Whole(attributes)
 end
 
--- Calls fn with the name of each window that may have grips: the listed windows, then the rest of the panel manager's.
 function win.Each(fn)
 	for _, info in ipairs(LIST) do
 		if info.kind == "window" then
@@ -3201,7 +2708,6 @@ function win.Each(fn)
 	end
 end
 
--- The cursor in the units of UIParent, or nil when the client will not say.
 function win.Cursor()
 	if type(GetCursorPosition) ~= "function" then
 		return nil
@@ -3227,8 +2733,6 @@ function win.Label(name)
 	return info and info.label or name
 end
 
--- The size a window has now, as a factor of the size the game gives it: the one size of every window, or the size saved for
--- the window. 1 while the part is off.
 function win.Factor(name, entry)
 	if not win.On() then
 		return 1
@@ -3240,7 +2744,6 @@ function win.Factor(name, entry)
 	return 1
 end
 
--- The spot a window is placed at: under Every window together the size is the shared one, and the size saved in the spot stays saved.
 function win.Entry(name, entry)
 	if type(entry) ~= "table" or entry.kind ~= "window" or not win.Shared() then
 		return entry
@@ -3249,9 +2752,6 @@ function win.Entry(name, entry)
 	return { point = entry.point, x = entry.x, y = entry.y, scale = f ~= 1 and f or nil }
 end
 
--- Why a window is the game's for now, or nil. The game sizes and places the map itself while it fills the screen (UpdateMaximizedSize,
--- MaximizeUIPanel), so the key the window's row names is read, and a key that is true, withheld or unreadable counts as full size. In the
--- gamepad interface the map reads the gamepad cursor in the units of UIParent, which a scale of its own would put off the map.
 function win.Fills(frame)
 	local info = BY_NAME[NameOf(frame) or ""]
 	if not (info and info.fills) then
@@ -3272,7 +2772,6 @@ function win.Fills(frame)
 	return nil
 end
 
--- The child of a window that its row names as its layer, or nil.
 function win.Layer(frame)
 	local info = BY_NAME[NameOf(frame) or ""]
 	if not (info and info.layer) then
@@ -3287,7 +2786,6 @@ function win.Layer(frame)
 	return nil
 end
 
--- The strata of that child, or nil when the window has none or the client will not say.
 function win.LayerStrata(frame)
 	local layer = win.Layer(frame)
 	if not layer then
@@ -3300,8 +2798,6 @@ function win.LayerStrata(frame)
 	return nil
 end
 
--- Sets the scale of a window and sets each of its points again with its offsets times the old scale over the new one, so the corner the
--- game anchored stays where it is (EditModeSystemMixin:SetScaleOverride does the same). False, with nothing changed, when a point cannot be read.
 function win.Rescale(frame, current, wanted)
 	local okCount, count = pcall(frame.GetNumPoints, frame)
 	if not (okCount and Number(count)) then
@@ -3325,7 +2821,6 @@ function win.Rescale(frame, current, wanted)
 	return true
 end
 
--- Gives a window the scale the game gave it. With keepCorner a window keeps its top left corner where it is; any other frame gets the scale only.
 function win.GiveBack(frame, scale, keepCorner)
 	local name = keepCorner and NameOf(frame)
 	local ok, current = pcall(frame.GetScale, frame)
@@ -3335,7 +2830,6 @@ function win.GiveBack(frame, scale, keepCorner)
 	end
 end
 
--- Gives a window the scale the game gave it. The corner it has stays; the game places the window itself at its next layout.
 function win.Unscale(frame)
 	local own = original[frame]
 	if own and own.scaled then
@@ -3344,7 +2838,6 @@ function win.Unscale(frame)
 	end
 end
 
--- The level of a window that is open, that the addon may place and that an anchor may refer to, or nil and why not.
 function win.Gate(name, frame)
 	local okFrame, isFrame = pcall(frame.IsObjectType, frame, "Frame")
 	if not okFrame or ns.IsSecret(isFrame) or isFrame ~= true then
@@ -3379,7 +2872,6 @@ function win.Gate(name, frame)
 	return nil, "its level is not readable"
 end
 
--- The level one above the highest of a window and its direct children, so the corner grip lies over the border art.
 function win.TopLevel(frame, level)
 	local top = level
 	pcall(function()
@@ -3395,7 +2887,6 @@ function win.TopLevel(frame, level)
 	return math.min(top + 1, 10000)
 end
 
--- A protected window is not placed or sized in combat. The player is told once for each fight.
 function win.Locked(frame, mode)
 	if not (InCombatLockdown() and ns.MaybeProtected(frame)) then
 		return false
@@ -3412,7 +2903,6 @@ function win.Locked(frame, mode)
 	return true
 end
 
--- True when the key the player chose is held, or none was chosen. Otherwise false and what to say.
 function win.KeyHeld()
 	local key = ns.Get("movers.dragKey")
 	if key == "shift" then
@@ -3425,7 +2915,6 @@ function win.KeyHeld()
 	return true
 end
 
--- True while the cursor holds an item or anything else, or when the client will not say.
 function win.Holding()
 	if type(GetCursorInfo) ~= "function" then
 		return false
@@ -3434,12 +2923,10 @@ function win.Holding()
 	return not ok or ns.IsSecret(kind) or kind ~= nil
 end
 
--- True while the picker is on or Edit Mode is open.
 function win.Busy()
 	return pick.on == true or ns.EditModeOpen()
 end
 
--- The frame under the cursor, as the game reports it, or nil.
 function win.Leaf()
 	if type(GetMouseFoci) ~= "function" then
 		return nil
@@ -3455,9 +2942,6 @@ function win.Leaf()
 	return leaf
 end
 
--- Why a frame keeps its clicks, or nil when a drag may start from it: a control by its type, or a frame with a mouse script of its own.
--- With a key held (keyed) the player asks for the drag: a model and a frame with a script of its own give way to it, so the window
--- can be taken by the model that fills its pane, and a button, an edit box and a slider still keep their clicks.
 function win.Control(node, keyed)
 	for _, word in ipairs(WIN.controls) do
 		local ok, found = pcall(node.IsObjectType, node, word)
@@ -3486,8 +2970,6 @@ function win.Control(node, keyed)
 	return nil
 end
 
--- True when a drag may start from the frame under the cursor, which is nodes[1] and lies inside the window nodes[index]. Otherwise false and why.
--- keyed: the player holds the key chosen for dragging.
 function win.Free(nodes, index, frame, keyed)
 	local leaf = nodes[1]
 	if leaf ~= frame then
@@ -3501,7 +2983,6 @@ function win.Free(nodes, index, frame, keyed)
 		end
 		local okLeaf, strata = pcall(leaf.GetFrameStrata, leaf)
 		local okWindow, wanted = pcall(frame.GetFrameStrata, frame)
-		-- The border and the quest log of the map lie in a strata above the map; a press on them is a press on the window.
 		if okLeaf and okWindow and not ns.IsSecret(strata) and not ns.IsSecret(wanted) and strata ~= wanted and strata == win.LayerStrata(frame) then
 			wanted = strata
 		end
@@ -3518,8 +2999,6 @@ function win.Free(nodes, index, frame, keyed)
 	return true
 end
 
--- Where in a window the cursor is: "title" over the title bar, "corner" over the square of the corner grip, "body" over the rest,
--- nil outside the window.
 function win.Zone(name, frame, x, y)
 	local left, bottom, width, height = Rect(frame)
 	local k = Ratio(frame)
@@ -3536,9 +3015,6 @@ function win.Zone(name, frame, x, y)
 	return "body"
 end
 
--- The title bar: a frame of the addon's over the top of the window, from its left edge to the close button, two levels above
--- the window. The game puts its own controls in the title at the level of the window or one above it, so the title bar lies over
--- them, and a press on it is a press on the title.
 function win.MakeGrip(name, frame, level)
 	local setup = BY_NAME[name] and BY_NAME[name].grip
 	local grip = CreateFrame("Frame", nil, frame)
@@ -3563,7 +3039,6 @@ function win.MakeGrip(name, frame, level)
 	end)
 end
 
--- The two lines of a corner grip are shown as the setting says: always, or while the cursor is inside the window.
 function win.Hover(name)
 	local frame, art = GameFrame(name), win.art[name]
 	if not (frame and art) then
@@ -3584,14 +3059,10 @@ function win.Hover(name)
 	end
 end
 
--- The corner grip: a frame of the addon's at the bottom right corner of the window, above the border art of the window. A frame over a
--- game button takes its clicks, so the grip takes the mouse only until the game has reported a press, and then only in its last
--- WIN.margin units, where no control of the window lies. After that a press in the corner is found from the frame under the cursor.
 function win.MakeCorner(name, frame)
 	local corner = CreateFrame("Frame", nil, frame)
 	ns.Own[corner] = true
 	win.corners[name] = corner
-	-- A window whose border and panes lie in a strata above it has its corner grip there, so the lines are drawn over them.
 	local strata = win.LayerStrata(frame)
 	if strata then
 		corner:SetFrameStrata(strata)
@@ -3626,7 +3097,6 @@ function win.MakeCorner(name, frame)
 	win.Hover(name)
 end
 
--- The corner grips take the mouse until the game has reported a press, and none after it. A protected window waits for the end of combat.
 function win.CornerMouse()
 	for name, corner in pairs(win.corners) do
 		local frame = GameFrame(name)
@@ -3640,7 +3110,6 @@ function win.CornerMouse()
 	end
 end
 
--- Makes the grips of a window that is open. A protected window waits for the end of combat.
 function win.Grip(name)
 	if win.grips[name] then
 		return
@@ -3649,7 +3118,6 @@ function win.Grip(name)
 	if not frame or ns.Forbidden(frame) then
 		return
 	end
-	-- A window Bags keeps hidden counts as closed (Parked).
 	if IsShown(frame) ~= true or Parked(frame) then
 		win.why[name] = nil
 		return
@@ -3667,12 +3135,10 @@ function win.Grip(name)
 	win.why[name] = nil
 	win.MakeGrip(name, frame, level)
 	win.MakeCorner(name, frame)
-	-- With dragging off the title bar is made hidden, and with the corner grip off the corner.
 	win.grips[name]:SetShown(win.DragOn())
 	win.corners[name]:SetShown(win.SizeOn())
 end
 
--- Puts the two frames of each open window at their levels, and keeps the levels for /flatui status.
 function win.Looks()
 	for name, grip in pairs(win.grips) do
 		local frame = GameFrame(name)
@@ -3684,7 +3150,6 @@ function win.Looks()
 				local setup = BY_NAME[name] and BY_NAME[name].grip
 				local titleLevel = level + ((setup and setup.level) or WIN.level)
 				local cornerLevel = win.TopLevel(frame, level)
-				-- The corner grip lies in the strata of the layer, one level above the highest child of the layer.
 				local layer = win.Layer(frame)
 				local okLayer, layerLevel
 				if layer then
@@ -3703,10 +3168,8 @@ function win.Looks()
 	end
 end
 
--- Makes the grips of the windows that are open, and shows or hides the grips there are as the settings say.
 function Grips()
 	local drag, size = win.DragOn(), win.SizeOn()
-	-- A window that fills the screen has no grips for now, and says why. A window with grips has no other reason in win.why.
 	for name, grip in pairs(win.grips) do
 		local frame = GameFrame(name)
 		local fills = frame and not ns.Forbidden(frame) and win.Fills(frame) or nil
@@ -3731,9 +3194,6 @@ function Grips()
 	win.Looks()
 end
 
--- Drag and size ------------------------------------------------------------------------------------
-
--- Starts a move or a size of a window at the cursor.
 function win.Start(name, frame, mode)
 	local x, y = win.Cursor()
 	local left, bottom, width, height = Rect(frame)
@@ -3755,7 +3215,6 @@ function win.Start(name, frame, mode)
 	win.carrier:SetScript("OnUpdate", win.Update)
 end
 
--- Places the window where the cursor has taken it, or sizes it, a frame at a time. The spot is saved when the drag ends.
 function win.Step()
 	local drag = win.drag
 	if not drag then
@@ -3767,12 +3226,10 @@ function win.Step()
 		win.EndDrag()
 		return
 	end
-	-- A window that goes to full size under the cursor is the game's: the drag ends and keeps the last small place.
 	if win.Fills(frame) then
 		win.EndDrag()
 		return
 	end
-	-- A press that is not followed by a move is a click, for a size as for a move.
 	local dx, dy = x - drag.x, y - drag.y
 	if not drag.moved and math.abs(dx) < WIN.start and math.abs(dy) < WIN.start then
 		return
@@ -3784,7 +3241,6 @@ function win.Step()
 		end
 		drag.moved = true
 		drag.left, drag.bottom = drag.from.left + dx, drag.from.bottom + dy
-		-- A window whose middle comes close to the middle of the screen snaps there, like a handle.
 		local middle = centre.Snaps(drag.left, drag.width)
 		drag.snapped = middle ~= nil
 		drag.left = middle or drag.left
@@ -3795,8 +3251,6 @@ function win.Step()
 		centre.LineLook()
 		return
 	end
-	-- The corner of the window follows the cursor along the diagonal, so the size is how far the corner is from the top left
-	-- corner, across and down, as a share of the width and height at 100%.
 	local cornerX, cornerY = x - drag.grabX, y - drag.grabY
 	local raw = ((cornerX - drag.left) + (drag.top - cornerY)) / (drag.w1 + drag.h1)
 	local percent = math.max(WIN.min, math.min(WIN.max, math.floor(raw * 100 / WIN.step + 0.5) * WIN.step))
@@ -3822,8 +3276,6 @@ function win.Update()
 	end
 end
 
--- Ends the drag and saves the spot the window was left at, as the drop of a handle does. A size is saved in the spot or, under Every
--- window together, in the setting.
 function win.EndDrag()
 	local drag = win.drag
 	if not drag then
@@ -3852,11 +3304,9 @@ function win.EndDrag()
 		end
 		ns.ResizeAll()
 	end
-	-- The first saved spot starts the check that keeps it.
 	UpdateDriver()
 end
 
--- A press on the title bar.
 function win.TitleDown(name, button)
 	if button ~= "LeftButton" then
 		return
@@ -3873,7 +3323,6 @@ function win.TitleDown(name, button)
 	win.Start(name, frame, "move")
 end
 
--- Letting go of the title bar ends the drag, and a right click puts the window back.
 function win.TitleUp(name, button)
 	if button == "LeftButton" then
 		if win.drag and win.drag.name == name then
@@ -3887,7 +3336,6 @@ function win.TitleUp(name, button)
 	end
 end
 
--- A press on the corner grip.
 function win.CornerDown(name, button)
 	if button ~= "LeftButton" or not win.SizeOn() then
 		return
@@ -3898,7 +3346,6 @@ function win.CornerDown(name, button)
 	end
 end
 
--- Puts a window back at 100%: its own size under Each window, the one size of every window under Every window together.
 function win.Unsize(name)
 	if win.Shared() then
 		ns.Set("movers.windowSize", 100)
@@ -3926,9 +3373,6 @@ function win.CornerUp(name, button)
 	end
 end
 
--- A press the game reports. The window under the cursor is found from the frame the game says takes the click, and dragged when the
--- settings allow it and the press is on an empty part of the window. A press on a frame of the addon's is left to that frame's script.
--- A press in the corner of the window sizes it, and a right click there puts it at 100%, where the frame under the cursor is not a control.
 function win.Pressed(button)
 	if not win.On() then
 		return
@@ -3937,7 +3381,6 @@ function win.Pressed(button)
 	if not leaf or ns.Own[leaf] then
 		return
 	end
-	-- The game says which frame takes a press, so the corner grips need no mouse of their own from here on.
 	if not win.heard then
 		win.heard = true
 		win.CornerMouse()
@@ -3960,7 +3403,6 @@ function win.Pressed(button)
 	if not frame then
 		return
 	end
-	-- A window shown without an announcement has no grips yet.
 	ns.EachPart(KEY, WIN.part, win.Grip, name)
 	if not win.Gate(name, frame) then
 		return
@@ -3970,7 +3412,6 @@ function win.Pressed(button)
 	if not zone then
 		return
 	end
-	-- The grip is drawn where the player can see it, so a model or a frame with a script of its own under it gives way, as it does to a held key.
 	if zone == "corner" and win.SizeOn() then
 		local free, because = win.Free(nodes, index, frame, true)
 		if not free then
@@ -4020,14 +3461,8 @@ function win.Released(button)
 	end
 end
 
--- Sizes ------------------------------------------------------------------------------------------
-
--- Gives a window with no spot the one size of every window, or gives it back the size the game gave it. The scale changes and each
--- point is set again with its offsets times the old scale over the new one, so the corner the game anchored stays where it is
--- (EditModeSystemMixin:SetScaleOverride does the same). No spot is saved.
 function win.SizeWindow(name, frame)
 	local saved = Saved()
-	-- A window being dragged is sized by the drag.
 	if ns.Forbidden(frame) or (saved and type(saved[name]) == "table") or (win.drag and win.drag.name == name) then
 		return
 	end
@@ -4042,7 +3477,6 @@ function win.SizeWindow(name, frame)
 	if f == 1 and not (own and own.scaled) then
 		return
 	end
-	-- A window that fills the screen has the game's scale. A protected one keeps the size until combat ends.
 	if win.Fills(frame) then
 		if InCombatLockdown() and ns.MaybeProtected(frame) then
 			win.Later(name, frame)
@@ -4071,7 +3505,6 @@ function win.SizeWindow(name, frame)
 		return
 	end
 	if math.abs(current - wanted) > 0.0005 then
-		-- A scale other than the one set last was written by the game.
 		if own.applied and math.abs(current - own.applied) > 0.0005 then
 			win.resizes[name] = (win.resizes[name] or 0) + 1
 		end
@@ -4082,7 +3515,6 @@ function win.SizeWindow(name, frame)
 	own.scaled, own.applied = f ~= 1, wanted
 end
 
--- Sizes every window the module knows: the shared size, or none.
 function win.SizeOpen()
 	win.Each(function(name)
 		local frame = GameFrame(name)
@@ -4093,7 +3525,6 @@ function win.SizeOpen()
 	end)
 end
 
--- True when a window with a spot has another scale than its spot and the size setting give it.
 function win.Wrong(name, entry)
 	local frame = GameFrame(name)
 	if type(entry) ~= "table" or entry.kind ~= "window" or not frame or ns.Forbidden(frame) then
@@ -4105,18 +3536,12 @@ function win.Wrong(name, entry)
 		and math.abs(current - (own.scale or 1) * win.Factor(name, entry)) > 0.0005
 end
 
--- A window the panel manager fits to the screen: the game gives it scale 1 and then the scale that fits, when it opens, when its layout is
--- worked out again and when the UI scale changes (FrameUtil.lua:169-179, UIParentPanelManager.lua:245, :624, :148, :769-771). Legacy is one (checkFit,
--- Blizzard_LegacySystemRegistration.lua:8).
 function win.Fitted(name)
 	local list = win.Panels()
 	local attributes = list and list[name]
 	return type(attributes) == "table" and not ns.IsSecret(attributes) and attributes.checkFit == 1
 end
 
--- The scale a fitted window is sized from is the one the game gave it last, so the size of every window is a factor of the fit and not of the
--- fit the window had when it was first seen (the fit depends on the size of UIParent, which changes). The game's scale is taken when a hook says the
--- game wrote it, or, for a window with no hook, when it is not the one set last. Any other window keeps the scale it had at first.
 function win.Rebase(name, frame, own)
 	local wrote = win.wrote[name]
 	win.wrote[name] = nil
@@ -4135,7 +3560,6 @@ function win.Rebase(name, frame, own)
 	end
 end
 
--- A window a hook has marked is sized on the next frame.
 function win.Mark(name)
 	win.marked[name] = true
 	if win.sizer then
@@ -4143,8 +3567,6 @@ function win.Mark(name)
 	end
 end
 
--- A window with both hooks that is not sized in a fight is marked again when the fight is over. A window with no hooks is tried again by the
--- check at its next pass, so nothing is queued for it.
 function win.Later(name, frame)
 	if win.scaleHooked[frame] and win.showHooked[frame] and not win.fixQueued[name] then
 		win.fixQueued[name] = true
@@ -4155,7 +3577,6 @@ function win.Later(name, frame)
 	end
 end
 
--- A window with a spot is put at the scale of its spot again when the game has sized it, not in a fight when it is protected.
 function win.Fix(name, entry)
 	local frame = GameFrame(name)
 	if not frame or ns.Forbidden(frame) or win.Fills(frame) or IsShown(frame) ~= true then
@@ -4174,7 +3595,6 @@ function win.Fix(name, entry)
 	end
 end
 
--- Sizes a window a hook has marked: the shared size, or the scale of its spot.
 function win.Marked(name)
 	if not (running and ns.Enabled(KEY)) then
 		return
@@ -4194,7 +3614,6 @@ function win.Marked(name)
 	end
 end
 
--- The one hidden frame that sizes the windows the hooks have marked, on the frame after the mark. It runs only while a window is marked.
 function win.Drain()
 	win.sizer:SetScript("OnUpdate", nil)
 	local names = win.marked
@@ -4204,10 +3623,6 @@ function win.Drain()
 	end
 end
 
--- Hooks a window with SetScale, which marks it when the game writes its scale, and with OnShow, which marks it when it opens. SetWidth and SetSize are
--- never hooked: a hook on a size setter tainted the panel manager (EllesmereUI). The hooks only mark. True when the window has both and the hooks
--- will see what happens to it, false when it has not (it does not need them, they are refused while taintLog is on, or the client has no hooksecurefunc), and
--- then the half-second check covers it. A window that gets its hooks here is marked, with quiet it is not.
 function win.Watch(name, frame, quiet)
 	if not win.Sizing() then
 		return false
@@ -4252,10 +3667,6 @@ function win.Watch(name, frame, quiet)
 	return false
 end
 
--- The half-second check. A window with both hooks is sized by the frame that sizes what the hooks mark. The check hooks a window that has come into
--- being since (a window of a load-on-demand addon), and does the sizing of a window that has no hooks: one the hooks are refused on (taintLog on, no
--- hooksecurefunc), and any window whose frame does not exist yet. The hooks see a SetScale call and the opening of a window; a scale the game
--- changes by another call, such as SetScaleBase, or on a frame the addon may not hook, is only seen here.
 function win.CheckSizes()
 	if win.Sizing() then
 		win.Each(function(name)
@@ -4275,7 +3686,6 @@ function win.CheckSizes()
 	end
 end
 
--- Closing a window drops its spot while the setting says so. The window may be closed by the panel manager or by a plain Hide.
 function win.Closed(name)
 	if not (win.On() and ns.Get("movers.keepSpots") == "reset") then
 		return
@@ -4291,7 +3701,6 @@ function win.Closed(name)
 	end
 end
 
--- Drops the spot of every closed window while the setting says so.
 function win.Sweep()
 	if not (win.On() and ns.Get("movers.keepSpots") == "reset") then
 		return
@@ -4308,7 +3717,6 @@ function win.Sweep()
 	end
 end
 
--- Puts every window back at its default place and size.
 function win.Reset()
 	local names = {}
 	for name, entry in pairs(Saved() or {}) do
@@ -4329,20 +3737,6 @@ function win.Reset()
 	end
 end
 
--- Windows clear of the unit frames ------------------------------------------------------------------
-
--- The panel manager puts a window at its top left spot, 116 under the top of the screen (UIPanelLayoutFrame.lua:3-4, UpdateUIPanelPositions,
--- UIParentPanelManager.lua:627-643), where the player and target frames the game starts at the top of the screen reach down over its title. So
--- once the game has placed the windows (PlaceWindows, after each window it shows, hides or lays out again), the open windows that have no spot of
--- their own and that the game hangs by their top from the top of the screen go down together, each with its left edge where it is, until their tops
--- are WIN.clear.gap under the lowest of the drawn player and target frames, when one of those frames reaches into one of them from above. The
--- windows beside each other stay in one row. A unit frame the player has put lower down, inside the window's height, moves nothing. A window's bottom
--- stays WIN.clear.floor above the bottom of the screen, as the game keeps it, or where the game put it when that is lower, so a window too tall to
--- clear the frames goes only as far as that allows. Nothing is saved and nothing is written on the panel manager: the game puts the window at its own
--- spot again each time it lays the windows out, and the pass after it takes the window clear again. The window is placed with the calls Move uses: a
--- protected one in a snippet, never in combat.
-
--- True when a frame has one point, its top left or its top on the same point of UIParent: how the panel manager hangs a window.
 function win.Hung(frame)
 	local okCount, count = pcall(frame.GetNumPoints, frame)
 	if not (okCount and Number(count) and count == 1) then
@@ -4355,14 +3749,11 @@ function win.Hung(frame)
 	return (point == "TOPLEFT" or point == "TOP") and relativePoint == point and (relativeTo == nil or relativeTo == UIParent)
 end
 
--- True when a frame is drawn, with every parent shown: a frame Hidden frames keeps under a hidden frame of its own does not count.
 function win.Drawn(frame)
 	local ok, visible = pcall(frame.IsVisible, frame)
 	return ok and not ns.IsSecret(visible) and visible == true
 end
 
--- The lowest bottom, in the units of UIParent, of the drawn unit frames that reach into a window from above: across its width, from over its top to
--- under it. Nil when none does.
 function win.UnitsOver(left, right, top)
 	local lowest
 	for _, unit in ipairs(WIN.clear.units) do
@@ -4378,8 +3769,6 @@ function win.UnitsOver(left, right, top)
 	return lowest
 end
 
--- The open windows with no spot that the game hangs from the top of the screen, each with its rectangle in the units of UIParent. A window being
--- dragged, a window a module holds and one that fills the screen are left out.
 function win.Hanging()
 	local saved = Saved() or {}
 	local list = {}
@@ -4396,7 +3785,6 @@ function win.Hanging()
 	return list
 end
 
--- Takes the open windows clear of the unit frames, while Open windows under the unit frames is on.
 function win.ClearUnits()
 	if not (win.On() and ns.Get("movers.clearUnits") == true) then
 		return
@@ -4416,8 +3804,6 @@ function win.ClearUnits()
 	end
 end
 
--- Moves one window down until its top is at the line, with its bottom no lower than the floor or where the game put it. Its point stays the one the
--- game gave it, with another height: one SetPoint, so a call refused leaves the window where it was.
 function win.Lower(frame, rect, line)
 	local lowest = math.min(rect.bottom, WIN.clear.floor)
 	local top = math.max(line, lowest + rect.top - rect.bottom)
@@ -4433,12 +3819,9 @@ function win.Lower(frame, rect, line)
 	setPoint(frame, point, UIParent, relativePoint, x, y + (top - rect.top) / k)
 end
 
--- Opening and closing ----------------------------------------------------------------------------
-
 local function BuildBar()
 	bar = CreateFrame("Frame", nil, UIParent)
 	ns.Own[bar] = true
-	-- Above every handle, including the ones of windows that are at DIALOG and FULLSCREEN.
 	bar:SetFrameStrata("FULLSCREEN_DIALOG")
 	bar:SetFrameLevel(10)
 	bar:SetSize(BAR_WIDTH, BAR_HEIGHT)
@@ -4463,7 +3846,6 @@ local function BuildBar()
 	local edit = Label(bar, "GameFontDisableSmall", 416)
 	edit:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -8)
 	edit:SetText(EVERY_FRAME)
-	-- How to centre a handle, which follows the settings.
 	centre.how = Label(bar, "GameFontDisableSmall", 416)
 	centre.how:SetPoint("TOPLEFT", edit, "BOTTOMLEFT", 0, -6)
 	local pickButton = MakeButton(bar, "Pick a frame", 110, function()
@@ -4474,9 +3856,7 @@ local function BuildBar()
 		end
 	end)
 	pickButton:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 12, 10)
-	-- Reset all forgets every saved spot, so it asks for a second click.
 	local resetButton = MakeButton(bar, "Reset all", 130, function(label)
-		-- Without a timer the question could not end by itself, so the first click resets.
 		if resetPending or not (C_Timer and C_Timer.After) then
 			resetPending = nil
 			label:SetText("Reset all")
@@ -4494,7 +3874,6 @@ local function BuildBar()
 		end)
 	end)
 	resetButton:SetPoint("LEFT", pickButton, "RIGHT", 8, 0)
-	-- Centres the handles that are ticked. It is shown while the setting asks for the tick boxes.
 	centre.button = MakeButton(bar, "Centre ticked", 82, function()
 		ns.Try(KEY, centre.Everything)
 	end)
@@ -4505,8 +3884,6 @@ local function BuildBar()
 	doneButton:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -12, 10)
 end
 
--- Edit Mode's own panel is at the top of the screen. The bar opens beside it when Edit Mode opens it and the
--- bar fits there, and at the bottom of the screen otherwise, until the player moves the bar.
 local function PlaceBar(source)
 	if barMoved then
 		return
@@ -4531,8 +3908,6 @@ function Open(source)
 		return
 	end
 	if InCombatLockdown() then
-		-- In a fight the movers wait for its end; a second call in the same fight takes that back. Movers that a fight
-		-- paused would open again as it ends, so a call then ends that session and they stay closed.
 		if ns.MoversMode.Resume() ~= nil then
 			ns.MoversMode.Abandon()
 			win.waitOpen, win.waitPick = nil, nil
@@ -4568,7 +3943,6 @@ function Close()
 	if not open then
 		return
 	end
-	-- A move that is under way ends here, so no handle or bar follows the mouse when it is shown again.
 	if dragging and handles[dragging] then
 		handles[dragging]:StopMovingOrSizing()
 	end
@@ -4581,7 +3955,6 @@ function Close()
 	for name in pairs(handles) do
 		HideHandle(name)
 	end
-	-- A bar of a bar block being dragged by its tab goes back, and the tabs go.
 	if ns.BarBlockGrips then
 		ns.Try(KEY, ns.BarBlockGrips, false)
 	end
@@ -4590,9 +3963,6 @@ function Close()
 	UpdateDriver()
 end
 
--- Callbacks of the game ----------------------------------------------------------------------------
-
--- What Edit Mode holds for a frame, as two texts: the place it gives it and its other settings. Nothing when the client will not say.
 local function Layout(frame)
 	local ok, place, settings = pcall(function()
 		local info = frame.systemInfo
@@ -4614,7 +3984,6 @@ local function Layout(frame)
 	return nil
 end
 
--- The number of the layout Edit Mode has applied.
 local function ActiveLayout()
 	local manager = EditModeManagerFrame
 	local ok, active = pcall(function()
@@ -4623,7 +3992,6 @@ local function ActiveLayout()
 	return ok and Number(active) and active or nil
 end
 
--- What Edit Mode held for each frame with a saved spot when it opened, and which layout it had applied.
 local entered
 
 local function NoteLayouts()
@@ -4641,9 +4009,6 @@ local function NoteLayouts()
 	end
 end
 
--- Edit Mode applies the layout again when it closes. A frame the player placed there keeps the place Edit Mode gives it, so its
--- saved spot is dropped. A frame whose other settings changed, such as its size, keeps the spot and takes the points and scale
--- the game gives it again. Another layout changes every frame, which says nothing about one.
 local function KeepEditModeChanges()
 	local was = entered
 	entered = nil
@@ -4698,9 +4063,6 @@ local function EditModeExited()
 	ApplyAllLater()
 end
 
--- The panel manager has finished when it announces a window, so the window is placed at once and never drawn in
--- the game's slot. Placed again next frame in case the game is not done. A window that has just opened gets its grips, and a
--- window that has closed loses its spot where the setting says so.
 local function PanelChanged()
 	if running and ns.Enabled(KEY) then
 		ns.Try(KEY, win.Sweep)
@@ -4710,7 +4072,6 @@ local function PanelChanged()
 	end
 end
 
--- Callbacks run when the game calls EventRegistry:TriggerEvent. The owner is the first argument.
 local owner = {}
 
 local function Watch()
@@ -4720,24 +4081,19 @@ local function Watch()
 	local ok, err = pcall(function()
 		EventRegistry:RegisterCallback("EditMode.Enter", EditModeEntered, owner)
 		EventRegistry:RegisterCallback("EditMode.Exit", EditModeExited, owner)
-		-- The game's bottom bar pass is not watched while Flat UI leaves the bars alone: a callback there runs inside the game's own pass.
 		if not ns.HandsOff() then
 			EventRegistry:RegisterCallback("EditModeManager.UpdateBottomActionBarPositions", hold.Pass, owner)
 		end
 		EventRegistry:RegisterCallback("UIParentPanelManager.ShowUIPanel", PanelChanged, owner)
 		EventRegistry:RegisterCallback("UIParentPanelManager.HideUIPanel", PanelChanged, owner)
-		-- The map says it goes to full size or back before the game sizes and places it.
 		EventRegistry:RegisterCallback("WorldMapMaximized", PanelChanged, owner)
 		EventRegistry:RegisterCallback("WorldMapMinimized", PanelChanged, owner)
-		-- Some windows are laid out again without an announcement, such as the right pane of the character window.
 		if type(hooksecurefunc) == "function" and type(UpdateUIPanelPositions) == "function" then
 			hooksecurefunc("UpdateUIPanelPositions", PanelChanged)
 		end
-		-- Bags are not panels: the game places them when one opens or closes.
 		if type(hooksecurefunc) == "function" and type(UpdateContainerFrameAnchors) == "function" then
 			hooksecurefunc("UpdateContainerFrameAnchors", PanelChanged)
 		end
-		-- The queue eye is put back by the calls that move it.
 		hold.EyeHooks()
 	end)
 	if ok then
@@ -4762,9 +4118,6 @@ local function OtherMover()
 	return nil
 end
 
--- The module ---------------------------------------------------------------------------------------
-
--- Edit Mode starts a bar of the stacks at the top left corner. A spot saved there did not come from the player.
 local function DropCorners()
 	local saved = Saved()
 	local corner = {}
@@ -4781,7 +4134,6 @@ local function DropCorners()
 	end
 end
 
--- The profile in use has other spots. The frames that have a spot in it are placed by the refresh that follows.
 function ns.SpotsChanged(was)
 	if running then
 		DropCorners()
@@ -4829,7 +4181,6 @@ end
 local function Resized()
 	if running and ns.Enabled(KEY) then
 		ApplyAll()
-		-- The game lays its windows out again for the new size of the screen, which takes them back to its own spot.
 		PlaceWindowsLater()
 		ShowHandles()
 		centre.LineLook()
@@ -4837,7 +4188,6 @@ local function Resized()
 	end
 end
 
--- Lines for /flatui status about the frames the check gave up on and the saved spots that are not used.
 local function Status()
 	local lines = {}
 	if not (running and ns.Enabled(KEY)) then
@@ -4872,11 +4222,9 @@ local function Status()
 	for _, name in ipairs(names) do
 		lines[#lines + 1] = ("%s cannot be dragged: %s."):format(win.Label(name), win.why[name])
 	end
-	-- A title bar was pressed and the game has reported no press and no frame under the cursor, so the rest of the window cannot be found.
 	if win.DragOn() and win.barUsed and not win.heard then
 		lines[#lines + 1] = "No mouse press reported by the game, so windows drag by the title bar only."
 	end
-	-- The levels of the open windows go with the last click that started no drag, to show what lay over the window.
 	if win.last then
 		lines[#lines + 1] = ("Last click on %s started no drag: %s."):format(win.last.label, win.last.reason)
 		names = {}
@@ -4916,7 +4264,6 @@ local function Status()
 	return lines
 end
 
--- Says why a command does nothing, or nil when the movers are on.
 local function Unavailable()
 	if conflict then
 		return ("Movers are off while %s is loaded. A fixed tooltip stays at the bottom right."):format(conflict)
@@ -4931,7 +4278,6 @@ local function Unavailable()
 	return nil
 end
 
--- The line of the Reset windows row and what choosing it does.
 function ns.WindowResetLines()
 	return { { 1, "Every window to its default place and size" } }
 end
@@ -4948,14 +4294,12 @@ function ns.WindowsReset(id)
 	end
 end
 
--- What MoversMode.lua draws its toolbar, lists and inspector from. It holds no state of its own.
 ns.MoverKit = {
 	LIST = LIST, BY_NAME = BY_NAME, handles = handles, looks = handleLooks, Saved = Saved, Describe = Describe, Rect = Rect, ScreenSize = ScreenSize,
 	BoxSize = BoxSize,
 	Commit = Commit, ShowHandle = function(name) ShowHandle(name) end, Cursor = function() return win.Cursor() end,
 	IsOpen = function() return open == true end, Close = function() Close() end,
 	Centre = function(name) return centre.Do(name) end,
-	-- The game's own frame, for a spot that is only known from the frame (a secret anchor makes its rectangle unreadable).
 	Readable = function(name)
 		local info = Describe(name)
 		if not info then
@@ -4967,7 +4311,6 @@ ns.MoverKit = {
 		local frame = GameFrame(name)
 		return frame ~= nil and not ns.Forbidden(frame) and Rect(frame) ~= nil
 	end,
-	-- Puts the saved spot of a frame back as it was: nil forgets the spot.
 	Restore = function(name, entry)
 		local info = Describe(name, entry)
 		local saved = Saved()
@@ -5002,15 +4345,12 @@ ns.Register(KEY, {
 	events = {
 		PLAYER_ENTERING_WORLD = ApplyAllLater,
 		ADDON_LOADED = ApplyAllLater,
-		-- Edit Mode lays its frames out again on these, so they are placed again once it is done.
 		EDIT_MODE_LAYOUTS_UPDATED = function()
 			ns.LayoutSpots.Updated()
 			ApplyAllLater()
 		end,
 		PLAYER_SPECIALIZATION_CHANGED = ApplyAllLater,
-		-- The map is the game's in the gamepad interface and is placed again when the player leaves it.
 		INPUT_DEVICE_INTERFACE_TRANSITION = PanelChanged,
-		-- The game reports every press of a mouse button; a window is found from the frame under the cursor.
 		GLOBAL_MOUSE_DOWN = function(button)
 			ns.EachPart(KEY, WIN.part, win.Pressed, button)
 		end,
@@ -5020,7 +4360,6 @@ ns.Register(KEY, {
 		PLAYER_REGEN_DISABLED = function()
 			win.toldMove, win.toldSize = false, false
 			if open then
-				-- The movers wait for the end of the fight and open again then, with what was done in them.
 				ns.MoversMode.Pause()
 				Close()
 				win.Say("Movers pause for combat.")
@@ -5032,7 +4371,6 @@ ns.Register(KEY, {
 			if again and not open then
 				Open(again)
 			end
-			-- A /flatui move given in the fight opens now, with the line on how it works the first time.
 			local waited = win.waitOpen
 			win.waitOpen = nil
 			if waited and not open and not Unavailable() then
@@ -5042,7 +4380,6 @@ ns.Register(KEY, {
 					win.Say(HOW)
 				end
 			end
-			-- A /flatui grab given in the fight opens the movers now and starts the pick.
 			if win.waitPick then
 				win.waitPick = nil
 				if not Unavailable() then
@@ -5060,7 +4397,6 @@ ns.Register(KEY, {
 	},
 	slash = {
 		move = function(rest)
-			-- The words may be separated by more than one space.
 			rest = rest:match("^%s*(.-)%s*$"):gsub("%s+", " ")
 			local why = Unavailable()
 			if why then
@@ -5086,7 +4422,6 @@ ns.Register(KEY, {
 				return
 			end
 			if InCombatLockdown() then
-				-- The pick waits for the end of the fight; a second one in the same fight takes it back.
 				if win.waitPick then
 					win.waitPick = nil
 					win.Say("/flatui grab will not start after the fight.")
@@ -5110,7 +4445,6 @@ ns.Register(KEY, {
 	},
 })
 
--- /flatui status names a game bar this addon placed in this session, which a click on one of its buttons can be refused after.
 ns.ClickPathReporter(function()
 	local placed = {}
 	for name in pairs(hold.off) do

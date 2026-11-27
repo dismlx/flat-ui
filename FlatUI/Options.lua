@@ -1,7 +1,5 @@
 local _, ns = ...
 
--- Builds the options from ns.PAGES: the first page is the category, the rest are subcategories.
-
 local root
 local variables = {}
 
@@ -9,8 +7,6 @@ local function Variable(path)
 	return "FLATUI_" .. (path:upper():gsub("%.", "_"))
 end
 
--- The settings that must be on for a control to apply: the chain of settings named by "needs", and the switch of
--- its page's owner. A row that acts at once has no switch.
 local function Needed(page, item)
 	local list = {}
 	local owner = page.owner or page.switch or page.key
@@ -35,9 +31,6 @@ local function Proxy(category, item, varType, default, get, set)
 	return Settings.RegisterProxySetting(category, variables[item.path], varType, item.label, default, get, set)
 end
 
--- What the game's Defaults button sets. A row the game holds has the value the game has when the button is pressed, so Defaults writes no
--- game setting. Maximum camera distance is one: it shows the game's camera distance (CameraZoom.lua), and Reset page leaves it too. The client
--- asks a default given as a function each time (Blizzard_Setting.lua:1-9, 358-359).
 local function Initial(item)
 	if item.cvar or item.set == "CameraZoomSet" then
 		return function()
@@ -78,7 +71,6 @@ local function AddNumber(category, item)
 	return Settings.CreateSlider(category, setting, options, item.tip)
 end
 
--- True while every setting a control needs is on.
 local function Open(page, item)
 	for _, needed in ipairs(Needed(page, item)) do
 		if not ns.NeedMet(item, needed) then
@@ -88,9 +80,6 @@ local function Open(page, item)
 	return true
 end
 
--- The game leaves a colour swatch usable in a greyed row. A colour picked there is dropped and the swatch
--- put back on the next frame, since the game shows the picked colour once the setter has run. The default
--- is still taken: pressing Defaults sets the colours and the switches in no set order.
 local function AddColour(category, item, page)
 	local setting = Proxy(category, item, Settings.VarType.String, item.default,
 		function()
@@ -110,7 +99,6 @@ local function AddColour(category, item, page)
 	return Settings.CreateColorSwatch(category, setting, item.tip)
 end
 
--- A dropdown holds the position of the choice in its list. The default of a row whose list is made by a function of ns is its first line.
 local function AddChoice(category, item)
 	local function Index(value)
 		for index, choice in ipairs(ns.Choices(item)) do
@@ -120,10 +108,6 @@ local function AddChoice(category, item)
 		end
 		return 1
 	end
-	-- The game asks for the lines when the dropdown is shown, not when it is registered. A list made by a function of ns, such as the faces the
-	-- client loads, is not asked for before that, so a client that is asked at registration gets its first line, and so does its default. After
-	-- that the default is the place of the row's own default in the list, asked each time Defaults is pressed (Blizzard_Setting.lua:1-9,
-	-- 358-359): a slot of the data panels whose default is not the first line keeps it.
 	local registering = type(item.choices) == "string"
 	local setting = Proxy(category, item, Settings.VarType.Number, item.cvar and function()
 			return Index(ns.Get(item.path))
@@ -158,10 +142,6 @@ local function AddChoice(category, item)
 	return created
 end
 
--- A dropdown that acts: choosing a line calls a function of ns with that line's id, and the
--- dropdown goes back to its first line. The game builds the lines each time the menu opens.
--- Only a line chosen in the open menu acts; the arrows and the d-pad of a gamepad pick a line
--- without opening it. A game that cannot say when the menu opens counts every pick.
 local function AddList(category, item)
 	local open = true
 	local setting = Proxy(category, item, Settings.VarType.Number, item.default,
@@ -195,14 +175,12 @@ local function AddList(category, item)
 	local initializer = Settings.CreateDropdown(category, setting, Lines, item.tip)
 	if type(initializer) == "table" then
 		open = false
-		-- The dropdown control calls these when its menu opens and closes.
 		initializer.OnShow = function()
 			open = true
 		end
 		initializer.OnHide = function()
 			open = false
 		end
-		-- The arrows beside a dropdown pick the line after the selected one, which here acts.
 		if type(initializer.data) == "table" then
 			initializer.data.forceSteppersHidden = true
 		end
@@ -212,8 +190,6 @@ end
 
 local ADD = { bool = AddBool, number = AddNumber, colour = AddColour, choice = AddChoice, list = AddList }
 
--- A control is greyed out while a setting it depends on is off. The game checks this when it builds
--- the control, and again whenever one of those settings changes.
 local function Depend(initializer, page, item)
 	if type(initializer) ~= "table" or type(initializer.AddModifyPredicate) ~= "function" then
 		return
@@ -237,9 +213,7 @@ local function BuildPage(category, page)
 				end)
 			end
 		elseif item.kind == "entries" then
-			-- The tracker editor is a block of the window's own.
 		elseif ns.RowShown(item.path) then
-			-- One control the client cannot build does not cost the rest of the page.
 			local ok, initializer = pcall(ADD[item.kind], category, item, page)
 			if ok then
 				pcall(Depend, initializer, page, item)
@@ -250,9 +224,6 @@ local function BuildPage(category, page)
 	end
 end
 
--- One category with a button that opens Flat UI's own window, in place of the settings: every setting made here sits in the game's settings
--- registry, which a click on an action button walks (ActionButton.lua:1409), so a registry with none of Flat UI's settings in it leaves the
--- click nothing of this addon's to read (EllesmereUI registers one canvas category the same way, EllesmereUI.lua:4366-4367).
 local function RegisterCanvas()
 	local frame = CreateFrame("Frame")
 	ns.Own[frame] = true
@@ -270,7 +241,6 @@ local function RegisterCanvas()
 	local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	label:SetPoint("CENTER", button, "CENTER", 0, 0)
 	label:SetText("Open Flat UI")
-	-- It lights under the mouse, and a press counts only when it is let go over it, as with the buttons of the options window.
 	local down = false
 	button:SetScript("OnEnter", function()
 		ns.SetOutlineFill(outline, 0.26, 0.26, 0.26, 1)
@@ -323,14 +293,12 @@ function ns.RegisterOptions()
 	Settings.RegisterAddOnCategory(root)
 end
 
--- A value changed outside the panel shows in the open panel.
 function ns.NotifyOption(path)
 	if root and variables[path] and Settings.NotifyUpdate then
 		pcall(Settings.NotifyUpdate, variables[path])
 	end
 end
 
--- Returns true when the options opened, and "combat" as the second value when a fight is why they did not.
 function ns.OpenOptions()
 	if not root then
 		return false
@@ -342,7 +310,6 @@ function ns.OpenOptions()
 	return ok and SettingsPanel ~= nil and SettingsPanel:IsShown()
 end
 
--- /flatui status names the settings this addon put in the game's settings registry.
 ns.ClickPathReporter(function()
 	local count = 0
 	for _ in pairs(variables) do
