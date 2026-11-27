@@ -699,7 +699,7 @@ function P.TargetFlash(p, spec, o)
 	if p.tflashFrame == nil then
 		p.tflashFrame = Frame(p.bar)
 		p.tflashFrame:SetAllPoints(p.bar)
-		p.tflashFrame:SetFrameLevel(p.bar:GetFrameLevel() + 8)
+		p.tflashFrame:SetFrameLevel(p.bar:GetFrameLevel() + 12)
 		p.tflashFrame:SetAlpha(0)
 		p.tflashOutline = P.Outline(p.S, p.tflashFrame, p.tflashFrame)
 		ns.KeepOutline(p.tflashOutline)
@@ -708,6 +708,10 @@ function P.TargetFlash(p, spec, o)
 	end
 	local px = Get("targetThickness")
 	px = ns.Finite(px) and px >= 1 and math.floor(px + 0.5) or 1
+	local markPx = o.styled and type(ns.PlateMarkPx) == "function" and ns.PlateMarkPx() or nil
+	if ns.Finite(markPx) and markPx > px then
+		px = markPx
+	end
 	ns.SetOutlineThickness(p.tflashOutline, px + P.FLASH_GROW)
 	ns.SetOutlineColour(p.tflashOutline, ns.Colour(KEY .. "." .. mark))
 	if was ~= true and p.tflash then
@@ -1816,6 +1820,9 @@ function P.Plate(p, spec, sets)
 	P.QuestMark(p, spec, o, m)
 	P.Cast(p, spec, o, m)
 	P.Auras(p, spec, o, m)
+	if type(ns.PlateMarkSample) == "function" then
+		pcall(ns.PlateMarkSample, p, spec, o, m)
+	end
 	if type(ns.PlateSlipBox) == "function" then
 		pcall(ns.PlateSlipBox, p)
 	end
@@ -2115,9 +2122,16 @@ function P.Stack(S, layout)
 	end
 	local target = by.target
 	local BW = target.plate.m.BW
-	local step = { BW * Get("overlapH") / 100, target.plate.m.top * Get("overlapV") / 100 }
+	local stacked, overlapV = Get("stackEnemies") == true, Get("overlapV")
+	if type(ns.PlateSpreadView) == "function" then
+		local ok, viewStacked, viewOverlap = pcall(ns.PlateSpreadView, stacked, overlapV)
+		if ok and viewStacked ~= nil then
+			stacked, overlapV = viewStacked, viewOverlap
+		end
+	end
+	local step = { BW * Get("overlapH") / 100, target.plate.m.top * overlapV / 100 }
 	local spots = { target = { 0, 0 }, near = { step[1] / 2, step[2] }, far = { -step[1], 0 } }
-	if Get("stackEnemies") ~= true then
+	if not stacked then
 		spots.near = { step[1] * 0.25, target.plate.m.top * 0.35 }
 	end
 	local left, right, bottom, top = math.huge, -math.huge, math.huge, -math.huge
@@ -2192,6 +2206,8 @@ function P.Parts(S)
 	Set({ "classColoursFriendly" }, (Live("friend") or plate).bar)
 	Set({ "targetBar", "targetBarColour", "target", "targetColour", "targetThickness", "targetFlash" }, (Live("target") or plate).bar)
 	Set({ "focusColour" }, (Live("focus") or Live("target") or plate).bar)
+	local marked = Live("target") or plate
+	Set({ "targetMark", "targetMarkColour", "targetArrows" }, type(ns.PlateMarkShown) == "function" and ns.PlateMarkShown(marked) or marked.bar)
 	Set({ "threat", "threatRole", "threatGood", "threatTransition", "threatBad", "threatSameColours", "threatDamageGood", "threatDamageTransition",
 		"threatDamageBad" }, plates.threat and plates.threat.chips.f or plate.bar)
 	Set({ "hover", "hoverColour" }, (Live("hover") or plate).bar)
@@ -2239,7 +2255,7 @@ function P.Parts(S)
 		Set({ "threatTanks", "threatTankColour" }, offtank and offtank.bar or good.bar)
 	end
 	Set({ "overlapH", "overlapV", "selectedScale" }, (Live("target") or plate).f)
-	Set({ "stackEnemies", "stackFriends" }, (Live("near") or plate).f)
+	Set({ "spread", "stackEnemies", "stackFriends" }, (Live("near") or plate).f)
 	Set({ "minScale", "minAlpha" }, (plates.far or plate).f)
 	Set({ "notSelectedAlpha" }, (plates.near or plate).f)
 	S.parts = parts

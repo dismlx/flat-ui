@@ -464,7 +464,7 @@ TM.StandIn({
 			holder.caption:SetTextColor(DIM[1], DIM[2], DIM[3])
 		end
 		local class = Class()
-		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, quest = true,
+		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, quest = true, target = true,
 			overpower = class == "WARRIOR" or class == "HUNTER", combo = (class == "ROGUE" or class == "DRUID") and 1 or nil,
 			cast = { name = "Shadow Bolt", share = 0, left = PLATE_CAST } }
 	end,
