@@ -99,14 +99,16 @@ function D.Place()
 			return "own"
 		end
 	end
+	local x, y = Opt("x"), Opt("y")
+	x, y = ns.Finite(x) and x or 0, ns.Finite(y) and y or 0
 	if place == "resource" then
 		local display = PersonalResourceDisplayFrame
 		if display ~= nil and not ns.Forbidden(display) then
 			local over = type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder("above") or nil
 			if over then
-				holder:SetPoint("BOTTOMLEFT", over, "TOPLEFT", 0, ROOM + 4)
+				holder:SetPoint("BOTTOMLEFT", over, "TOPLEFT", x, ROOM + 4 + y)
 			else
-				holder:SetPoint("BOTTOMLEFT", D.TopBar(display), "TOPLEFT", 0, ROOM + 4)
+				holder:SetPoint("BOTTOMLEFT", D.TopBar(display), "TOPLEFT", x, ROOM + 4 + y)
 			end
 			if D.Anchored(holder) then
 				ns.ClearNote(KEY, NOTE_NO_POSITION)
@@ -120,10 +122,10 @@ function D.Place()
 	end
 	local frame = PlayerFrame
 	if frame ~= nil and not ns.Forbidden(frame) then
-		holder:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", OFFSET_X, OFFSET_Y)
+		holder:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", OFFSET_X + x, OFFSET_Y + y)
 		return "player"
 	end
-	holder:SetPoint("CENTER", UIParent, "CENTER", 0, -200)
+	holder:SetPoint("CENTER", UIParent, "CENTER", x, -200 + y)
 	return "screen"
 end
 
@@ -1430,6 +1432,11 @@ ns.Register(KEY, {
 		end,
 		SPELLS_CHANGED = function()
 			D.QueueSounds()
+		end,
+		PLAYER_REGEN_DISABLED = function()
+			if D.testing then
+				ns.Try(KEY, D.EndTest, nil, true)
+			end
 		end,
 	},
 	slash = { check = D.Check, defensives = D.Slash, test = function(rest)
