@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Flat UI
 ## Notes: Thin dark borders on the default interface. /flatui
-## Version: 0.5.47
+## Version: 0.5.48
 ## Author: dismlx
 ## X-License: MIT
 ## X-Curse-Project-ID: 1750813
@@ -71,6 +71,9 @@ PingBar.lua
 OwnBuffs.lua
 Absorbs.lua
 ResourceBarrier.lua
+ChargesLook.lua
+ChargesGame.lua
+Charges.lua
 TrackerShapes.lua
 TrackerKinds.lua
 TrackerMarks.lua

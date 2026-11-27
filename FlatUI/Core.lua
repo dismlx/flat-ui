@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "trinkets", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "consumebar", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "charges", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "trinkets", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "consumebar", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 local MAX_FAILURES = 5
 local MAX_PART_FAILURES = 3
@@ -3590,7 +3590,7 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui setup - walk round your screen in six short stops")
 		print("/flatui profiles - the ready-made looks; a click puts one in use")
 		print("/flatui welcome - the welcome screen")
-		print("/flatui new - what changed in this version; /flatui new 0.5.41 shows that version (changes works too)")
+		print("/flatui new - what changed in this version; /flatui new <version> shows that version (changes works too)")
 		print("/flatui scale 70 - the UI scale in percent, 35 to 115; under 65 uses Small scale")
 		print("/flatui scale off - the game's own UI scale")
 		print("/flatui <words> - opens the options window and searches for them")

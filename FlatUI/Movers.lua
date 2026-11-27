@@ -81,6 +81,8 @@ local LIST = {
 		gate = "AbsorbsShown", changed = "AbsorbsMoved" },
 	{ name = "FlatUIAbsorbsTarget", label = "Absorb shields: target", point = "CENTER", kind = "hud", own = true, noScale = true, width = 180, height = 16, x = 0, y = 140,
 		gate = "AbsorbsTargetShown", changed = "AbsorbsMoved" },
+	{ name = "FlatUICharges", label = "Charges", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 90, x = 0, y = -200,
+		gate = "ChargesShown", changed = "ChargesMoved" },
 	{ name = "FlatUIPartyRaid", label = "Party cooldowns: raid group", point = "CENTER", kind = "hud", own = true, noScale = true, width = 220, height = 150, x = -420, y = 0,
 		gate = "PartyRaidShown", changed = "PartyRaidMoved" },
 	{ name = "FlatUIEnemyTarget", label = "Enemy cooldowns: target", point = "CENTER", kind = "hud", own = true, noScale = true, width = 200, height = 30, x = 0, y = 220,

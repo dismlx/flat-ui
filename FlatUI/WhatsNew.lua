@@ -769,7 +769,7 @@ function ns.WhatsNewCommand(rest)
 	if typed == "" then
 		return ns.OpenWhatsNew()
 	elseif not typed:find("^%d+[%.%d]*$") then
-		print("Flat UI: /flatui new shows what changed in this version; /flatui new 0.5.41 shows that version.")
+		print("Flat UI: /flatui new shows what changed in this version; /flatui new <version> shows that version.")
 		return false
 	end
 	return ns.OpenWhatsNew(typed)
