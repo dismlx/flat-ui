@@ -472,6 +472,10 @@ local function Step(_, elapsed)
 		Refresh(true)
 		return
 	end
+	if S.preview and not (S.sampleUntil ~= nil and now < S.sampleUntil) then
+		S.preview = false
+		Run(true)
+	end
 	Advance(now)
 	Draw(now)
 end

@@ -16,6 +16,9 @@ local SHAKE_STEP, SHAKE_TURNS, SHAKE_WINDOW, SHAKE_HOLD = 8, 4, 0.5, 0.6
 local GROW, GROW_UP, GROW_END = 1.5, 0.15, 0.6
 local PREVIEW = 1.2
 local PREVIEW_ROWS = { ["general.cursorRing"] = true, ["general.cursorRingSize"] = true, ["general.cursorRingColour"] = true }
+local SWIPE_ROWS = { ["general.cursorRingCast"] = true, ["general.cursorRingCastColour"] = true, ["general.cursorRingGcd"] = true,
+	["general.cursorRingGcdColour"] = true }
+local SWIPE_PREVIEW = 2.6
 
 local ring
 local art
@@ -607,20 +610,8 @@ local function Apply()
 	Show(Wanted())
 end
 
-function ns.CursorRingChanged(path)
-	local mode = Mode()
-	if type(path) == "string" and PREVIEW_ROWS[path] and (mode == "combat" or mode == "shake") and not broken and not InCombatLockdown()
-		and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
-		previewUntil = GetTime() + PREVIEW
-	end
-	local ok, err = pcall(Apply)
-	if not ok then
-		Stop(err)
-	end
-end
-
-function ns.CursorRingSample()
-	if broken or stopped or not (ring and ring:IsShown() and Testing()) or Running(false) then
+local function Sample(force)
+	if broken or stopped or not (ring and ring:IsShown() and (force or Testing())) or Running(false) then
 		return
 	end
 	local now = GetTime()
@@ -635,6 +626,27 @@ function ns.CursorRingSample()
 			end
 		end
 	end
+end
+
+function ns.CursorRingChanged(path)
+	local mode = Mode()
+	local shown = type(path) == "string" and not broken and not InCombatLockdown() and type(ns.PanelShown) == "function" and ns.PanelShown() == true
+	local swipe = shown and SWIPE_ROWS[path] and (mode == "always" or mode == "combat") and not InFight()
+	if shown and PREVIEW_ROWS[path] and (mode == "combat" or mode == "shake") then
+		previewUntil = GetTime() + PREVIEW
+	elseif swipe then
+		previewUntil = math.max(previewUntil or 0, GetTime() + SWIPE_PREVIEW)
+	end
+	local ok, err = pcall(Apply)
+	if not ok then
+		Stop(err)
+	elseif swipe then
+		pcall(Sample, true)
+	end
+end
+
+function ns.CursorRingSample()
+	Sample(false)
 end
 
 local function ProgressStatus()

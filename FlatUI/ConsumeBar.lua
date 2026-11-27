@@ -12,7 +12,7 @@ local K = {
 	KEY_FONT = "GameFontHighlightSmall", COUNT_FONT = "NumberFontNormal", PLUS_FONT = "GameFontHighlightLarge",
 	DIM = { 0.66, 0.68, 0.62 }, WARN = { 0.9, 0.72, 0.36 }, RED = { 1, 0.3, 0.25 },
 	UNUSABLE = { 0.4, 0.4, 0.4 }, NO_MANA = { 0.5, 0.5, 1 }, WHITE = { 1, 1, 1 },
-	EMPTY_ALPHA = 0.45, LIGHTER = 0.17, NONE_GAP = 5, RECENT = 0.5, SOON = 0.2,
+	EMPTY_ALPHA = 0.45, LIGHTER = 0.17, NONE_GAP = 5, RECENT = 0.5, SOON = 0.2, RISE = 0.1, FALL = 0.3, WATCH = 0.1, LONG = 3,
 	SAMPLES = { { 118, 5 }, { 159, 12 }, { 4540, 0 }, { 1251, 3 } },
 	QUESTION = 134400,
 	WAIT_LINE = "Flat UI: the consumables bar lays out again when the fight ends.",
@@ -514,6 +514,12 @@ function C.Entry(index)
 	top:SetAllPoints(icon.frame)
 	top:SetFrameLevel(icon.frame:GetFrameLevel() + 3)
 	entry = { index = index, icon = icon, frame = icon.frame, texture = icon.texture, cooldown = icon.cooldown, outline = icon.outline, top = top }
+	icon.onDone = function()
+		if entry.long then
+			entry.long, entry.ends = false, nil
+			C.Ready(entry)
+		end
+	end
 	entry.countText = Text(top, K.COUNT_FONT, "BOTTOMRIGHT", -1, 2)
 	entry.keyText = Text(top, K.KEY_FONT, "TOPLEFT", 2, -2)
 	entry.cover = C.Cover(entry)
@@ -536,13 +542,12 @@ function C.Cover(entry)
 	local done = pcall(function()
 		cover:SetFrameLevel(entry.frame:GetFrameLevel() + 5)
 		cover:EnableMouse(true)
-		cover:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-		cover:SetAttribute("useOnKeyDown", false)
+		cover:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp")
 		cover:SetScript("PreClick", function(_, button)
 			ns.Try(KEY, C.PreClick, entry, button)
 		end)
-		cover:SetScript("PostClick", function(_, button)
-			ns.Try(KEY, C.PostClick, entry, button)
+		cover:SetScript("PostClick", function(_, button, down)
+			ns.Try(KEY, C.PostClick, entry, button, down)
 		end)
 		cover:SetScript("OnReceiveDrag", function()
 			ns.Try(KEY, C.Drop, entry)
@@ -609,6 +614,7 @@ function C.Park(entry)
 	end
 	entry.id, entry.list, entry.place, entry.sample, entry.sampleCount = nil, nil, nil, nil, nil
 	entry.cd, entry.shownIcon, entry.lastCount, entry.empty = nil, nil, nil, nil
+	entry.long, entry.ends = false, nil
 	pcall(entry.cooldown.Clear, entry.cooldown)
 	entry.frame:Hide()
 	entry.cover:Hide()
@@ -643,6 +649,7 @@ function C.Layout(wanted)
 		end
 		if entry.id ~= want.id or entry.sample ~= (want.sample == true) then
 			entry.cd, entry.shownIcon, entry.lastCount = nil, nil, nil
+			entry.long, entry.ends = false, nil
 			pcall(entry.cooldown.Clear, entry.cooldown)
 		end
 		entry.id, entry.list, entry.place, entry.sample, entry.sampleCount = want.id, want.list == true, want.place, want.sample == true, want.count
@@ -746,7 +753,11 @@ function C.Lay()
 		return
 	end
 	C.Place()
+	local hidden = not C.panel:IsShown()
 	C.panel:Show()
+	if hidden then
+		C.Fade(true)
+	end
 end
 
 function C.Queue()
@@ -810,9 +821,21 @@ function C.Sweep(entry)
 	end
 	entry.cd = key
 	if duration > 0 then
+		entry.long, entry.ends = duration >= K.LONG, start + duration
 		pcall(entry.cooldown.SetCooldown, entry.cooldown, start, duration)
 	else
+		local ended = entry.long and entry.ends ~= nil and Now() >= entry.ends - K.SOON
+		entry.long, entry.ends = false, nil
 		pcall(entry.cooldown.Clear, entry.cooldown)
+		if ended then
+			C.Ready(entry)
+		end
+	end
+end
+
+function C.Ready(entry)
+	if entry.id and not entry.sample and entry.frame:IsVisible() then
+		ns.IconFlash(entry.icon)
 	end
 end
 
@@ -906,16 +929,101 @@ function C.Tints()
 	end
 end
 
-function C.Fade()
-	local alpha = 1
-	if Opt("fade") == true and not C.fighting and not C.hover then
-		alpha = math.max(0, math.min(100, Number("fadeAlpha", 40))) / 100
+function C.Lining()
+	local kit = ns.MoverKit
+	if type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true then
+		return true
 	end
+	return type(ns.EditModeOpen) == "function" and ns.EditModeOpen() == true
+end
+
+function C.Rest()
+	if Opt("fade") == true and not C.fighting and not C.hover and not C.Lining() then
+		return math.max(0, math.min(100, Number("fadeAlpha", 40))) / 100
+	end
+	return 1
+end
+
+function C.SetAlpha(alpha)
+	C.alpha = alpha
 	for _, entry in ipairs(C.shown) do
 		entry.frame:SetAlpha(alpha)
 	end
 	if C.plus then
 		C.plus.frame:SetAlpha(alpha)
+	end
+end
+
+function C.StopEase()
+	C.ease = nil
+	if C.easer then
+		C.easer:SetScript("OnUpdate", nil)
+	end
+end
+
+function C.Ease()
+	local ease = C.ease
+	if not ease then
+		C.StopEase()
+		return
+	end
+	local share = ease.duration > 0 and (Now() - ease.start) / ease.duration or 1
+	if not Finite(share) or share >= 1 then
+		C.StopEase()
+		C.SetAlpha(ease.to)
+		return
+	end
+	share = math.max(0, share)
+	C.SetAlpha(ease.from + (ease.to - ease.from) * (1 - (1 - share) * (1 - share)))
+end
+
+function C.Fade(snap)
+	local to = C.Rest()
+	if snap or C.alpha == nil or not (C.panel and C.panel:IsShown()) then
+		C.StopEase()
+		C.SetAlpha(to)
+	elseif not (C.ease and C.ease.to == to) then
+		if C.alpha == to then
+			C.StopEase()
+			C.SetAlpha(to)
+		else
+			if not C.easer then
+				C.easer = Own(CreateFrame("Frame"))
+				C.easeStep = function()
+					if not ns.Try(KEY, C.Ease) then
+						C.StopEase()
+					end
+				end
+			end
+			local from = C.alpha
+			C.ease = { from = from, to = to, start = Now(), duration = (to > from and K.RISE or K.FALL) * math.abs(to - from) }
+			C.easer:SetScript("OnUpdate", C.easeStep)
+		end
+	end
+	C.Watch()
+end
+
+function C.StopWatch()
+	local ticker = C.ticker
+	C.ticker = nil
+	if type(ticker) == "table" and type(ticker.Cancel) == "function" then
+		pcall(ticker.Cancel, ticker)
+	end
+end
+
+function C.Watch()
+	local want = Opt("fade") == true and not C.fighting and C.panel ~= nil and C.panel:IsShown() and ns.Enabled(KEY)
+	if want and not C.ticker then
+		if type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
+			local ok, ticker = pcall(C_Timer.NewTicker, K.WATCH, function()
+				if not ns.Try(KEY, C.Fade) then
+					C.StopWatch()
+				end
+			end)
+			C.ticker = ok and ticker or nil
+		end
+	elseif not want and C.ticker then
+		C.StopWatch()
 	end
 end
 
@@ -1036,7 +1144,7 @@ function C.PreClick(entry, button)
 	end
 end
 
-function C.PostClick(entry, button)
+function C.PostClick(entry, button, down)
 	if entry.held then
 		entry.held = false
 		if Fighting() or not pcall(entry.cover.SetAttribute, entry.cover, "*type1", "item") then
@@ -1045,7 +1153,7 @@ function C.PostClick(entry, button)
 		end
 	end
 	if button == "RightButton" then
-		if Ask(IsShiftKeyDown) == true and entry.id and not entry.sample then
+		if not down and Ask(IsShiftKeyDown) == true and entry.id and not entry.sample then
 			local _, line
 			if entry.list then
 				_, line = C.Remove(entry.id)
@@ -1057,7 +1165,9 @@ function C.PostClick(entry, button)
 		return
 	end
 	if C.CursorItem() then
-		C.Drop(entry)
+		if not down then
+			C.Drop(entry)
+		end
 	elseif not C.Recent(entry) and entry.id and not entry.sample and entry.empty then
 		C.SayNone(entry.id)
 	end
