@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
--- The sidebar of the options window: four fixed rows, then eleven groups with 43 pages, each with its icon. A group folds on a click and the
+-- The sidebar of the options window: four fixed rows, then eleven groups with 45 pages, each with its icon. A group folds on a click and the
 -- fold is kept per account. A module that is off shows the Off chip. Also the switch widget, and the header of a page that has the module
 -- switch. Panel.lua hands the drawing of these to this file; the widgets are the ones of ns.PanelKit.
 
