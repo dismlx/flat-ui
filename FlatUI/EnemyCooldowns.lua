@@ -38,6 +38,7 @@ local LINE_PLATES = "Enemy cooldowns: some nameplates show no icons."
 local LINE_WAIT = "Enemy cooldowns: a bar waits for the nameplate of its unit, whose identity the game hides."
 local LINE_ARENA = "Crowd control break in arenas: the game refused the arena call."
 local ARENA_OPPONENTS = 5
+local SAMPLE_KEYS = { "ROGUE:Kick", "MAGE:Ice Block", "PALADIN:Divine Shield" }
 
 local IsSecret = ns.IsSecret
 local T = ns.Tracking
@@ -794,20 +795,23 @@ function E.Tip(row, icon)
 	if not tip or tips == "off" or (tips == "out" and InCombatLockdown()) then
 		return
 	end
-	local a = not row.testing and E.ByKey(icon.key) or nil
+	local a = E.ByKey(icon.key)
 	if not a and not row.testing then
 		return
 	end
 	local rec = row.rec
 	local who = rec and rec.unit and Text(UnitName, rec.unit) or nil
 	local start, seconds
-	if a and rec and rec.owner then
+	if a and not row.testing and rec and rec.owner then
 		start, seconds = T.Timer(rec.owner, a.key)
 	end
 	pcall(function()
 		tip:SetOwner(icon.frame, "ANCHOR_TOP")
 		if row.testing then
 			tip:SetText("Sample", 1, 1, 1)
+			if a then
+				tip:AddLine(E.Name(a), ns.KindColour(a.kind))
+			end
 			tip:AddLine("A sample of test mode.", DIM[1], DIM[2], DIM[3])
 			tip:Show()
 			return
@@ -1905,12 +1909,22 @@ function E.Hold(rec)
 	for slot, icon in ipairs(row.icons) do
 		row.drawn[slot] = nil
 		if slot <= count then
+			local a = E.Ability(SAMPLE_KEYS[slot])
+			icon.key, icon.unknown = a and a.key or nil, nil
+			local shown = look
+			if a and look.kind then
+				shown = {}
+				for name, value in pairs(look) do
+					shown[name] = value
+				end
+				shown.kind = a.kind
+			end
 			E.Mark(icon, false)
-			ns.IconSampleHeld(icon, slot, KEY, look)
+			ns.IconSampleHeld(icon, slot, KEY, shown, a and E.Texture(a) or nil)
 			icon.texture:SetDesaturated(level < 1)
 			icon.texture:SetVertexColor(level, level, level)
 		else
-			icon.held = nil
+			icon.key, icon.held = nil, nil
 			ns.IconClear(icon)
 		end
 	end

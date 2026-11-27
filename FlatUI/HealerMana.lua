@@ -195,13 +195,17 @@ function H.Healer(unit)
 end
 
 function H.Read()
-	local byRole, byClass = {}, {}
+	local byRole, byClass, roled = {}, {}, false
+	local skip = Opt("mine") == false
 	local function Member(unit)
 		if Ask(UnitExists, unit) == true then
 			local healer, guessed = H.Healer(unit)
 			if healer then
-				local list = guessed and byClass or byRole
-				list[#list + 1] = unit
+				roled = roled or not guessed
+				if not (skip and Ask(UnitIsUnit, unit, "player") == true) then
+					local list = guessed and byClass or byRole
+					list[#list + 1] = unit
+				end
 			end
 		end
 	end
@@ -215,7 +219,7 @@ function H.Read()
 			Member("party" .. index)
 		end
 	end
-	return #byRole > 0 and byRole or byClass
+	return roled and byRole or byClass
 end
 
 local function ClassRGB(class)

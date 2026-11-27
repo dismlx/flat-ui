@@ -37,7 +37,7 @@ local DEBUFFS = {
 local BUFFS = { { kind = nil, seconds = 25 }, { kind = nil, seconds = 290 }, { kind = nil, seconds = 1700 } }
 local AURA_GOLD = { 1, 0.82, 0 }
 local AURA_WARN, AURA_RED, AURA_GAME_WHITE = 10, { 1, 0.3, 0.3 }, 90
-local ROLL_BOX, ROLL_STEP, ROLL_W, ROLL_TIME = "FlatUILootRolls", 100, 277, 10
+local ROLL_BOX, ROLL_STEP, ROLL_W, ROLL_TIME, ROLL_WARN = "FlatUILootRolls", 100, 277, 10, 5
 local ROLL_ITEMS = { { icon = 2, name = "Sturdy Shield", quality = 2 }, { icon = 3, name = "Royal Crown", quality = 3 } }
 local MIRROR_TIME = 30
 local PLATE_UP, PLATE_ROUND, PLATE_CAST, THREAT_EVERY = 160, 3, 2.5, 3
@@ -302,10 +302,17 @@ local function RollShown()
 end
 
 local function RollTimers(holder, now)
+	local sound = ns.Get("hud.lootRolls") == true and ns.Get("hud.lootRollTime") == true and ns.Get("hud.lootRollSound") ~= "none"
+		and type(ns.LootRollSound) == "function"
 	for index, roll in ipairs(holder.rolls) do
 		local run = ((now + (index - 1) * 3) % ROLL_TIME) / ROLL_TIME
+		local secs = math.max(1, math.ceil(60 * (1 - run)))
 		roll.timer:SetValue(100 * (1 - run))
-		ns.DrawHud.RollTime(roll, math.max(1, math.ceil(60 * (1 - run))))
+		ns.DrawHud.RollTime(roll, secs)
+		if sound and secs <= ROLL_WARN and ns.Finite(roll.lastSecs) and roll.lastSecs > ROLL_WARN and TM.Sound("hud.lootRoll") then
+			ns.LootRollSound()
+		end
+		roll.lastSecs = secs
 	end
 end
 
