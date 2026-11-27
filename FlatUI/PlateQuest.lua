@@ -29,7 +29,10 @@ local _, ns = ...
 -- enemy's name that starts another's ("Plaguehound" and "Plaguehound Runt") takes its own objective. An enemy that only drops a quest item, or
 -- whose name is withheld, shows the mark alone. The finished kill objectives are kept too: as the last kill counts, the marks of the other plates
 -- of that enemy read need/need (8/8) in green and pop before they fade (the fade waits for the pop to settle), and a mark the game still shows for
--- another objective of the quest keeps its green 8/8; an unfinished objective of the same name comes first.
+-- another objective of the quest keeps its green 8/8; an unfinished objective of the same name comes first. A finished objective counts only on a
+-- plate that was counting it as it was done (each objective has a key, its quest and its place in the quest, which the plate keeps while it counts
+-- it, rec.objective, until it leaves): a plate that comes into view later, marked for another quest of that enemy (an item it drops), shows the
+-- mark alone, not a green count that reads as done.
 -- The count is a font string of the mark's frame, outlined, in Text font, at 0.8 of Quest mark size. As a kill counts, the count on every other
 -- plate of that enemy pops (grows to 1.6 of its size and settles back over 0.3 seconds, white until it ends, then gold, green once the objective is
 -- done, or grey on a tapped enemy).
@@ -523,6 +526,9 @@ local function Hide(rec, now, late)
 	if not rec.holder then
 		return
 	end
+	if now then
+		rec.objective = nil
+	end
 	if now and rec.complete then
 		rec.complete = nil
 		CountColour(rec)
@@ -555,8 +561,10 @@ end
 -- The kill objective that names this enemy, unfinished (S.counts) or finished (S.done), of those whose text starts with its name: one where no
 -- letter follows the name first (a space or a colon: "Plaguehound slain" for a Plaguehound, not "Plaguehounds"), then the one whose rest, without
 -- its count and punctuation, is the shortest (" slain" before " Runt slain", so a Plaguehound is not counted on the Plaguehound Runts' objective),
--- the first in the log on a tie, an unfinished one before a finished one. Nil while Kill count is off or the enemy's name is withheld.
-local function Objective(unit)
+-- the first in the log on a tie, an unfinished one before a finished one. A finished one is taken only when it is `keep` (the key of the objective
+-- the plate was counting, rec.objective), so a plate that comes into view for another quest of the same enemy shows no finished count. Nil while
+-- Kill count is off or the enemy's name is withheld.
+local function Objective(unit, keep)
 	local counts, done = S.counts, S.done
 	if Opt("questMarkCount") ~= true or not ((counts and #counts > 0) or (done and #done > 0)) then
 		return nil
@@ -566,10 +574,10 @@ local function Objective(unit)
 		return nil
 	end
 	local best, bestLetter, bestLength
-	for _, list in ipairs({ counts or {}, done or {} }) do
+	for _, list in ipairs({ counts or {}, (keep ~= nil and done) or {} }) do
 		for _, entry in ipairs(list) do
 			local words = entry.text
-			if words:find(name, 1, true) == 1 then
+			if (not entry.done or entry.key == keep) and words:find(name, 1, true) == 1 then
 				local rest = words:sub(#name + 1)
 				local letter = rest:find("^%a") ~= nil
 				local length = #(rest:gsub("[%s%d/:]+$", ""))
@@ -582,14 +590,18 @@ local function Objective(unit)
 	return best
 end
 
--- The kill count of the objective that names the enemy (Objective, or the one given), or nothing: have/need while it is unfinished, need/need in
--- green once it is done.
-local function Count(rec, unit, entry)
+-- The kill count of the objective given (Objective), or nothing: have/need while it is unfinished, need/need in green once it is done. The plate
+-- keeps the key of the unfinished objective it counts (rec.objective), which lets it keep that objective's green count as it is done.
+local function Count(rec, entry)
 	local count = rec.count
 	if not count then
 		return
 	end
-	entry = entry or Objective(unit)
+	if entry == nil then
+		rec.objective = nil
+	elseif not entry.done then
+		rec.objective = entry.key
+	end
 	local text = entry and ("%d/%d"):format(entry.have, entry.need) or ""
 	local complete = entry and entry.done or nil
 	if rec.complete ~= complete then
@@ -627,15 +639,15 @@ function Draw(unitFrame)
 	if want then
 		CountFont(rec)
 		Tapped(rec, unit)
-		Count(rec, unit)
+		Count(rec, Objective(unit, rec.objective))
 		if not rec.shown then
 			rec.shown = true
 			Fade(rec, true)
 		end
 	else
-		local entry = rec.shown and rec.count and Objective(unit) or nil
+		local entry = rec.shown and rec.count and Objective(unit, rec.objective) or nil
 		if entry and entry.done then
-			Count(rec, unit, entry)
+			Count(rec, entry)
 			Hide(rec, false, true)
 		else
 			Hide(rec)
@@ -658,15 +670,18 @@ local function Objectives()
 		local id = Ask(quests.GetQuestIDForLogIndex, index)
 		local objectives = ns.Finite(id) and id > 0 and Ask(quests.GetQuestObjectives, id) or nil
 		if Plain(objectives, "table") then
-			for _, objective in ipairs(objectives) do
+			for n, objective in ipairs(objectives) do
+				-- The key of the objective: its quest and its place in the quest, since its text carries the count.
+				local key = id .. ":" .. n
 				local kill = Plain(objective, "table") and Plain(objective.type, "string") and objective.type == "monster"
 					and Plain(objective.text, "string") and ns.Finite(objective.numRequired) and objective.numRequired > 0
 				local finished = kill and Plain(objective.finished, "boolean") and objective.finished
 				if finished then
 					local need = math.floor(objective.numRequired)
-					done[#done + 1] = { text = objective.text, have = need, need = need, done = true }
+					done[#done + 1] = { key = key, text = objective.text, have = need, need = need, done = true }
 				elseif kill and ns.Finite(objective.numFulfilled) then
-					list[#list + 1] = { text = objective.text, have = math.floor(objective.numFulfilled), need = math.floor(objective.numRequired) }
+					list[#list + 1] = { key = key, text = objective.text, have = math.floor(objective.numFulfilled),
+						need = math.floor(objective.numRequired) }
 				end
 			end
 		end

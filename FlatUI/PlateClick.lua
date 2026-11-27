@@ -11,7 +11,8 @@ local _, ns = ...
 -- The insets are the game's, set per kind of plate, and no part of the look, so the rows work on friendly plates whether or not Restyle friendly
 -- nameplates is on. With Where friendly nameplates are clicked through at In dungeons and raids, friendly plates are clicked through only while
 -- IsInInstance says a party or raid instance; PLAYER_ENTERING_WORLD and ZONE_CHANGED_NEW_AREA set the area again as you zone (after the fight when
--- you zone in one, as every change of the area waits for).
+-- you zone in one, as every change of the area waits for). A change of a click row in the options window in a fight says so in chat once a fight,
+-- while the window shows.
 
 local KEY = "nameplates"
 local PART = "nameplate click area"
@@ -33,6 +34,8 @@ local KINDS = {
 local done = {}
 local queued, forced = false, false
 local note
+-- rows: the values of the click rows at the last refresh, as one string; told: the chat line was said this fight.
+local rows, told
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -110,7 +113,7 @@ end
 
 local function Run()
 	local f = forced
-	queued, forced = false, false
+	queued, forced, told = false, false, nil
 	local ok = ns.EachPart(KEY, PART, Apply, f)
 	if not ok and ns.PartStopped(KEY, PART) then
 		-- The part stopped: the game's area goes back.
@@ -118,9 +121,23 @@ local function Run()
 	end
 end
 
+-- A click row changed in the options window in a fight: one chat line a fight says the change lands as the fight ends. A refresh that changed no
+-- click row, or zoning, says nothing.
+local function Tell()
+	local now = ("%s|%s|%s|%s|%s|%s"):format(tostring(ns.Enabled(KEY)), tostring(Opt("clickThroughFriendly")), tostring(Opt("clickThroughEnemy")),
+		tostring(Opt("clickThroughFriendlyWhere")), tostring(Opt("clickExtraX")), tostring(Opt("clickExtraY")))
+	local changed = rows ~= nil and rows ~= now
+	rows = now
+	if changed and not told and InCombatLockdown() and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+		told = true
+		print("Flat UI: nameplate clicks change when the fight ends.")
+	end
+end
+
 -- Sets the area now, or when combat ends. force sets what is already set again.
 local function Queue(force)
 	forced = forced or force == true
+	pcall(Tell)
 	if queued then
 		return
 	end
