@@ -18,6 +18,7 @@ local ANCHOR = "ANCHOR_LEFT"
 local DIM_RGB = { 0.66, 0.68, 0.62 }
 local CLICKS = { coords = true, durability = true, clock = true }
 local HOVER_LIGHT, LIGHT_OUT = { 1, 1, 1, 0.07 }, 2
+local FADE_IN = 0.15
 local HINTS = {
 	coords = { "Click: world map", "Shift-click: put this in chat" },
 	durability = { "Click: character window" },
@@ -583,8 +584,30 @@ local function Make(map)
 	return true
 end
 
+function S.Fade(frame, elapsed)
+	local step = ns.Finite(elapsed) and elapsed or 0
+	for text, at in pairs(S.fading) do
+		at = at + step
+		if at >= FADE_IN then
+			S.fading[text] = nil
+			text:SetAlpha(1)
+		else
+			S.fading[text] = at
+			text:SetAlpha(at / FADE_IN)
+		end
+	end
+	if next(S.fading) == nil then
+		S.fadeOn = nil
+		frame:SetScript("OnUpdate", nil)
+	end
+end
+
 local function Hide(line)
 	local text, button = S.text[line.id], S.button[line.id]
+	if text and S.fading and S.fading[text] then
+		S.fading[text] = nil
+		text:SetAlpha(1)
+	end
 	if text and S.shown[line.id] then
 		text:Hide()
 	end
@@ -623,6 +646,13 @@ local function Show(line, value, colour)
 	end
 	if S.shown[line.id] ~= value then
 		if S.shown[line.id] == nil then
+			S.fading = S.fading or {}
+			S.fading[text] = 0
+			text:SetAlpha(0)
+			if not S.fadeOn then
+				S.fadeOn = true
+				S.frame:SetScript("OnUpdate", S.Fade)
+			end
 			text:Show()
 		end
 		text:SetText(value)
