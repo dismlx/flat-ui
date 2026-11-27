@@ -80,6 +80,17 @@ local function Halt(group)
 	end
 end
 
+local function Playing(group)
+	local ok, playing = pcall(group.IsPlaying, group)
+	return ok and playing == true
+end
+
+local function Guard(fn, ...)
+	if not ns.EachPart(KEY, PART, fn, ...) and ns.PartStopped(KEY, PART) then
+		pcall(B.Off)
+	end
+end
+
 function B.Mode()
 	local mode = Opt("barrier")
 	if mode == "barrier" or mode == "fill" then
@@ -167,7 +178,7 @@ function B.Fader(root)
 		fall:SetDuration(FADE)
 		pcall(made.SetToFinalAlpha, made, true)
 		made:SetScript("OnFinished", function()
-			ns.EachPart(KEY, PART, B.Faded)
+			Guard(B.Faded)
 		end)
 		return made
 	end)
@@ -204,7 +215,7 @@ function B.Build(bar)
 	d.healthClip = NewClip(clip)
 	d.fold, d.foldFill = NewBar(d.healthClip)
 	d.fold:SetAllPoints(bar)
-	pcall(d.fold.SetReverseFill, d.fold, true)
+	d.reverse = pcall(d.fold.SetReverseFill, d.fold, true)
 	d.foldClip = NewClip(d.fold)
 	d.foldEdge = NewBar(d.fold)
 	B.Hug(d)
@@ -229,9 +240,15 @@ function B.Build(bar)
 	end
 	d.fade = B.Fader(root)
 	root:SetScript("OnSizeChanged", function()
-		ns.EachPart(KEY, PART, B.Layout)
+		Guard(B.Layout)
 	end)
 	root:Hide()
+	root:SetScript("OnShow", function()
+		Guard(B.Shown)
+	end)
+	root:SetScript("OnHide", function()
+		ns.EachPart(KEY, PART, B.Hidden)
+	end)
 	return d
 end
 
@@ -324,7 +341,7 @@ function B.Paint()
 	for _, edge in ipairs(d.edges) do
 		edge:SetStatusBarColor(r, g, b, RING_ALPHA)
 	end
-	d.healthClip:SetShown(barrier)
+	d.healthClip:SetShown(barrier and d.reverse == true)
 	d.afterEdge:SetShown(barrier)
 	for _, shine in ipairs(d.shines) do
 		shine:SetShown(barrier)
@@ -349,7 +366,7 @@ function B.Sheen()
 	if not d then
 		return
 	end
-	local want = B.on == true and B.Mode() == "barrier" and Opt("barrierSheen") == true and B.up == true and d.width ~= nil
+	local want = B.on == true and B.Mode() == "barrier" and Opt("barrierSheen") == true and B.up == true and d.width ~= nil and d.root:IsVisible()
 	local mode = ns.TestMode
 	if want and B.sample and type(mode) == "table" and type(mode.Moving) == "function" and not mode.Moving() then
 		want = false
@@ -357,8 +374,7 @@ function B.Sheen()
 	for _, sheen in ipairs(d.bands) do
 		if want and sheen.group then
 			sheen.frame:Show()
-			local ok, playing = pcall(sheen.group.IsPlaying, sheen.group)
-			if not (ok and playing == true) then
+			if not Playing(sheen.group) then
 				pcall(sheen.group.Play, sheen.group)
 			end
 		else
@@ -369,6 +385,9 @@ function B.Sheen()
 end
 
 function B.Flash()
+	if not B.d.root:IsVisible() then
+		return
+	end
 	for _, glint in ipairs(B.d.glints) do
 		if glint.group then
 			Halt(glint.group)
@@ -551,6 +570,8 @@ function B.Update()
 			if not pcall(d.fade.Play, d.fade) then
 				B.Faded()
 			end
+		elseif not (d.fade and Playing(d.fade)) then
+			B.Faded()
 		end
 		B.Poll(false)
 		return
@@ -571,11 +592,36 @@ function B.Update()
 	B.Poll(B.source == "tracked" and plain and amount > 0 and not B.sample)
 end
 
+function B.Shown()
+	if B.on and B.d then
+		B.Layout()
+		B.Update()
+	end
+end
+
+function B.Hidden()
+	local d = B.d
+	if not d then
+		return
+	end
+	for _, sheen in ipairs(d.bands) do
+		Halt(sheen.group)
+		sheen.frame:Hide()
+	end
+	for _, glint in ipairs(d.glints) do
+		Halt(glint.group)
+		glint.texture:Hide()
+	end
+	if B.fading then
+		B.Faded()
+	end
+end
+
 function B.Tick(_, elapsed)
 	B.acc = B.acc + (Finite(elapsed) and elapsed or 0)
 	if B.acc >= POLL then
 		B.acc = 0
-		ns.EachPart(KEY, PART, B.Update)
+		Guard(B.Update)
 	end
 end
 
@@ -595,7 +641,7 @@ function B.Later()
 	B.waiting = true
 	local ok = type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, AGAIN, function()
 		B.waiting = false
-		ns.EachPart(KEY, PART, B.Update)
+		Guard(B.Update)
 	end)
 	if not ok then
 		B.waiting = false
@@ -607,11 +653,11 @@ function B.OnEvent(_, event, unit)
 		return
 	end
 	if event == "PLAYER_ENTERING_WORLD" then
-		ns.EachPart(KEY, PART, B.Sync)
+		Guard(B.Sync)
 		B.Later()
 		return
 	end
-	ns.EachPart(KEY, PART, B.Update)
+	Guard(B.Update)
 	if LATER[event] then
 		B.Later()
 	end
@@ -678,7 +724,7 @@ function B.Wait()
 	B.queued = true
 	ns.OutOfCombat(function()
 		B.queued = false
-		ns.EachPart(KEY, PART, B.Sync)
+		Guard(B.Sync)
 	end)
 end
 
@@ -720,7 +766,7 @@ function ns.ResourceBarrierSync()
 		pcall(B.Off)
 		return
 	end
-	ns.EachPart(KEY, PART, B.Sync)
+	Guard(B.Sync)
 end
 
 function ns.ResourceBarrierChanged()
@@ -748,10 +794,10 @@ if ns.TestMode and type(ns.TestMode.Register) == "function" then
 		module = KEY,
 		label = "Absorb shield on the personal resource display",
 		Start = function()
-			ns.EachPart(KEY, PART, B.Sample, true)
+			Guard(B.Sample, true)
 		end,
 		Stop = function()
-			ns.EachPart(KEY, PART, B.Sample, false)
+			Guard(B.Sample, false)
 		end,
 		Changed = function()
 			ns.ResourceBarrierSync()
