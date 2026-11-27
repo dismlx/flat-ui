@@ -276,8 +276,7 @@ function Home.Counts(model)
 			local top = Nav.Top(model, entry)
 			top = top.partOf and model.byKey[top.partOf] or top
 			for _, item in ipairs(page) do
-				if item.path and ns.RowShown(item.path) and ((item.shows and ns.PanelTrust.Changed(item)) or (item.kind ~= "list" and item.kind ~= "entries"
-					and not ns.RowUnsaved(item) and ns.Get(item.path) ~= item.default)) then
+				if item.key and item.path and ns.RowShown(item.path) and ns.PanelTrust.Changed(item) then
 					counts[top] = (counts[top] or 0) + 1
 				end
 			end

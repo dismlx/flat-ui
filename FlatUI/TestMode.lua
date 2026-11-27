@@ -49,7 +49,7 @@ local TIPS = {
 	Queue = { "Queue", "Opens or closes the Trinket queue window, as /flatui queue." },
 	Move = { "Move", "Opens /flatui move with these samples, so each frame can be placed where it shows. Press it again to close it." },
 	Title = { "Test mode bar", "Drag the bar to move it; it stays there. Double-click here to put it back." },
-	End = { "End", "Turns test mode off. Nothing was saved." },
+	End = { "End", "Turns test mode off. Your settings stay as they were; the bar keeps its Group and place." },
 }
 
 local function Report(err)
@@ -383,7 +383,43 @@ local function Finder()
 	end
 end
 
-local function Tip(owner, key)
+local SAMPLES_LISTED = 10
+
+local function Samples()
+	local names = {}
+	for _, entry in ipairs(entries) do
+		if entry.running then
+			names[#names + 1] = entry.label
+		end
+	end
+	for _, si in ipairs(standins) do
+		if si.shown then
+			names[#names + 1] = si.label
+		end
+	end
+	return #names, names
+end
+
+local function Shows()
+	local count, names = Samples()
+	if count == 0 then
+		return "No samples show now."
+	end
+	if count == 1 then
+		return ("Shows now: %s."):format(names[1])
+	end
+	local listed = {}
+	for index = 1, math.min(count, SAMPLES_LISTED) do
+		listed[index] = names[index]
+	end
+	if count > SAMPLES_LISTED then
+		return ("Shows now: %s and %d more."):format(table.concat(listed, ", "), count - SAMPLES_LISTED)
+	end
+	local final = table.remove(listed)
+	return ("Shows now: %s and %s."):format(table.concat(listed, ", "), final)
+end
+
+local function Tip(owner, key, back)
 	local tip = TIPS[key]
 	if not tip or ns.Forbidden(GameTooltip) then
 		return
@@ -393,6 +429,12 @@ local function Tip(owner, key)
 		GameTooltip:SetOwner(owner, "ANCHOR_BOTTOM")
 		GameTooltip:SetText(tip[1], 1, 1, 1)
 		GameTooltip:AddLine(tip[2], 0.66, 0.68, 0.62, true)
+		if key == "Title" then
+			GameTooltip:AddLine(Shows(), 0.5, 0.52, 0.48, true)
+			if back then
+				GameTooltip:AddLine("Back at its place.", 0.35, 0.85, 0.4, true)
+			end
+		end
 		GameTooltip:Show()
 	end)
 end
@@ -533,7 +575,8 @@ local function UpdateBar()
 	if not ui.bar then
 		return
 	end
-	ui.title:SetText(S.paused and "Test mode: paused for combat" or "Test mode")
+	local count = Samples()
+	ui.title:SetText(S.paused and "Test mode: paused for combat" or count == 1 and "Test mode · 1 sample" or ("Test mode · %d samples"):format(count))
 	ui.live:SetShown(not S.paused)
 	PaintBar()
 	local text = SAY.line
@@ -601,6 +644,7 @@ local function BuildBar()
 				kept.point, kept.relative, kept.x, kept.y = nil, nil, nil, nil
 			end
 			Safe(PlaceBar)
+			Tip(grip, "Title", true)
 		else
 			ui.clicked = now
 		end
