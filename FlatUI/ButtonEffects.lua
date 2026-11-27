@@ -25,8 +25,10 @@ local _, ns = ...
 -- or an aura) pulse (aimSpell -1) until it says no; the events that end an aim of a known spell ask it again instead. Only buttons that show light
 -- up: one the layout hid keeps its place over empty space. Only heights, alpha, colours, Show, Hide and animations of these frames are set in a fight.
 -- Samples (ns.ButtonEffectsSample, out of combat): test mode (ActionBars.lua) plays the cast fill as a 2 s cast that lands, the interrupt flash and a
--- 2 s aim on the first shown buttons of Flat UI's main bar, and a change of Cast fill animation, Interrupt flash or Aim highlight with the options
--- window open plays that one on the first. A sample's spell is 0, which no event of the game's names, so a real cast or aim replaces it at once and
+-- 2 s aim on the first sample buttons (ns.ButtonSamples, Flat UI's main bar first, then bars 2 to 8), and the proc glow on the interrupt's button
+-- for 3 s once its flash has played (GLOW: Glowing answers true for it, so the pass paints it as a real proc, in the look of Proc glow), and a change
+-- of Cast fill animation, Interrupt flash or Aim highlight with the options window open plays that one on the first, as a change of Proc glow or
+-- Proc border colour lights the proc glow there for 3 s. A sample's spell is 0, which no event of the game's names, so a real cast or aim replaces it at once and
 -- the events of other spells leave it alone; a sample never replaces a real cast or aim that shows. Moving off on the bar of test mode holds them
 -- (ns.ButtonEffectsSampleHold): the fill at 60% of its cast with its driver hidden, the aim pulse stopped bright and its time left kept, and a
 -- sample started meanwhile held the same way; Moving on moves their times on by the time held and lets them go on.
@@ -106,6 +108,12 @@ end
 -- The rotation helper highlight is not drawn on these buttons; the cast fill and the interrupt flash are drawn below (CAST).
 local procOn = setmetatable({}, WEAK)
 local listenedOwn = false
+-- The sample proc glow (GlowSample, below): the button it lights until ends, held while Moving is off on the bar of test mode (held, with left the
+-- seconds it had left), and the token of the last sample asked for, so a glow asked for after the flash and taken back meanwhile does not start.
+-- TIME: how long it shows.
+local GLOW = { button = nil, ends = 0, held = false, left = nil, token = 0, TIME = 3 }
+-- One pass a frame later (below).
+local Ask
 
 local function Attach(ask)
 	if not listenedOwn and type(ns.OnOwnProc) == "function" then
@@ -127,6 +135,9 @@ local function OwnButtons()
 end
 
 local function Glowing(button)
+	if GLOW.button == button and (GLOW.held or GetTime() < GLOW.ends) then
+		return true
+	end
 	if procOn[button] ~= nil then
 		return procOn[button]
 	end
@@ -704,10 +715,66 @@ end
 -- Moving off on the bar of test mode holds the samples still (heldAt): the fill at SAMPLE_HELD of its cast, the aim pulse bright, and the time left
 -- of the aim kept; any sample started meanwhile is held the same way. Moving on carries on from there.
 local SAMPLE_HELD = 0.6
+
+-- The sample glow ends seconds from now, unless it is held, taken away or given more time first. The pass after paints the button without it.
+local function GlowEndsIn(seconds)
+	if C_Timer and C_Timer.After then
+		C_Timer.After(seconds + 0.05, function()
+			if GLOW.button and not GLOW.held and GetTime() >= GLOW.ends then
+				GLOW.button = nil
+				Ask()
+			end
+		end)
+	end
+end
+
+-- The proc glow of Proc glow and Proc border colour on button for GLOW.TIME seconds, held while the samples are; one that shows on the same button
+-- is given its time again, unless keep is true.
+local function GlowLight(button, keep)
+	local now = GetTime()
+	if keep and GLOW.button == button and (GLOW.held or now < GLOW.ends) then
+		return
+	end
+	GLOW.button, GLOW.ends = button, now + GLOW.TIME
+	if CAST.sample.heldAt then
+		GLOW.held, GLOW.left = true, GLOW.TIME
+	else
+		GLOW.held, GLOW.left = false, nil
+		GlowEndsIn(GLOW.TIME)
+	end
+	Ask()
+end
+
+-- after: seconds to wait first (test mode lights it once the interrupt flash has played); a sample asked for or taken away meanwhile wins.
+local function GlowSample(button, keep, after)
+	GLOW.token = GLOW.token + 1
+	if not (after and after > 0 and C_Timer and C_Timer.After) then
+		GlowLight(button, keep)
+		return
+	end
+	local token = GLOW.token
+	C_Timer.After(after, function()
+		if GLOW.token == token and not InCombatLockdown() and On() then
+			GlowLight(button, keep)
+		end
+	end)
+end
+
+local function GlowOff()
+	GLOW.token = GLOW.token + 1
+	if GLOW.button then
+		GLOW.button, GLOW.held, GLOW.left = nil, false, nil
+		Ask()
+	end
+end
+
 local function SampleFreeze()
 	local sample, now = CAST.sample, GetTime()
 	local was = sample.heldAt
 	sample.heldAt = now
+	if GLOW.button and not GLOW.held then
+		GLOW.held, GLOW.left = true, math.max(0, GLOW.ends - now)
+	end
 	if CAST.spell == 0 then
 		CAST.start, CAST.landed = now - CAST.SAMPLE_TIME * SAMPLE_HELD, nil
 		CAST.finish = CAST.start + CAST.SAMPLE_TIME
@@ -739,6 +806,11 @@ local function SampleThaw()
 	end
 	local gap = GetTime() - sample.heldAt
 	sample.heldAt = nil
+	if GLOW.button and GLOW.held then
+		GLOW.held, GLOW.ends = false, GetTime() + (GLOW.left or GLOW.TIME)
+		GlowEndsIn(GLOW.left or GLOW.TIME)
+		GLOW.left = nil
+	end
 	if CAST.spell == 0 then
 		CAST.start, CAST.finish = CAST.start + gap, CAST.finish + gap
 		CastDriver():Show()
@@ -755,9 +827,10 @@ local function SampleThaw()
 	end
 end
 
--- The samples of the cast fill, the interrupt flash and the aim highlight (test mode and a change of a row, ActionBars.lua): spec.cast fills as a cast
--- of SAMPLE_TIME seconds that lands, spec.interrupt flashes in the Interrupted colour, spec.aim pulses for SAMPLE_TIME seconds, each a Flat UI button
--- or nil and each only while its row is on. Out of combat only.
+-- The samples of the cast fill, the interrupt flash, the aim highlight and the proc glow (test mode and a change of a row, ActionBars.lua): spec.cast
+-- fills as a cast of SAMPLE_TIME seconds that lands, spec.interrupt flashes in the Interrupted colour, spec.aim pulses for SAMPLE_TIME seconds, each
+-- a Flat UI button or nil and each only while its row is on; spec.glow shows the proc glow in the look of Proc glow for GLOW.TIME seconds (nothing
+-- with None), from once the flash has played (CAST.FLASH) when spec.interrupt is the same button. Out of combat only.
 function ns.ButtonEffectsSample(spec, force)
 	if type(spec) ~= "table" or InCombatLockdown() or not On() or not (type(ns.OwnOn) == "function" and ns.OwnOn()) then
 		return
@@ -771,6 +844,9 @@ function ns.ButtonEffectsSample(spec, force)
 	end
 	if Plain(spec.aim, "table") then
 		SampleAim(spec.aim, force)
+	end
+	if Plain(spec.glow, "table") then
+		GlowSample(spec.glow, not force, spec.interrupt == spec.glow and CAST.FLASH or nil)
 	end
 	if CAST.sample.heldAt then
 		SampleFreeze()
@@ -815,6 +891,7 @@ end
 -- Test mode ends or pauses: the samples that show go.
 function ns.ButtonEffectsSampleOff()
 	CAST.sample.heldAt = nil
+	GlowOff()
 	if CAST.spell == 0 then
 		CastClear()
 	end
@@ -827,8 +904,6 @@ function ns.ButtonEffectsSampleOff()
 	end
 	CAST.sample.flashed = nil
 end
-
-local Ask
 
 local function Run()
 	waiting = false
@@ -987,21 +1062,25 @@ if type(ns.OnOwnBuilt) == "function" then
 end
 
 -- The rows of the Glows and animations page call this. Cast fill animation, Interrupt flash or Aim highlight turned on plays its sample once on the
--- first shown button of Flat UI's main bar, out of combat while the options window shows and test mode is off (test mode plays them itself).
-local PREVIEW = { [PATH .. "castAnim"] = "cast", [PATH .. "interruptAnim"] = "interrupt", [PATH .. "aimAnim"] = "aim" }
+-- first sample button (ns.ButtonSamples: the first shown button of Flat UI's main bar that holds something, else of bars 2 to 8), out of combat
+-- while the options window shows and test mode is off (test mode plays them itself). Proc glow (but None) and Proc border colour light that button's
+-- proc glow in the look chosen for GLOW.TIME seconds, each change given the time again, so a colour dragged keeps it up.
+local PREVIEW = { [PATH .. "castAnim"] = "cast", [PATH .. "interruptAnim"] = "interrupt", [PATH .. "aimAnim"] = "aim", [PATH .. "proc"] = "glow",
+	[PATH .. "procColour"] = "glow" }
 
 function ns.ButtonEffectsChanged(path)
 	Hook()
 	Ask()
 	local kind = PREVIEW[path]
 	local mode = ns.TestMode
-	if not kind or Opt(kind .. "Anim") ~= true or InCombatLockdown() or (mode and mode.IsOn()) or type(ns.PanelShown) ~= "function"
+	local wanted = kind == "glow" and Opt("proc") ~= "off" or kind ~= "glow" and kind ~= nil and Opt(kind .. "Anim") == true
+	if not wanted or InCombatLockdown() or (mode and mode.IsOn()) or type(ns.PanelShown) ~= "function"
 		or not ns.PanelShown() or type(ns.ButtonSamples) ~= "function" then
 		return
 	end
 	local first = ns.ButtonSamples()[1]
 	if first then
-		ns.ButtonEffectsSample({ [kind] = first })
+		ns.ButtonEffectsSample({ [kind] = first }, kind == "glow" or nil)
 	end
 end
 
