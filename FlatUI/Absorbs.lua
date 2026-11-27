@@ -544,7 +544,18 @@ local function Seconds(left)
 	return ("%.1f"):format(math.max(0, left))
 end
 
+function A.Glide(bar, value, now)
+	local list = not now and type(Enum) == "table" and Enum.StatusBarInterpolation or nil
+	local how = type(list) == "table" and list.ExponentialEaseOut or nil
+	if how ~= nil and pcall(bar.SetValue, bar, value, how) then
+		return true
+	end
+	return (pcall(bar.SetValue, bar, value))
+end
+
 function A.Fill(row, item)
+	local now = item.instance == nil or row.instance ~= item.instance or not row.amounted
+	row.instance, row.amounted = item.instance, item.amount ~= nil
 	row.icon:SetTexture(item.file or SHIELD_ICON)
 	local r, g, b = A.Colour(item.mask)
 	row.bar:SetStatusBarColor(r, g, b, item.amount == nil and TIME_ALPHA or 1)
@@ -557,7 +568,7 @@ function A.Fill(row, item)
 	elseif not pcall(row.bar.SetMinMaxValues, row.bar, 0, item.amount) then
 		row.bar:SetMinMaxValues(0, 1)
 	end
-	if item.amount ~= nil and not pcall(row.bar.SetValue, row.bar, item.amount) then
+	if item.amount ~= nil and not A.Glide(row.bar, item.amount, now) then
 		row.bar:SetValue(0)
 	end
 	A.WriteAmount(row.amount, item.amount, size)
@@ -621,6 +632,7 @@ function A.DrawRows(list)
 	end
 	for index = n + 1, #A.rows do
 		A.rows[index].frame:Hide()
+		A.rows[index].instance = nil
 	end
 	A.items = list or {}
 	A.Mouse()
@@ -801,9 +813,10 @@ function A.WriteTotal(row, unit)
 	if not pcall(row.bar.SetMinMaxValues, row.bar, 0, most) then
 		row.bar:SetMinMaxValues(0, 1)
 	end
-	if not pcall(row.bar.SetValue, row.bar, total) then
+	if not A.Glide(row.bar, total, not row.drawn) then
 		row.bar:SetValue(0)
 	end
+	row.drawn = true
 	A.WriteAmount(row.amount, total, size)
 	local mask = nil
 	if unit == "player" then
@@ -1473,6 +1486,7 @@ end
 
 function A.Off()
 	A.sample, A.held, A.heldList = nil, nil, nil
+	A.Undrawn()
 	A.known, A.casts, A.wasRead = {}, {}, false
 	A.Listen(false)
 	if A.holder then
@@ -1546,7 +1560,17 @@ local function SampleList(now)
 	}
 end
 
+function A.Undrawn()
+	if A.total then
+		A.total.drawn = nil
+	end
+	if A.target then
+		A.target.drawn = nil
+	end
+end
+
 local function SampleTotal(row, amount, most, size)
+	row.drawn = nil
 	Present(row, 1)
 	row.bar:SetMinMaxValues(0, most)
 	row.bar:SetValue(amount)
@@ -1565,6 +1589,7 @@ function A.Hold()
 		return false
 	end
 	A.held, A.wasRead = true, false
+	A.Undrawn()
 	A.heldList = A.heldList or SampleList(Now())
 	A.ShowContainer(false)
 	A.Layout()
@@ -1586,6 +1611,7 @@ end
 function A.Samples(seconds)
 	local token = {}
 	A.sample = token
+	A.Undrawn()
 	A.ShowContainer(false)
 	A.DrawRows(A.held and A.heldList or SampleList(Now()))
 	local total = A.total
@@ -1747,6 +1773,10 @@ ns.Register(KEY, {
 		PLAYER_REGEN_DISABLED = function()
 			A.fighting = true
 			A.Mouse()
+			if A.sample then
+				A.sample, A.sampleWhy = nil, nil
+				ns.Try(KEY, A.Pass)
+			end
 			Soon()
 		end,
 		PLAYER_REGEN_ENABLED = function()
@@ -1757,6 +1787,9 @@ ns.Register(KEY, {
 		end,
 		ADDON_RESTRICTION_STATE_CHANGED = Soon,
 		PLAYER_TARGET_CHANGED = function()
+			if A.target then
+				A.target.drawn = nil
+			end
 			A.Totals()
 		end,
 	},

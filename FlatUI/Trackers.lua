@@ -59,6 +59,7 @@ local HELP = {
 	"/flatui tracker add proc Shadow Trance for Shadow Bolt - a proc alert: its buff, then the spell it is for",
 	"/flatui tracker class - add the usual trackers of your class",
 	"/flatui tracker remove 1 - a number from the list, or a name",
+	"/flatui tracker back - puts the tracker you last removed back, with its own settings, until you reload",
 	"/flatui tracker list",
 	"/flatui tracker export - opens Share, to copy every tracker as text",
 	"/flatui tracker import - opens Share, to paste trackers",
@@ -997,11 +998,53 @@ function ns.TrackerRemove(position)
 	for index, other in ipairs(list) do
 		if other == entry then
 			table.remove(list, index)
+			table.insert(K.removed, 1, { entry = entry, index = index })
+			K.removed[K.REMOVED_MOST + 1] = nil
 			break
 		end
 	end
 	QueueLayout()
-	return true, ("Removed %s."):format(Label(entry))
+	K.RowPreview()
+	return true, ("Removed %s. Bring back a tracker puts it back until you reload."):format(Label(entry))
+end
+
+K.removed, K.REMOVED_MOST = {}, 5
+
+function ns.TrackerRemovedLines()
+	local rows = {}
+	for index, removed in ipairs(K.removed) do
+		rows[#rows + 1] = { index, Label(removed.entry) }
+	end
+	return rows
+end
+
+function ns.TrackerBringBack(index)
+	local removed = Whole(index) and K.removed[index]
+	if not removed then
+		return false, #K.removed == 0 and "No tracker was removed since you logged in or reloaded." or ("No removed tracker numbered %s."):format(tostring(index))
+	end
+	local entry, list = removed.entry, List()
+	local label = Label(entry)
+	if #list >= K.MAX_TRACKERS then
+		return false, ("%d trackers is the most."):format(K.MAX_TRACKERS)
+	end
+	local taken = {}
+	for _, other in ipairs(list) do
+		if type(other.id) == "string" then
+			taken[other.id] = true
+		end
+		if other.kind == entry.kind and Label(other) == label then
+			return false, ("%s is already tracked."):format(label)
+		end
+	end
+	if type(entry.id) ~= "string" or taken[entry.id] then
+		entry.id = NewId(taken)
+	end
+	table.remove(K.removed, index)
+	table.insert(list, math.min(removed.index, #list + 1), entry)
+	QueueLayout()
+	K.RowPreview()
+	return true, ("%s is back."):format(label)
 end
 
 ns.TrackerOwnKeys = OWN
@@ -1911,7 +1954,7 @@ local function Wanted(entry, state, how)
 	local show = Value(entry, "show")
 	if show == "low" then
 		if (Opt("mounted") and (Ask(IsMounted) == true or Ask(UnitOnTaxi, "player") == true)) or (Opt("resting") and Ask(IsResting) == true)
-			or (Opt("combatHide") and fighting) then
+			or (Opt("combatHide") and fighting) or (Opt("outside") and not K.Inside()) then
 			return 0
 		end
 		if how ~= "live" or state == "low" or state == "missing" then
@@ -2750,6 +2793,10 @@ end
 
 local function FightStarts()
 	fighting = true
+	K.ReminderOff()
+	if K.held and K.held.preview then
+		K.held = nil
+	end
 	StartFight()
 	Pass()
 end
@@ -4024,6 +4071,8 @@ local function Slash(rest)
 			return
 		end
 		print((select(2, ns.TrackerRemove(position))))
+	elseif word == "back" then
+		print((select(2, ns.TrackerBringBack(1))))
 	elseif word == "list" then
 		local entries = Entries()
 		if #entries == 0 then
@@ -4139,13 +4188,26 @@ function ns.TrackerLookChanged(path)
 	end
 end
 
-K.READY = 12
+K.READY, K.LINE_GAP, K.COUNT_MOST, K.PLAYER_COUNTDOWN = 12, 15, 30, 2
 
-function K.ReadyCheck()
-	if not Opt("readyCheck") or InCombatLockdown() or not ns.Enabled(KEY) then
+function K.Named(entry, state, kept)
+	local label = Label(entry)
+	if entry.kind == "group" and state == "missing" and Plain(kept.count, "number") and Plain(kept.total, "number") and kept.total > 0 then
+		return ("%s is missing on %d of %d"):format(label, kept.count, kept.total)
+	elseif entry.kind == "durability" then
+		if state == "missing" then
+			return label .. " is broken"
+		elseif Plain(kept.count, "number") then
+			return ("%s is low (%d%%)"):format(label, kept.count)
+		end
+	end
+	return label .. (state == "missing" and " is missing" or " is low")
+end
+
+function K.ReadyLine(words)
+	if not K.readyUntil or fighting or InCombatLockdown() or Now() >= K.readyUntil or not ns.Enabled(KEY) then
 		return
 	end
-	K.readyUntil = Now() + K.READY
 	local missing, low = {}, {}
 	for _, entry in ipairs(Entries()) do
 		local kind, kept = KINDS[entry.kind], mem.kept[entry.id]
@@ -4158,7 +4220,7 @@ function K.ReadyCheck()
 			end
 			if not hidden then
 				local list = state == "missing" and missing or low
-				list[#list + 1] = Label(entry) .. (state == "missing" and " is missing" or " is low")
+				list[#list + 1] = K.Named(entry, state, kept)
 			end
 		end
 	end
@@ -4168,11 +4230,84 @@ function K.ReadyCheck()
 	if #missing > 0 then
 		local last = table.remove(missing)
 		local text = #missing > 0 and (table.concat(missing, ", ") .. " and " .. last) or last
-		print(("Flat UI: for the ready check, %s."):format(text))
+		K.lineAt = Now()
+		print(("Flat UI: %s, %s."):format(words, text))
 	end
+end
+
+function K.Reminder(why, length, words)
+	local now = Now()
+	K.reminders = K.reminders or {}
+	K.reminders[why] = now + length
+	K.ReminderEnds()
 	Dirty()
 	if C_Timer and C_Timer.After then
-		C_Timer.After(K.READY + 0.05, Dirty)
+		local stamp = K.reminders[why]
+		if words then
+			C_Timer.After(PASS + 0.15, function()
+				if K.reminders and K.reminders[why] == stamp then
+					ns.Try(KEY, K.ReadyLine, words)
+				end
+			end)
+		end
+		C_Timer.After(length + 0.05, Dirty)
+	end
+end
+
+function K.ReminderEnds()
+	local most, now = nil, Now()
+	for why, ends in pairs(K.reminders or {}) do
+		if ends <= now then
+			K.reminders[why] = nil
+		elseif not most or ends > most then
+			most = ends
+		end
+	end
+	K.readyUntil = most
+end
+
+function K.ReminderOff(why)
+	if why then
+		if K.reminders then
+			K.reminders[why] = nil
+		end
+	else
+		K.reminders = nil
+	end
+	K.ReminderEnds()
+end
+
+function K.ReadyCheck()
+	if not Opt("readyCheck") or InCombatLockdown() or not ns.Enabled(KEY) then
+		return
+	end
+	K.Reminder("ready", K.READY, "for the ready check")
+end
+
+function K.PlayerCountdown(kind)
+	if IsSecret(kind) or not ns.Finite(kind) then
+		return false
+	end
+	local enums = type(Enum) == "table" and not IsSecret(Enum) and Enum.StartTimerType or nil
+	local value = type(enums) == "table" and enums.PlayerCountdown or nil
+	return kind == (ns.Finite(value) and value or K.PLAYER_COUNTDOWN)
+end
+
+function K.Countdown(kind, remaining)
+	if not Opt("readyCheck") or InCombatLockdown() or fighting or not ns.Enabled(KEY) or not K.PlayerCountdown(kind) then
+		return
+	end
+	if IsSecret(remaining) or not ns.Finite(remaining) or remaining <= 0 then
+		return
+	end
+	local recent = K.lineAt and Now() - K.lineAt < K.LINE_GAP
+	K.Reminder("countdown", math.min(remaining, K.COUNT_MOST) + 2, not recent and "before the pull" or nil)
+end
+
+function K.CountdownStop(kind)
+	if K.PlayerCountdown(kind) and K.reminders and K.reminders.countdown then
+		K.ReminderOff("countdown")
+		Dirty()
 	end
 end
 
@@ -4196,6 +4331,12 @@ ns.Register(KEY, {
 		SPELLS_CHANGED = SpellsChanged,
 		READY_CHECK = function()
 			ns.Try(KEY, K.ReadyCheck)
+		end,
+		START_TIMER = function(kind, remaining)
+			ns.Try(KEY, K.Countdown, kind, remaining)
+		end,
+		STOP_TIMER_OF_TYPE = function(kind)
+			ns.Try(KEY, K.CountdownStop, kind)
 		end,
 	},
 	slash = { tracker = Slash },

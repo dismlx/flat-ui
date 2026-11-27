@@ -191,7 +191,7 @@ function P.Matches(list, id)
 	return found
 end
 
-function P.BookSlot(found, book, slot, bank, spellType)
+function P.BookSlot(found, book, slot, bank, spellType, pet)
 	local item = P.Ask(book.GetSpellBookItemInfo, slot, bank)
 	if type(item) ~= "table" or item.itemType ~= spellType or item.isPassive == true or item.isOffSpec == true then
 		return
@@ -206,7 +206,7 @@ function P.BookSlot(found, book, slot, bank, spellType)
 	end
 	local spell = found[name]
 	if not spell then
-		spell = { ranks = {} }
+		spell = { ranks = {}, pet = pet }
 		found[name] = spell
 	end
 	spell.ranks[id] = true
@@ -235,7 +235,38 @@ function P.Book()
 			end
 		end
 	end
+	local pet = Opt("pet") == true and Enum.SpellBookSpellBank.Pet or nil
+	if pet ~= nil and type(book.HasPetSpells) == "function" then
+		local count = P.Ask(book.HasPetSpells)
+		for slot = 1, P.Plain(count, "number") and math.min(count, MOST_LEFT) or 0 do
+			P.BookSlot(found, book, slot, pet, spellType, true)
+		end
+	end
 	return found
+end
+
+function P.Pets()
+	local count = 0
+	for _, entry in pairs(P.spells) do
+		if entry.pet then
+			count = count + 1
+		end
+	end
+	return count
+end
+
+function P.PetChanged(unit)
+	if Opt("pet") == true and not IsSecret(unit) and (unit == nil or unit == "player") then
+		P.Soon()
+	end
+end
+
+function P.OnPetCooldown()
+	for _, entry in pairs(P.spells) do
+		if entry.pet then
+			ns.Each(KEY, P.CheckSpell, entry, nil, "event")
+		end
+	end
 end
 
 function P.Build()
@@ -252,7 +283,7 @@ function P.Build()
 		local base = P.Base(spell.id)
 		if base == nil or (base > 0 and base >= minimum) then
 			local entry = old[name] or { kind = "spell", key = "spell:" .. name, name = name }
-			entry.id, entry.ranks = spell.id, spell.ranks
+			entry.id, entry.ranks, entry.pet = spell.id, spell.ranks, spell.pet
 			if not (entry.last and spell.ranks[entry.last]) then
 				entry.last = spell.id
 			end
@@ -1490,6 +1521,11 @@ function P.Status()
 		items = items + 1
 	end
 	lines[1] = ("Cooldown pulse: %s and %s watched%s."):format(Many(spells, "spell"), Many(items, "item"), left > 0 and (", " .. left .. " left out") or "")
+	if Opt("pet") == true then
+		local pets = P.Pets()
+		lines[#lines + 1] = pets > 0 and ("Cooldown pulse: %s of your pet among them."):format(pets == 1 and "1 ability" or (pets .. " abilities"))
+			or "Cooldown pulse: Your pet's abilities is on, but no pet ability is in the spell book now."
+	end
 	if not (C_Spell and C_Spell.GetSpellCooldown) then
 		lines[#lines + 1] = NO_COOLDOWNS
 	elseif P.noBook then
@@ -1539,6 +1575,9 @@ ns.Register(KEY, {
 		PLAYER_EQUIPMENT_CHANGED = P.Trinkets,
 		SPELLS_CHANGED = P.Soon,
 		PLAYER_ENTERING_WORLD = P.World,
+		UNIT_PET = P.PetChanged,
+		PET_BAR_UPDATE = P.PetChanged,
+		PET_BAR_UPDATE_COOLDOWN = P.OnPetCooldown,
 	},
 	slash = { pulse = P.Slash },
 	help = HELP,
