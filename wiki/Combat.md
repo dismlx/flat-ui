@@ -519,6 +519,7 @@ Where the game lacks a piece of that art, the next set fills in for it, and then
 - As you cast the buff again, or it gains charges or stacks, the gems light in turn, each with a short glow.
 - On the last charge, the last gem pulses.
 - There are as many gems as the most charges the buff has had since you cast it, at most 10. Maelstrom Weapon has at least 5 gems, or as many as the game says it can stack, and more once it has had more stacks, at most 10; it lights one more with each stack, and its first stack does not pulse. In a fight it shows its stacks even when it was not on you as the fight began.
+- While the **Proc alerts** art builds up Maelstrom Weapon's stacks over your character (**Art beside the character** and **Stacks build the art** on, as they are at first), its stacks show there and not here. Turn either off and they show here as gems.
 - With **Show used charges** (on), each charge you use stays as an empty socket. Off, only the charges left show.
 - Two buffs at once, such as a shaman's Lightning Shield and Maelstrom Weapon, sit one above the other, or side by side with the ring, arc or row of orbs.
 

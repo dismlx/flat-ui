@@ -778,6 +778,9 @@ function ns.ProcArtReset()
 end
 
 function ns.ProcArtChanged()
+	if type(ns.ChargesRecheck) == "function" then
+		ns.ChargesRecheck()
+	end
 	if holder then
 		if not On() then
 			ns.ProcArtReset()

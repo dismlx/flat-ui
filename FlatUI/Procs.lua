@@ -748,6 +748,21 @@ function ns.ProcAutoBuild()
 	Call(ns.ProcGlowPrepare, All())
 end
 
+function ns.ProcShowsStacks(spellID)
+	if not ns.Enabled(KEY) or ns.Get(KEY .. ".art") ~= true or ns.Get(KEY .. ".artStacks") == false then
+		return false
+	end
+	if A.stale then
+		Build()
+	end
+	for _, entry in ipairs(A.list) do
+		if Lists(entry.spells, spellID) then
+			return true
+		end
+	end
+	return false
+end
+
 local function World()
 	Overlayed()
 	local before = Ids()

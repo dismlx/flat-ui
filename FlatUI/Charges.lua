@@ -646,6 +646,10 @@ function C.Apply(family, st, now)
 	end
 end
 
+function C.Covered(family)
+	return family.stacks == true and type(ns.ProcShowsStacks) == "function" and ns.ProcShowsStacks(family.ids[1]) == true
+end
+
 function C.Gate()
 	if not ns.Enabled(KEY) then
 		return false
@@ -669,7 +673,7 @@ function C.Pass()
 	C.Holder():SetAlpha((C.Gate() or C.sample ~= nil) and 1 or 0)
 	local real = false
 	for _, family in ipairs(C.Families()) do
-		local st = C.Read(family)
+		local st = not C.Covered(family) and C.Read(family) or nil
 		real = real or type(st) == "table"
 		if not C.sample then
 			C.Apply(family, st, now)
@@ -960,6 +964,12 @@ end
 function ns.ChargesLookChanged()
 	ns.Try(KEY, C.Refresh)
 	ns.Try(KEY, C.Preview)
+end
+
+function ns.ChargesRecheck()
+	if C.holder and ns.Enabled(KEY) then
+		C.Queue()
+	end
 end
 
 function ns.ChargesSoundChanged()
