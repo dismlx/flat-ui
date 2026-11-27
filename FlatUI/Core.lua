@@ -298,6 +298,13 @@ local ADDON_NAME, ns = ...
 -- FlatUIDB.consumables, or of its names with a body Flat UI writes (made on another computer: macros are the account's), only out of combat and with
 -- the game's macro window closed; it reads the game's action slots and the cursor first (GetActionInfo, C_ActionBar.GetActionText, GetCursorInfo) and
 -- deletes no macro that one of them still holds.
+-- Consumables bar (ConsumeBar.lua, off by default) makes secure buttons of its own (SecureActionButtonTemplate, *type1 item, item "item:<id>",
+-- useOnKeyDown false; the first six named FlatUIConsumeButton1 to 6 for their key bindings in Bindings.xml) over icons of its own, on a frame of its
+-- own that a state driver hides in a pet battle (RegisterStateDriver), all made, placed, sized, shown, hidden and given attributes only out of
+-- combat. A PreClick and a PostClick of its own, set as each is made, take the type away for a click with an item on the cursor and give it back
+-- after, out of combat only; in a fight they change no attribute. It reads the bags (C_Container), the counts, cooldowns, uses and names of items
+-- (C_Item), the cursor (GetCursorInfo, then ClearCursor once a dropped item is taken), keeps its list in FlatUICharDB.consumeBar and writes
+-- tooltips in GameTooltip (SetOwner, SetItemByID, AddLine, Show, Hide).
 -- Mount key (off by default) makes one secure button, FlatUIMountButton, once a key is bound to it in the game's Key Bindings (Bindings.xml names the
 -- binding, BINDING_NAME_CLICK FlatUIMountButton:LeftButton), writes its type and macrotext only out of combat and takes them away when off; it writes
 -- no binding or macro. With Slow Fall or Levitate while falling on, it sets a PreClick and a PostClick on the button, out of combat, that swap the
@@ -472,7 +479,7 @@ local ADDON_NAME, ns = ...
 -- goes when nothing needs a reload any more. What needs one is the value each such row had at login (ns.ReloadStart) against the profile in use
 -- (ns.ReloadLines), which Home's Needs a reload also lists.
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "trinkets", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "trinkets", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "consumebar", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
 -- The switches version 0.1.0 saved. This list never grows.
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 -- A module that keeps failing is stopped.

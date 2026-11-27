@@ -217,6 +217,11 @@ local LIST = {
 	-- four pings of the game's wheel at the default size in a row, and it grows down or to the right from there. It starts under the group tools.
 	{ name = "FlatUIPingBar", label = "Ping bar", point = "TOP", kind = "hud", own = true, noScale = true, width = 132, height = 24, x = 0, y = -130,
 		gate = "PingBarShown", changed = "PingBarMoved" },
+	-- The consumables bar (ConsumeBar.lua): the corner of the bar that Grow starts from is that corner of the box (bottom left while it grows right
+	-- or up, bottom right while it grows left, top left while it grows down), which has the room of six buttons at the default size in a row. It
+	-- starts at the left of the screen above the chat window, clear of the action bars.
+	{ name = "FlatUIConsumeBar", label = "Consumables bar", point = "BOTTOMLEFT", kind = "hud", own = true, noScale = true, width = 226, height = 36,
+		x = 20, y = 280, gate = "ConsumeBarShown", changed = "ConsumeBarMoved" },
 	-- The reload notice (Reload.lua), which shows while a change needs a reload: its top left corner is the top left corner of the box, which has the
 	-- notice's size. It starts at the top of the screen, in the middle, and has a box whether or not it shows.
 	{ name = "FlatUIReloadNotice", label = "Reload notice", point = "TOP", kind = "hud", own = true, noScale = true, width = 520, height = 52, x = 0, y = -40,
