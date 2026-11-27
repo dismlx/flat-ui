@@ -124,7 +124,9 @@ end
 
 -- A flat button of the addon's own, as Reload.lua makes them: a frame with an outline and a label, clicked when the left mouse button comes up
 -- over it after going down on it, so the click is the player's own (a hardware click). button.SetUsable greys it and turns its click off, and
--- button.SetLabel changes its words, on one line that a long text cannot run out of.
+-- button.SetLabel changes its words, on one line that a long text cannot run out of. While the left button holds it down (usable), its label
+-- sinks 1 px and its fill goes back to the resting tone, as the buttons of the options window do (Panel.lua, Press and Tone); the release, the
+-- mouse leaving and a hide put it back before anything else runs.
 function Errands.Button(parent, text, width, onClick, onEnter)
 	local button = CreateFrame("Frame", nil, parent)
 	ns.Own[button] = true
@@ -138,15 +140,26 @@ function Errands.Button(parent, text, width, onClick, onEnter)
 		label:SetWordWrap(false)
 		label:SetText(text)
 	end
-	local down, hover, usable = false, false, true
+	local down, hover, usable, pressed = false, false, true, false
 	local function Paint()
-		local r, g, b = Shade(hover and usable and 0.17 or 0.09)
+		local r, g, b = Shade(hover and usable and not pressed and 0.17 or 0.09)
 		if outline then
 			ns.SetOutlineFill(outline, r, g, b, 1)
 		end
 		if label then
 			label:SetAlpha(usable and 1 or 0.45)
 		end
+	end
+	-- The pressed look: the label 1 px lower, and the resting fill.
+	local function Press(on)
+		if on == pressed then
+			return
+		end
+		pressed = on
+		if label then
+			label:SetPoint("CENTER", button, "CENTER", 0, on and -1 or 0)
+		end
+		Paint()
 	end
 	Paint()
 	button:EnableMouse(true)
@@ -159,6 +172,7 @@ function Errands.Button(parent, text, width, onClick, onEnter)
 	end)
 	button:SetScript("OnLeave", function()
 		hover, down = false, false
+		Press(false)
 		Paint()
 		if GameTooltip and not ns.Forbidden(GameTooltip) and GameTooltip:IsOwned(button) then
 			GameTooltip:Hide()
@@ -167,14 +181,19 @@ function Errands.Button(parent, text, width, onClick, onEnter)
 	-- A button hidden under the cursor takes its tooltip with it.
 	button:SetScript("OnHide", function()
 		hover, down = false, false
+		Press(false)
 		if GameTooltip and not ns.Forbidden(GameTooltip) and GameTooltip:IsOwned(button) then
 			GameTooltip:Hide()
 		end
 	end)
 	button:SetScript("OnMouseDown", function(_, which)
 		down = which == "LeftButton"
+		if down and usable then
+			Press(true)
+		end
 	end)
 	button:SetScript("OnMouseUp", function(_, which)
+		Press(false)
 		local wanted = down and which == "LeftButton" and usable and Over(button)
 		down = false
 		if wanted then
@@ -194,6 +213,9 @@ function Errands.Button(parent, text, width, onClick, onEnter)
 	pcall(button.SetClampedToScreen, button, true)
 	function button.SetUsable(on)
 		usable = on == true
+		if not usable then
+			Press(false)
+		end
 		Paint()
 	end
 	function button.SetLabel(words)
