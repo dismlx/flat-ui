@@ -26,7 +26,8 @@ ns.NAME_COLOUR_CHOICES = { { "game", "As the game has it" }, { "white", "White" 
 
 local KEPT = "Not applied while Leave the game's action bars alone is on."
 local KEPT_XP = "On the game's bar, not applied while Leave the game's action bars alone is on."
-local MAP_TEXT_PLACES = { { "above", "Above the map" }, { "below", "Below the map" } }
+local MAP_TEXT_PLACES = { { "above", "Above the map" }, { "below", "Below the map" }, { "inside", "On the map, at the bottom" } }
+local MAP_TEXT_PLACE_TIP = "On the map, at the bottom puts the line just inside the map's bottom edge, outlined so it reads over the ground, raised on a round map to stay inside the circle. A line there takes no room under the map, so the addon button row and the zone name keep their place."
 local HIT_TABLE_SIZES = { { "70", "70%" }, { "80", "80%" }, { "90", "90%" }, { "100", "100%" }, { "110", "110%" }, { "125", "125%" },
 	{ "150", "150%" }, { "175", "175%" }, { "200", "200%" } }
 local FADE_WHEN = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" },
@@ -2615,7 +2616,7 @@ ns.PAGES = {
 			tip = "Gives each gathered button a square dark plate with a thin border in place of its round gold ring, and a light square when you point at it. A button you tick in Leave in place keeps its own art." },
 		{ section = "Text around the map" },
 		{ key = "mapCoords", kind = "bool", default = true, label = "Coordinates", tip = "Your place on the zone map. Hidden in instances, where the game gives no position, and while the game's own coordinates show under the map (the game's Options, Interface, Coordinates), so you see one line; turn those off for this one. Point at it for the zone and subzone; a click opens the world map, in a fight as it ends, and Shift-click puts the zone and coordinates in the chat box." },
-		{ key = "mapCoordsPlace", kind = "choice", default = "below", label = "Coordinates place", needs = "mapCoords", choices = MAP_TEXT_PLACES },
+		{ key = "mapCoordsPlace", kind = "choice", default = "below", label = "Coordinates place", needs = "mapCoords", choices = MAP_TEXT_PLACES, tip = MAP_TEXT_PLACE_TIP },
 		{ key = "mapCoordsDecimals", kind = "choice", default = "1", label = "Coordinate decimals", needs = "mapCoords",
 			choices = { { "0", "None (45, 62)" }, { "1", "One (45.3, 62.1)" }, { "2", "Two (45.31, 62.08)" } } },
 		{ key = "mapWorldCoords", kind = "bool", default = true, label = "Coordinates on the world map",
@@ -2623,12 +2624,12 @@ ns.PAGES = {
 		{ key = "mapPingName", kind = "bool", default = true, label = "Name of who pings the map",
 			tip = "The name of a group member who pings the minimap, in their class colour, by the ping for about 3 seconds, at Text size. Your own pings show none." },
 		{ key = "mapDurability", kind = "bool", default = true, label = "Durability", tip = "Your most worn equipped item. Yellow at 50% or less, red at 20% or less. Point at it for each item you wear; a click opens the character window, in a fight as it ends." },
-		{ key = "mapDurabilityPlace", kind = "choice", default = "below", label = "Durability place", needs = "mapDurability", choices = MAP_TEXT_PLACES },
+		{ key = "mapDurabilityPlace", kind = "choice", default = "below", label = "Durability place", needs = "mapDurability", choices = MAP_TEXT_PLACES, tip = MAP_TEXT_PLACE_TIP },
 		{ key = "mapDurabilityWhen", kind = "choice", default = "always", label = "Durability shows", needs = "mapDurability",
 			choices = { { "always", "Always" }, { "worn", "At 50% or less" }, { "low", "At 20% or less" } },
 			tip = "The line comes as an item wears to the mark, yellow at 50% or less and red at 20% or less, and goes after a repair." },
 		{ key = "mapPerf", kind = "bool", default = false, label = "Frame rate and latency", tip = "Frames per second, then your home and world latency in milliseconds. Point at it for both latencies and Flat UI's memory." },
-		{ key = "mapPerfPlace", kind = "choice", default = "below", label = "Frame rate place", needs = "mapPerf", choices = MAP_TEXT_PLACES },
+		{ key = "mapPerfPlace", kind = "choice", default = "below", label = "Frame rate place", needs = "mapPerf", choices = MAP_TEXT_PLACES, tip = MAP_TEXT_PLACE_TIP },
 		{ key = "mapPerfShow", kind = "choice", default = "both", label = "Show", tip = "What the line by the minimap shows.", needs = "mapPerf",
 			choices = { { "both", "Frame rate and latency" }, { "fps", "Frame rate only" }, { "ms", "Latency only" } } },
 		{ key = "mapLatency", kind = "choice", default = "both", label = "Latency", tip = "Home is chat and the auction house, world is combat and other players.",
@@ -2637,11 +2638,11 @@ ns.PAGES = {
 		{ key = "mapPerfColour", kind = "bool", default = true, label = "Colour by value", needs = "mapPerf",
 			tip = "Frame rate red under 30 and yellow under 60; latency yellow over 100 ms and red over 200 ms." },
 		{ key = "mapClock", kind = "bool", default = false, label = "Time", tip = "Your local time or the realm's. Point at it for both and the time of this session; a click opens the stopwatch and alarm, Shift-click the calendar, in a fight as it ends. The game's clock beside the zone name has its own row, Clock, under Buttons." },
-		{ key = "mapClockPlace", kind = "choice", default = "above", label = "Time place", needs = "mapClock", choices = MAP_TEXT_PLACES },
+		{ key = "mapClockPlace", kind = "choice", default = "above", label = "Time place", needs = "mapClock", choices = MAP_TEXT_PLACES, tip = MAP_TEXT_PLACE_TIP },
 		{ key = "mapClockTime", kind = "choice", default = "local", label = "Local or realm time", needs = "mapClock", choices = { { "local", "Local time" }, { "realm", "Realm time" } } },
 		{ key = "mapClockHours", kind = "choice", default = "24", label = "Time format", needs = "mapClock", choices = { { "24", "24 hours (14:05)" }, { "12", "12 hours (2:05 PM)" } } },
 		{ key = "mapTextSize", kind = "number", default = 100, min = 70, max = 160, step = 5, unit = "%", label = "Text size",
-			tip = "The lines of text above and below the map: coordinates, durability, frame rate and time, and also the coordinates on the world map and the name of who pings. In test mode, a line with nothing to show shows a sample, so you can see where it sits." },
+			tip = "The lines of text around the map: coordinates, durability, frame rate and time, and also the coordinates on the world map and the name of who pings. In test mode, a line with nothing to show shows a sample, so you can see where it sits." },
 		{ section = "Border and background" },
 		{ key = "lookOwn", kind = "bool", default = false, label = "Own border and background", tip = "For every page of Minimap and HUD." },
 		{ key = "lookBorder", kind = "colour", default = "ff000000", label = "Border colour", needs = "lookOwn" },

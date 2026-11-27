@@ -34,7 +34,7 @@ To show the minimap buttons only while the mouse is over the minimap, turn on **
 
 ### Text around the map
 
-Four lines of text can sit above or below the map. Each has its own place row, **Above the map** or **Below the map**.
+Four lines of text can sit above or below the map, or on it. Each has its own place row, **Above the map**, **Below the map** or **On the map, at the bottom**. On the map, the line sits just inside the map's bottom edge, outlined so it reads over the ground, with its tooltip, click and light under the mouse as before; on a round map it is raised so it stays inside the circle. Lines on the map stack upward from the edge and take no room under the map, so the **Row under the map** of addon buttons and the zone name keep their place.
 
 - **Coordinates** (on, below the map): your place on the zone map. **Coordinate decimals** is **One (45.3, 62.1)** by default, or **None (45, 62)** or **Two (45.31, 62.08)**. The line is hidden in instances, where the game gives no position. It also hides while the game's own coordinates show under the map (the game's Options, Interface, Coordinates), so you see your place once. Turn the game's off to have Flat UI's line, with its tooltip and Shift-click.
 - **Durability** (on, below the map): your most worn equipped item, yellow at 50% or less and red at 20% or less. **Durability shows** is **Always** by default. Pick **At 50% or less** or **At 20% or less** and the line only comes as an item wears to that mark, and goes again after a repair. The lines under it close up while it is away.
