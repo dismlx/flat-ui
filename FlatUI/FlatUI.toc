@@ -33,6 +33,7 @@ PlateThreatText.lua
 PlateOverpower.lua
 PlateQuest.lua
 PlateCombo.lua
+PlateTarget.lua
 CombatBurst.lua
 CombatTextSpells.lua
 CombatText.lua

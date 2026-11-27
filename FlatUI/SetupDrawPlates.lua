@@ -12,9 +12,10 @@ local _, ns = ...
 -- (Blizzard_NamePlates/Camelot/Blizzard_NamePlateConstants.lua:33-60, 62-68), the anchors those of NamePlateUnitFrameMixin:UpdateAnchors
 -- (Blizzard_NamePlates/Blizzard_NamePlateUnitFrame.lua:678-890) and of the cast bar (Blizzard_NamePlateCastingBar.lua:26-130). What each row changes is what
 -- Nameplates.lua, PlateText.lua, PlateColours.lua, HealthColour.lua, PlateQuest.lua (the quest mark and its kill count of a sample with quest),
--- PlateOverpower.lua (the Overpower icon of a sample with overpower, a hunter's Mongoose Bite, moved by its offsets, whose swipe drains over its 5
--- seconds and starts again) and PlateCombo.lua (the row of combo points of a sample with combo, under the cast bar's room at Combo point size and
--- moved by its vertical offset, in a rogue's or a druid's drawing) do to a plate with the same row. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a
+-- PlateOverpower.lua (the Overpower icon of a sample with overpower, a hunter's Mongoose Bite or, for a rogue who knows it, Riposte, moved by its
+-- offsets, whose swipe drains over its 5 seconds and starts again), PlateCombo.lua (the row of combo points of a sample with combo, under the cast
+-- bar's room at Combo point size and moved by its vertical offset, in a rogue's or a druid's drawing) and PlateTarget.lua (the flash of a Target or
+-- Focus sample's border as the drawing opens and as Flash as you change target turns on, P.TargetFlash) do to a plate with the same row. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a
 -- unit (UnitDocumentation.lua:1526-1529).
 -- A sample's threat (threatGood, threatTransition or threatBad) colours its health bar as PlateColours.lua orders it and, as PlateThreatLook.lua,
 -- PlateText.lua and PlateThreatText.lua draw it (P.Threat), gives it the threat ring at Threat ring thickness (flashing as it turns to threatBad), a
@@ -77,13 +78,15 @@ P.THREAT_GAP, P.RING_PX, P.RING_GAP = 4, 2, 2
 -- The name of the enemy's target on the sample (PlateThreatText.lua's TargetPart): a warrior who holds it, and you while it attacks you; the share of
 -- the threat colour the background takes (PlateThreatLook.lua's BACK_SHARE).
 P.THREAT_HOLDER, P.THREAT_HOLDER_CLASS, P.BACK_SHARE = "Gorvak", "WARRIOR", 0.3
--- The Overpower icon of PlateOverpower.lua: the spell of each class that has one (Overpower for a warrior, Mongoose Bite for a hunter), its file
--- when the client gives none and its name, the crop of each edge, the units over the name and its window in seconds; its pop as a round starts (a
+-- The Overpower icon of PlateOverpower.lua: the spell of each class that has one (Overpower for a warrior, Mongoose Bite for a hunter, Riposte for a
+-- rogue), its file when the client gives none and its name, the classes whose icon stands over their target (P.OP_TARGET), the crop of each edge, the units over the name and its window in seconds; its pop as a round starts (a
 -- fade in over P.OP_POP_IN seconds and a shrink from P.OP_POP_FROM of its size over P.OP_POP_SCALE) and its fade over the round's last P.OP_FADE
 -- seconds, as PlateOverpower.lua's.
-P.OP_SPELLS = { WARRIOR = 7384, HUNTER = 1495 }
-P.OP_FILES = { WARRIOR = "Interface\\Icons\\Ability_MeleeDamage", HUNTER = "Interface\\Icons\\Ability_Hunter_SwiftStrike" }
-P.OP_NAMES = { WARRIOR = "Overpower", HUNTER = "Mongoose Bite" }
+P.OP_SPELLS = { WARRIOR = 7384, HUNTER = 1495, ROGUE = 14251 }
+P.OP_FILES = { WARRIOR = "Interface\\Icons\\Ability_MeleeDamage", HUNTER = "Interface\\Icons\\Ability_Hunter_SwiftStrike",
+	ROGUE = "Interface\\Icons\\Ability_Warrior_Challange" }
+P.OP_NAMES = { WARRIOR = "Overpower", HUNTER = "Mongoose Bite", ROGUE = "Riposte" }
+P.OP_TARGET = { HUNTER = true, ROGUE = true }
 P.OP_CROP, P.OP_GAP, P.OP_WINDOW = 0.08, 2, 5
 P.OP_POP_FROM, P.OP_POP_IN, P.OP_POP_SCALE, P.OP_FADE = 1.3, 0.12, 0.15, 0.25
 -- Test mode's sample eases to a new opacity over P.EASE_SECONDS, as a live plate's fade (PlateThreatLook.lua's EASE_SECONDS).
@@ -96,6 +99,8 @@ P.COMBO_POP_FROM, P.COMBO_POP_SECONDS = 1.4, 0.15
 P.SPACING = 2
 -- The gap between a class icon and the row, and the border of an elite, a rare and a boss in screen pixels (Nameplates.lua:30, 46).
 P.GAP, P.KIND_PX = 3, 2
+-- The screen pixels the flash of Flash as you change target is thicker than Target and focus border thickness (PlateTarget.lua's GROW).
+P.FLASH_GROW = 2
 -- The colours the game gives a hostile and a friendly unit when no row changes them, the level number, the dimming of a plate that is not the target.
 P.HOSTILE, P.FRIENDLY, P.LEVEL_COLOUR = { 0.77, 0.23, 0.23 }, { 0.24, 0.77, 0.35 }, { 1, 0.82, 0 }
 P.SHARE, P.DIM = 0.7, 0.5
@@ -769,6 +774,43 @@ function P.Border(p, spec, o)
 	end
 end
 
+-- The flash of Flash as you change target on a Target or Focus sample, as PlateTarget.lua's: a thicker outline over the border in Target colour or
+-- Focus colour, P.FLASH_GROW screen pixels past Target and focus border thickness, that fades out once (ns.PlateTargetFlash). It plays as the drawing
+-- opens and as the row turns on, so the row shows what it does; any other sample has none.
+function P.TargetFlash(p, spec, o)
+	local mark = o.targetOn and (spec.target and "targetColour" or spec.focus and "focusColour") or nil
+	local on = mark ~= nil and Get("targetFlash") == true
+	local was = p.tflashWas
+	p.tflashWas = on
+	if not on then
+		if p.tflashFrame then
+			if p.tflash then
+				pcall(p.tflash.Stop, p.tflash)
+			end
+			p.tflashFrame:SetAlpha(0)
+		end
+		return
+	end
+	if p.tflashFrame == nil then
+		p.tflashFrame = Frame(p.bar)
+		p.tflashFrame:SetAllPoints(p.bar)
+		p.tflashFrame:SetFrameLevel(p.bar:GetFrameLevel() + 8)
+		p.tflashFrame:SetAlpha(0)
+		p.tflashOutline = P.Outline(p.S, p.tflashFrame, p.tflashFrame)
+		ns.KeepOutline(p.tflashOutline)
+		ns.SetOutline(p.tflashOutline, true, false)
+		p.tflash = type(ns.PlateTargetFlash) == "function" and ns.PlateTargetFlash(p.tflashFrame) or nil
+	end
+	local px = Get("targetThickness")
+	px = ns.Finite(px) and px >= 1 and math.floor(px + 0.5) or 1
+	ns.SetOutlineThickness(p.tflashOutline, px + P.FLASH_GROW)
+	ns.SetOutlineColour(p.tflashOutline, ns.Colour(KEY .. "." .. mark))
+	if was ~= true and p.tflash then
+		pcall(p.tflash.Stop, p.tflash)
+		pcall(p.tflash.Play, p.tflash)
+	end
+end
+
 -- The level number, its box and the mark after it.
 function P.Level(p, spec, o, m)
 	P.Put(p, p.lvl, "BOTTOMLEFT", m.LX, m.LY, m.LW, m.LH)
@@ -1389,7 +1431,23 @@ function P.ThreatTarget(p, spec, o, m, on)
 	text:Show()
 end
 
--- The class whose spell the Overpower icon shows: the player's when it has one (a hunter's Mongoose Bite), else the warrior's Overpower.
+-- True while the player knows a spell (C_SpellBook.IsSpellKnownOrInSpellBook, else IsSpellKnown), as PlateOverpower.lua's KnownRank asks; false
+-- when no call gives a plain answer.
+function P.Knows(id)
+	local book = type(C_SpellBook) == "table" and C_SpellBook or {}
+	for _, call in ipairs({ book.IsSpellKnownOrInSpellBook, book.IsSpellKnown, IsSpellKnown }) do
+		if type(call) == "function" then
+			local ok, known = pcall(call, id)
+			if ok and not ns.IsSecret(known) and type(known) == "boolean" then
+				return known
+			end
+		end
+	end
+	return false
+end
+
+-- The class whose spell the Overpower icon shows: the player's when it has one (a hunter's Mongoose Bite, a rogue's Riposte), else the warrior's
+-- Overpower.
 function P.OverpowerClass()
 	local _, class = P.Player()
 	return P.OP_SPELLS[class] and class or "WARRIOR"
@@ -1580,7 +1638,8 @@ function P.OverpowerClock(p)
 	end
 end
 
--- The Overpower icon of a sample that dodged a warrior (spec.overpower; Mongoose Bite's for a hunter), where PlateOverpower.lua puts it: centred over
+-- The Overpower icon of a sample that dodged a warrior (spec.overpower; Mongoose Bite's for a hunter, Riposte's for a rogue), where
+-- PlateOverpower.lua puts it: centred over
 -- the sample's auras, else over the name (over the bar while the name is inside it), moved by Overpower icon horizontal and vertical offset, at
 -- Overpower icon size, in Flat UI's thin border, with its swipe.
 function P.Overpower(p, spec, o, m)
@@ -1827,6 +1886,7 @@ function P.Plate(p, spec, sets)
 	p.lowFrame:SetAlpha((low and share * 100 < Get("lowHealthAt")) and 1 or 0)
 	p.lowFrame:SetShown(low and true or false)
 	P.Border(p, spec, o)
+	P.TargetFlash(p, spec, o)
 	-- The name and the health text.
 	p.name:ClearAllPoints()
 	if m.nameAbove then
@@ -2148,9 +2208,11 @@ function P.Cells(kind)
 				{ id = "elite", label = "Elite", col = 2, spec = Enemy({ name = names.elite, level = 20, kind = "elite" }) },
 				{ id = "rare", label = "Rare", col = 2, spec = Enemy({ name = "Old Blanchy", level = 20, kind = "rare" }) },
 				{ id = "boss", label = "Boss", col = 2, spec = Enemy({ name = "Edwin VanCleef", level = 20, kind = "boss" }) },
-				-- A warrior's Overpower over an enemy that dodged them, or a hunter's Mongoose Bite over their target.
-				{ id = "overpower", label = P.OP_NAMES[class] or P.OP_NAMES.WARRIOR, col = 2, show = P.OP_SPELLS[class] ~= nil,
-					spec = Enemy({ overpower = true, target = class == "HUNTER" or nil }) },
+				-- A warrior's Overpower over an enemy that dodged them, or a hunter's Mongoose Bite or a rogue's Riposte over their target; a rogue's
+				-- only while they know Riposte, a talent.
+				{ id = "overpower", label = P.OP_NAMES[class] or P.OP_NAMES.WARRIOR, col = 2,
+					show = P.OP_SPELLS[class] ~= nil and (class ~= "ROGUE" or P.Knows(P.OP_SPELLS.ROGUE)),
+					spec = Enemy({ overpower = true, target = P.OP_TARGET[class] }) },
 				-- A rogue's or a druid's combo points under their target, 3 of 5, below the room the game keeps for the cast bar.
 				{ id = "combo", label = "Combo points", col = 2, show = class == "ROGUE" or class == "DRUID",
 					spec = Enemy({ target = true, combo = 3, reserve = true }) },
@@ -2273,7 +2335,7 @@ function P.Parts(S)
 	Set({ "level", "levelSize", "levelShape", "levelGap" }, plate.lvl)
 	Set({ "kindMark" }, (plates.elite or plate).mark)
 	Set({ "colourPlayers" }, (plates.player or plate).bar)
-	Set({ "targetBar", "targetBarColour", "target", "targetColour", "targetThickness" }, (Live("target") or plate).bar)
+	Set({ "targetBar", "targetBarColour", "target", "targetColour", "targetThickness", "targetFlash" }, (Live("target") or plate).bar)
 	Set({ "focusColour" }, (Live("focus") or Live("target") or plate).bar)
 	Set({ "threat", "threatRole", "threatGood", "threatTransition", "threatBad", "threatSameColours", "threatDamageGood", "threatDamageTransition",
 		"threatDamageBad" }, plates.threat and plates.threat.chips.f or plate.bar)
@@ -2295,8 +2357,8 @@ function P.Parts(S)
 	Set({ "raidMarker", "raidMarkerSize", "raidMarkerX", "raidMarkerY" }, (plates.marked or plate).marker)
 	Set({ "questMark", "questMarkSize", "questMarkPlace", "questMarkX", "questMarkY" }, (Live("quest") or plate).quest)
 	Set({ "questMarkCount" }, (Live("quest") or plate).questCount)
-	-- Only a warrior's and a hunter's drawing has the Overpower plate, and a rogue's and a druid's the combo points; for anyone else the rows mark
-	-- nothing.
+	-- Only a warrior's, a hunter's and a Riposte rogue's drawing has the Overpower plate, and a rogue's and a druid's the combo points; for anyone
+	-- else the rows mark nothing.
 	local overpower = Live("overpower")
 	Set({ "overpower", "overpowerSize", "overpowerX", "overpowerY", "overpowerSwipe" }, overpower and overpower.opFrame or nil)
 	local combo = Live("combo")

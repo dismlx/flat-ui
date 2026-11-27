@@ -183,6 +183,7 @@ ns.SETUP_STEPS = {
 		{ "nameplates.targetColour", "r", "mock-nameplate-marks" },
 		{ "nameplates.focusColour", "r", "mock-nameplate-marks" },
 		{ "nameplates.targetThickness", "r", "mock-nameplate-marks" },
+		{ "nameplates.targetFlash", "r", "mock-nameplate-marks" },
 		{ "nameplates.classEnemy", "c", "mock-nameplate-marks" },
 		{ "nameplates.classFriendly", "c", "mock-nameplate-marks" },
 		{ "nameplates.classPosition", "o", "mock-nameplate-marks" },
