@@ -15,7 +15,9 @@ local ADDON_NAME, ns = ...
 -- followed): Seconds left on rolls puts the whole seconds left over the right end of each roll's timer, the number and the timer's bar red under 10
 -- (SetStatusBarColor, given back as the roll ends or the row goes off; ROLL.Time), and Seconds on the timers puts the time left, as 1:12, at the
 -- right under the breath, fatigue and feign death bars, red under 10 while the timer runs out (MIRROR.Time). Opacity in combat eases the objective
--- tracker down as a fight starts and back up as it ends, and Questie's the same way (ns.TrackerEase).
+-- tracker down as a fight starts and back up as it ends, and Questie's the same way (ns.TrackerEase); in the fight either comes back to full
+-- while the mouse is over the part it draws (ns.TrackerHover). Zoom out after (hud.zoomReset) glides the minimap out to its widest one zoom level
+-- every ZOOM_GLIDE seconds, with SetZoom on the map; the mouse coming over the map stops the glide where it is and the count starts again.
 -- Sound before a roll ends (hud.lootRollSound, None by default) plays once as a roll still on the screen comes down to 5 seconds left, read from
 -- the same seconds (ROLL.Tick, ROLL.Sound); the game takes a roll away once you roll on it, so only a roll you have not rolled on rings.
 
@@ -25,8 +27,8 @@ local MAP_MASK = "ui-hud-minimap-frame-generic-mask"
 -- The mask of a square map: a plain white picture (the game's own code passes an atlas name to Minimap:SetMaskTexture, and the documentation takes any
 -- texture asset: MinimapFrameAPIDocumentation.lua:141-149).
 local SQUARE_MASK = "Interface\\ChatFrame\\ChatFrameBackground"
--- Seconds between two looks at the minimap zoom.
-local ZOOM_EVERY = 0.5
+-- Seconds between two looks at the minimap zoom, and between two steps of Zoom out after's glide out.
+local ZOOM_EVERY, ZOOM_GLIDE = 0.5, 0.08
 -- The buttons round the minimap that a setting can switch off: the setting, and the field of the cluster or the global name of the frame
 -- and the fields of it that take the mouse, since a parent does not turn off the mouse of its children (Blizzard_Minimap/Mainline/Minimap.xml:39-43,
 -- Camelot/MinimapIndicatorFrameTemplate.xml:12) (Mainline/Minimap.xml:25 and 46, Mainline/GameTime.xml:3, Camelot/AddonCompartment.xml:3,
@@ -152,7 +154,7 @@ local mapButtons = setmetatable({}, { __mode = "k" })
 -- Per experience or reputation bar: { game = the text the game set last, ours = true while the text shown is ours, line = that text }
 local xpTexts = setmetatable({}, { __mode = "k" })
 -- The objective tracker: alpha = the opacity the game had while a lower one is set here, sent = the one set last, and the ease of Opacity in combat
--- (ns.TrackerEase: target, from, t, span, back, driver).
+-- (ns.TrackerEase: target, from, t, span, back, driver), and its watcher under the mouse in a fight (ns.TrackerHover: hover, over, wanted).
 local look = {}
 local retry = false
 local Refresh
@@ -697,8 +699,36 @@ local function Now()
 	return type(GetTime) == "function" and GetTime() or 0
 end
 
--- Puts the zoom back to the widest once the time has passed since it changed, with the mouse off the map. A withheld answer counts as the mouse
--- being over it. The call raises when the game refuses it.
+-- One step of the glide out: the map zooms out one level, every ZOOM_GLIDE seconds, until it is at its widest. The mouse coming over the map
+-- stops the glide where it is and starts the count again (a withheld answer counts as over); a refusal of the game's ends it with a note.
+-- minimap.glideTo is the zoom Flat UI asked for, so ZoomSeen tells its own steps from the player's.
+local function ZoomGlide()
+	local map, zoom = Frame("Minimap"), ZoomLevel()
+	if not map or zoom == nil or zoom <= 0 then
+		minimap.gliding, minimap.glideTo, minimap.zoomAt = nil, nil, nil
+		minimap.zoomer:Hide()
+		return
+	end
+	local ok, over = pcall(map.IsMouseOver, map)
+	if not ok or ns.IsSecret(over) or over ~= false then
+		minimap.gliding, minimap.glideTo, minimap.zoomAt = nil, nil, Now()
+		return
+	end
+	minimap.glideTo = zoom - 1
+	if not pcall(map.SetZoom, map, zoom - 1) then
+		minimap.gliding, minimap.glideTo, minimap.zoomAt = nil, nil, nil
+		minimap.zoomer:Hide()
+		ns.Note(KEY, LABEL .. ": the game refused to zoom the minimap out.")
+		return
+	end
+	if zoom - 1 <= 0 then
+		minimap.gliding, minimap.glideTo, minimap.zoomAt = nil, nil, nil
+		minimap.zoomer:Hide()
+	end
+end
+
+-- Starts the glide out to the widest zoom once the time has passed since the zoom changed, with the mouse off the map. A withheld answer counts
+-- as the mouse being over it.
 local function ZoomBack()
 	local seconds = Val("minimap", "zoomReset")
 	if type(seconds) ~= "number" or seconds <= 0 or minimap.zoomAt == nil then
@@ -718,18 +748,15 @@ local function ZoomBack()
 	if not ok or ns.IsSecret(over) or over ~= false then
 		return
 	end
-	minimap.zoomAt = nil
-	minimap.zoomer:Hide()
-	if not pcall(map.SetZoom, map, 0) then
-		ns.Note(KEY, LABEL .. ": the game refused to zoom the minimap out.")
-	end
+	minimap.zoomAt, minimap.gliding = nil, true
+	ZoomGlide()
 end
 
 local function ZoomStep(_, elapsed)
 	minimap.zoomClock = (minimap.zoomClock or 0) + elapsed
-	if minimap.zoomClock >= ZOOM_EVERY then
+	if minimap.zoomClock >= (minimap.gliding and ZOOM_GLIDE or ZOOM_EVERY) then
 		minimap.zoomClock = 0
-		Run("minimap", ZoomBack, minimap)
+		Run("minimap", minimap.gliding and ZoomGlide or ZoomBack, minimap)
 	end
 end
 
@@ -740,6 +767,11 @@ local function ZoomSeen(_, fresh)
 	local zoom = ZoomLevel()
 	local count = type(seconds) == "number" and seconds > 0
 	minimap.zoomBlind = (count and zoom == nil) or nil
+	-- A step of the glide out is Flat UI's own and starts no count; a zoom the player chose meanwhile ends the glide and starts it.
+	if minimap.gliding and count and zoom ~= nil and zoom > 0 and (not fresh or zoom == minimap.glideTo) then
+		return
+	end
+	minimap.gliding, minimap.glideTo = nil, nil
 	if not count or zoom == nil or zoom == 0 then
 		minimap.zoomAt = nil
 		if minimap.zoomer then
@@ -1919,7 +1951,8 @@ end
 -- tracker's record (look here, S in QuestieSkin.lua): alpha, the opacity to put back; sent, the alpha written last, set at once so the Fading page
 -- leaves the tracker alone for the whole ease (ns.TrackerFades, ns.QuestieFades); target; back, true while it goes back to alpha, which lets the
 -- tracker go as it gets there (alpha and sent nil). run runs each step as the file runs its parts, so a failure counts toward stopping the part,
--- and a step that failed stops the ease. The driver is a frame of Flat UI's own, shown only while it eases. SetAlpha is no protected call.
+-- and a step that failed stops the ease. The driver is a frame of Flat UI's own, shown only while it eases. SetAlpha is no protected call. In a
+-- fight the tracker comes back to full while the mouse is over the part it draws, and goes back down as the mouse leaves (ns.TrackerHover).
 do
 	local DOWN, UP = 0.25, 0.2
 
@@ -1982,6 +2015,51 @@ do
 		end
 		state.target, state.back = nil, nil
 	end
+
+	-- Under the mouse in a fight the tracker comes back to full. A watcher of Flat UI's own (state.hover), shown only while the fight's opacity
+	-- holds, asks every HOVER_EVERY seconds whether the mouse is over part, the part the tracker draws (an answer the game withholds counts as
+	-- over), and on a change eases the tracker up to state.alpha, the opacity to put back, or down to the fight's again (state.over says which).
+	-- Only IsMouseOver is asked and only SetAlpha written, through ns.TrackerEase, so the Fading page still leaves the tracker alone.
+	local HOVER_EVERY = 0.1
+
+	local function Watch(state)
+		local part = state.hoverPart
+		local ok, over = pcall(part.IsMouseOver, part)
+		over = ok and (ns.IsSecret(over) or over == true)
+		if over ~= state.over then
+			state.over = over
+			ns.TrackerEase(state, state.hoverFrame, over and (state.alpha or 1) or state.wanted, false, state.hoverRun)
+		end
+	end
+
+	-- Starts or keeps the watcher of frame while wanted is the fight's opacity; with wanted nil, or no part, it stops. run runs each look as the
+	-- caller's part, as the ease's steps.
+	function ns.TrackerHover(state, frame, part, wanted, run)
+		if wanted == nil or frame == nil or part == nil or type(part.IsMouseOver) ~= "function" then
+			if state.hover then
+				state.hover:Hide()
+			end
+			state.over = nil
+			return
+		end
+		state.hoverFrame, state.hoverPart, state.wanted, state.hoverRun = frame, part, wanted, run
+		local hover = state.hover
+		if not hover then
+			hover = CreateFrame("Frame")
+			ns.Own[hover] = true
+			hover:Hide()
+			local waited = 0
+			hover:SetScript("OnUpdate", function(_, elapsed)
+				waited = waited + (ns.Finite(elapsed) and elapsed or 0)
+				if waited >= HOVER_EVERY then
+					waited = 0
+					state.hoverRun(Watch, state)
+				end
+			end)
+			state.hover = hover
+		end
+		hover:Show()
+	end
 end
 
 -- Runs a step of the tracker's ease as the tracker's part.
@@ -2004,13 +2082,15 @@ local function TrackerAlpha(_, fight)
 	end
 	local percent = Val("tracker panel", "trackerCombat") or 100
 	local wanted = fight and percent < 100 and percent / 100 or nil
+	-- The mouse over the part the tracker draws keeps it at full (ns.TrackerHover).
+	ns.TrackerHover(look, frame, wanted and Child(frame, "NineSlice"), wanted, look.run)
 	if wanted ~= nil then
 		if look.alpha == nil then
 			local given = ns.FadeGiven and ns.FadeGiven(frame)
 			local ok, alpha = pcall(frame.GetAlpha, frame)
 			look.alpha = ns.Finite(given) and given or ((ok and ns.Finite(alpha)) and alpha or 1)
 		end
-		ns.TrackerEase(look, frame, wanted, false, look.run)
+		ns.TrackerEase(look, frame, look.over and look.alpha or wanted, false, look.run)
 	elseif look.alpha ~= nil then
 		if ns.FadeTakesBack and ns.FadeTakesBack(frame, look.alpha) then
 			ns.TrackerEaseStop(look)

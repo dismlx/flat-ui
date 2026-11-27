@@ -14,6 +14,9 @@ local _, ns = ...
 -- name (Hud.lua): the opacity each string had is read before the first write and given back when the row, the page or the part goes off. The
 -- frames take no mouse, so a name that is hidden is in nobody's way. A string this client lacks is passed over, and a change of opacity the
 -- game refuses gives back the strings of that row, which then shows as usual until /reload, and /flatui status says so.
+-- Zone title size (hud.zoneTitleSize, 100%, 50% to 150%) sizes the four strings with SetFont, a share of the font the game gave them, read on the
+-- first touch and put back at 100%, while the part stops or the page goes off (ns.TextStyle). The game never sets their font itself (ZoneText.lua
+-- has no SetFont, SetFontObject or SetTextHeight), so a size stays, and shows the next time the names fade in. Hidden ones stay hidden.
 -- The smaller line holds the zone's own name too: when the player leaves a part of the zone for the open zone (a town, a mine, a building)
 -- once the big name has faded, the part's name is empty and the game writes the zone's name in SubZoneTextString and shows that frame
 -- (ZoneText.lua:96-110), many times an hour while levelling. That is the zone name, so Hide the zone name hides the smaller line while it holds
@@ -52,6 +55,8 @@ local SMALL = "SubZoneTextString"
 local kept, hides = {}, { zoneTitle = {}, subzoneTitle = {} }
 local refused, missing = {}, {}
 local followed = false
+-- Zone title size: true while the game refused a size on one of the four strings.
+local sizeRefused = false
 -- The talking head. held: Flat UI took the event and owes it back. aside: the frame did not listen when Flat UI looked. refused: the frame kept
 -- the event or would not say. stuck: the frame would not take the event back. absent: the client has no such frame. waiting: a change waits
 -- for the end of a fight.
@@ -252,10 +257,27 @@ function Talk()
 	T.aside, T.refused, T.stuck = nil, nil, nil
 end
 
+-- Zone title size (hud.zoneTitleSize): the four strings of the two rows at a share of the size the game gave them (ns.TextStyle, which reads
+-- the game's font on the first touch and puts it back at 100%), the game's size while the part has stopped or the page is off.
+local function Sizes()
+	local size = ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and tonumber(ns.Get(KEY .. ".zoneTitleSize")) or 100
+	size = math.max(50, math.min(150, size))
+	sizeRefused = false
+	for _, row in ipairs(ROWS) do
+		for _, name in ipairs(STRINGS[row]) do
+			local text = Global(name)
+			if text ~= nil and type(text.SetFont) == "function" and ns.TextStyle(text, { percent = size }) == false then
+				sizeRefused = size ~= 100
+			end
+		end
+	end
+end
+
 local function Apply()
 	for _, row in ipairs(ROWS) do
 		Strings(row)
 	end
+	Sizes()
 	Talk()
 end
 
@@ -267,6 +289,9 @@ ns.AddStatus(KEY, function()
 		elseif Wanted(row) and missing[row] then
 			lines[#lines + 1] = ("%s: this client has no such text, so nothing is hidden."):format(LABELS[row])
 		end
+	end
+	if sizeRefused then
+		lines[#lines + 1] = "Zone title size: the game refused a size, so the zone names keep the game's."
 	end
 	if T.stuck then
 		lines[#lines + 1] = "Talking head: the game did not take its talking head back, so none shows until /reload."

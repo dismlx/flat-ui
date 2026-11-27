@@ -29,6 +29,8 @@ local _, ns = ...
 -- reputations open when the fight ends." (ns.OpenAfterFight, MapText.lua). A Ctrl-click on either bar counts the levelling and reputation
 -- numbers of this session from now, as /flatui xp reset does (ns.XpStatsReset, XpStats.lua): "Flat UI: the experience and reputation count
 -- starts again now.". The tooltip ends with dim hints, "after the fight" in one, and "Ctrl-click: count this session from now"; none on a sample.
+-- A click counts only when it is let go over the bar with the button it was pressed with, as in the options window, so a press slid off does
+-- nothing. While it takes clicks or shows a tooltip, a bar under the mouse has a faint light over it (bar.lit), as a data panel's slot has.
 -- The tooltip says what is left, "To level: 14,850 (55%)" on the experience bar and "4,200 / 12,000 (35%)" with "To Revered: 7,800" on the
 -- reputation bar ("To the next standing" for a friendship, renown or paragon faction), as the data panels do; none at the top level or standing.
 -- The tooltip's rested line is in Rested colour with the share of the level it covers ("Rested: 8,000 (30% of the level)"), and with Rested share
@@ -38,18 +40,24 @@ local _, ns = ...
 -- which Hud.lua styles, keeps the game's text).
 -- With Animate gains (hud.xpSmooth, on by default) a fill that grows slides to its new value over EASE_FILL seconds, easing out, and the stretch
 -- just gained lights up on the bar (a white texture of Flat UI's own, added over the fill) and fades over EASE_GLOW seconds; a new level,
--- another faction, a loss, a sample or a hidden bar sets the fill at once. A new level also lights the whole bar in soft gold, and a new
--- standing of the same faction in the fill of that standing, fading over EASE_FLASH seconds as the fill drops to its new value (F.Rose,
+-- another faction, another standing, a loss, a sample or a hidden bar sets the fill at once. A new level also lights the whole bar in soft gold,
+-- and a new standing of the same faction in the fill of that standing, fading over EASE_FLASH seconds as the fill drops to its new value (F.Rose,
 -- F.Flash); the first drawing after login or after the bar showed again, a sample and a bar off the screen never flash. One frame of Flat UI's
--- own per bar runs the ease, shown only while it runs, so this goes on in a fight too.
+-- own per bar runs the ease, shown only while it runs, so this goes on in a fight too. A quest that becomes ready to hand in lights the part it
+-- adds to the stretch of the quests ready to hand in, in Quest colour, fading over EASE_GLOW seconds (F.QuestGlow); not on the first drawing,
+-- a new level or a sample.
 -- With Gains over the bar (hud.xpGainText, on by default) each gain rises as "+1,240" from the end of the fill, FLOAT_RISE px over FLOAT_TIME
 -- seconds as it fades, white for experience and in the fill's colour on the reputation bar (F.Float); a quick second gain starts it again with the
--- new amount. Only a gain on the same level or faction counts, so the first drawing, a bar that shows again, a new level or standing (which
--- flash), another faction, a sample and a bar off the screen show none. Its frame is Flat UI's own too, so it shows in a fight. It is drawn in
--- the HIGH strata, over the action buttons and the other bar, and just over the bar text while that shows Above the bar.
+-- new amount. A reputation loss rises as "-250" in red. A new level rises as "Level 35" in gold over the middle of the experience bar, and a new
+-- standing of the same faction as "Honored" in its colour, FLOAT_WORD times as slowly, with Animate gains off too (F.Change). A reputation change
+-- is measured on the faction's own scale (rep.at), so a loss that drops a standing reads as the loss. Only a change on the same level or faction
+-- counts, so the first drawing, a bar that shows again, another faction, a sample and a bar off the screen show none. Its frame is Flat UI's own
+-- too, so it shows in a fight. It is drawn in the HIGH strata, over the action buttons and the other bar, and just over the bar text while that
+-- shows Above the bar.
 -- While test mode's Moving is on, every SAMPLE_EVERY seconds each shown bar plays a sample gain, "+1,240" or "+75" with the glow of Animate
--- gains (F.SampleGain); the numbers drawn and the session's count are not touched. A gain, its glow or a flash holds the bar at full on the
--- Fading page's Experience bar row while it runs (ns.XpBarLively).
+-- gains, and every third time the experience bar plays "Level 35" with the gold flash (F.SampleGain); the numbers drawn and the session's count
+-- are not touched. A gain, its glow, a flash or the glow of a quest ready holds the bar at full on the Fading page's Experience bar row while it
+-- runs (ns.XpBarLively).
 -- In test mode (TestMode.lua, entry "xpbar") a bar that Bars shown asks for and that has nothing to show, as at the top level or with no faction
 -- watched, shows a sample (experience at 45% with rested and quest stretches, Stormwind at Honored), drawn with every row; samples are kept apart
 -- from what the game gave (F.Data), are never put in chat, and give XpStats.lua nothing to count (ns.XpRepNow).
@@ -65,8 +73,11 @@ local QUEST_ALPHA = 0.6
 local EASE_FILL, EASE_GLOW, GLOW_ALPHA, EASE_LEAST = 0.4, 0.8, 0.5, 0.0005
 -- The flash of a new level or standing over the whole bar: the seconds it fades over, its opacity at the start, and the gold of a new level.
 local EASE_FLASH, FLASH_ALPHA, FLASH_GOLD = 1.0, 0.6, { 1, 0.82, 0 }
--- Gains over the bar: the seconds the "+1,240" rises and fades over, how far it rises, and how close to an end of the bar it may stand.
-local FLOAT_TIME, FLOAT_RISE, FLOAT_EDGE = 1.2, 10, 16
+-- Gains over the bar: the seconds the "+1,240" rises and fades over, how far it rises, and how close to an end of the bar it may stand. A word
+-- ("Level 35", "Honored") lasts FLOAT_WORD times as long, and a reputation loss is in LOSS red.
+local FLOAT_TIME, FLOAT_RISE, FLOAT_EDGE, FLOAT_WORD, LOSS = 1.2, 10, 16, 1.5, { 1, 0.3, 0.3 }
+-- The faint light over a bar under the mouse while it takes clicks or shows a tooltip, as the data panels' slots have (DataPanels.lua).
+local HOVER_LIGHT = 0.07
 -- Test mode's sample gain: how often it plays, in seconds, and the share of the bar its glow lights.
 local SAMPLE_EVERY, SAMPLE_STRETCH = 4, 0.04
 -- The chat line of a click on the reputation bar in a fight.
@@ -315,7 +326,7 @@ function F.ReadRep()
 		end
 		local levels = Call(_G.C_MajorFactions, "GetRenownLevels", id)
 		top = type(levels) == "table" and #levels > 0 and type(levels[#levels]) == "table" and levels[#levels].level or nil
-		rep.blue = true
+		rep.blue, rep.renown = true, true
 	elseif type(friend) == "table" and ns.Finite(friend.friendshipFactionID) and friend.friendshipFactionID > 0 then
 		local ranks = Call(_G.C_GossipInfo, "GetFriendshipReputationRanks", id)
 		level = type(ranks) == "table" and ranks.currentLevel or nil
@@ -493,8 +504,8 @@ function F.Unpark()
 	end
 	-- The bar comes back with its fill set at once, and without a flash or a gain over it.
 	for _, bar in pairs(S.bars) do
-		bar.ratio, bar.key, bar.raw = nil, nil, nil
-		bar.level, bar.repId, bar.reaction = nil, nil, nil
+		bar.ratio, bar.key, bar.raw, bar.rawAt, bar.rawId = nil, nil, nil, nil, nil
+		bar.level, bar.repId, bar.reaction, bar.readyWas, bar.readyKey = nil, nil, nil, nil, nil
 	end
 end
 
@@ -502,6 +513,9 @@ end
 
 function F.Hover(bar, on)
 	bar.hover = on
+	if bar.lit then
+		bar.lit:SetShown(on == true and (Opt("xpClicks") == true or Opt("xpTooltip") == true))
+	end
 	if on and Opt("xpTooltip") then
 		F.Tip(bar)
 	elseif not on and _G.GameTooltip ~= nil then
@@ -596,14 +610,36 @@ function F.NewBar(root, id)
 	bar.over:SetAllPoints(frame)
 	bar.over:SetFrameLevel(frame:GetFrameLevel() + 3)
 	bar.text = bar.over:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	-- The faint light under the mouse (F.Hover): over the fill and the glows, under the text.
+	bar.lit = bar.over:CreateTexture(nil, "ARTWORK", nil, 3)
+	bar.lit:SetAllPoints(frame)
+	bar.lit:SetColorTexture(1, 1, 1, HOVER_LIGHT)
+	pcall(bar.lit.SetBlendMode, bar.lit, "ADD")
+	bar.lit:Hide()
 	frame:SetScript("OnEnter", function()
 		F.Hover(bar, true)
 	end)
 	frame:SetScript("OnLeave", function()
 		F.Hover(bar, false)
 	end)
-	frame:SetScript("OnMouseUp", function(_, button)
-		F.Click(bar, button)
+	-- A click counts only when it is let go over the bar with the button it was pressed with, as in the options window (ns.PanelKit.Clickable):
+	-- the game sends the release to the frame the press began on, wherever the cursor is. A withheld answer counts as over.
+	frame:SetScript("OnMouseDown", function(_, button)
+		bar.pressed = button
+	end)
+	frame:SetScript("OnMouseUp", function(self, button)
+		local wanted = bar.pressed ~= nil and bar.pressed == button
+		bar.pressed = nil
+		if not wanted then
+			return
+		end
+		local ok, over = pcall(self.IsMouseOver, self)
+		if not ok or ns.IsSecret(over) or over ~= false then
+			F.Click(bar, button)
+		end
+	end)
+	frame:SetScript("OnHide", function()
+		bar.pressed = nil
 	end)
 	return bar
 end
@@ -883,7 +919,8 @@ end
 
 -- Animate gains -------------------------------------------------------------------------------------------------------------------------------
 
--- What a bar shows, for Animate gains: the level for experience, the faction for reputation, or a sample. A fill eases only while this stays.
+-- What a bar shows, for Animate gains: the level for experience, the faction and its standing for reputation, or a sample. A fill eases only
+-- while this stays, so a fall to a lower standing sets the fill at once.
 function F.Key(bar, data, sample)
 	if sample or not data then
 		return "sample"
@@ -891,7 +928,7 @@ function F.Key(bar, data, sample)
 		local ok, level = Ask(_G.UnitLevel, "player")
 		return "xp:" .. tostring(ok == "ok" and ns.Finite(level) and level or "?")
 	end
-	return "rep:" .. tostring(data.id)
+	return "rep:" .. tostring(data.id) .. ":" .. tostring(data.standing or data.reaction)
 end
 
 -- Ends the ease of a bar where it was going: the fill at its new value, the glow away; hide also hides the frame that runs it.
@@ -1048,7 +1085,7 @@ end
 -- One frame of a gain over the bar: it rises FLOAT_RISE px, easing out, and fades over FLOAT_TIME seconds, then hides.
 function F.FloatStep(bar, elapsed)
 	bar.floatT = bar.floatT + (ns.Finite(elapsed) and elapsed or 0)
-	local done = math.min(bar.floatT / FLOAT_TIME, 1)
+	local done = math.min(bar.floatT / (bar.floatSpan or FLOAT_TIME), 1)
 	bar.float:SetPoint("BOTTOM", bar.frame, "TOPLEFT", bar.floatX, bar.floatY + FLOAT_RISE * (1 - (1 - done) ^ 2))
 	bar.float:SetAlpha(1 - done * done)
 	if done >= 1 then
@@ -1061,8 +1098,9 @@ end
 -- strata (bar.floatHost), so it reads over the action buttons the bar sits under and over the other bar; it is a child of the bar, so Fading's
 -- alpha on FlatUIXpBar still reaches it. It starts 2 px over the bar, or just over the bar text while that shows Above the bar (bar.floatY).
 -- One frame of Flat UI's own per bar runs it, shown only while it runs; a second gain starts it again with the new amount. Nothing on a bar
--- that is not on the screen.
-function F.Float(bar, gained, ratio, width)
+-- that is not on the screen. word, when given, is written in place of the amount ("Level 35", "Honored", "-250") and lasts FLOAT_WORD times as
+-- long; rgb, when given, is its colour.
+function F.Float(bar, gained, ratio, width, word, rgb)
 	local okSeen, seen = pcall(bar.frame.IsVisible, bar.frame)
 	if not (okSeen and seen == true) then
 		return
@@ -1098,13 +1136,16 @@ function F.Float(bar, gained, ratio, width)
 		bar.floatSize = size
 		ns.TextStyle(text, { percent = size, flags = "OUTLINE" })
 	end
-	if bar.id == "xp" then
+	if rgb then
+		text:SetTextColor(rgb[1], rgb[2], rgb[3], 1)
+	elseif bar.id == "xp" then
 		text:SetTextColor(1, 1, 1, 1)
 	else
 		local r, g, b = F.Colour(bar)
 		text:SetTextColor(r, g, b, 1)
 	end
-	text:SetText("+" .. Grouped(gained))
+	text:SetText(word or ("+" .. Grouped(gained)))
+	bar.floatSpan = (word and FLOAT_TIME * FLOAT_WORD) or FLOAT_TIME
 	bar.floatX = math.max(math.min(ratio * width, width - FLOAT_EDGE), math.min(FLOAT_EDGE, width / 2))
 	bar.floatY = 2
 	if Opt("xpTextPlace") == "above" and bar.text:IsShown() then
@@ -1119,8 +1160,17 @@ function F.Float(bar, gained, ratio, width)
 	bar.floatAnim:Show()
 end
 
--- True while a gain rises over a shown bar, its fill slides up or a level or standing flashes on it: the Experience bar row of Fading holds the
--- bar at full meanwhile (Fade.lua, busy), then waits Wait before fading.
+-- True while a frame that runs a part of Animate gains or Gains over the bar is shown.
+function F.Running(anim)
+	if not anim then
+		return false
+	end
+	local ok, shown = pcall(anim.IsShown, anim)
+	return ok and shown == true
+end
+
+-- True while a gain rises over a shown bar, its fill slides up, a level or standing flashes on it or the stretch of the quests ready to hand in
+-- glows: the Experience bar row of Fading holds the bar at full meanwhile (Fade.lua, busy), then waits Wait before fading.
 function ns.XpBarLively()
 	if not ns.XpOwn() then
 		return false
@@ -1130,12 +1180,8 @@ function ns.XpBarLively()
 			if bar.easing then
 				return true
 			end
-			local anim = bar.floatAnim
-			if anim then
-				local ok, shown = pcall(anim.IsShown, anim)
-				if ok and shown == true then
-					return true
-				end
+			if F.Running(bar.floatAnim) or F.Running(bar.questAnim) then
+				return true
 			end
 		end
 	end
@@ -1144,29 +1190,104 @@ end
 
 -- Test mode, every SAMPLE_EVERY seconds while its Moving is on: each shown bar plays a sample gain, "+1,240" over the experience bar and "+75"
 -- in the standing's colour over the reputation bar (with Gains over the bar), and the glow of Animate gains over the last stretch of the fill
--- (with Animate gains). Nothing is counted: the ease ends where the fill is, and bar.ratio, bar.key and bar.raw stay as drawn, so the next real
--- gain counts from what the game gave.
+-- (with Animate gains). Every third round the experience bar plays a new level in its place: "Level 35" (the next level) in gold over its
+-- middle and the gold flash. Nothing is counted: the ease ends where the fill is, and bar.ratio, bar.key and bar.raw stay as drawn, so the next
+-- real gain counts from what the game gave.
 function F.SampleGain()
 	if not ns.XpOwn() then
 		return
 	end
 	local float, smooth, width = Opt("xpGainText") == true, Opt("xpSmooth") == true, F.Width()
+	S.sampleRound = (S.sampleRound or 0) % 3 + 1
 	for _, bar in pairs(S.bars) do
 		if bar.shown then
 			local ratio = ns.Finite(bar.ratio) and bar.ratio or 0
-			if float then
+			local _, level = Ask(_G.UnitLevel, "player")
+			local rise = bar.id == "xp" and S.sampleRound == 3 and ns.Finite(level)
+			if float and rise then
+				F.Float(bar, 0, 0.5, width, ("Level %d"):format(level + 1), FLASH_GOLD)
+			elseif float then
 				F.Float(bar, bar.id == "xp" and 1240 or 75, ratio, width)
 			end
-			if smooth and ratio > 0 and not bar.easing then
+			if smooth and rise and not bar.easing then
+				F.Flash(bar, ratio, width, FLASH_GOLD)
+			elseif smooth and ratio > 0 and not bar.easing then
 				F.Ease(bar, math.max(0, ratio - SAMPLE_STRETCH), ratio, width)
 			end
 		end
 	end
 end
 
--- The value of a bar, its fill colour and the stretch of rested experience. A gain on the same level or faction (bar.raw keeps the value drawn
--- last; cleared with bar.ratio and bar.key) rises over the bar with Gains over the bar on, so the first drawing after login, a bar that shows
--- again, a new level or standing, another faction and a sample never show one.
+-- What rises over a bar for a change the game gave, with Gains over the bar on: the new level ("Level 35", in gold over the middle of the
+-- experience bar) or standing ("Honored", in its colour) that flash names, else a gain as "+1,240" and, on the reputation bar, a loss as "-250"
+-- in red, both from the end of the fill. A reputation change is measured on the faction's own scale (rep.at, kept as bar.rawAt with bar.rawId),
+-- so a loss across a standing reads as the loss it is; a renown level, whose scale starts again at each level, counts only within one.
+function F.Change(bar, data, sameKey, ratio, width, flash)
+	local delta
+	if bar.id == "xp" then
+		delta = (sameKey and ns.Finite(bar.raw)) and math.max(data.value - bar.raw, 0) or 0
+		bar.raw = data.value
+	else
+		local same = bar.rawId == data.id and ns.Finite(bar.rawAt) and ns.Finite(data.at) and (sameKey or not data.renown)
+		delta = same and data.at - bar.rawAt or 0
+		bar.raw, bar.rawAt, bar.rawId = data.value, ns.Finite(data.at) and data.at or nil, data.id
+	end
+	if Opt("xpGainText") ~= true then
+		return
+	elseif flash and bar.id == "xp" and ns.Finite(bar.level) then
+		F.Float(bar, 0, 0.5, width, ("Level %d"):format(bar.level), FLASH_GOLD)
+	elseif flash and type(data.standing) == "string" and data.standing ~= "" then
+		F.Float(bar, 0, ratio, width, data.standing, flash)
+	elseif delta >= 1 then
+		F.Float(bar, math.floor(delta), ratio, width)
+	elseif delta <= -1 then
+		F.Float(bar, 0, ratio, width, "-" .. Grouped(math.floor(-delta)), LOSS)
+	end
+end
+
+-- The glow over the stretch of the quests ready to hand in that has just grown, from from to to of the bar's width, in Quest colour: it fades
+-- from GLOW_ALPHA over EASE_GLOW seconds on a frame of Flat UI's own (bar.questAnim), shown only while it runs and hidden with the bar.
+function F.QuestGlow(bar, from, to, width)
+	if not bar.questAnim then
+		local glow = bar.over:CreateTexture(nil, "ARTWORK", nil, 1)
+		glow:SetTexture(FILE)
+		pcall(glow.SetBlendMode, glow, "ADD")
+		glow:Hide()
+		bar.questGlow = glow
+		local anim = CreateFrame("Frame", nil, bar.frame)
+		ns.Own[anim] = true
+		anim:Hide()
+		anim:SetScript("OnUpdate", function(self, elapsed)
+			bar.questT = bar.questT + (ns.Finite(elapsed) and elapsed or 0)
+			local fade = math.min(bar.questT / EASE_GLOW, 1)
+			glow:SetAlpha(GLOW_ALPHA * (1 - fade))
+			if fade >= 1 then
+				self:Hide()
+			end
+		end)
+		-- The bar hid: the glow goes, and so does the frame, so it holds nothing for Fading (ns.XpBarLively).
+		anim:SetScript("OnHide", function(self)
+			glow:Hide()
+			self:Hide()
+		end)
+		bar.questAnim = anim
+	end
+	local glow, left = bar.questGlow, from * width
+	local qr, qg, qb = ns.Colour(KEY .. ".xpQuestColour")
+	glow:ClearAllPoints()
+	glow:SetPoint("TOPLEFT", bar.frame, "TOPLEFT", left, 0)
+	glow:SetPoint("BOTTOMLEFT", bar.frame, "BOTTOMLEFT", left, 0)
+	glow:SetWidth(math.max((to - from) * width, 1))
+	glow:SetVertexColor(qr, qg, qb, 1)
+	glow:SetAlpha(GLOW_ALPHA)
+	glow:Show()
+	bar.questT = 0
+	bar.questAnim:Show()
+end
+
+-- The value of a bar, its fill colour and the stretch of rested experience. A change on the same level or faction (bar.raw keeps the value
+-- drawn last; cleared with bar.ratio and bar.key) rises over the bar with Gains over the bar on (F.Change), so the first drawing after login, a
+-- bar that shows again, another faction and a sample never show one; a new level or standing shows its name.
 function F.Fill(bar, width)
 	local data, sample = F.Data(bar)
 	local ratio = 0
@@ -1176,13 +1297,14 @@ function F.Fill(bar, width)
 	end
 	local key = F.Key(bar, data, sample)
 	local real = data ~= nil and not sample and ns.Finite(data.value)
-	local gained = real and bar.key == key and ns.Finite(bar.raw) and data.value > bar.raw and math.floor(data.value - bar.raw) or 0
-	bar.raw = real and data.value or nil
-	F.Value(bar, ratio, key, sample, width, F.Rose(bar, data, sample))
+	local flash, sameKey = F.Rose(bar, data, sample), bar.key == key
+	F.Value(bar, ratio, key, sample, width, flash)
 	local r, g, b = F.Colour(bar)
 	bar.frame:SetStatusBarColor(r, g, b, 1)
-	if gained > 0 and Opt("xpGainText") == true then
-		F.Float(bar, gained, ratio, width)
+	if real then
+		F.Change(bar, data, sameKey, ratio, width, flash)
+	else
+		bar.raw, bar.rawAt, bar.rawId = nil, nil, nil
 	end
 	local stretch = bar.rested
 	local xp = bar.id == "xp" and data or nil
@@ -1200,9 +1322,10 @@ function F.Fill(bar, width)
 	end
 	-- The quests ready to hand in, from the left edge as the rested stretch, so the fill covers what is already earned.
 	local quest = bar.quest
-	local ready = 0
+	local ready, counted = 0, false
 	if bar.id == "xp" and Opt("xpQuest") == true and xp ~= nil and xp.total > 0 then
 		ready = sample and SAMPLE_QUEST or ns.XpQuestReady ~= nil and ns.XpQuestReady() or 0
+		counted = real and ns.Finite(ready)
 	end
 	if ns.Finite(ready) and ready > 0 then
 		local reach = math.max(0, math.min((xp.value + ready) / xp.total, 1))
@@ -1215,6 +1338,18 @@ function F.Fill(bar, width)
 		quest:Show()
 	else
 		quest:Hide()
+	end
+	-- A quest that just became ready to hand in lights the stretch it adds, with Animate gains, on the same level and on a bar on the screen;
+	-- nothing on the first drawing after login (bar.readyWas nil), on a new level or on a sample.
+	local was = bar.readyKey == key and bar.readyWas or nil
+	bar.readyWas, bar.readyKey = counted and ready or nil, counted and key or nil
+	if was and ready > was and Opt("xpSmooth") == true then
+		local okSeen, seen = pcall(bar.frame.IsVisible, bar.frame)
+		local from = math.min((xp.value + was) / xp.total, 1)
+		local to = math.min((xp.value + ready) / xp.total, 1)
+		if okSeen and seen == true and to - from > EASE_LEAST then
+			F.QuestGlow(bar, from, to, width)
+		end
 	end
 end
 
@@ -1288,9 +1423,10 @@ function F.Update(layout)
 			-- A bar that hides stops its ease, and comes back with its fill set at once.
 			F.EaseEnd(bar, true)
 			bar.frame:Hide()
-			bar.hover = false
-			bar.ratio, bar.key, bar.raw = nil, nil, nil
-			bar.level, bar.repId, bar.reaction = nil, nil, nil
+			bar.hover, bar.pressed = false, nil
+			bar.lit:Hide()
+			bar.ratio, bar.key, bar.raw, bar.rawAt, bar.rawId = nil, nil, nil, nil, nil
+			bar.level, bar.repId, bar.reaction, bar.readyWas, bar.readyKey = nil, nil, nil, nil, nil
 		end
 		F.Text(bar)
 	end
