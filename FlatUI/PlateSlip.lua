@@ -558,7 +558,7 @@ local function Members()
 		return nil
 	end
 	local ok, list = pcall(M.Members)
-	if ok and type(list) == "table" and #list > 0 then
+	if ok and type(list) == "table" and #list > 1 then
 		return list
 	end
 	return nil
@@ -588,7 +588,7 @@ local function Goal(kind, judged, t)
 		goal = full
 	elseif judged == "slipping" and t then
 		goal = 1 + (full - 1) * t
-	elseif judged == "held" then
+	elseif judged == "held" and kind ~= "lost" then
 		goal = kind and 1 or nil
 	elseif kind == "lost" then
 		goal = full
@@ -781,6 +781,28 @@ local function Tint(copy, r, g, b)
 		copy.r, copy.g, copy.b = r, g, b
 		copy.bar:SetStatusBarColor(r, g, b, 1)
 	end
+end
+
+local function Border(copy)
+	local outline = copy.outline
+	if outline == nil then
+		return
+	end
+	local owner = copy.live and copy.owner or nil
+	local r, g, b, px
+	if owner ~= nil and ns.Enabled(KEY) and Opt("health") == true and Opt("target") == true and type(ns.PlateUnitFrame) == "function" then
+		if owner == ns.PlateUnitFrame("target") then
+			r, g, b = ns.Colour(KEY .. ".targetColour")
+		elseif owner == ns.PlateUnitFrame("focus") then
+			r, g, b = ns.Colour(KEY .. ".focusColour")
+		end
+		if r ~= nil then
+			px = Opt("targetThickness")
+			px = ns.Finite(px) and px or nil
+		end
+	end
+	ns.SetOutlineColour(outline, r, g, b)
+	ns.SetOutlineThickness(outline, px)
 end
 
 local function Health(copy)
@@ -1090,6 +1112,7 @@ local function Magnify(frame, rec, state, kind, snap)
 	Health(copy)
 	local r, g, b = CopyColour(state, kind, judged)
 	Tint(copy, r, g, b)
+	Border(copy)
 	if not Come(copy, goal, snap) then
 		return false
 	end
@@ -1280,6 +1303,18 @@ EXTRA.refresh[#EXTRA.refresh + 1] = function()
 		end
 	end
 end
+
+local function Marked()
+	for _, rec in pairs(recs) do
+		local copy = rec.copy
+		if copy and (copy.on or copy.leaving) then
+			pcall(Border, copy)
+		end
+	end
+end
+
+ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", Marked)
+ns.AddEvent(KEY, "PLAYER_FOCUS_CHANGED", Marked)
 
 EXTRA.status[#EXTRA.status + 1] = function()
 	if not On() or Core() == nil then
