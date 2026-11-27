@@ -1287,7 +1287,7 @@ def loop_over_list(f, k):
 AREAS = [
     ("core", "Core and settings", """Config Core TaintScan Scale Fonts Fade LayoutSpots LayoutText ConfigGame Options Reload
         Panel ProfileSwitch ProfileShare PanelLook PanelCards PanelSamples PanelColour PanelTrust PanelSearch PanelNav
-        PanelTabs PanelHome PanelPreview TestMode TestUnits TestHud"""),
+        PanelTabs PanelHome PanelPreview WhatsNewData WhatsNew TestMode TestUnits TestHud"""),
     ("setup", "Setup", "SetupSteps SetupProfiles SetupStops Setup SetupWalk SetupWelcome"),
     ("unitframes", "Unit frames", """ClassData UnitFrames UnitFramePortrait UnitFrameLevel UnitFrameCells UnitFrameLooks
         UnitFrameHead UnitText UnitParts UnitExtras UnitGroupMarks UnitDruidMana UnitManaRule UnitPetTarget UnitHots HealthColour

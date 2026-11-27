@@ -158,6 +158,10 @@ ns.PAGES = {
 			tip = "A Flat UI button under Options. It does not work in combat, and it does not show while the game's taintLog is on." },
 		{ key = "menuOpens", kind = "choice", default = "options", label = "Flat UI button opens", needs = "menuButton",
 			choices = { { "options", "Options window" }, { "setup", "Flat UI setup" } } },
+		{ section = "Updates" },
+		{ key = "whatsNew", kind = "choice", default = "window", label = "What's new after an update",
+			choices = { { "window", "Show the window" }, { "chat", "One line in chat" }, { "off", "Nothing" } },
+			tip = "What shows at the first login after Flat UI updates, once on the account for each version. /flatui new opens the What's new window at any time." },
 	},
 	{
 		key = "generalWorld", label = "World and cursor", owner = "general",

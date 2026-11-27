@@ -683,6 +683,25 @@ function Home.Build(host)
 		tiles[index] = tile
 	end
 
+	local news = kit.Frame(child)
+	news:SetSize(260, 20)
+	local newsText = kit.Dim(kit.Label(news, "GameFontHighlight", "LEFT", 260))
+	newsText:SetPoint("LEFT", news, "LEFT", 0, 0)
+	local version = type(ns.WhatsNewVersion) == "function" and ns.WhatsNewVersion()
+	newsText:SetText(version and ("What's new in %s"):format(version) or "What's new")
+	news:SetShown(type(ns.OpenWhatsNew) == "function")
+	kit.Clickable(news, function()
+		ns.OpenWhatsNew()
+	end)
+	news:SetScript("OnEnter", function()
+		kit.Tint(newsText, "accent")
+		kit.Tip("What changed in this version of Flat UI, as /flatui new shows it.")
+	end)
+	news:SetScript("OnLeave", function()
+		kit.Dim(newsText)
+		kit.Tip("")
+	end)
+
 	local shape
 	local function Layout(shownLines, reloadCount)
 		local y = 12
@@ -708,6 +727,9 @@ function Home.Build(host)
 			Place(tile.frame, MARGIN + column * (tileW + GAP), y + line * (TILE_H + GAP), tileW, TILE_H)
 		end
 		y = y + math.ceil(#tiles / 4) * (TILE_H + GAP)
+		news:ClearAllPoints()
+		news:SetPoint("TOPLEFT", child, "TOPLEFT", MARGIN, -(y + 2))
+		y = y + 26
 		scroller.SetContent(y + 12)
 	end
 

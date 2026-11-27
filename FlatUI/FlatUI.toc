@@ -217,3 +217,5 @@ SetupDrawMovers.lua
 Setup.lua
 SetupWalk.lua
 SetupWelcome.lua
+WhatsNewData.lua
+WhatsNew.lua

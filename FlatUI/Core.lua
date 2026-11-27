@@ -2354,6 +2354,7 @@ local function LoadSettings()
 	FlatUIDB = FlatUIDB or {}
 	db = FlatUIDB
 	local version = tonumber(db.settingsVersion) or 0
+	ns.newInstall = type(db.profiles) ~= "table"
 	if type(db.profiles) ~= "table" then
 		db.profiles = { [DEFAULT] = FromOlder(version) }
 		if fresh then
@@ -3482,6 +3483,13 @@ SlashCmdList["FLATUI"] = function(msg)
 		end
 		return
 	end
+	if verb and (verb:lower() == "new" or verb:lower() == "changes") and type(ns.WhatsNewCommand) == "function" then
+		local ok, err = pcall(ns.WhatsNewCommand, rest)
+		if not ok then
+			geterrorhandler()(err)
+		end
+		return
+	end
 	if text == "" and type(ns.OpenPanel) == "function" then
 		local ok, err = pcall(ns.OpenPanel)
 		if ok then
@@ -3568,6 +3576,7 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui setup - walk round your screen in six short stops")
 		print("/flatui profiles - the ready-made looks; a click puts one in use")
 		print("/flatui welcome - the welcome screen")
+		print("/flatui new - what changed in this version; /flatui new 0.5.41 shows that version (changes works too)")
 		print("/flatui scale 70 - the UI scale in percent, 35 to 115; under 65 uses Small scale")
 		print("/flatui scale off - the game's own UI scale")
 		print("/flatui <words> - opens the options window and searches for them")

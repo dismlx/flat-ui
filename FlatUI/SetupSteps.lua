@@ -771,6 +771,7 @@ ns.SETUP_STEPS = {
 		{ "hud.micro", "c", "mock-xp-micro" },
 		{ "general.menuButton", "o", "behaviour", "Puts a Flat UI button in the game menu, under Options. It does not work in combat, and it does not show while the game's taintLog is on." },
 		{ "general.menuOpens", "o", "behaviour", "Chooses whether the game menu button opens Flat UI setup or the options window." },
+		{ "general.whatsNew", "o", "behaviour", "Chooses what shows at the first login after Flat UI updates: the What's new window with what changed, one line in chat, or nothing." },
 		{ "general.questSparkle", "o", "behaviour", "Makes quest items in the world sparkle, a game setting that the game's options do not show." },
 		{ "general.sparkleStrength", "o", "behaviour", "Raises the game's particle and spell density so that the sparkle on quest items and gathering nodes is thicker, at some cost to frame rate." },
 		{ "general.sparkleGlow", "o", "behaviour", "Draws a pulsing glow, gold or by what it is, on the herb, vein or quest object your Interact Key would use, while the game gives it a nameplate." },
