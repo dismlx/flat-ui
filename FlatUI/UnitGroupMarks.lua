@@ -4,6 +4,7 @@ local X = ns.UnitFrameExtra
 local KEY = "unitframes"
 local DISPEL, MARKER, LEADER, AIM, REZ = "Dispel highlight", "Raid frame marker", "Leader icons", "Target border", "Resurrection icon"
 local AFK = "AFK word"
+local FOCUS = "Focus border"
 local FILTER = "HARMFUL|RAID"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local MARKER_FILE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
@@ -23,6 +24,7 @@ local NOTE_BLIND = "Unit frames: Dispel highlight: the game would not say which 
 local NOTE_TYPE = "Unit frames: Dispel highlight: the game withheld the type of a debuff you can dispel, so its border is white."
 local NOTE_LEAD = "Unit frames: Leader icons: the game would not set the icons from its answer about the leader, so they do not show."
 local NOTE_AIM = "Unit frames: Border for your target: the game would not set the outline from its answer about your target, so the party frames have none."
+local NOTE_FOCUS = "Unit frames: Border for your focus: the game would not set the outline from its answer about your focus, so the party and raid frames have none."
 
 local IsSecret = ns.IsSecret
 
@@ -49,7 +51,7 @@ local function Field(object, key)
 end
 
 local saying = { [NOTE_BLIND] = setmetatable({}, { __mode = "k" }), [NOTE_TYPE] = setmetatable({}, { __mode = "k" }), [NOTE_LEAD] = setmetatable({}, { __mode = "k" }),
-	[NOTE_AIM] = setmetatable({}, { __mode = "k" }) }
+	[NOTE_AIM] = setmetatable({}, { __mode = "k" }), [NOTE_FOCUS] = setmetatable({}, { __mode = "k" }) }
 
 local function Say(text, rec, on)
 	saying[text][rec] = on or nil
@@ -1335,6 +1337,87 @@ local function Aim(rec, on)
 	Say(NOTE_AIM, rec, set == false)
 end
 
+local function MakeFocusMark(rec)
+	local frame = rec.frame
+	local ok, level = pcall(frame.GetFrameLevel, frame)
+	local box = X.frame(frame, ok and X.number(level) and level + 1 or nil)
+	local placed = X.cover(rec, box, AimMargin(rec))
+	box:SetAlpha(0)
+	local inner = X.frame(box)
+	inner:SetAllPoints(box)
+	local outline = ns.Outline(inner, inner)
+	if outline == nil then
+		box:Hide()
+		return nil
+	end
+	ns.KeepOutline(outline)
+	ns.SetOutline(outline, true, false)
+	rec.focusMark = { box = box, inner = inner, outline = outline, placed = placed }
+	return rec.focusMark
+end
+
+local function PlaceFocusMark(rec)
+	local f = rec.focusMark
+	if f ~= nil then
+		f.placed = X.cover(rec, f.box, AimMargin(rec), f.placed)
+	end
+end
+
+local function UnderAim(rec)
+	local aim = Opt("targetBorder")
+	if rec.kind == "party" then
+		return aim == "own" and not ns.PartStopped(KEY, AIM)
+	end
+	return aim ~= "off"
+end
+
+local function Unless(region, unit, other)
+	local ok, answer = pcall(_G.UnitIsUnit, unit, other)
+	if not (ok and (IsSecret(answer) or type(answer) == "boolean") and type(region.SetAlphaFromBoolean) == "function"
+		and pcall(region.SetAlphaFromBoolean, region, answer, 0, 1)) then
+		pcall(region.SetAlpha, region, 1)
+	end
+end
+
+local function FocusMark(rec, on)
+	if rec.kind ~= "party" and rec.kind ~= "raid" then
+		return
+	end
+	local f = rec.focusMark
+	if not (on and rec.made and not ns.PartStopped(KEY, FOCUS) and Opt("focusBorder") == true and type(_G.UnitIsUnit) == "function") then
+		if f then
+			f.box:Hide()
+		end
+		Say(NOTE_FOCUS, rec, false)
+		return
+	end
+	if f == nil then
+		if InCombatLockdown() then
+			AfterFight(rec, "focusQueued", FOCUS, FocusMark)
+			return
+		end
+		f = MakeFocusMark(rec)
+		if f == nil then
+			return
+		end
+	end
+	ns.SetOutlineColour(f.outline, ns.Colour(KEY .. ".focusBorderColour"))
+	local unit = X.unitOf(rec)
+	local set = nil
+	if unit ~= nil then
+		set = FromAnswer(f.box, _G.UnitIsUnit, unit, "focus")
+		if UnderAim(rec) then
+			Unless(f.inner, unit, "target")
+		else
+			pcall(f.inner.SetAlpha, f.inner, 1)
+		end
+	else
+		pcall(f.box.SetAlpha, f.box, 0)
+	end
+	f.box:Show()
+	Say(NOTE_FOCUS, rec, set == false)
+end
+
 local function KeepAway()
 	if next(awaySince) == nil then
 		return
@@ -1373,6 +1456,9 @@ local function GroupChanged()
 		if rec.aim then
 			X.run(AIM, Aim, rec, X.active(rec))
 		end
+		if rec.focusMark then
+			X.run(FOCUS, FocusMark, rec, X.active(rec))
+		end
 		if rec.afk and rec.afk.unit ~= nil then
 			X.run(AFK, ShowAfk, rec.afk)
 		end
@@ -1387,10 +1473,18 @@ ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
 		if rec.aim then
 			X.run(AIM, Aim, rec, X.active(rec))
 		end
+		if rec.focusMark then
+			X.run(FOCUS, FocusMark, rec, X.active(rec))
+		end
 	end
 end)
 ns.AddEvent(KEY, "PLAYER_FOCUS_CHANGED", function()
 	Retarget("focus")
+	for _, rec in pairs(X.records) do
+		if rec.focusMark then
+			X.run(FOCUS, FocusMark, rec, X.active(rec))
+		end
+	end
 end)
 
 local wasUnit = X.unitChanged
@@ -1407,6 +1501,9 @@ function X.unitChanged(rec)
 	if rec.aim then
 		X.run(AIM, Aim, rec, X.active(rec))
 	end
+	if rec.focusMark then
+		X.run(FOCUS, FocusMark, rec, X.active(rec))
+	end
 	if rec.rezIcon then
 		X.run(REZ, Rez, rec, X.active(rec))
 	end
@@ -1419,7 +1516,7 @@ ns.AddStatus(KEY, function()
 	if not ns.Enabled(KEY) or ns.IsStopped(KEY) then
 		return {}
 	end
-	local rims, aims, group = 0, 0, false
+	local rims, aims, focused, group = 0, 0, 0, false
 	for _, rec in pairs(X.records) do
 		group = group or (rec.made == true and (rec.kind == "party" or rec.kind == "raid"))
 		if rec.dispel and rec.dispel.rim then
@@ -1427,6 +1524,9 @@ ns.AddStatus(KEY, function()
 		end
 		if rec.aim and X.ask(rec.aim.box, "IsShown") == true then
 			aims = aims + 1
+		end
+		if rec.focusMark and X.ask(rec.focusMark.box, "IsShown") == true then
+			focused = focused + 1
 		end
 	end
 	local lines = {}
@@ -1440,6 +1540,9 @@ ns.AddStatus(KEY, function()
 		else
 			lines[#lines + 1] = "Border for your target: " .. (aim == "off" and "off" or "as the game has it")
 		end
+		if Opt("focusBorder") == true then
+			lines[#lines + 1] = ("Border for your focus: on, with an outline ready on %d party and raid %s"):format(focused, focused == 1 and "frame" or "frames")
+		end
 	end
 	return lines
 end)
@@ -1450,6 +1553,9 @@ table.insert(X.after.apply, { part = LEADER, fn = Leader })
 table.insert(X.after.apply, { part = AIM, fn = Aim })
 table.insert(X.after.apply, { part = REZ, fn = Rez })
 table.insert(X.after.apply, { part = AFK, fn = Afk })
+table.insert(X.after.apply, { part = FOCUS, fn = FocusMark })
+table.insert(X.after.raid, { part = FOCUS, fn = FocusMark })
+table.insert(X.after.layout, { part = FOCUS, fn = PlaceFocusMark })
 table.insert(X.after.raid, { part = DISPEL, fn = Dispel })
 table.insert(X.after.raid, { part = MARKER, fn = Marker })
 table.insert(X.after.raid, { part = LEADER, fn = Leader })

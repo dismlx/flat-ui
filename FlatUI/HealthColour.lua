@@ -99,6 +99,13 @@ function ns.HealthLeftFrameOn(rec)
 	return FrameOn(rec)
 end
 
+function ns.HealthLeftTint(bar, unit)
+	if ns.PartStopped("unitframes", PART) or not Probe(false) then
+		return false
+	end
+	return pcall(Tint, bar, unit) == true
+end
+
 local driver, clock = nil, 0
 local Tick
 

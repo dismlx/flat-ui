@@ -132,12 +132,24 @@ local function Write(frame, fromGame)
 	end
 end
 
+local function Pending(frame)
+	local scale = Wanted(frame)
+	if scale == nil then
+		return state.ours ~= nil
+	end
+	local current = Read(frame, "GetScale")
+	return current == nil or math.abs(current - scale) > TOLERANCE
+end
+
 function Apply(fromGame)
 	local frame = Frame()
 	if not frame or ns.EditModeOpen() then
 		return
 	end
 	if InCombatLockdown() and ns.MaybeProtected(frame) then
+		if not Pending(frame) then
+			return
+		end
 		local extra = ns.UnitFrameExtra
 		if fromGame ~= true and extra ~= nil and type(extra.tell) == "function" then
 			extra.tell("Flat UI: the pet frame takes its new size when the fight ends.")

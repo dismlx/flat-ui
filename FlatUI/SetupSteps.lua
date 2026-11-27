@@ -487,6 +487,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.druidManaHeight", "r", "mock-unit-frame" },
 		{ "unitframes.druidManaShift", "o", "mock-unit-frame" },
 		{ "unitframes.manaRule", "o", "mock-unit-frame" },
+		{ "unitframes.energyTick", "o", "mock-unit-frame" },
 		{ "unitframes.targetPicture", "c", "mock-unit-frame" },
 		{ "unitframes.targetName", "o", "mock-unit-frame" },
 		{ "unitframes.targetLevel", "o", "mock-unit-frame" },
@@ -558,6 +559,8 @@ ns.SETUP_STEPS = {
 		{ "unitframes.raidAfk", "o", "mock-raid-cells" },
 		{ "unitframes.targetBorder", "o", "mock-raid-cells" },
 		{ "unitframes.targetColour", "r", "mock-raid-cells" },
+		{ "unitframes.focusBorder", "o", "mock-raid-cells" },
+		{ "unitframes.focusBorderColour", "r", "mock-raid-cells" },
 	} },
 	{ id = "cb-look", area = "Cast bars and timers", title = "Cast bar look", draw = "mock-cast-bar", built = true, rows = {
 		{ "castbars.enabled", "c", "mock-cast-bar" },
