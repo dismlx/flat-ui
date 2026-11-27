@@ -987,6 +987,8 @@ ns.PAGES = {
 			tip = "Shown at 60% opacity, so the fill shows through. Red at first; pick another for a red bar or a class colour that hides it." },
 		{ key = "ticks", kind = "bool", default = true, label = "Channel ticks on the player bar",
 			tip = "A thin mark where each tick of a channel lands, such as Arcane Missiles, Blizzard, Mind Flay or Drain Life." },
+		{ key = "ticksColour", kind = "colour", default = "ffffffff", label = "Channel tick colour", needs = "ticks",
+			tip = "At 60% opacity, fainter once its tick lands. White at first; pick a dark one for a white or pale bar, such as a priest's class colour." },
 		{ section = "Fill" },
 		{ key = "flat", kind = "bool", default = false, label = "Flat fill" },
 		{ key = "texture", kind = "choice", default = "default", label = "Bar texture", needs = "flat", choices = "BarChoicesDefault" },

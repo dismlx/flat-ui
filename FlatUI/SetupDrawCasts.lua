@@ -10,7 +10,8 @@ local _, ns = ...
 --   cast bars: the border and background of ApplyCastBar (Bars.lua:597-622), the plate behind the spell name, the spark, the shield, the icon and
 --   the spell name of ApplyCastParts and ns.CastText (Bars.lua:707-816), the cover colour of CastColour (956-972), the marks of Marks (1020-1088),
 --   the sizes and the place of the spell name of CastBarSize.lua:92-150, the rank after the spell name of CastRank.lua, the tick marks of a
---   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks), dim where the channel has passed them, the pushback past
+--   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks) in Channel tick colour (0.5.42), dim where the channel has
+--   passed them, the pushback past
 --   the right end of the player bar of CastTime.lua (+0.4 on the first row), the whole cast after the seconds left while Total cast time too is
 --   on (1.0 / 2.5 on the first row), and the interrupt colours of Interrupt.lua on the Target row (ready), the Focus row (on cooldown) and the
 --   Target, out of range row (Frostbolt, ready but out of range, 0.5.39) while Interrupt readiness is on: on the fill with Flat fill, else on the
@@ -445,6 +446,7 @@ local function BuildCast(stage)
 	for _, row in ipairs(rows) do
 		if row.ticks then
 			p["castbars.ticks"] = p["castbars.ticks"] or row.bar
+			p["castbars.ticksColour"] = p["castbars.ticksColour"] or row.bar
 		end
 	end
 	p["castbars.flat"] = player.fill
@@ -600,7 +602,7 @@ local function DimTicks(row, part)
 end
 
 -- The tick marks of a channel on a bar that has them, at even steps of its width, while Channel ticks on the player bar is on (CastTicks.lua), the
--- ones the channel has passed dimmed.
+-- ones the channel has passed dimmed, in Channel tick colour at 60% (0.5.42).
 local function PaintTicks(row, look, state, w, part)
 	local list = row.ticks
 	if not list then
@@ -608,6 +610,15 @@ local function PaintTicks(row, look, state, w, part)
 	end
 	local on = look.enabled and G("castbars.ticks") == true and state == "channel"
 	local n = #list + 1
+	if on then
+		local ok, r, g, b = pcall(ns.Colour, "castbars.ticksColour")
+		if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+			r, g, b = 1, 1, 1
+		end
+		for _, mark in ipairs(list) do
+			mark:SetColorTexture(r, g, b, 0.6)
+		end
+	end
 	for k, mark in ipairs(list) do
 		if on then
 			mark:ClearAllPoints()

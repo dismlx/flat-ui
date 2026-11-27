@@ -14,7 +14,9 @@ local _, ns = ...
 -- channel sooner, moves the marks with the bar's new length (the step is the one the channel started with) and drops those past its end. The
 -- width is read at each start and update (bar:GetWidth, plain on the player bar), so the marks follow the size of CastBarSize.lua.
 -- The marks are textures of the addon's own on PlayerCastingBarFrame and OverlayPlayerCastingBarFrame (OVERLAY, under the spark), 15 a bar, one
--- screen pixel wide (ns.Pixels) and as tall as the bar, white at 0.6 opacity. Each hangs from a spacer of its own, an invisible texture whose left
+-- screen pixel wide (ns.Pixels) and as tall as the bar, in Channel tick colour (0.5.42, white at first; always white before) at 0.6 opacity, set
+-- again when the row changed, at each placing and each refresh of the cast bars (Tint), so a dark colour shows on a white bar, such as a priest's
+-- class colour. Each hangs from a spacer of its own, an invisible texture whose left
 -- edge is the bar's: the mark's middle is the spacer's right edge. Marks and spacers are made and anchored once, out of a fight (on a bar the
 -- game may protect, ns.MaybeProtected of Movers.lua, never in one): as the row comes on, at every refresh of the cast bars and at the end of
 -- each fight while some are still missing. While a channel runs only their widths change (SetWidth, the call Bars.lua makes on its latency zone
@@ -26,7 +28,7 @@ local _, ns = ...
 -- whose marks could not be shown (none made yet, as after a reload in a fight). Nothing of the game is written or called but CreateTexture on
 -- the two bars, as Bars.lua makes its own marks there.
 
-local KEY, ROW, PART = "castbars", "castbars.ticks", "channel ticks"
+local KEY, ROW, PART, COLOUR_ROW = "castbars", "castbars.ticks", "channel ticks", "castbars.ticksColour"
 local BARS = { "PlayerCastingBarFrame", "OverlayPlayerCastingBarFrame" }
 -- POOL: the marks a bar has (Hellfire's 15 ticks need 14). ALPHA: their opacity. SUBLEVEL: their place in the OVERLAY layer, under the spark (2).
 -- PASSED: the alpha of a mark whose tick has landed. EVERY: the seconds between two looks at the ticks that have landed.
@@ -81,6 +83,23 @@ local function Bar(name)
 	return bar
 end
 
+-- Channel tick colour (white at first, 0.5.42) at ALPHA on every mark of a set, set again only when the row changed since (set.hex). A widget
+-- call on textures of the addon's own, so also in a fight.
+local function Tint(set)
+	local hex = ns.Get(COLOUR_ROW)
+	if set.hex == hex then
+		return
+	end
+	local ok, r, g, b = pcall(ns.Colour, COLOUR_ROW)
+	if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		r, g, b = 1, 1, 1
+	end
+	for _, mark in ipairs(set.marks) do
+		mark:SetColorTexture(r, g, b, ALPHA)
+	end
+	set.hex = hex
+end
+
 -- The marks of a bar and their spacers, made and anchored once; nil while a protected bar is in a fight, or when the bar would not take them.
 local function Marks(bar)
 	local set = sets[bar]
@@ -107,6 +126,7 @@ local function Marks(bar)
 		mark:Hide()
 		set.marks[index], set.spacers[index], set.alpha[index] = mark, spacer, 1
 	end
+	Tint(set)
 	sets[bar] = set
 	return set
 end
@@ -195,6 +215,7 @@ local function Place(bar, length, step)
 		local read, value = pcall(bar.GetReverseFill, bar)
 		reverse = read and Plain(value, "boolean") and value
 	end
+	Tint(set)
 	local px = ns.Pixels(bar, 1)
 	local used = 0
 	for k = 1, POOL do
@@ -324,6 +345,12 @@ function ns.CastTicksSync()
 	if want then
 		if not InCombatLockdown() then
 			ns.EachPart(KEY, PART, MakeAll, "make")
+		end
+		-- A change of Channel tick colour reaches the marks at once, those of a channel that runs too.
+		for _, set in pairs(sets) do
+			if set then
+				pcall(Tint, set)
+			end
 		end
 		ns.EachPart(KEY, PART, Draw, false)
 	end
