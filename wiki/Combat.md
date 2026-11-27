@@ -121,6 +121,7 @@ In test mode every row shows, with sweeps that loop. An empty row gets three sam
 **What pulses**
 
 - **Shortest cooldown** (5 s): a shorter cooldown does not pulse, nor does the global cooldown.
+- **When it pulses**: **Always** (the default), **In combat only**, or **Not while mounted or in a city**, which keeps the pulse quiet on a mount, on a flight path and where the game rests you, in a city or an inn. A cooldown that ends while it is quiet does not pulse later. `/flatui pulse test` and the samples of the look still show, and `/flatui pulse list` names the rule.
 - **Your pet's abilities** (off) pulses your pet's abilities too, such as Spell Lock, Seduction, Sacrifice or Dash. A pet casts some of these on its own, which then pulse each time; leave those out with **Leave out**.
 - **Leave out** stops one spell or item from pulsing, a spell with all its ranks. **Put back** lets it pulse again.
 
@@ -131,12 +132,13 @@ In test mode every row shows, with sweeps that loop. An empty row gets three sam
 - **Sound** (**None** by default) plays with each pulse. **Sound of one spell or item** gives one a sound of its own.
 - **Name under the icon** (on) shows the name as it fades. An item's name is in its quality's colour.
 - **Grow as it fades** (off) swells the icon by a quarter as it fades out.
+- **Burst as it shows** (on) bursts the game's star flash, the one its own cooldowns show as they end, once over the icon as it comes in: white for a spell, in the item's quality colour for an item.
 
 **Spots**
 
 **Pulse spots** (**One**, **Two** or **Three**) lets pulses show at up to three places. Each spot has its own box in `/flatui move` (**Cooldown pulse**, **Cooldown pulse, spot 2** and **Cooldown pulse, spot 3**) and pulses on its own. **Icon size** is the size at spot 1, and **Icon size at spot 2** and **Icon size at spot 3** set the others. **Spot of one spell or item** sends one to a spot of its own; one without it pulses at spot 1.
 
-Out of combat, changing **Icon size**, **How long it shows**, **Opacity**, **Sound**, **Name under the icon**, **Grow as it fades** or **Pulse spots** shows a test pulse at each spot in use, in the new look. A **Sound** you pick plays with it. With two or three spots, each spot's test pulse shows another of your watched spells, named as "Spot 2: Frost Nova", so you can tell the spots apart. A pick in **Sound of one spell or item** or **Spot of one spell or item** pulses that one's own icon at its spot, with its own sound.
+Out of combat, changing **Icon size**, **How long it shows**, **Opacity**, **Sound**, **Name under the icon**, **Grow as it fades**, **Burst as it shows** or **Pulse spots** shows a test pulse at each spot in use, in the new look. A **Sound** you pick plays with it. With two or three spots, each spot's test pulse shows another of your watched spells, named as "Spot 2: Frost Nova", so you can tell the spots apart. A pick in **Sound of one spell or item** or **Spot of one spell or item** pulses that one's own icon at its spot, with its own sound.
 
 ### Cooldown commands
 
@@ -153,7 +155,7 @@ Out of combat, changing **Icon size**, **How long it shows**, **Opacity**, **Sou
 | `/flatui pulse ignore <spell or item>` | Leaves one out. `/flatui pulse watch` puts it back |
 | `/flatui pulse sound <spell or item> bell` | Gives one its own pulse sound. `none` silences it, and `page` gives it the page's sound again |
 | `/flatui pulse spot <spell or item> 2` | Sends one to pulse spot 2. `1` puts it back |
-| `/flatui pulse list` | Says what pulses, what is left out, and the own sounds and spots |
+| `/flatui pulse list` | Says what pulses, what is left out, the own sounds and spots, and **When it pulses** |
 
 ## Trackers
 
@@ -226,7 +228,7 @@ A tracker you fix, by casting the buff, restocking or putting a poison back on, 
 - casts your buff, stance or form
 - calls your pet, revives it or sets it to fight
 - casts a group buff on a member who lacks it
-- conjures a missing or low mana gem, water, food, Healthstone or Soulstone with the best spell you know for it
+- conjures a missing or low mana gem, water, food, Healthstone or Soulstone with the best spell you know for it. An improved Healthstone, from Improved Healthstone, counts as a Healthstone, so the tracker stays clear while one is in the bags
 - casts the minimap tracking you last had on, such as Find Herbs or Track Beasts.
 
 The tooltip says what a click does ("A click casts Conjure Mana Ruby."), or that you lack the reagent. An item no spell makes, such as an Ankh, takes no click.
@@ -250,6 +252,7 @@ A click still goes through to the world, except on a tracker that a click can fi
 
 - **Shape** draws each tracker as an **Icon** (the default), a **Bar** or **Text**. Icons take **Icon size**; bars and text take **Bar width** and **Bar height**, in **Colour**.
 - **Bar fill** fills a bar by **Charges** or **Time left**. A buff without charges fills by time left.
+- A bar glides as it fills and empties, with a thin bright spark riding its edge as on the game's cast bar. A bar filled by **Charges** has a thin notch between charges, for 2 to 10 charges, so 2 of 3 Lightning Shield, Inner Fire or Shadowguard charges reads at a glance.
 - **Charges**, **Name** (on bars and text) and **Time left** choose what each tracker shows.
 - **Row direction** lays the trackers out **From the middle**, **Left to right**, **Right to left**, **Column, downward** or **Column, upward**. A column stacks them under each other, left-aligned, as timer bars usually are.
 - **Close up the gaps** (off) lets a hidden tracker take no room, so the ones that show sit together, centred or from the start as **Row direction** says. In a fight nothing moves: the row keeps the places it had when the fight began, and a tracker that shows there takes a place after them.
@@ -287,7 +290,7 @@ Under **Missing**:
 - **Sound when it drops** (on) plays as a tracked buff ends.
 - **Sound when it comes** and **Sound when it stacks** (both off) play as a buff or debuff comes back or gains a stack.
 - **Sound when it turns low** (off) plays once as a tracker goes from fine to low. The game hides buffs in a fight, so a buff turns low by sound between fights.
-- **Sound** (**Raid warning** by default) is the sound they all use. Out of combat, a pick plays it once.
+- **Sound** (**Raid warning** by default) is the sound they all use. Out of combat, a pick plays it once. **Raid warning**, **Alarm** and **Whisper warning** also play for a buff in a fight, since the game plays them. **Spell alert**, **Chimes**, **Bell** and **Warhorn** play only while the game shows your buffs, so a buff that drops in a fight is silent with them: a pick of one of those, with a buff sound on, says so in chat, and `/flatui tracker check` names the trackers it leaves silent in a fight.
 
 ### Proc alerts tab
 
@@ -375,7 +378,7 @@ To share trackers, use **Export trackers** and **Import trackers** under **Share
 | `/flatui tracker proc colour 1 ffd100` | One added proc's colour. `proc time 1 10` sets its time |
 | `/flatui tracker export` | Opens **Share**, to copy every tracker as text. `import` opens it to paste trackers |
 | `/flatui tracker test` | Each look for 3 seconds: fine, low, missing, then the game's own look |
-| `/flatui tracker check` | What each tracker shows and why, and what happened in the last fight |
+| `/flatui tracker check` | What each tracker shows and why, what happened in the last fight, and which trackers have a sound the game does not play in a fight |
 
 ## Defensives on you
 
@@ -389,6 +392,7 @@ The **Defensives on you** page (on by default) shows a row of icons for the shie
 ### Look
 
 - **Icon size** (32). The time left and the charges on an icon grow and shrink with it.
+- **Time left**: **On the icon** (the default), **Thin bar under the icon** or **Off**. The bar runs down with the time left, in the **Bar texture** of **Your buffs**, so the two rows can match, and the caster's name moves under it. The bars the game draws in a fight change once the game shows your buffs again.
 - **Spacing** (3), **Caster's name** (on) and **Icon border** (on).
 - **Buff tooltips** shows the game's own tooltip over each icon: **On** (the default), **Out of combat only** or **Off**. A click still goes through to the world. Settings on the **Tooltips** page do not change this tooltip.
 - **Your own defensives** (on) also shows the ones you cast on yourself, such as Shield Wall or Ice Barrier.
@@ -406,7 +410,7 @@ The **Defensives on you** page (on by default) shows a row of icons for the shie
 
 ### Seeing it
 
-Out of combat with no defensive on you, changing **Place**, **X offset**, **Y offset**, **Icon size**, **Spacing**, **Caster's name**, **Icon border** or **Flash when one lands** shows sample icons where the row now sits, for about 4 seconds. Picking a sound plays it and shows the samples landing.
+Out of combat with no defensive on you, changing **Place**, **X offset**, **Y offset**, **Icon size**, **Time left**, **Spacing**, **Caster's name**, **Icon border** or **Flash when one lands** shows sample icons where the row now sits, for about 4 seconds. Picking a sound plays it and shows the samples landing.
 
 `/flatui test icons` shows three sample icons for 8 seconds, out of combat only. They flash as they appear, play **Sound when one lands**, and **Sound when one ends** as they go. A chat line names each sound and whether the game played it: "Sound when one lands: Raid warning, played." A pull ends the samples at once: "Defensives on you: the pull ended the test."
 
@@ -443,6 +447,8 @@ As damage eats a shield, its bar and the total bar glide down over about a quart
 ### Colour
 
 **Colour by school** (on) draws a shield that takes one school in its colour: Fire Ward orange, Frost Ward light blue, Shadow Ward violet and Mana Shield grey. A shield that takes every school, and the total, are in **Shield colour**.
+
+**Shield stripes** (on) lays the game's striped shield pattern over each bar's fill, as the game draws absorbs on its later frames, tinted by the colour under it, with a soft bright edge where the fill ends. The bars the game draws in a fight have it too.
 
 ### Which shields
 

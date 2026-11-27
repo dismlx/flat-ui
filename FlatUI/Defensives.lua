@@ -10,6 +10,7 @@ local TEST_TIME = 8
 local PREVIEW = 4
 local FLASH_FROM, FLASH = 0.8, 0.5
 local LOW, AMBER = 5, { 1, 0.7, 0.2 }
+local BAR_HEIGHT, BAR_RGB, WHITE = 3, { 0.302, 0.6, 0.902 }, "Interface\\Buttons\\WHITE8X8"
 local KITS = { raid = 8959, alarm = 12889, whisper = 37666 }
 local MOST_LISTED, MOST_EXTERNAL = 6, 4
 local GROUPS = { "listed", "external", "own" }
@@ -196,6 +197,60 @@ function D.TimeOptions()
 	return D.timeOptions or nil
 end
 
+function D.BarOptions()
+	local direction = type(Enum) == "table" and type(Enum.StatusBarTimerDirection) == "table" and Enum.StatusBarTimerDirection.RemainingTime
+	local interpolation = type(Enum) == "table" and type(Enum.StatusBarInterpolation) == "table" and Enum.StatusBarInterpolation.Immediate
+	return { interpolation = interpolation or 0, direction = direction or 1 }
+end
+
+function D.BarFile()
+	return ns.BarTexture(ns.Get("ownbuffs.barTexture")) or WHITE
+end
+
+function D.PlaceName(parts)
+	local name = parts.name
+	if not name then
+		return
+	end
+	name:ClearAllPoints()
+	if parts.bound == "bar" and parts.bar then
+		name:SetPoint("TOP", parts.bar, "BOTTOM", 0, -1)
+	else
+		name:SetPoint("TOP", parts.button, "BOTTOM", 0, -1)
+	end
+end
+
+function D.BindTime(parts, want)
+	if parts.bound == want then
+		return
+	end
+	local button, was = parts.button, parts.bound
+	if was == "on" then
+		pcall(button.ClearDurationText, button)
+		parts.left:SetText("")
+		parts.left:Hide()
+	elseif was == "bar" then
+		pcall(button.ClearDurationBar, button)
+		parts.bar:Hide()
+	end
+	parts.bound = nil
+	if want == "on" then
+		parts.left:Show()
+		local options = D.TimeOptions()
+		if not (options and pcall(button.SetDurationText, button, parts.left, options)) then
+			button:SetDurationText(parts.left, nil)
+		end
+	elseif want == "bar" then
+		if not parts.bar then
+			error("the time bar was refused", 0)
+		end
+		parts.bar:Show()
+		button:SetDurationBar(parts.bar, D.BarOptions())
+	end
+	parts.bound = want
+	D.PlaceName(parts)
+end
+
 D.BASE = 32
 function D.TextSize(size)
 	return ns.IconNumberHeight(ns.IconFontHeight("NumberFontNormal", 14), size, D.BASE),
@@ -264,18 +319,34 @@ function D.Init(button)
 	Part("time", function()
 		local left = Own(top:CreateFontString(nil, "OVERLAY", "NumberFontNormal"))
 		left:SetPoint("CENTER", top, "CENTER", 0, 0)
+		left:Hide()
 		parts.left = left
-		local options = D.TimeOptions()
-		local bound = options ~= nil and pcall(button.SetDurationText, button, left, options)
-		if not bound and not pcall(button.SetDurationText, button, left, nil) and parts.sweep then
-			pcall(parts.sweep.SetHideCountdownNumbers, parts.sweep, false)
+		local made, bar = pcall(function()
+			local frame = Own(CreateFrame("StatusBar", nil, button))
+			frame:SetPoint("TOPLEFT", button, "BOTTOMLEFT", 0, -1)
+			frame:SetPoint("TOPRIGHT", button, "BOTTOMRIGHT", 0, -1)
+			frame:SetHeight(BAR_HEIGHT)
+			parts.file = D.BarFile()
+			frame:SetStatusBarTexture(parts.file)
+			frame:SetStatusBarColor(BAR_RGB[1], BAR_RGB[2], BAR_RGB[3], 1)
+			frame:SetMinMaxValues(0, 1)
+			frame:SetValue(0)
+			frame:Hide()
+			return frame
+		end)
+		parts.bar = made and bar or nil
+		local want = Opt("time")
+		if not pcall(D.BindTime, parts, want) then
+			if want == "on" and parts.sweep then
+				pcall(parts.sweep.SetHideCountdownNumbers, parts.sweep, false)
+			end
 			error("the time text was refused", 0)
 		end
 	end)
 	Part("name", function()
 		local name = Own(top:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"))
-		name:SetPoint("TOP", button, "BOTTOM", 0, -1)
 		parts.name = name
+		D.PlaceName(parts)
 		if parts.casterOn then
 			button:SetCasterName(name, CASTER)
 		else
@@ -394,7 +465,22 @@ function D.ApplyFlash()
 	end
 end
 
-D.apply = { caster = D.ApplyCaster, border = D.ApplyBorder, size = D.ApplySize, tips = D.ApplyTips, flash = D.ApplyFlash }
+function D.ApplyTime()
+	local want, file = Opt("time"), D.BarFile()
+	for _, parts in ipairs(D.list) do
+		if parts.bar and parts.file ~= file then
+			parts.file = file
+			pcall(parts.bar.SetStatusBarTexture, parts.bar, file)
+		end
+		if parts.left and parts.bound ~= want then
+			if not pcall(D.BindTime, parts, want) then
+				D.refused.time = true
+			end
+		end
+	end
+end
+
+D.apply = { caster = D.ApplyCaster, border = D.ApplyBorder, size = D.ApplySize, tips = D.ApplyTips, flash = D.ApplyFlash, time = D.ApplyTime }
 
 function D.Flush()
 	if next(D.pending) == nil or not T.Open() then
@@ -827,7 +913,7 @@ function D.Pass()
 	for index = 1, math.min(#found, MOST_LISTED) do
 		local item, icon = found[index], D.Icon(index)
 		if icon then
-			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { border = Opt("iconBorder") })
+			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { border = Opt("iconBorder"), numbers = Opt("time") == "on" })
 			ns.IconCountdownHeight(icon, Opt("size"), D.BASE)
 			local landing = item.id .. ":" .. item.expires
 			now[landing] = true
@@ -838,6 +924,7 @@ function D.Pass()
 			if Opt("caster") and item.source then
 				name = T.Ask(UnitName, item.source)
 			end
+			D.IconTime(icon, item.expires - item.length, item.length)
 			if Plain(name, "string") then
 				icon.name:SetText(name)
 				icon.name:SetTextColor(1, 1, 1)
@@ -1041,6 +1128,7 @@ function D.Sync()
 		D.Change("caster")
 		D.Change("border")
 		D.Change("size")
+		D.Change("time")
 		D.Change("tips")
 		D.Change("flash")
 	elseif D.path == "reading" then
@@ -1129,7 +1217,46 @@ end
 D.CASTERS = { { "Eli", "PRIEST" }, { "Mara", "PALADIN" }, { "Ivo", "WARLOCK" } }
 
 function D.SampleLook()
-	return { border = Opt("iconBorder") ~= false }
+	return { border = Opt("iconBorder") ~= false, numbers = Opt("time") == "on" }
+end
+
+function D.IconTime(icon, start, seconds)
+	local want = Opt("time")
+	local bar = icon.bar
+	if want == "bar" and bar == nil then
+		local ok, made = pcall(function()
+			local frame = Own(CreateFrame("StatusBar", nil, icon.frame))
+			frame:SetPoint("TOPLEFT", icon.frame, "BOTTOMLEFT", 0, -1)
+			frame:SetPoint("TOPRIGHT", icon.frame, "BOTTOMRIGHT", 0, -1)
+			frame:SetHeight(BAR_HEIGHT)
+			frame:SetMinMaxValues(0, 1)
+			frame:SetScript("OnUpdate", function(self)
+				local held = icon.held
+				local length = held and held.seconds or icon.barLength or 0
+				local ends = held and held.ends or icon.barEnds or 0
+				self:SetMinMaxValues(0, length > 0 and length or 1)
+				self:SetValue(math.max(0, ends - Now()))
+			end)
+			return frame
+		end)
+		bar = ok and made or false
+		icon.bar = bar
+	end
+	local shown = want == "bar" and bar and true or false
+	if bar then
+		bar:SetShown(shown)
+	end
+	if shown then
+		pcall(bar.SetStatusBarTexture, bar, D.BarFile())
+		bar:SetStatusBarColor(BAR_RGB[1], BAR_RGB[2], BAR_RGB[3], 1)
+		if Plain(start, "number") and Plain(seconds, "number") then
+			icon.barEnds, icon.barLength = start + seconds, seconds
+		end
+	end
+	if icon.name then
+		icon.name:ClearAllPoints()
+		icon.name:SetPoint("TOP", shown and bar or icon.frame, "BOTTOM", 0, -1)
+	end
 end
 
 function D.SampleName(icon, index)
@@ -1260,6 +1387,7 @@ function D.Test(quiet, path)
 		ns.IconSet(icon, ns.IconSamplePicture(index), now, 2 * index, D.SampleLook())
 		ns.IconCountdownHeight(icon, Opt("size"), D.BASE)
 		D.SampleName(icon, index)
+		D.IconTime(icon, now, 2 * index)
 		if flash then
 			ns.IconFlash(icon)
 		end
@@ -1337,6 +1465,7 @@ function D.Held()
 		ns.IconSampleHeld(icon, index, KEY, look)
 		ns.IconCountdownHeight(icon, Opt("size"), D.BASE)
 		D.SampleName(icon, index)
+		D.IconTime(icon)
 		if fresh and icon.held then
 			came = true
 			if flash then

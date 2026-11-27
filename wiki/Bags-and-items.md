@@ -278,7 +278,7 @@ The **Item slots** page works on the game's own windows and the Character window
 ### Item level
 
 - **Item level in bags and bank** (on): in the game's bag and bank windows. The **Bags** page has its own **Item level** row.
-- **Item level on equipped gear** (on): on the slots of the Character window.
+- **Item level on equipped gear** (on): on the slots of the Character window, and your average item level under your level, in **Item level colour** (gold at Gold, white otherwise), to set beside the one the Inspect window shows. It follows your gear as you change it.
 - **Item level in the equipment flyout** (on): on the bag items that fit a slot, shown while you hold Alt over the slot.
 - **Item level on the Inspect window** (on): on each slot, and the player's average item level under their level.
 - **Item level corner on gear**: **Bottom left** (the default), **Bottom right**, **Top left** or **Top right**, on the Character and Inspect windows. Bags and the flyout keep the bottom left.

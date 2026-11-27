@@ -5,6 +5,7 @@ local MOVER = "FlatUIPulse"
 local CROP = 0.08
 local PEAK, RISE = 0.7, 0.3
 local GROW, NAME_GAP, NAME_FONT = 1.25, 4, "GameFontHighlightLarge"
+local BURST, BURST_SIZE, BURST_TIME, BURST_FROM, BURST_TO = "Interface\\Cooldown\\star4", 1.6, 0.45, 0.5, 1.3
 local GCD = 2
 local MOST_WAITING, MOST_ITEMS, MOST_LEFT = 32, 40, 100
 local MAX_ID = 2147483647
@@ -656,13 +657,25 @@ function P.Done(entry)
 	P.Ready(entry)
 end
 
+P.WHEN = { combat = "in combat only", travel = "not while mounted, on a flight path or in a city" }
+
+function P.Quiet()
+	local when = Opt("when")
+	if when == "combat" then
+		return not (P.Ask(InCombatLockdown) == true or P.Ask(UnitAffectingCombat, "player") == true)
+	elseif when == "travel" then
+		return P.Ask(IsMounted) == true or P.Ask(UnitOnTaxi, "player") == true or P.Ask(IsResting) == true
+	end
+	return false
+end
+
 function P.Ready(entry)
 	entry.cooling = false
 	P.Disarm(entry)
 	if entry.kind == "item" and not entry.worn and P.items[entry.id] == entry then
 		P.items[entry.id], P.known[entry.id] = nil, true
 	end
-	if not entry.short and not P.LeftOut(entry) then
+	if not entry.short and not P.LeftOut(entry) and not P.Quiet() then
 		P.Queue(entry)
 	end
 end
@@ -686,6 +699,47 @@ function P.MakeFade(frame)
 		return scale
 	end)
 	return { group = group, rise = rise, fall = fall, grow = made and grow or nil }
+end
+
+function P.MakeBurst(spot)
+	local holder = CreateFrame("Frame", nil, UIParent)
+	ns.Own[holder] = true
+	holder:SetFrameStrata("HIGH")
+	holder:SetFrameLevel(spot.frame:GetFrameLevel() + 5)
+	holder:EnableMouse(false)
+	holder:SetSize(1, 1)
+	holder:SetPoint("CENTER", spot.frame, "CENTER", 0, 0)
+	local texture = holder:CreateTexture(nil, "OVERLAY", nil, 2)
+	ns.Own[texture] = true
+	texture:SetTexture(BURST)
+	texture:SetBlendMode("ADD")
+	texture:SetPoint("CENTER", holder, "CENTER", 0, 0)
+	texture:SetAlpha(0)
+	local group = texture:CreateAnimationGroup()
+	group:SetToFinalAlpha(true)
+	local scale = group:CreateAnimation("Scale")
+	scale:SetOrigin("CENTER", 0, 0)
+	scale:SetScaleFrom(BURST_FROM, BURST_FROM)
+	scale:SetScaleTo(BURST_TO, BURST_TO)
+	scale:SetDuration(BURST_TIME)
+	local alpha = group:CreateAnimation("Alpha")
+	alpha:SetFromAlpha(1)
+	alpha:SetToAlpha(0)
+	alpha:SetDuration(BURST_TIME)
+	return { holder = holder, texture = texture, group = group, alpha = alpha }
+end
+
+function P.Burst(spot, entry)
+	local burst = spot.burst
+	burst.group:Stop()
+	burst.texture:SetAlpha(0)
+	if Opt("burst") == false then
+		return
+	end
+	local r, g, b = P.NameColour(entry)
+	burst.texture:SetVertexColor(r, g, b)
+	burst.alpha:SetFromAlpha(P.Peak())
+	burst.group:Play()
 end
 
 function P.InUse()
@@ -733,6 +787,8 @@ function P.Frame(spot)
 	spot.outline = ns.Outline(frame, frame, true)
 	local ok, fade = pcall(P.MakeFade, frame)
 	spot.fade = ok and fade or nil
+	local made, burst = pcall(P.MakeBurst, spot)
+	spot.burst = made and burst or nil
 	P.Size(spot)
 	return frame
 end
@@ -741,6 +797,9 @@ function P.Size(spot)
 	if spot.frame then
 		local size = Opt(spot.size)
 		spot.frame:SetSize(size, size)
+		if spot.burst and ns.Finite(size) then
+			spot.burst.texture:SetSize(size * BURST_SIZE, size * BURST_SIZE)
+		end
 	end
 end
 
@@ -822,6 +881,10 @@ function P.Hide(spot)
 	if spot.fade then
 		pcall(spot.fade.group.Stop, spot.fade.group)
 	end
+	if spot.burst then
+		pcall(spot.burst.group.Stop, spot.burst.group)
+		spot.burst.texture:SetAlpha(0)
+	end
 	spot.frame:Hide()
 	spot.frame:SetAlpha(0)
 end
@@ -849,6 +912,9 @@ function P.Show(spot, entry)
 	frame:Show()
 	if not P.Fade(spot, seconds) then
 		frame:SetAlpha(P.Peak())
+	end
+	if spot.burst then
+		pcall(P.Burst, spot, entry)
 	end
 	local sound = not entry.quiet and ns.SOUNDS and ns.SOUNDS[KITS[P.OwnSound(entry.soundKey or entry.key) or Opt("sound")] or 0]
 	if sound and ns.PlayKit then
@@ -1472,6 +1538,7 @@ function P.List()
 	print(("Cooldown pulse, own sounds: %s"):format(#own > 0 and table.concat(own, ", ") or "none"))
 	local spots = P.SpotList()
 	print(("Cooldown pulse, own spots: %s"):format(#spots > 0 and table.concat(spots, ", ") or "none"))
+	print(("Cooldown pulse, when: %s."):format(P.WHEN[Opt("when")] or "always"))
 end
 
 function P.Slash(rest)
@@ -1521,6 +1588,9 @@ function P.Status()
 		items = items + 1
 	end
 	lines[1] = ("Cooldown pulse: %s and %s watched%s."):format(Many(spells, "spell"), Many(items, "item"), left > 0 and (", " .. left .. " left out") or "")
+	if P.WHEN[Opt("when")] then
+		lines[#lines + 1] = ("Cooldown pulse: %s."):format(P.WHEN[Opt("when")])
+	end
 	if Opt("pet") == true then
 		local pets = P.Pets()
 		lines[#lines + 1] = pets > 0 and ("Cooldown pulse: %s of your pet among them."):format(pets == 1 and "1 ability" or (pets .. " abilities"))

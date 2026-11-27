@@ -6,7 +6,8 @@ local IsSecret = ns.IsSecret
 local K = {
 	PLATE = { 0.06, 0.06, 0.06, 0.85 }, MISSING = { 0.32, 0.08, 0.08, 0.9 },
 	RED = { 0.851, 0.251, 0.251 }, AMBER = { 1, 0.7, 0.2 }, GREY = { 0.6, 0.6, 0.6 }, BLUE = { 0.302, 0.6, 0.902 },
-	WHITE = "Interface\\Buttons\\WHITE8X8", FONT = "GameFontHighlightSmall",
+	WHITE = "Interface\\Buttons\\WHITE8X8", FONT = "GameFontHighlightSmall", SPARK = "Interface\\CastingBar\\UI-CastingBar-Spark",
+	MOST_MARKS = 10, MARK_ALPHA = 0.9, SPARK_TALL = 2.2, SPARK_WIDE = 0.7,
 	PAD = 3, GAP = 4, TICK = 0.25, SAMPLE_COUNT = "20", SAMPLE_TIME = "10:00",
 	SAMPLE_GROUP = "40/40",
 	REFUSED = {
@@ -101,6 +102,12 @@ local function Build(record, shape, part)
 		bar:SetValue(0)
 		record.top:SetFrameLevel(bar:GetFrameLevel() + 1)
 		host = bar
+		local spark = bar:CreateTexture(nil, "ARTWORK", nil, 7)
+		ns.Own[spark] = true
+		spark:SetTexture(K.SPARK)
+		spark:SetBlendMode("ADD")
+		spark:Hide()
+		part.spark, part.marks = spark, {}
 	end
 	part.host = host
 	part.name, part.count, part.time = String(host, "LEFT"), String(host, "RIGHT"), String(host, "RIGHT")
@@ -114,6 +121,7 @@ end
 local function Switch(record, shape)
 	for name, part in pairs(record.parts) do
 		part.body:SetShown(name == shape)
+		part.drawn = nil
 	end
 	record.texture:SetShown(shape ~= "text")
 	if shape == "text" and record.start ~= nil then
@@ -211,6 +219,10 @@ function Shapes.Fit(record, entry)
 		local room = ns.Get(KEY .. ".barWidth") - K.PAD * 2 - K.GAP * 2 - Width(entry.kind == "group" and K.SAMPLE_GROUP or K.SAMPLE_COUNT, size)
 			- Width(K.SAMPLE_TIME, size)
 		part.name:SetWidth(math.max(1, math.floor(room)))
+		if part.spark then
+			part.spark:SetSize(math.max(6, math.floor(height * K.SPARK_WIDE + 0.5)), math.floor(height * K.SPARK_TALL + 0.5))
+		end
+		part.marked = nil
 	end
 	part.row = nil
 	count:ClearAllPoints()
@@ -269,8 +281,10 @@ function Shapes.Apply(record, entry, look)
 		end
 		part.bar:SetStatusBarColor(r, g, b, 1)
 		if look.fill ~= nil then
-			part.bar:SetValue(look.fill)
+			Shapes.Glide(part, look.fill)
+			Shapes.Marks(part, look.top)
 		end
+		Shapes.Spark(part, look)
 	else
 		for _, text in ipairs({ part.name, part.count, part.time }) do
 			text:SetTextColor(r, g, b, 1)
@@ -284,6 +298,71 @@ function Shapes.Apply(record, entry, look)
 			Row(part.host, { part.time, part.count }, "RIGHT", -1)
 		else
 			Row(part.host, { part.name, part.count, part.time }, "LEFT", 1)
+		end
+	end
+end
+
+function Shapes.Glide(part, fill)
+	local list = type(Enum) == "table" and Enum.StatusBarInterpolation or nil
+	local how = type(list) == "table" and list.ExponentialEaseOut or nil
+	local smooth = how ~= nil and part.drawn == true and type(part.fill) == "number" and math.abs(fill - part.fill) < 0.5
+	if not (smooth and pcall(part.bar.SetValue, part.bar, fill, how)) then
+		part.bar:SetValue(fill)
+	end
+	part.fill, part.drawn = fill, true
+end
+
+function Shapes.Spark(part, look)
+	local spark = part.spark
+	if not spark then
+		return
+	end
+	local fill = part.fill
+	local show = type(fill) == "number" and fill > 0.02 and fill < 0.98 and not look.red and not look.none
+	if show then
+		local texture = part.bar:GetStatusBarTexture()
+		if texture and part.sparked ~= texture then
+			spark:ClearAllPoints()
+			spark:SetPoint("CENTER", texture, "RIGHT", 0, 0)
+			part.sparked = texture
+		end
+		show = part.sparked ~= nil
+	end
+	spark:SetShown(show)
+end
+
+function Shapes.Marks(part, top)
+	local marks, width = part.marks, ns.Get(KEY .. ".barWidth")
+	if not marks then
+		return
+	end
+	local count = 0
+	if not IsSecret(top) and type(top) == "number" and top >= 2 and top <= K.MOST_MARKS and top == math.floor(top) and type(width) == "number" then
+		count = top - 1
+	end
+	local key = count > 0 and (top .. ":" .. width) or ""
+	if part.marked == key then
+		return
+	end
+	part.marked = key
+	local thick = ns.Pixels(part.bar, 1)
+	for index = 1, math.max(count, #marks) do
+		local mark = marks[index]
+		if index <= count then
+			if not mark then
+				mark = part.bar:CreateTexture(nil, "ARTWORK", nil, 6)
+				ns.Own[mark] = true
+				mark:SetColorTexture(K.PLATE[1], K.PLATE[2], K.PLATE[3], K.MARK_ALPHA)
+				marks[index] = mark
+			end
+			local x = math.floor(width * index / top + 0.5)
+			mark:ClearAllPoints()
+			mark:SetPoint("TOPLEFT", part.bar, "TOPLEFT", x, 0)
+			mark:SetPoint("BOTTOMLEFT", part.bar, "BOTTOMLEFT", x, 0)
+			mark:SetWidth(thick)
+			mark:Show()
+		elseif mark then
+			mark:Hide()
 		end
 	end
 end
