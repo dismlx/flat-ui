@@ -24,7 +24,7 @@ local K = {
 	BAGS_HINT = " It shows while Buttons is Your list or Your list, then the rest.",
 	LOW = 3, LIT = 0.14, SUNK = 0.3, GCD = 1.5, TIP_EVERY = 1, BUFF_GAP = 0.5, BUFF_EVERY = 30,
 	BUFF = { 0.3, 0.85, 0.4 }, READY = { 0.4, 0.85, 0.45 }, ACCENT = { 0.85, 0.85, 0.85 },
-	MAIN = 16, OFF = 17,
+	MAIN = 16, OFF = 17, TEMPORARY = 15,
 	HANDS = { INVTYPE_WEAPON = true, INVTYPE_WEAPONOFFHAND = true, INVTYPE_2HWEAPON = true },
 	ONTO = {},
 	WEAPON_ITEMS = {
@@ -278,7 +278,11 @@ function C.Clock(seconds)
 end
 
 function C.Onto(id)
-	return C.KindOf(id) == "enhance" or K.ONTO[id] == true
+	if K.ONTO[id] == true then
+		return true
+	end
+	local info = C.Instant(id)
+	return type(info) == "table" and info.class == CONSUMABLE and info.sub == K.TEMPORARY
 end
 
 function C.OffWeapon()

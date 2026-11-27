@@ -3328,7 +3328,7 @@ ns.PAGES = {
 		{ key = "kindScroll", kind = "bool", default = true, label = "Scrolls" },
 		{ key = "kindBandage", kind = "bool", default = true, label = "Bandages" },
 		{ key = "kindEnhance", kind = "bool", default = true, label = "Enhancements",
-			tip = "Oils, sharpening stones, weightstones and the like. A click puts one on your main hand, and a right-click on a weapon in your off hand." },
+			tip = "Oils, sharpening stones, weightstones and the like. A click puts an oil or a stone on your main hand, and a right-click on a weapon in your off hand." },
 		{ key = "kindExplosive", kind = "bool", default = true, label = "Explosives and devices" },
 		{ key = "kindOther", kind = "bool", default = true, label = "Other consumables", tip = "Healthstones, mana gems and the rest. They come first on the bar." },
 		{ section = "Layout" },
