@@ -14,6 +14,7 @@ local BOB = { slipping = 0.6, lost = 0.3 }
 local PULSE_LOW, BOB_PX = 0.25, 3
 local FADE_IN, FADE_OUT, FADE_BACK = 0.15, 0.2, 0.45
 local ARROW, ARROW_ROW, ARROW_GAP, LEVEL = { 14, 11, 8, 5, 2 }, 2, 3, 22
+local ARROW_FIT, ARROW_LO, ARROW_HI = 1.1, 12, 24
 local SHADE = { 0, 0, 0, 0.8 }
 local KINDS = { bad = "lost", changing = "slipping" }
 local SAMPLE_KINDS = { threatBad = "lost", threatTransition = "slipping" }
@@ -21,10 +22,12 @@ local GROW_SECONDS, GROW_MIN, GROW_MAX, GROW_DEFAULT = 0.2, 100, 200, 150
 local LOOK_SECONDS, SLIP_DEFAULT, SLIP_MIN, PULL_SHARE = 0.2, 80, 50, 110
 local COPY_LEVEL, SAMPLE_RISE = 8000, 40
 local NAME_GAP, MARK_GAP, MARK_SHARE, FONT_PX = 2, 2, 1.5, 12
+local VALUE_GAP, VALUE_WIDE, LINE_ALPHA = 4, 2.5, 0.7
 local FONT, WHITE = "SystemFont_NamePlate", "Interface\\Buttons\\WHITE8X8"
 local RAID = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local STRATA = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
 local JUSTIFY = { LEFT = true, CENTER = true, RIGHT = true }
+local SIDES = { left = true, right = true, above = true, below = true }
 
 local recs = setmetatable({}, { __mode = "k" })
 local owns = setmetatable({}, { __mode = "k" })
@@ -243,6 +246,32 @@ local function Animate(cue)
 	cue.come, cue.go, cue.back, cue.pulse, cue.fade, cue.bob, cue.move = come, go, back, pulse, fade, bob, move
 end
 
+local function Shape(cue, height)
+	local wide = ns.Finite(height) and height > 0 and height * ARROW_FIT or ARROW[1]
+	local k = math.max(ARROW_LO, math.min(ARROW_HI, wide)) / ARROW[1]
+	local arrow = cue.arrow
+	local px = ns.Pixels(arrow, 1)
+	if cue.k == k and cue.px ~= nil and math.abs(cue.px - px) < 0.001 then
+		return
+	end
+	cue.k, cue.px = k, px
+	local row, most = ARROW_ROW * k, 0
+	for index, width in ipairs(ARROW) do
+		local w = math.max(px, math.floor(width * k + 0.5))
+		local y = -px - (index - 1) * row
+		local shade, piece = cue.shade[index], cue.shape[index]
+		most = math.max(most, w)
+		piece:ClearAllPoints()
+		piece:SetPoint("TOP", arrow, "TOP", 0, y)
+		piece:SetSize(w, row)
+		shade:ClearAllPoints()
+		shade:SetPoint("TOP", arrow, "TOP", 0, y + px)
+		shade:SetSize(w + 2 * px, row + 2 * px)
+	end
+	cue.width, cue.height = most + 2 * px, #ARROW * row + 2 * px
+	arrow:SetSize(cue.width, cue.height)
+end
+
 local function Build(parent)
 	local holder = Own(CreateFrame("Frame", nil, parent))
 	holder:SetAllPoints(parent)
@@ -257,19 +286,12 @@ local function Build(parent)
 		end
 		cue.rings[index] = ring
 	end
-	cue.width, cue.height = ARROW[1] + 1, #ARROW * ARROW_ROW + 1
-	arrow:SetSize(cue.width, cue.height)
-	for index, width in ipairs(ARROW) do
-		local y = -(index - 1) * ARROW_ROW
+	for index = 1, #ARROW do
 		local shade = Own(arrow:CreateTexture(nil, "BORDER"))
 		shade:SetColorTexture(SHADE[1], SHADE[2], SHADE[3], SHADE[4])
-		shade:SetSize(width, ARROW_ROW)
-		shade:SetPoint("TOP", arrow, "TOP", 1, y - 1)
-		local piece = Own(arrow:CreateTexture(nil, "ARTWORK"))
-		piece:SetSize(width, ARROW_ROW)
-		piece:SetPoint("TOP", arrow, "TOP", 0, y)
-		cue.shade[index], cue.shape[index] = shade, piece
+		cue.shade[index], cue.shape[index] = shade, Own(arrow:CreateTexture(nil, "ARTWORK"))
 	end
+	Shape(cue, nil)
 	pcall(Animate, cue)
 	return cue
 end
@@ -474,7 +496,10 @@ local function Place(frame, rec, cue)
 	local right = type(own) == "table" and own.levelBox == true and Level(frame) or bar
 	local above = Above(frame)
 	local unit = ns.Pixels(cue.glow, 1)
-	if cue.bar == bar and cue.right == right and cue.base == Base() and cue.unit ~= nil and math.abs(cue.unit - unit) < 0.001 and rec.above == above then
+	local height = Read(bar, "GetHeight")
+	height = ns.Finite(height) and math.floor(height * 4 + 0.5) / 4 or nil
+	if cue.bar == bar and cue.right == right and cue.base == Base() and cue.unit ~= nil and math.abs(cue.unit - unit) < 0.001 and rec.above == above
+		and cue.tall == height then
 		return true
 	end
 	if Locked(frame) then
@@ -482,6 +507,8 @@ local function Place(frame, rec, cue)
 		return cue.bar ~= nil
 	end
 	Ring(cue, bar, right)
+	cue.tall = height
+	Shape(cue, height)
 	if above ~= nil then
 		cue.arrow:ClearAllPoints()
 		cue.arrow:SetPoint("BOTTOM", above, "TOP", 0, ARROW_GAP)
@@ -657,11 +684,18 @@ local function NewCopy(parent, strata, level)
 	bar:SetValue(1)
 	local words = NoMouse(Own(CreateFrame("Frame", nil, frame)))
 	words:SetAllPoints(frame)
-	local copy = { frame = frame, bar = bar, words = words, parent = parent, at = Channel(), w = 1, h = 1, scale = 1, on = false }
-	copy.name = ns.OwnText(words, "OVERLAY", FONT)
-	if copy.name then
-		copy.name:SetWordWrap(false)
+	local copy = { frame = frame, bar = bar, words = words, parent = parent, at = Channel(), w = 1, h = 1, scale = 1, on = false, fonts = {} }
+	copy.lift = { now = 0, from = 0, to = 0, start = 0 }
+	for _, field in ipairs({ "name", "value", "health" }) do
+		local text = ns.OwnText(words, "OVERLAY", FONT)
+		if text then
+			text:SetWordWrap(false)
+			text:Hide()
+		end
+		copy[field] = text
 	end
+	copy.low = Own(bar:CreateTexture(nil, "OVERLAY"))
+	copy.low:Hide()
 	copy.mark = Own(words:CreateTexture(nil, "OVERLAY"))
 	copy.mark:SetTexture(RAID)
 	copy.mark:Hide()
@@ -698,18 +732,38 @@ local function Cell(texture, index)
 	return false
 end
 
-local function Font(copy, spec)
-	local name = copy.name
+local function Font(copy, field, spec)
+	local text, fonts = copy[field], copy.fonts
 	local key = spec.file and (spec.file .. "|" .. math.floor(spec.size * 100 + 0.5) .. "|" .. spec.flags) or "game"
-	if copy.font == key then
+	if fonts[field] == key then
 		return
 	end
-	if spec.file and pcall(name.SetFont, name, spec.file, spec.size, spec.flags) then
-		copy.font = key
-	elseif copy.font ~= "game" then
-		pcall(name.SetFontObject, name, FONT)
-		copy.font = "game"
+	if spec.file and pcall(text.SetFont, text, spec.file, spec.size, spec.flags) then
+		fonts[field] = key
+	elseif fonts[field] ~= "game" then
+		pcall(text.SetFontObject, text, FONT)
+		fonts[field] = "game"
 	end
+end
+
+local function Write(copy, field, spec)
+	local text = copy[field]
+	if text == nil then
+		return nil
+	end
+	if spec == nil then
+		text:Hide()
+		return nil
+	end
+	Font(copy, field, spec)
+	text:SetTextColor(spec.r or 1, spec.g or 1, spec.b or 1, 1)
+	text:SetJustifyH(spec.justify or "CENTER")
+	if not pcall(text.SetText, text, spec.text) then
+		text:SetText("")
+	end
+	text:ClearAllPoints()
+	text:Show()
+	return text
 end
 
 local function Words(copy, spec, w, h)
@@ -721,7 +775,7 @@ local function Words(copy, spec, w, h)
 		name:Hide()
 		return nil
 	end
-	Font(copy, spec)
+	Font(copy, "name", spec)
 	name:ClearAllPoints()
 	name:SetPoint(spec.point or "BOTTOM", copy.frame, spec.rel or "TOP", spec.x or 0, spec.y or NAME_GAP)
 	name:SetWidth(math.max(1, spec.width or w))
@@ -737,10 +791,98 @@ local function Words(copy, spec, w, h)
 	return top, spec.left or -half, spec.right or half, bottom >= h / 2 - 1
 end
 
+local function CopyArrow(copy)
+	local cue = copy.cue
+	local at = copy.nameTop or copy.h / 2
+	if copy.valueTop then
+		at = math.max(at, copy.valueTop)
+	end
+	local guide = copy.live and copy.guide or nil
+	if guide ~= nil and Read(guide, "IsVisible") == true then
+		local top, scale = Read(guide, "GetTop"), Read(guide, "GetEffectiveScale")
+		local base, f = Read(copy.parent, "GetEffectiveScale"), copy.scale
+		if ns.Finite(top) and ns.Finite(scale) and ns.Finite(base) and base > 0 and ns.Finite(f) and f > 0 and ns.Finite(copy.y) then
+			at = math.max(at, top * scale / (base * f) - copy.y)
+		end
+	elseif not copy.live and ns.Finite(copy.guideTop) then
+		at = math.max(at, copy.guideTop)
+	end
+	if copy.arrowY == nil or math.abs(copy.arrowY - at) > 0.5 then
+		copy.arrowY = at
+		cue.arrow:ClearAllPoints()
+		cue.arrow:SetPoint("BOTTOM", copy.frame, "CENTER", 0, at + ARROW_GAP)
+	end
+	local ext = copy.ext
+	if ext then
+		ext.t = math.max(ext.t, copy.arrowY + ARROW_GAP + cue.height)
+	end
+end
+
+local function Value(copy, spec, w, h, side, top)
+	local text = Write(copy, "value", spec)
+	if text == nil then
+		return nil, nil
+	end
+	local size = ns.Finite(spec.size) and spec.size or FONT_PX
+	local wide = ns.Finite(spec.width) and spec.width > 0 and spec.width or size * VALUE_WIDE
+	local high = ns.Finite(spec.high) and spec.high > 0 and spec.high or size
+	local y = ns.Finite(spec.y) and spec.y or 0
+	if spec.side == "left" then
+		text:SetPoint("RIGHT", copy.frame, "CENTER", side.l - VALUE_GAP, y)
+		side.l = side.l - VALUE_GAP - wide
+	elseif spec.side == "right" then
+		text:SetPoint("LEFT", copy.frame, "CENTER", side.r + VALUE_GAP, y)
+		side.r = side.r + VALUE_GAP + wide
+	elseif spec.side == "above" then
+		text:SetPoint("BOTTOM", copy.frame, "CENTER", 0, top + NAME_GAP)
+		return top + NAME_GAP + high, nil
+	else
+		local at = -h / 2 - NAME_GAP
+		if ns.Finite(spec.top) and spec.top < at then
+			at = spec.top
+		end
+		text:SetPoint("TOP", copy.frame, "CENTER", ns.Finite(spec.x) and spec.x or 0, at)
+		return nil, at - high
+	end
+	return nil, nil
+end
+
+local function HealthText(copy, spec, w)
+	local text = Write(copy, "health", spec)
+	if text == nil then
+		return
+	end
+	local y = ns.Finite(spec.y) and spec.y or 0
+	if spec.justify == "LEFT" and ns.Finite(spec.left) then
+		text:SetPoint("LEFT", copy.frame, "CENTER", spec.left, y)
+	elseif spec.justify == "CENTER" and ns.Finite(spec.x) then
+		text:SetPoint("CENTER", copy.frame, "CENTER", spec.x, y)
+	else
+		text:SetPoint("RIGHT", copy.frame, "CENTER", ns.Finite(spec.right) and spec.right or w / 2 - VALUE_GAP, y)
+	end
+end
+
+local function LowLine(copy, share, w)
+	local low = copy.low
+	if not ns.Finite(share) or share <= 0 or share >= 1 then
+		low:Hide()
+		return
+	end
+	local px = ns.Pixels(copy.bar, 1)
+	local x = math.floor(w * share / px + 0.5) * px
+	low:ClearAllPoints()
+	low:SetPoint("TOPLEFT", copy.bar, "TOPLEFT", x, 0)
+	low:SetPoint("BOTTOMLEFT", copy.bar, "BOTTOMLEFT", x, 0)
+	low:SetWidth(px)
+	local r, g, b = ns.Colour(KEY .. ".lowHealthColour")
+	low:SetColorTexture(r, g, b, LINE_ALPHA)
+	low:Show()
+end
+
 local function Lay(copy, L)
 	Size(copy, L.w, L.h)
 	local w, h = L.w, L.h
-	local left, right, top = -w / 2, w / 2, h / 2
+	local left, right, top, bottom = -w / 2, w / 2, h / 2, -h / 2
 	local nameTop, nameLeft, nameRight, above = Words(copy, L.name, w, h)
 	if nameTop then
 		top, left, right = math.max(top, nameTop), math.min(left, nameLeft), math.max(right, nameRight)
@@ -749,13 +891,8 @@ local function Lay(copy, L)
 	if cue.base ~= Base() then
 		Ring(cue, copy.bar, copy.bar)
 	end
-	local to = above and copy.name or copy.frame
-	if copy.arrowTo ~= to then
-		copy.arrowTo = to
-		cue.arrow:ClearAllPoints()
-		cue.arrow:SetPoint("BOTTOM", to, "TOP", 0, ARROW_GAP)
-	end
-	top = math.max(top, (above and nameTop or h / 2) + ARROW_GAP + cue.height)
+	Shape(cue, h)
+	local side = { l = -w / 2, r = w / 2 }
 	local mark, spec = copy.mark, L.mark
 	if spec and Cell(mark, spec.index) then
 		local size = spec.size or h * MARK_SHARE
@@ -764,11 +901,18 @@ local function Lay(copy, L)
 		mark:SetPoint(spec.point or "RIGHT", copy.frame, spec.rel or "LEFT", x, spec.y or 0)
 		mark:SetSize(size, size)
 		mark:Show()
-		left = math.min(left, spec.left or (-w / 2 + x - size))
+		side.l = math.min(side.l, spec.left or (-w / 2 + x - size))
 	else
 		mark:Hide()
 	end
-	copy.ext = { l = left, r = right, b = -h / 2, t = top }
+	copy.nameTop = above and nameTop or h / 2
+	local valueTop, valueBottom = Value(copy, L.value, w, h, side, copy.nameTop)
+	copy.valueTop = valueTop
+	HealthText(copy, L.health, w)
+	LowLine(copy, L.low, w)
+	copy.beside = { l = -w / 2 - side.l, r = side.r - w / 2 }
+	copy.ext = { l = math.min(left, side.l), r = math.max(right, side.r), b = math.min(bottom, valueBottom or bottom), t = math.max(top, valueTop or top) }
+	CopyArrow(copy)
 end
 
 local function Tint(copy, r, g, b)
@@ -846,24 +990,60 @@ local function FontOf(spec, name, scale)
 	end
 end
 
-local function LiveText(name, unit, bx, by, base, bs)
+local function LiveText(region, bx, by, base, bs)
 	local spec = { justify = "CENTER" }
-	local x, y, w, h, scale = Screen(name, bs)
+	local x, y, w, h, scale = Screen(region, bs)
 	if x then
 		spec.point, spec.rel, spec.x, spec.y, spec.width = "CENTER", "CENTER", (x - bx) / base, (y - by) / base, w / base
+		spec.high = h / base
 		spec.bottom, spec.top = spec.y - h / base / 2, spec.y + h / base / 2
 		spec.left, spec.right = spec.x - spec.width / 2, spec.x + spec.width / 2
 	end
-	FontOf(spec, name, (scale or bs) / base)
-	local justify = Read(name, "GetJustifyH")
+	FontOf(spec, region, (scale or bs) / base)
+	local justify = Read(region, "GetJustifyH")
 	if Plain(justify, "string") and JUSTIFY[justify] then
 		spec.justify = justify
 	end
-	local ok, text = pcall(UnitName, unit)
-	if ok then
-		spec.text = text
-	end
 	return spec
+end
+
+local function Copied(spec, region)
+	local ok, text = Call(region, "GetText")
+	spec.text = ok and text or ""
+	return spec
+end
+
+local function LiveValue(frame, bx, by, base, bs)
+	if type(ns.PlateThreatTexts) ~= "function" then
+		return nil
+	end
+	local ok, value, side = pcall(ns.PlateThreatTexts, frame)
+	if not ok or type(value) ~= "table" or not SIDES[side] or ns.Forbidden(value) or Read(value, "IsShown") ~= true then
+		return nil
+	end
+	local spec = Copied(LiveText(value, bx, by, base, bs), value)
+	spec.side, spec.region = side, value
+	spec.justify = side == "left" and "RIGHT" or side == "right" and "LEFT" or "CENTER"
+	return spec
+end
+
+local function LiveHealth(frame, bx, by, base, bs)
+	if type(ns.PlateHealthText) ~= "function" then
+		return nil
+	end
+	local ok, region = pcall(ns.PlateHealthText, frame)
+	if not ok or type(region) ~= "table" or ns.Forbidden(region) then
+		return nil
+	end
+	return Copied(LiveText(region, bx, by, base, bs), region)
+end
+
+local function LowShare(frame)
+	if type(ns.PlateLowLineShare) ~= "function" then
+		return nil
+	end
+	local ok, share = pcall(ns.PlateLowLineShare, frame)
+	return ok and ns.Finite(share) and share or nil
 end
 
 local function LiveMark(frame, unit, bx, by, base, bs)
@@ -903,10 +1083,44 @@ local function LiveLayout(frame)
 	local L = { unit = unit, source = bar, w = bw / base, h = bh / base }
 	local name = Usable(frame.name)
 	if name and Read(name, "IsShown") == true and (type(ns.PlateNameShown) ~= "function" or ns.PlateNameShown(frame) ~= false) then
-		L.name = LiveText(name, unit, bx, by, base, bs)
+		L.name = LiveText(name, bx, by, base, bs)
+		local ok, text = pcall(UnitName, unit)
+		if ok then
+			L.name.text = text
+		end
 	end
 	L.mark = LiveMark(frame, unit, bx, by, base, bs)
+	L.value = LiveValue(frame, bx, by, base, bs)
+	L.health = LiveHealth(frame, bx, by, base, bs)
+	L.low = LowShare(frame)
 	return L
+end
+
+local function Guide(frame)
+	local guide = Above(frame)
+	if guide == nil or guide == Bar(frame) or guide == Usable(frame.name) then
+		return nil
+	end
+	local ok, value = false, nil
+	if type(ns.PlateThreatTexts) == "function" then
+		ok, value = pcall(ns.PlateThreatTexts, frame)
+	end
+	if ok and value == guide then
+		if type(ns.PlateDebuffTop) == "function" then
+			local okTop, top = pcall(ns.PlateDebuffTop, frame)
+			if okTop and type(top) == "table" then
+				return top
+			end
+		end
+		return nil
+	end
+	return guide
+end
+
+local function Casting(frame)
+	local container = Usable(frame.CastBarsContainer)
+	local bar = container and Usable(container.castBar)
+	return bar ~= nil and Read(bar, "IsVisible") == true
 end
 
 local function Follow(copy, f)
@@ -920,7 +1134,9 @@ local function Follow(copy, f)
 		return false
 	end
 	Size(copy, w / base, h / base)
-	x, y = x / base / f, y / base / f
+	Aim(copy.lift, Casting(frame) and 1 or 0, false)
+	local lift = math.max(0, copy.lift.now) * (f - 1) * h / base / 2
+	x, y = x / base / f, (y / base + lift) / f
 	if copy.x == nil or math.abs(copy.x - x) > 0.01 or math.abs(copy.y - y) > 0.01 then
 		copy.x, copy.y = x, y
 		copy.frame:ClearAllPoints()
@@ -941,8 +1157,45 @@ local function Fit(copy)
 		copy.scale = f
 		copy.frame:SetScale(f)
 		Lines(copy.cue)
+		Shape(copy.cue, copy.h)
+		if copy.low:IsShown() then
+			copy.low:SetWidth(ns.Pixels(copy.bar, 1))
+		end
 	end
 	return true
+end
+
+local function Fade(frame, region, to, instant)
+	if region ~= nil and type(ns.PlateEase) == "function" then
+		pcall(ns.PlateEase, frame, region, to, instant)
+	end
+end
+
+local function Cover(copy, on, instant)
+	local frame = copy.owner
+	if not copy.live or frame == nil or ns.Forbidden(frame) or (copy.covered == true) == on then
+		return
+	end
+	copy.covered = on
+	local name = Usable(frame.name)
+	local holder = Usable(frame.RaidTargetFrame)
+	local icon = holder and Usable(holder.RaidTargetIcon) or nil
+	if on then
+		Fade(frame, name, 0)
+		if Opt("raidMarker") ~= false then
+			Fade(frame, icon, 0)
+		end
+	else
+		if type(ns.PlateNameShown) ~= "function" or ns.PlateNameShown(frame) ~= false then
+			Fade(frame, name, 1, instant)
+		end
+		if not (type(ns.PlateMarkerFaded) == "function" and ns.PlateMarkerFaded(frame) == true) then
+			Fade(frame, icon, 1, instant)
+		end
+	end
+	if type(ns.PlateThreatValueCover) == "function" then
+		pcall(ns.PlateThreatValueCover, frame, on, instant)
+	end
 end
 
 local function Gone(copy)
@@ -951,10 +1204,14 @@ local function Gone(copy)
 	Hide(copy.cue, true)
 	copy.frame:Hide()
 	Aim(copy.at, 1, true)
+	Aim(copy.lift, 0, true)
+	copy.arrowY = nil
+	Cover(copy, false, true)
 end
 
 local function Step(copy, now)
 	local eased = Ease(copy.at, now)
+	local lifted = Ease(copy.lift, now)
 	if not Fit(copy) then
 		Gone(copy)
 		local owner = copy.owner
@@ -965,9 +1222,10 @@ local function Step(copy, now)
 	end
 	if copy.live then
 		Health(copy)
+		CopyArrow(copy)
 	end
 	if copy.leaving then
-		if eased and not Playing(copy.cue.back) then
+		if eased and lifted and not Playing(copy.cue.back) then
 			Gone(copy)
 			return true
 		end
@@ -1065,6 +1323,7 @@ local function Leave(copy, snap)
 	end
 	if not copy.leaving then
 		copy.leaving = true
+		Cover(copy, false)
 		Aim(copy.at, 1, false)
 		Push(copy)
 	end
@@ -1081,6 +1340,7 @@ local function Come(copy, goal, snap)
 		return false
 	end
 	copy.frame:Show()
+	Cover(copy, true)
 	Push(copy)
 	return copy.on
 end
@@ -1108,6 +1368,7 @@ local function Magnify(frame, rec, state, kind, snap)
 	end
 	local swap = rec.cue ~= nil and rec.cue.on == true
 	copy.unit, copy.source = layout.unit, layout.source
+	copy.guide = Guide(frame)
 	Lay(copy, layout)
 	Health(copy)
 	local r, g, b = CopyColour(state, kind, judged)
@@ -1240,11 +1501,33 @@ local function OnChange(frame, state, previous)
 	end
 end
 
+local function Replace(frame, copy)
+	copy.guide = Guide(frame)
+	copy.arrowY = nil
+	CopyArrow(copy)
+end
+
 function ns.PlateSlipPlace(frame)
 	local rec = frame ~= nil and not ns.IsSecret(frame) and recs[frame] or nil
-	if rec and rec.cue and rec.cue.on and not ns.Forbidden(frame) then
+	if rec == nil or ns.Forbidden(frame) then
+		return
+	end
+	local copy = rec.copy
+	if copy and copy.on and copy.live then
+		ns.EachPart(KEY, PART, Replace, frame, copy)
+	end
+	if rec.cue and rec.cue.on then
 		ns.EachPart(KEY, PART, Place, frame, rec, rec.cue)
 	end
+end
+
+function ns.PlateSlipCopy(frame)
+	local rec = frame ~= nil and not ns.IsSecret(frame) and recs[frame] or nil
+	local copy = rec and rec.copy
+	if copy == nil or not (copy.on or copy.leaving) or not copy.frame:IsShown() or type(copy.beside) ~= "table" then
+		return nil
+	end
+	return copy.frame, copy.bar, copy.beside, copy.at.now, copy.level
 end
 
 local function Subscribe()
@@ -1368,12 +1651,45 @@ local function SampleText(p, spec, m)
 	return text
 end
 
+local function SampleValue(p, m)
+	local value = p.tvalue
+	if value == nil or not SIDES[p.tvalueSide] or Read(value, "IsShown") ~= true then
+		return nil
+	end
+	local side = p.tvalueSide
+	local spec = Copied({ side = side, justify = side == "left" and "RIGHT" or side == "right" and "LEFT" or "CENTER" }, value)
+	FontOf(spec, value, 1)
+	spec.width, spec.high = Read(value, "GetWidth"), Read(value, "GetHeight")
+	if ns.Finite(p.tvalueY) and ns.Finite(m.center) and (side == "left" or side == "right") then
+		spec.y = p.tvalueY - m.center
+	end
+	return spec
+end
+
+local function SampleHealth(p, m)
+	local text = p.htext
+	if text == nil or Read(text, "IsShown") ~= true then
+		return nil
+	end
+	local spec = Copied({ justify = "RIGHT", right = m.HW / 2 - VALUE_GAP, y = 0 }, text)
+	FontOf(spec, text, 1)
+	return spec
+end
+
+local function SampleLow(p)
+	local at = ns.Get(KEY .. ".lowHealthAt")
+	if p.lowLine == nil or Read(p.lowLine, "IsShown") ~= true or not ns.Finite(at) then
+		return nil
+	end
+	return math.max(0, math.min(100, at)) / 100
+end
+
 local function SampleLayout(p, spec, o)
 	local m = p.m
 	if type(m) ~= "table" or not (ns.Finite(m.HW) and ns.Finite(m.HH) and ns.Finite(m.sp)) or m.HW <= 0 or m.HH <= 0 then
 		return nil
 	end
-	local L = { w = m.HW, h = m.HH, name = SampleText(p, spec, m) }
+	local L = { w = m.HW, h = m.HH, name = SampleText(p, spec, m), value = SampleValue(p, m), health = SampleHealth(p, m), low = SampleLow(p) }
 	if spec.marker and o.marker and p.marker and Read(p.marker, "IsShown") == true then
 		local size = ns.Finite(o.markerSize) and o.markerSize or m.HH * MARK_SHARE
 		local x = (ns.Finite(o.markerX) and o.markerX or 0) - (ns.Finite(m.iconShift) and m.iconShift or 0)
@@ -1403,6 +1719,15 @@ local function SampleCopy(p, spec, o, kind, snap, still)
 		p.slipCopy = copy
 	end
 	Layer(copy, strata, level)
+	local m = p.m
+	copy.guideTop = nil
+	if ns.Finite(m.top) and ns.Finite(m.center) then
+		local top = m.top
+		if p.opFrame and p.opFrame:IsShown() and ns.Finite(p.opT) then
+			top = math.max(top, p.opT)
+		end
+		copy.guideTop = (top - m.center) / goal
+	end
 	Lay(copy, layout)
 	local P = ns.SetupDrawPlates
 	local share = spec.health or (type(P) == "table" and P.SHARE) or 1
@@ -1434,6 +1759,14 @@ function ns.PlateSlipSample(p, spec, o, on)
 	end
 	local cue = p.slipCue
 	local covered = SampleCopy(p, spec, o, kind, still or not ok or snaps ~= false, still)
+	if p.slipCopy ~= nil then
+		local hide = p.slipCopy.on == true
+		for _, region in ipairs({ p.name or false, p.marker or false, p.tvalue or false }) do
+			if region then
+				Fade(p.f, region, hide and 0 or 1, still)
+			end
+		end
+	end
 	if not kind or covered then
 		if cue then
 			Hide(cue, true)
@@ -1447,6 +1780,7 @@ function ns.PlateSlipSample(p, spec, o, on)
 	Ring(cue, p.bar, o.levelSquare and p.lvl or p.bar)
 	local m = p.m
 	if type(m) == "table" and ns.Finite(m.top) and ns.Finite(m.BW) then
+		Shape(cue, m.HH)
 		local top = m.top
 		if p.tvalue and p.tvalue:IsShown() and p.tvalueSide == "above" and ns.Finite(p.tvalueT) then
 			top = math.max(top, p.tvalueT)

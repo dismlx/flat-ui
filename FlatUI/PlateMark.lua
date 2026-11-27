@@ -7,14 +7,19 @@ if type(EXTRA) ~= "table" then
 	return
 end
 
-local K = { LEVEL = 9200, MARK = 7800, SAMPLE = 9, RING = 2, GAP = 2, BAND = 3, ROOM = 3, LOOK = 0.05, COLUMNS = 8, TALL = 2.2, SHORT = 16,
-	MOST = 44, WIDE = 0.62, SIZE = 100, SHARP = 1600, STEP = 4, FAINT = 0.05 }
+local K = { LEVEL = 9200, MARK = 8100, SAMPLE = 9, COPY = 10, RING = 2, GAP = 2, BAND = 3, ROOM = 3, LOOK = 0.05, COLUMNS = 8, TALL = 2.2, SHORT = 16,
+	MOST = 44, WIDE = 0.62, SIZE = 100, SHARP = 1600, STEP = 4, FAINT = 0.05, SLIDE = 8, SLIDE_SECONDS = 0.15, BOB = 2, BOB_SECONDS = 0.55, LOW = 20 }
 local GLOW = { 0.62, 0.45, 0.32, 0.21, 0.13, 0.07, 0.03 }
 local SHADE = { 0, 0, 0, 0.75 }
 local STRATA = { BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8 }
 
 local owns = setmetatable({}, { __mode = "k" })
-local S = { on = false, target = nil, mark = nil, ext = nil, look = 0, styled = false, running = false, marked = 0 }
+local S = { on = false, running = false }
+local SLOTS = {
+	{ unit = "target", colour = "targetMarkColour", sample = "targetMark", rise = 0, look = 0, styled = false, marked = 0 },
+	{ unit = "focus", colour = "focusColour", sample = "focusMark", rise = -5, look = 0, styled = false, marked = 0 },
+}
+local CURVES = {}
 local driver
 
 local function Opt(key)
@@ -142,18 +147,61 @@ function ns.PlateMarkPx()
 	return MarkPx()
 end
 
+local function Playing(group)
+	if not group then
+		return false
+	end
+	local ok, playing = pcall(group.IsPlaying, group)
+	return ok and playing == true
+end
+
+local function Motion(arrow)
+	local sign = arrow.side == 2 and -1 or 1
+	local frame = arrow.frame
+	local come = Own(frame:CreateAnimationGroup())
+	local out = Own(come:CreateAnimation("Translation"))
+	out:SetOffset(-sign * K.SLIDE, 0)
+	out:SetDuration(0)
+	out:SetOrder(1)
+	local slide = Own(come:CreateAnimation("Translation"))
+	slide:SetOffset(sign * K.SLIDE, 0)
+	slide:SetDuration(K.SLIDE_SECONDS)
+	slide:SetOrder(2)
+	pcall(slide.SetSmoothing, slide, "OUT")
+	local bob = Own(frame:CreateAnimationGroup())
+	bob:SetLooping("BOUNCE")
+	local push = Own(bob:CreateAnimation("Translation"))
+	push:SetOffset(sign * K.BOB, 0)
+	push:SetDuration(K.BOB_SECONDS)
+	pcall(push.SetSmoothing, push, "IN_OUT")
+	come:SetScript("OnFinished", function()
+		if arrow.moving then
+			pcall(bob.Play, bob)
+		end
+	end)
+	arrow.come, arrow.bob = come, bob
+end
+
 local function Arrow(root, side)
 	local frame = Own(CreateFrame("Frame", nil, root))
 	Call(frame, "EnableMouse", false)
-	local arrow = { frame = frame, side = side, pieces = {}, shades = {} }
+	local arrow = { frame = frame, side = side, pieces = {}, lows = {}, shades = {} }
+	arrow.normal, arrow.low = Own(CreateFrame("Frame", nil, frame)), Own(CreateFrame("Frame", nil, frame))
+	for _, layer in ipairs({ arrow.normal, arrow.low }) do
+		Call(layer, "EnableMouse", false)
+		layer:SetAllPoints(frame)
+	end
+	arrow.low:SetAlpha(0)
 	for index = 1, K.COLUMNS + 2 do
 		local shade = Unsnap(Own(frame:CreateTexture(nil, "BORDER")))
 		shade:SetColorTexture(SHADE[1], SHADE[2], SHADE[3], SHADE[4])
 		arrow.shades[index] = shade
 		if index <= K.COLUMNS then
-			arrow.pieces[index] = Unsnap(Own(frame:CreateTexture(nil, "ARTWORK")))
+			arrow.pieces[index] = Unsnap(Own(arrow.normal:CreateTexture(nil, "ARTWORK")))
+			arrow.lows[index] = Unsnap(Own(arrow.low:CreateTexture(nil, "ARTWORK")))
 		end
 	end
+	pcall(Motion, arrow)
 	return arrow
 end
 
@@ -177,9 +225,11 @@ local function Shape(arrow, wide, tall)
 		high = math.max(px, tall * (count - index + 1) / count)
 		local x = sign * (px + (index - 1) * column)
 		local piece, shade = arrow.pieces[index], arrow.shades[index]
-		piece:ClearAllPoints()
-		piece:SetPoint(point, frame, point, x, 0)
-		piece:SetSize(column, high)
+		for _, art in ipairs({ piece, arrow.lows[index] }) do
+			art:ClearAllPoints()
+			art:SetPoint(point, frame, point, x, 0)
+			art:SetSize(column, high)
+		end
 		shade:ClearAllPoints()
 		shade:SetPoint(point, frame, point, x, 0)
 		shade:SetSize(column, high + 2 * px)
@@ -241,6 +291,15 @@ local function Rings(mark, from, unit)
 end
 
 local function Colours(mark, r, g, b)
+	local lr, lg, lb = ns.Colour(KEY .. ".lowHealthColour")
+	if mark.lr ~= lr or mark.lg ~= lg or mark.lb ~= lb then
+		mark.lr, mark.lg, mark.lb = lr, lg, lb
+		for _, arrow in ipairs(mark.arrows) do
+			for _, piece in ipairs(arrow.lows) do
+				piece:SetColorTexture(lr, lg, lb, 1)
+			end
+		end
+	end
 	if mark.r == r and mark.g == g and mark.b == b then
 		return
 	end
@@ -257,8 +316,8 @@ local function Colours(mark, r, g, b)
 	end
 end
 
-local function Look(mark, ring)
-	local r, g, b = ns.Colour(KEY .. ".targetMarkColour")
+local function Look(mark, ring, colour)
+	local r, g, b = ns.Colour(KEY .. "." .. (colour or "targetMarkColour"))
 	ns.SetOutlineThickness(mark.outline, MarkPx())
 	ns.SetOutlineColour(mark.outline, r, g, b)
 	Colours(mark, r, g, b)
@@ -293,8 +352,9 @@ local function Layer(mark, strata, level)
 	end
 	mark.strata, mark.level = strata, level
 	local outline = mark.outline
-	local list = { mark.root, mark.box, outline and outline.holder or false, mark.arrows[1].frame, mark.arrows[2].frame }
-	local rise = { 0, 0, 1, 2, 2 }
+	local first, second = mark.arrows[1], mark.arrows[2]
+	local list = { mark.root, mark.box, outline and outline.holder or false, first.frame, second.frame, first.normal, first.low, second.normal, second.low }
+	local rise = { 0, 0, 1, 2, 2, 3, 3, 3, 3 }
 	for index, region in ipairs(list) do
 		if region then
 			if strata then
@@ -422,9 +482,93 @@ local function Aim(mark, ext, left, right, mid, tall, ratio)
 	Pin(second, second.frame, "LEFT", right + reachRight + mark.gap, mid)
 end
 
-local function Follow(unitFrame, mark, elapsed)
+local function Curves()
+	local at = Opt("lowHealthAt")
+	at = ns.Finite(at) and math.max(0, math.min(100, at)) or K.LOW
+	if CURVES.at ~= at then
+		CURVES.at, CURVES.low, CURVES.high = at, nil, nil
+		pcall(function()
+			local low, high = C_CurveUtil.CreateCurve(), C_CurveUtil.CreateCurve()
+			low:SetType(Enum.LuaCurveType.Step)
+			low:AddPoint(0, 1)
+			low:AddPoint(at / 100, 0)
+			high:SetType(Enum.LuaCurveType.Step)
+			high:AddPoint(0, 0)
+			high:AddPoint(at / 100, 1)
+			CURVES.low, CURVES.high = low, high
+		end)
+	end
+	return CURVES.low, CURVES.high
+end
+
+local function Number(value)
+	return ns.IsSecret(value) or type(value) == "number"
+end
+
+local function Tone(mark, low, high)
+	for _, arrow in ipairs(mark.arrows) do
+		pcall(arrow.low.SetAlpha, arrow.low, low)
+		pcall(arrow.normal.SetAlpha, arrow.normal, high)
+	end
+end
+
+local function Low(mark, unit)
+	local low, high = 0, 1
+	if mark.arrowsOn and Opt("targetArrowsLow") == true then
+		local lowCurve, highCurve = Curves()
+		if lowCurve and highCurve then
+			local okLow, a = pcall(UnitHealthPercent, unit, true, lowCurve)
+			local okHigh, b = pcall(UnitHealthPercent, unit, true, highCurve)
+			if okLow and okHigh and Number(a) and Number(b) then
+				low, high = a, b
+			end
+		end
+	end
+	Tone(mark, low, high)
+end
+
+local function Move(mark, fresh, still)
+	local on = mark.arrowsOn == true and Opt("targetArrowsMove") == true and not still
+	for _, arrow in ipairs(mark.arrows) do
+		local come, bob = arrow.come, arrow.bob
+		if come and bob then
+			if not on then
+				if arrow.moving then
+					arrow.moving = false
+					pcall(come.Stop, come)
+					pcall(bob.Stop, bob)
+				end
+			elseif fresh then
+				arrow.moving = true
+				pcall(bob.Stop, bob)
+				pcall(come.Stop, come)
+				pcall(come.Play, come)
+			elseif not arrow.moving then
+				arrow.moving = true
+				if not Playing(come) then
+					pcall(bob.Play, bob)
+				end
+			end
+		end
+	end
+end
+
+local function Copied(unitFrame)
+	if type(ns.PlateSlipCopy) ~= "function" then
+		return nil
+	end
+	local ok, _, bar, beside = pcall(ns.PlateSlipCopy, unitFrame)
+	if ok and type(bar) == "table" and type(beside) == "table" and ns.Finite(beside.l) and ns.Finite(beside.r) then
+		return bar, beside
+	end
+	return nil
+end
+
+local function Follow(slot, elapsed)
+	local unitFrame, mark = slot.frame, slot.mark
 	local root = mark.root
-	local bar = Bar(unitFrame)
+	local copy, beside = Copied(unitFrame)
+	local bar = copy or Bar(unitFrame)
 	local x, y, w, h, scale = Screen(bar)
 	local base = Read(UIParent, "GetEffectiveScale")
 	if x == nil or w <= 0 or h <= 0 or not (ns.Finite(base) and base > 0) or Read(bar, "IsVisible") ~= true then
@@ -433,19 +577,29 @@ local function Follow(unitFrame, mark, elapsed)
 	end
 	local height = h / base
 	local tall = Tall(height)
-	S.look = S.look - (ns.Finite(elapsed) and elapsed or 0)
-	if S.ext == nil or S.look <= 0 then
-		S.look = K.LOOK
-		S.styled = Styled(unitFrame)
-		S.ext = Scan(unitFrame, x, y, w, scale, tall * base / 2)
-		Layer(mark, StrataOf(unitFrame), K.MARK)
-		Look(mark, RingOn(unitFrame))
+	slot.look = slot.look - (ns.Finite(elapsed) and elapsed or 0)
+	if slot.ext == nil or slot.look <= 0 or slot.copied ~= (copy ~= nil) then
+		slot.look = K.LOOK
+		slot.copied = copy ~= nil
+		slot.styled = Styled(unitFrame)
+		if copy == nil then
+			slot.ext = Scan(unitFrame, x, y, w, scale, tall * base / 2)
+		end
+		Layer(mark, StrataOf(unitFrame), K.MARK + slot.rise)
+		Look(mark, RingOn(unitFrame), slot.colour)
+		Low(mark, slot.unit)
+		Move(mark, false)
 	end
-	if not S.styled then
+	if copy ~= nil then
+		local ext = slot.copyExt or {}
+		ext.l, ext.r, ext.edge = beside.l, beside.r, 0
+		slot.copyExt, slot.ext = ext, ext
+	end
+	if not slot.styled then
 		root:Hide()
 		return
 	end
-	local ext, at, ratio = S.ext, mark.at, scale / base
+	local ext, at, ratio = slot.ext, mark.at, scale / base
 	local left, right = (x - w / 2) / base, (x + w / 2) / base
 	local width = right - left + ext.edge * ratio
 	Pin(at, mark.box, "BOTTOMLEFT", left, (y - h / 2) / base)
@@ -472,22 +626,43 @@ local function Stop()
 	S.running = false
 end
 
-local function Hide()
-	if S.mark then
-		S.mark.root:Hide()
+local function Hide(slot)
+	local mark = slot.mark
+	if mark then
+		mark.root:Hide()
+		Move(mark, false, true)
 	end
-	S.target, S.ext = nil, nil
+	slot.frame, slot.ext = nil, nil
+	for _, other in ipairs(SLOTS) do
+		if other.frame ~= nil then
+			return
+		end
+	end
 	Stop()
 end
 
-local function Tick(_, elapsed)
-	local target, mark = S.target, S.mark
-	if target == nil or mark == nil or not S.on then
-		Stop()
-		return
+local function HideAll()
+	for _, slot in ipairs(SLOTS) do
+		pcall(Hide, slot)
 	end
-	if ns.Forbidden(target) or not ns.EachPart(KEY, PART, Follow, target, mark, elapsed) then
-		pcall(Hide)
+end
+
+local function Tick(_, elapsed)
+	local any = false
+	if S.on then
+		for _, slot in ipairs(SLOTS) do
+			local frame = slot.frame
+			if frame ~= nil and slot.mark ~= nil then
+				if ns.Forbidden(frame) or not ns.EachPart(KEY, PART, Follow, slot, elapsed) then
+					pcall(Hide, slot)
+				else
+					any = true
+				end
+			end
+		end
+	end
+	if not any then
+		Stop()
 	end
 end
 
@@ -502,54 +677,85 @@ local function Run()
 	end
 end
 
-local function Mark()
-	if S.mark == nil then
+local function Mark(slot)
+	if slot.mark == nil then
 		local mark = Build(UIParent)
 		mark.root:SetSize(1, 1)
 		mark.root:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 		mark.root:Hide()
-		S.mark = mark
+		slot.mark = mark
 	end
-	return S.mark
+	return slot.mark
 end
 
-local function Update()
-	local target = S.on and type(ns.PlateUnitFrame) == "function" and ns.PlateUnitFrame("target") or nil
-	if target == nil or ns.Forbidden(target) or not Styled(target) then
-		Hide()
+local function Want(slot)
+	if not S.on or type(ns.PlateUnitFrame) ~= "function" then
+		return nil
+	end
+	local frame = ns.PlateUnitFrame(slot.unit)
+	if frame ~= nil and slot.unit == "focus" and (Opt("focusMark") ~= true or frame == ns.PlateUnitFrame("target")) then
+		return nil
+	end
+	return frame
+end
+
+local function Update(slot)
+	local frame = Want(slot)
+	if frame == nil or ns.Forbidden(frame) or not Styled(frame) then
+		Hide(slot)
 		return
 	end
-	local mark = Mark()
-	if S.target ~= target then
-		S.marked = S.marked + 1
+	local mark = Mark(slot)
+	local fresh = slot.frame ~= frame
+	if fresh then
+		slot.marked = slot.marked + 1
 	end
-	S.target, S.ext, S.look = target, nil, 0
-	Follow(target, mark, 0)
+	slot.frame, slot.ext, slot.look = frame, nil, 0
+	Follow(slot, 0)
+	if fresh then
+		Move(mark, true)
+	end
 	Run()
+end
+
+local function UpdateAll()
+	for _, slot in ipairs(SLOTS) do
+		Update(slot)
+	end
 end
 
 local function Sync()
 	S.on = Wanted()
 	if not S.on then
-		Hide()
+		HideAll()
 		return
 	end
-	Update()
+	UpdateAll()
 end
 
 ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
-	ns.EachPart(KEY, PART, Update)
+	ns.EachPart(KEY, PART, UpdateAll)
+end)
+ns.AddEvent(KEY, "PLAYER_FOCUS_CHANGED", function()
+	ns.EachPart(KEY, PART, Update, SLOTS[2])
 end)
 ns.AddEvent(KEY, "RAID_TARGET_UPDATE", function()
-	S.look = 0
+	for _, slot in ipairs(SLOTS) do
+		slot.look = 0
+	end
 end)
 
 EXTRA.show[#EXTRA.show + 1] = function(unitFrame, own)
 	if type(own) == "table" then
 		owns[unitFrame] = own
 	end
-	if S.on and (S.target == unitFrame or ns.PlateUnitFrame("target") == unitFrame) then
-		ns.EachPart(KEY, PART, Update)
+	if not S.on then
+		return
+	end
+	for _, slot in ipairs(SLOTS) do
+		if slot.frame == unitFrame or ns.PlateUnitFrame(slot.unit) == unitFrame then
+			ns.EachPart(KEY, PART, Update, slot)
+		end
 	end
 end
 EXTRA.layout[#EXTRA.layout + 1] = function(unitFrame, own)
@@ -559,22 +765,26 @@ EXTRA.layout[#EXTRA.layout + 1] = function(unitFrame, own)
 	if not S.on then
 		return
 	end
-	if S.target == unitFrame then
-		S.look = 0
-	elseif S.target == nil and ns.PlateUnitFrame("target") == unitFrame then
-		ns.EachPart(KEY, PART, Update)
+	for _, slot in ipairs(SLOTS) do
+		if slot.frame == unitFrame then
+			slot.look = 0
+		elseif slot.frame == nil and ns.PlateUnitFrame(slot.unit) == unitFrame then
+			ns.EachPart(KEY, PART, Update, slot)
+		end
 	end
 end
 EXTRA.leave[#EXTRA.leave + 1] = function(unitFrame)
-	if S.target == unitFrame then
-		pcall(Hide)
+	for _, slot in ipairs(SLOTS) do
+		if slot.frame == unitFrame then
+			pcall(Hide, slot)
+		end
 	end
 end
 EXTRA.refresh[#EXTRA.refresh + 1] = function()
 	local ok = ns.EachPart(KEY, PART, Sync)
 	if not ok and (ns.PartStopped(KEY, PART) or not ns.Enabled(KEY)) then
 		S.on = false
-		pcall(Hide)
+		HideAll()
 	end
 end
 
@@ -582,48 +792,20 @@ EXTRA.status[#EXTRA.status + 1] = function()
 	if Opt("targetMark") ~= true then
 		return nil
 	end
+	local target, focus = SLOTS[1], SLOTS[2]
 	local now = "off"
 	if S.on then
-		now = S.target and "on, following your target's nameplate" or "on, no target nameplate in view"
+		now = target.frame and "on, following your target's nameplate" or "on, no target nameplate in view"
 	end
-	return ("Target mark: %s, %d targets marked so far, in a fight too."):format(now, S.marked)
+	local line = ("Target mark: %s, %d targets marked so far"):format(now, target.marked)
+	if Opt("focusMark") == true then
+		line = line .. (", %d focuses marked"):format(focus.marked)
+	end
+	return line .. ", in a fight too."
 end
 
-function ns.PlateMarkSample(p, spec, o, m)
-	if type(p) ~= "table" or type(spec) ~= "table" or type(o) ~= "table" or type(m) ~= "table" or type(p.f) ~= "table" then
-		return
-	end
-	local mark = p.targetMark
-	local on = spec.target == true and o.styled == true and Opt("targetMark") == true
-	if not on then
-		if mark then
-			mark.root:Hide()
-		end
-		return
-	end
+local function SampleSpan(p, o, m)
 	local P = ns.SetupDrawPlates
-	if mark == nil then
-		local outlineOf = type(P) == "table" and type(P.Outline) == "function" and function(box)
-			return P.Outline(p.S, box, box)
-		end or nil
-		mark = Build(p.f, outlineOf)
-		mark.root:SetAllPoints(p.f)
-		p.targetMark = mark
-	end
-	Layer(mark, nil, p.bar:GetFrameLevel() + K.SAMPLE)
-	local box = mark.box
-	box:ClearAllPoints()
-	box:SetPoint("LEFT", p.bar, "LEFT", 0, 0)
-	box:SetPoint("TOP", p.bar, "TOP", 0, 0)
-	box:SetPoint("BOTTOM", p.bar, "BOTTOM", 0, 0)
-	box:SetPoint("RIGHT", o.levelSquare and p.lvl or p.bar, "RIGHT", 0, 0)
-	Look(mark, Ringed() and p.ringShown == true)
-	mark.root:SetAlpha(1)
-	mark.root:Show()
-	if not mark.arrowsOn or type(P) ~= "table" or type(P.Put) ~= "function" then
-		return
-	end
-	local first, second = mark.arrows[1], mark.arrows[2]
 	local icon = p.iconFrame and p.iconFrame:IsShown()
 	local shift = ns.Finite(m.iconShift) and m.iconShift or 0
 	local lo = -shift
@@ -664,15 +846,76 @@ function ns.PlateMarkSample(p, spec, o, m)
 	if quest and ns.Finite(p.questR) then
 		hi = math.max(hi, p.questR)
 	end
-	local tall = Tall(m.HH)
+	return lo, hi, right
+end
+
+local function SampleMark(p, slot, on, spec, o, m)
+	local mark = p[slot.sample]
+	if not on then
+		if mark then
+			mark.root:Hide()
+			Move(mark, false, true)
+		end
+		return
+	end
+	local P = ns.SetupDrawPlates
+	if mark == nil then
+		local outlineOf = type(P) == "table" and type(P.Outline) == "function" and function(box)
+			return P.Outline(p.S, box, box)
+		end or nil
+		mark = Build(p.f, outlineOf)
+		mark.root:SetAllPoints(p.f)
+		p[slot.sample] = mark
+	end
+	local copy = p.slipCopy
+	local copied = type(copy) == "table" and copy.on == true and type(copy.beside) == "table" and ns.Finite(copy.goal) and ns.Finite(copy.level)
+	local bar = copied and copy.bar or p.bar
+	Layer(mark, nil, copied and copy.level + K.COPY or p.bar:GetFrameLevel() + K.SAMPLE)
+	local box = mark.box
+	box:ClearAllPoints()
+	box:SetPoint("LEFT", bar, "LEFT", 0, 0)
+	box:SetPoint("TOP", bar, "TOP", 0, 0)
+	box:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
+	box:SetPoint("RIGHT", copied and bar or (o.levelSquare and p.lvl or p.bar), "RIGHT", 0, 0)
+	Look(mark, Ringed() and p.ringShown == true, slot.colour)
+	mark.root:SetAlpha(1)
+	mark.root:Show()
+	local share = spec.health or (type(P) == "table" and P.SHARE) or 1
+	local at = Opt("lowHealthAt")
+	local red = mark.arrowsOn and Opt("targetArrowsLow") == true and ns.Finite(share) and ns.Finite(at) and share * 100 < at
+	Tone(mark, red and 1 or 0, red and 0 or 1)
+	if not mark.arrowsOn or type(P) ~= "table" or type(P.Put) ~= "function" then
+		Move(mark, false, true)
+		return
+	end
+	Move(mark, false, type(P.Still) == "function" and P.Still(p) == true)
+	local first, second = mark.arrows[1], mark.arrows[2]
+	local lo, hi, left, right, tall
+	if copied then
+		local f, beside, half = copy.goal, copy.beside, m.HW / 2
+		left, right = half - half * f, half + half * f
+		lo, hi, tall = left - beside.l * f, right + beside.r * f, Tall(m.HH * f)
+	else
+		lo, hi, right = SampleSpan(p, o, m)
+		left, tall = 0, Tall(m.HH)
+	end
 	local fw, fh = Shape(first, tall * K.WIDE, tall)
 	Shape(second, tall * K.WIDE, tall)
-	P.Put(p, first.frame, "RIGHT", math.min(lo, -mark.outer) - mark.gap, m.center, fw, fh)
+	P.Put(p, first.frame, "RIGHT", math.min(lo, left - mark.outer) - mark.gap, m.center, fw, fh)
 	P.Put(p, second.frame, "LEFT", math.max(hi, right + mark.outer) + mark.gap, m.center, fw, fh)
 end
 
-function ns.PlateMarkShown(p)
-	local mark = type(p) == "table" and p.targetMark or nil
+function ns.PlateMarkSample(p, spec, o, m)
+	if type(p) ~= "table" or type(spec) ~= "table" or type(o) ~= "table" or type(m) ~= "table" or type(p.f) ~= "table" then
+		return
+	end
+	local styled = o.styled == true and Opt("targetMark") == true
+	SampleMark(p, SLOTS[1], styled and spec.target == true, spec, o, m)
+	SampleMark(p, SLOTS[2], styled and spec.focus == true and spec.target ~= true and Opt("focusMark") == true, spec, o, m)
+end
+
+function ns.PlateMarkShown(p, focus)
+	local mark = type(p) == "table" and p[focus and "focusMark" or "targetMark"] or nil
 	if mark and mark.root:IsShown() then
 		return mark.root
 	end
