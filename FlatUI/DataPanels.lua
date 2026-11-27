@@ -1467,7 +1467,8 @@ function P.Retip(slot)
 	end
 end
 
--- The tooltip of a feed: its OnEnter when it has one, which shows its own, else GameTooltip with the lines of its OnTooltipShow or its tooltip text.
+-- The tooltip of a feed: its OnEnter when it has one, which shows its own, else GameTooltip with the lines of its OnTooltipShow or its tooltip text,
+-- and then a dim line for the slot's menu, which Alt-right-click opens on a feed (P.Click).
 function P.FeedEnter(slot)
 	local name, object = slot.feed, P.FeedObject(slot.feed)
 	if not object then
@@ -1489,6 +1490,7 @@ function P.FeedEnter(slot)
 	else
 		pcall(tip.SetText, tip, P.Text(P.Field(object, "tooltiptext")) or P.Text(P.Field(object, "label")) or name, 1, 1, 1, 1, true)
 	end
+	pcall(tip.AddLine, tip, "Alt-right-click: choose what this slot shows.", DIM_RGB[1], DIM_RGB[2], DIM_RGB[3])
 	pcall(tip.Show, tip)
 end
 
@@ -1537,9 +1539,15 @@ end
 -- A click on a slot: a feed's own OnClick, with the slot and the button, or the Click of a stream of Flat UI's own that has one (Equipment set, Bag
 -- space, Time, Coordinates, Quest log, Experience, Reputation, Friends, Guild, Durability), with the slot and the button. A right click on a slot
 -- of Flat UI's own opens the slot's menu of what it shows (P.SlotMenu, below), or closes it when it is open; another menu open on the slot
--- closes first. Any other click on a slot of Flat UI's own does nothing.
+-- closes first. On a feed, whose clicks are its own, Alt-right-click does that (a plain right click still goes to the feed), and any other
+-- click closes the slot's menu before it goes on to the feed. Any other click on a slot of Flat UI's own does nothing.
 function P.Click(slot, button)
-	if not slot.feed then
+	local alt = false
+	if slot.feed and button == "RightButton" and type(IsAltKeyDown) == "function" then
+		local ok, down = pcall(IsAltKeyDown)
+		alt = ok and not ns.IsSecret(down) and down == true
+	end
+	if not slot.feed or alt then
 		local stream = P.StreamOf(slot.id)
 		if button == "RightButton" and stream then
 			if P.MenuOpen(slot) and P.menu.stream == P.SLOT_MENU then
@@ -1550,6 +1558,15 @@ function P.Click(slot, button)
 			if Owned(slot) then
 				pcall(_G.GameTooltip.Hide, _G.GameTooltip)
 			end
+			-- A feed's own tooltip, from its OnEnter, goes as it would when the mouse leaves.
+			local entered = slot.entered
+			if entered then
+				slot.entered = nil
+				local leave = P.Field(entered, "OnLeave")
+				if type(leave) == "function" then
+					P.Call(slot.feed or "", leave, slot.frame)
+				end
+			end
 			P.SlotMenu(slot)
 			return
 		end
@@ -1557,6 +1574,9 @@ function P.Click(slot, button)
 			P.Run(stream, stream.Click, slot, button)
 		end
 		return
+	end
+	if P.MenuOpen(slot) then
+		P.CloseMenu()
 	end
 	local object = P.FeedObject(slot.feed)
 	local click = object and P.Field(object, "OnClick")
@@ -1811,7 +1831,7 @@ function P.OpenMenu(slot, stream, title, items)
 	return true
 end
 
--- The menu of a slot: a right click on a slot of Flat UI's own opens it, titled with the panel and the slot ("Top panel, third slot"). It lists
+-- The menu of a slot: a right click on a slot of Flat UI's own opens it, or Alt-right-click on another addon's feed, titled with the panel and the slot ("Top panel, third slot"). It lists
 -- None, every stream and the feeds, as the slot's row on the options page does (ns.DataPanelChoices), the one the slot shows now in gold with a
 -- tick, which does nothing; a pick sets the slot's row (ns.Set, and Home's Recent changes as for a change on the page, so Ctrl+Z and the reset
 -- arrow take it back) and the module's refresh draws the panel again. A stream of Flat UI's own that shows nothing for this character now (its
