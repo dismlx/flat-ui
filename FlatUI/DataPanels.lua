@@ -1289,7 +1289,8 @@ end
 -- after FLOAT.fade, as the bag window's footer does (GoldFloat, BagsWindow.lua). It is a frame, a font string and an animation group of the
 -- slot's own, made the first time, in the panels' face, size and outline; a change that comes while one plays adds to it and starts it again,
 -- so a Sell junk pass or a pack's loot reads as one growing sum. It hides with the slot. The gold stream calls it on PLAYER_MONEY, never at
--- login, after a loading screen or in test mode (DataStreams.lua).
+-- login, after a loading screen or in test mode (DataStreams.lua); in test mode, while its Moving is on, the module's Tick floats a sample
+-- instead, "+38s 2c" and then "-1g 4s" every 5 seconds (at the end of this file).
 local FLOAT = { rise = 10, seconds = 1.2, fade = 0.6 }
 
 local function MakeFloat(slot)
@@ -2172,7 +2173,15 @@ ns.Register(KEY, {
 	},
 })
 
--- Test mode: On, Off and a pause refresh the page, so an empty slot shows its stream's sample while it is on (P.TextOf) and goes after.
+-- Test mode: On, Off and a pause refresh the page, so an empty slot shows its stream's sample while it is on (P.TextOf) and goes after. While
+-- its Moving is on, a shown Gold slot floats a sample change every SAMPLE_GOLD seconds, a gain and then a loss in turn (P.Float); the money and
+-- the session count are left alone, and a real change floats nothing then (DataStreams.lua).
 if ns.TestMode then
-	ns.TestMode.Register("datapanels", { module = KEY, label = "Data panels", refresh = true })
+	local SAMPLE_GOLD, GAIN, LOSS = 5, 3802, -10400
+	local loss = false
+	ns.TestMode.Register("datapanels", { module = KEY, label = "Data panels", refresh = true,
+		every = SAMPLE_GOLD, Tick = function()
+			P.Float("gold", loss and LOSS or GAIN)
+			loss = not loss
+		end })
 end
