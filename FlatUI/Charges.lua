@@ -2,8 +2,8 @@ local _, ns = ...
 
 local KEY = "charges"
 local MOVER = "FlatUICharges"
-local SPOT_Y = -100
-local REREAD, EARLY, FRESH = 0.05, 0.3, 0.5
+local SPOT_Y = -200
+local REREAD, EARLY, FRESH, CAST = 0.05, 0.3, 0.5, 1
 local TEST_TIME, PREVIEW = 8, 7
 local DEFAULT_TOP, MOST_TOP = 3, 99
 local MOST_ADDED, MAX_ID = 40, 2147483647
@@ -360,9 +360,9 @@ function C.Remember(d, top)
 	end
 end
 
-local function NewCast(d, st)
+local function NewCast(d, st, now)
 	if not d.up then
-		return true
+		return st.expires ~= nil and st.length ~= nil and st.length > 0 and now - (st.expires - st.length) < CAST
 	elseif st.instance and d.instance and st.instance ~= d.instance then
 		return true
 	end
@@ -370,12 +370,15 @@ local function NewCast(d, st)
 end
 
 function C.Up(d, st, now)
-	local fresh = NewCast(d, st)
+	local fresh = NewCast(d, st, now)
 	local top = d.top or d.memory or DEFAULT_TOP
+	if not d.up then
+		top = d.memory or st.count or top
+	end
 	if st.count then
 		top = fresh and st.count or math.max(top, st.count)
 		top = math.min(top, MOST_TOP)
-		if top ~= d.memory then
+		if top ~= d.memory and not C.sample then
 			C.Remember(d, top)
 		end
 	end
@@ -406,7 +409,7 @@ end
 function C.Down(d, now, silent)
 	if d.up and d.mode == "read" then
 		local left = d.expires and d.expires - now or nil
-		if not (silent or C.quiet) and d.lastCount and (left == nil or left > EARLY) then
+		if not (silent or C.quiet) and d.lastCount == 1 and (left == nil or left > EARLY) then
 			C.Sound()
 		end
 		L.Gone(d, now, not (silent or C.quiet))
@@ -440,7 +443,11 @@ end
 
 function C.Known(family)
 	for _, id in ipairs(family.ids) do
-		if Ask(IsPlayerSpell, id) == true then
+		local known = type(C_SpellBook) == "table" and Ask(C_SpellBook.IsSpellKnown, id) or nil
+		if type(known) ~= "boolean" then
+			known = Ask(IsPlayerSpell, id)
+		end
+		if known == true then
 			return true
 		end
 	end
@@ -532,7 +539,14 @@ function C.Queue()
 end
 
 local function Visible(d)
-	return d.shown or d.fading ~= nil or (d.mode == "hidden" and d.held)
+	if d.mode == "hidden" then
+		return d.held and true or false
+	end
+	return d.shown or d.fading ~= nil
+end
+
+local function Spare(d)
+	return d.mode == "hidden" and not d.up
 end
 
 function C.Layout()
@@ -549,16 +563,30 @@ function C.Layout()
 		return a.family.order < b.family.order
 	end)
 	local gap = L.Number("orbSize", 12) * 0.6 + 6
-	local total = -gap
+	local total, kept = -gap, 0
 	for _, d in ipairs(list) do
-		total = total + d.w + gap
+		if not Spare(d) then
+			total = total + d.w + gap
+			kept = kept + 1
+		end
 	end
 	local x = -total / 2
 	for _, d in ipairs(list) do
-		pcall(d.frame.ClearAllPoints, d.frame)
-		pcall(d.frame.SetPoint, d.frame, "CENTER", C.holder, "CENTER", x + d.w / 2, -d.cy)
-		x = x + d.w + gap
+		if not Spare(d) then
+			C.Put(d, x + d.w / 2)
+			x = x + d.w + gap
+		end
 	end
+	for _, d in ipairs(list) do
+		if Spare(d) then
+			C.Put(d, kept > 0 and x + d.w / 2 or 0)
+		end
+	end
+end
+
+function C.Put(d, x)
+	pcall(d.frame.ClearAllPoints, d.frame)
+	pcall(d.frame.SetPoint, d.frame, "CENTER", C.holder, "CENTER", x, -d.cy)
 end
 
 function C.Step(_, elapsed)
@@ -569,7 +597,7 @@ function C.Step(_, elapsed)
 	if C.sample then
 		C.SampleStep(now, elapsed)
 		if C.sample and C.sample.frozen then
-			return
+			elapsed = 0
 		end
 	elseif C.holder:GetAlpha() <= 0 then
 		C.holder:SetScript("OnUpdate", nil)
@@ -578,16 +606,14 @@ function C.Step(_, elapsed)
 	end
 	local busy, relayout = false, false
 	for _, d in ipairs(C.shown) do
-		if d.mode ~= "hidden" or d.gameUp then
-			local wasShown = d.shown
-			local on = L.Tick(d, now, elapsed)
-			busy = busy or on
-			if wasShown and not d.shown then
-				relayout = true
-			end
-			if d.mode == "read" and d.left and d.left <= 0 and not C.sample then
-				C.Queue()
-			end
+		local wasShown = d.shown
+		local on = L.Tick(d, now, elapsed)
+		busy = busy or on
+		if wasShown and not d.shown then
+			relayout = true
+		end
+		if d.mode == "read" and d.left and d.left <= 0 and not C.sample then
+			C.Queue()
 		end
 	end
 	if relayout then
@@ -863,6 +889,13 @@ function C.Test()
 		return
 	end
 	C.Refresh()
+	if C.sample and C.sample.held then
+		print("Charges: test mode already shows the sample.")
+		return
+	elseif C.AnyUp() then
+		print("Charges: the sample shows while no buff with charges is on you.")
+		return
+	end
 	if C.StartSample("slash", TEST_TIME) then
 		print(("Charges: a sample of Lightning Shield for %d seconds, a charge used every 2 seconds."):format(TEST_TIME))
 	end

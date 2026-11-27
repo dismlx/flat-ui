@@ -43,12 +43,12 @@ function G.Formatter()
 	return G.formatter or nil
 end
 
-function G.Seen(rec, on)
-	rec.d.gameUp = on
-	local C = Charges()
-	if on and C and C.Wake then
-		C.Wake()
-	end
+local function Invoke(object, method, ...)
+	return object[method](object, ...)
+end
+
+local function Call(object, method, ...)
+	return pcall(Invoke, object, method, ...)
 end
 
 function G.Quiet(button)
@@ -101,15 +101,6 @@ function G.InitIcon(rec, button)
 	top:SetAllPoints(face)
 	top:SetFrameLevel(face:GetFrameLevel() + 8)
 	G.Texts(rec, button, top)
-	local watch = Own(CreateFrame("Frame", nil, button))
-	watch:SetScript("OnShow", function()
-		G.Seen(rec, true)
-	end)
-	watch:SetScript("OnHide", function()
-		G.Seen(rec, false)
-	end)
-	local ok, shown = pcall(button.IsVisible, button)
-	d.gameUp = not ok or IsSecret(shown) or shown == true
 end
 
 function G.InitOrb(rec, index, button)
@@ -150,7 +141,7 @@ function G.Build(d)
 		return
 	end
 	Own(container)
-	local rec = { d = d, orbs = {}, container = container, Paint = G.Paint, on = true }
+	local rec = { d = d, orbs = {}, container = container, on = true }
 	local made = pcall(function()
 		container:SetEditModePreviewEnabled(false)
 		container:SetUnit("player")
@@ -190,30 +181,48 @@ function G.Paint(d)
 	if not (rec and rec.face) then
 		return
 	end
+	rec.dirty = nil
 	local r, g, b = d.r or 1, d.g or 1, d.b or 1
-	L.PaintFace(rec.face, d.size, r, g, b)
+	pcall(L.PaintFace, rec.face, d.size, r, g, b)
 	local ghosts = L.Opt("ghosts") ~= false
+	local glow = d.orb * ORB_SIZE
 	for index = 1, L.MOST do
 		local ghost = rec.ghosts[index]
-		ghost:SetSize(d.orb * L.GHOST, d.orb * L.GHOST)
-		ghost:SetVertexColor(r, g, b, 0.32)
-		ghost:SetShown(ghosts and index <= d.n)
+		Call(ghost, "SetSize", d.orb * L.GHOST, d.orb * L.GHOST)
+		Call(ghost, "SetVertexColor", r, g, b, 0.32)
+		Call(ghost, "SetShown", ghosts and index <= d.n)
 		local orb = rec.orbs[index]
 		if orb then
-			orb.bar:SetSize(d.orb * ORB_SIZE, d.orb * ORB_SIZE)
-			orb.bar:SetStatusBarColor(r, g, b, 1)
-			orb.bar:SetAlpha(index <= d.n and 1 or 0)
+			Call(orb.bar, "SetSize", glow, glow)
+			Call(orb.bar, "SetStatusBarColor", r, g, b, 1)
+			Call(orb.bar, "SetAlpha", index <= d.n and 1 or 0)
 		end
 	end
 	local percent = math.max(80, math.min(150, d.size / 40 * 100))
 	if rec.time then
-		ns.TextStyle(rec.time, { percent = percent, flags = "OUTLINE" })
-		rec.time:ClearAllPoints()
-		rec.time:SetPoint("TOP", d.frame, "BOTTOM", 0, d.style == "row" and 2 or d.orb * 0.4)
-		rec.time:SetShown(L.Opt("time") ~= false)
+		pcall(ns.TextStyle, rec.time, { percent = percent, flags = "OUTLINE" })
+		Call(rec.time, "ClearAllPoints")
+		Call(rec.time, "SetPoint", "TOP", d.frame, "BOTTOM", 0, d.style == "row" and 2 or d.orb * 0.4)
+		Call(rec.time, "SetShown", L.Opt("time") ~= false)
 	end
 	if rec.number then
-		ns.TextStyle(rec.number, { percent = percent * 1.2, flags = "OUTLINE" })
+		pcall(ns.TextStyle, rec.number, { percent = percent * 1.2, flags = "OUTLINE" })
+	end
+end
+
+function G.Safe()
+	return not InCombatLockdown() and ns.Tracking.Open() == true
+end
+
+function G.Repaint(d)
+	local rec = d.game
+	if not rec then
+		return
+	end
+	if G.Safe() then
+		G.Paint(d)
+	else
+		rec.dirty = true
 	end
 end
 
@@ -245,13 +254,32 @@ function G.Sync()
 		if not wanted[key] then
 			G.Enable(rec, false)
 		end
+		if rec.dirty and G.Safe() then
+			G.Paint(rec.d)
+		end
 	end
 end
 G.tried = {}
 
+function G.Disable()
+	for _, rec in pairs(G.recs) do
+		G.Enable(rec, false)
+	end
+end
+
 function G.Off()
 	for _, rec in pairs(G.recs) do
 		pcall(rec.container.SetAlpha, rec.container, 0)
-		G.Enable(rec, false)
+	end
+	if not InCombatLockdown() then
+		G.Disable()
+	elseif not G.offQueued then
+		G.offQueued = true
+		ns.OutOfCombat(function()
+			G.offQueued = false
+			if not ns.Enabled("charges") then
+				G.Disable()
+			end
+		end)
 	end
 end

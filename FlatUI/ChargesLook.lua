@@ -310,8 +310,9 @@ function L.Paint(d, top)
 	end
 	L.PlaceSpots(d)
 	L.TextLook(d)
-	if d.game then
-		d.game.Paint(d)
+	local game = ns.ChargesGame
+	if d.game and game then
+		game.Repaint(d)
 	end
 	d.painted = true
 end
@@ -562,6 +563,9 @@ function L.Gone(d, now, animate)
 	if animate and not d.fading then
 		for index = 1, math.min(d.lit or 0, d.n) do
 			L.Burst(d, d.orbs[index], now)
+		end
+		if d.pulse and d.orbs[d.pulse] then
+			L.TintOrb(d.orbs[d.pulse], d.r, d.g, d.b)
 		end
 		d.lit = 0
 		d.pulse = nil
