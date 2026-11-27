@@ -15,6 +15,10 @@ local _, ns = ...
 -- game never anchors or colours an action button's count again after its OnLoad (ActionButton.lua:638, 853 and 1742-1743 only), so the anchor it
 -- had is read the first time and put back at Bottom right; the other corners keep that anchor's inset (5 and 5 on the template's buttons,
 -- ActionButtonTemplate.xml:92-96), the count is justified to its side, and it is placed out of combat only, as the hotkey is.
+-- The macro name takes Macro name colour (white by default, through ns.TextStyle as the count, so also in a fight) and Macro name position (Bottom
+-- by default, as the game has it, Top or Centre). The game never anchors or colours the name after its template (ActionButtonTemplate.xml:43-47:
+-- BOTTOM, 2 up, 36 wide and centred), so its anchor is read the first time and put back at Bottom; Top keeps the same inset, and it is placed out of
+-- combat only.
 
 local KEY = "actionbars"
 local POINTS = {
@@ -27,7 +31,7 @@ local JUSTIFY = { topleft = "LEFT", bottomleft = "LEFT", top = "CENTER", center 
 -- above 100% does not fit in it and is not drawn, so those get a box as tall as their text.
 local TEXT_HEIGHT = 10
 local LINE_RANGE = "Hotkey colour: the game withholds the range, so those hotkeys keep the game's colour."
-local LINE_WAIT = "Hotkey and count position: wait for the end of the fight."
+local LINE_WAIT = "Hotkey, macro name and count position: wait for the end of the fight."
 
 local weak = { __mode = "k" }
 -- Per button: { hotFaded, nameFaded = true while faded here, coloured = true while the own colour is set, placed = true while the position is
@@ -45,13 +49,16 @@ local state = { hooked = false, queued = false, place = false, waiting = false, 
 local pending = {}
 local DEFAULTS = {
 	hotkeyText = "game", hotkeyShow = "all", hotkeySize = 100, hotkeyOwn = false, hotkeyPoint = "topright", hotkeyX = 0, hotkeyY = 0,
-	nameShow = "all", nameSize = 100, countSize = 100, countColour = "ffffffff", countPoint = "bottomright", textOutline = "game",
+	nameShow = "all", nameSize = 100, nameColour = "ffffffff", namePoint = "bottom", countSize = 100, countColour = "ffffffff", countPoint = "bottomright",
+	textOutline = "game",
 }
 -- Count position: the point of the button, the signs of the inset across and up, and the justification.
 local COUNT_SPOTS = {
 	bottomright = { "BOTTOMRIGHT", -1, 1, "RIGHT" }, bottomleft = { "BOTTOMLEFT", 1, 1, "LEFT" }, topleft = { "TOPLEFT", 1, -1, "LEFT" },
 	topright = { "TOPRIGHT", -1, -1, "RIGHT" }, bottom = { "BOTTOM", 0, 1, "CENTER" },
 }
+-- Macro name position: the point of the button and the sign of the inset up.
+local NAME_SPOTS = { bottom = { "BOTTOM", 1 }, top = { "TOP", -1 }, center = { "CENTER", 0 } }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -380,6 +387,38 @@ local function PlaceCount(record, button, count, custom, o)
 	end
 end
 
+-- Puts the macro name where Macro name position says, or back where the game had it (Bottom). The game's anchor is read the first time
+-- (record.nameOrig); Top keeps its inset (2 on the template's buttons). Out of combat only.
+local function PlaceName(record, button, name, custom, o)
+	if custom then
+		if record.nameOrig == nil then
+			local ok, p1, rel, p2, x, y = pcall(name.GetPoint, name, 1)
+			if ok and Plain(p1) and type(p1) == "string" and Plain(rel) and Plain(p2) and Plain(x) and Plain(y) then
+				record.nameOrig = { p1, rel, p2, x, y }
+			else
+				record.nameOrig = false
+			end
+		end
+		local orig, iy = record.nameOrig, 2
+		if orig and orig[1] == "BOTTOM" and ns.Finite(orig[5]) then
+			iy = math.abs(orig[5])
+		end
+		local spot = NAME_SPOTS[o.namePoint] or NAME_SPOTS.bottom
+		name:ClearAllPoints()
+		name:SetPoint(spot[1], button, spot[1], 0, spot[2] * iy)
+		record.namePlaced = true
+	elseif record.namePlaced then
+		local orig = record.nameOrig
+		name:ClearAllPoints()
+		if orig then
+			name:SetPoint(orig[1], orig[2] or button, orig[3] or orig[1], orig[4] or 0, orig[5] or 0)
+		else
+			name:SetPoint("BOTTOM", button, "BOTTOM", 0, 2)
+		end
+		record.namePlaced = nil
+	end
+end
+
 -- A size above 100%: the hotkey or the macro name gets a box as tall as its text, and the height it had is kept (record[key]); at 100% that height
 -- goes back. The game sets the hotkey's height again in UpdateHotkeys (UPDATE_BINDINGS), so this runs with the position. Out of combat only.
 local function Tall(record, key, fontString, percent)
@@ -430,11 +469,15 @@ local function Pass()
 	end
 	local flags = Flags(o)
 	local custom = o.hotkeyPoint ~= "topright" or o.hotkeyX ~= 0 or o.hotkeyY ~= 0
-	local countCustom = o.countPoint ~= DEFAULTS.countPoint
-	local countTint = nil
+	local countCustom, nameCustom = o.countPoint ~= DEFAULTS.countPoint, o.namePoint ~= DEFAULTS.namePoint
+	local countTint, nameTint = nil, nil
 	if o.countColour ~= DEFAULTS.countColour then
 		local r, g, b = ns.Colour(KEY .. ".countColour")
 		countTint = { r, g, b }
+	end
+	if o.nameColour ~= DEFAULTS.nameColour then
+		local r, g, b = ns.Colour(KEY .. ".nameColour")
+		nameTint = { r, g, b }
 	end
 	local moduleOn = ns.Enabled(KEY) == true
 	pending = {}
@@ -478,13 +521,21 @@ local function Pass()
 			end
 			if name ~= nil then
 				Fade(record, "nameFaded", name, not nameShown)
-				Style(name, nameOn, o.nameSize, flags)
-				local tall = Big(nameOn, o.nameSize)
-				if placing and (tall or record.nameHeight ~= nil) then
+				local look = nil
+				if nameOn then
+					look = { percent = o.nameSize, flags = flags }
+					if nameTint then
+						look.r, look.g, look.b = nameTint[1], nameTint[2], nameTint[3]
+					end
+				end
+				ns.TextStyle(name, look)
+				local tall, put = Big(nameOn, o.nameSize), styled and nameCustom
+				if placing and (tall or record.nameHeight ~= nil or put or record.namePlaced) then
 					if fight then
 						waits = true
 					else
 						Tall(record, "nameHeight", name, tall and o.nameSize or 100)
+						PlaceName(record, button, name, put, o)
 					end
 				end
 			end
@@ -644,7 +695,7 @@ end
 -- Config changed callback of every row of the Button text page.
 function ns.ButtonTextChanged(path)
 	if type(path) == "string" and (path:find("^" .. KEY .. "%.hotkey[PXY]") or path == KEY .. ".hotkeySize" or path == KEY .. ".nameSize"
-		or path == KEY .. ".hotkeyShow" or path == KEY .. ".nameShow" or path == KEY .. ".countPoint") then
+		or path == KEY .. ".hotkeyShow" or path == KEY .. ".nameShow" or path == KEY .. ".countPoint" or path == KEY .. ".namePoint") then
 		state.place = true
 	end
 	state.dirty = true
