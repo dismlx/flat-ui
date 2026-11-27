@@ -1254,16 +1254,25 @@ end
 -- Your target on party frames ------------------------------------------------------------------------------------------------------------------------
 
 -- The game's classic party frames have no highlight for your target (Mainline/PartyFrameTemplates.xml:79-368). With Border for your target at Own colour
--- each gets an outline of Flat UI's own round the frame (ns.Outline) in the colour of the row, on a frame of its own one level above the game's frame, made
--- and anchored out of combat, under the frame of the dispel border, which calls for action. Whether the member is your target is UnitIsUnit, withheld where
+-- each gets an outline of Flat UI's own round the member's own picture, name row and bars (ns.Outline) in the colour of the row, on a frame of its own one
+-- level above the game's frame, made and anchored out of combat, under the frame of the dispel border, which calls for action. The frame covers what the
+-- range shade covers (X.cover, UnitExtras.lua): in One frame the body, in Separate parts the button down to where the game hangs the pet frame and the
+-- debuff icons, so the outline no longer runs through them; a border thickness and 1 unit further out, so it clears the border of the picture or the
+-- body, and anchored again out of combat after a change of Frame style (after.layout). Whether the member is your target is UnitIsUnit, withheld where
 -- the game restricts the comparison of units (SecretWhenUnitComparisonRestricted, UnitDocumentation.lua:2410-2426): the answer goes to the opacity of that
 -- frame as it is (FromAnswer), on a new target, a change of the group and a new member of the frame. Raid frames show it on their health bar border
 -- (UnitFrames.lua).
+-- The margin of the outline's frame: a border thickness and 1 unit, so the outline, just outside it, clears the border round the picture or the body.
+local function AimMargin(rec)
+	local t = ns.Pixels(rec.frame, ns.Get("general.thickness"))
+	return (ns.Finite(t) and t or 1) + 1
+end
+
 local function MakeAim(rec)
 	local frame = rec.frame
 	local ok, level = pcall(frame.GetFrameLevel, frame)
 	local box = X.frame(frame, ok and X.number(level) and level + 1 or nil)
-	box:SetAllPoints(frame)
+	local placed = X.cover(rec, box, AimMargin(rec))
 	box:SetAlpha(0)
 	local outline = ns.Outline(box, box)
 	if outline == nil then
@@ -1273,8 +1282,17 @@ local function MakeAim(rec)
 	-- The outline of a tool, drawn whatever the borders of the look say, with no background.
 	ns.KeepOutline(outline)
 	ns.SetOutline(outline, true, false)
-	rec.aim = { box = box, outline = outline }
+	rec.aim = { box = box, outline = outline, placed = placed }
 	return rec.aim
+end
+
+-- The layout of a party frame changed, out of combat (UnitFrames.lua Layout): the outline wraps the body again after a change of Frame style or
+-- border thickness.
+local function PlaceAim(rec)
+	local a = rec.aim
+	if a ~= nil then
+		a.placed = X.cover(rec, a.box, AimMargin(rec), a.placed)
+	end
 end
 
 local function Aim(rec, on)
@@ -1413,3 +1431,4 @@ table.insert(X.after.raid, { part = LEADER, fn = Leader })
 table.insert(X.after.picture, { part = MARKER, fn = Follow })
 table.insert(X.after.picture, { part = REZ, fn = FollowRez })
 table.insert(X.after.picture, { part = AFK, fn = FollowAfk })
+table.insert(X.after.layout, { part = AIM, fn = PlaceAim })

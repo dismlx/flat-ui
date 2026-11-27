@@ -2057,7 +2057,7 @@ ns.PAGES = {
 		{ key = "partyPowerText", kind = "choice", default = "game", label = "Power text", choices = ns.TEXT_FORMAT_CHOICES },
 		{ key = "partyPowerBar", kind = "bool", default = true, label = "Power bar" },
 		{ section = "Range" },
-		{ key = "partyRangeDim", kind = "bool", default = false, label = "Dim members out of range", tip = "Also dims a member whose range the game does not report." },
+		{ key = "partyRangeDim", kind = "bool", default = false, label = "Dim members out of range", tip = "Darkens the member's picture, name and bars. Their pet's frame dims by its own range. Also dims a member whose range the game does not report." },
 		{ key = "partyRangeOpacity", kind = "number", default = 50, min = 10, max = 100, step = 5, unit = "%", label = "Out of range opacity", needs = "partyRangeDim" },
 	},
 	{
