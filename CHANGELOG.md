@@ -1,6 +1,11 @@
 ## 0.5.45
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- **/flatui move**: press on empty space and drag to select every box the rectangle touches, but for the boxes of frames the game places. It has a thin accent outline over a faint fill, and the boxes light up as you drag. Shift and drag adds them to the selection, Ctrl and drag takes them away, and a click on empty space lets go of them all. Shift or Ctrl and click on a box, or on a name in the frame list, adds it or takes it away; a plain click still selects one box alone.
+- **/flatui move**: every selected box has the accent outline and every selected frame is marked in the frame list. Drag any of them and the others move with it by the same amount, keeping their places to one another and stopping together at the edge of the screen. With **Snap** on, the box under the mouse snaps and the others follow it. The arrow keys move them all, Shift ten at a time.
+- **/flatui move**: with two or more selected, the inspector reads "3 frames selected" and offers **Align left**, **Align right**, **Align top**, **Align bottom**, **Centre horizontally** and **Centre vertically** (on the middle of the space they cover together). It also has **Distribute across** and **Distribute down** (equal gaps in their order on the screen, with three or more) and **Reset these**.
+- **/flatui move**: each group drag, align, distribute or **Reset these** is one Undo step, and so is a run of arrow presses less than a second apart. Undo and Redo select the frames they put back. Hidden frames, frames not on screen now and frames placed by the game stay put in group moves and in **Reset these**; the inspector says how many, and chat says once which.
+- **/flatui move**: Escape now lets go of the selection first and closes the boxes once nothing is selected. Ctrl and click no longer marks boxes for the lower **Space across** and **Space down** bar, which is gone: **Distribute across** and **Distribute down** in the inspector do the same for the selected frames.
 
 ## 0.5.44
 

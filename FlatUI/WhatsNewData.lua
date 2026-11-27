@@ -3,7 +3,13 @@ local _, ns = ...
 ns.WhatsNewData = {
 	{
 		version = "0.5.45",
-		lines = {},
+		lines = {
+			"\001/flatui move\002: press on empty space and drag to select every box the rectangle touches, but for the boxes of frames the game places. It has a thin accent outline over a faint fill, and the boxes light up as you drag. Shift and drag adds them to the selection, Ctrl and drag takes them away, and a click on empty space lets go of them all. Shift or Ctrl and click on a box, or on a name in the frame list, adds it or takes it away; a plain click still selects one box alone.",
+			"\001/flatui move\002: every selected box has the accent outline and every selected frame is marked in the frame list. Drag any of them and the others move with it by the same amount, keeping their places to one another and stopping together at the edge of the screen. With \001Snap\002 on, the box under the mouse snaps and the others follow it. The arrow keys move them all, Shift ten at a time.",
+			"\001/flatui move\002: with two or more selected, the inspector reads \"3 frames selected\" and offers \001Align left\002, \001Align right\002, \001Align top\002, \001Align bottom\002, \001Centre horizontally\002 and \001Centre vertically\002 (on the middle of the space they cover together). It also has \001Distribute across\002 and \001Distribute down\002 (equal gaps in their order on the screen, with three or more) and \001Reset these\002.",
+			"\001/flatui move\002: each group drag, align, distribute or \001Reset these\002 is one Undo step, and so is a run of arrow presses less than a second apart. Undo and Redo select the frames they put back. Hidden frames, frames not on screen now and frames placed by the game stay put in group moves and in \001Reset these\002; the inspector says how many, and chat says once which.",
+			"\001/flatui move\002: Escape now lets go of the selection first and closes the boxes once nothing is selected. Ctrl and click no longer marks boxes for the lower \001Space across\002 and \001Space down\002 bar, which is gone: \001Distribute across\002 and \001Distribute down\002 in the inspector do the same for the selected frames.",
+		},
 	},
 	{
 		version = "0.5.44",
