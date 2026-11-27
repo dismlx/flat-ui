@@ -735,7 +735,7 @@ function Categories.Unput()
 			end
 		end
 	end
-	if back > 0 then
+	if back > 0 or last.key ~= nil then
 		Request("layout")
 	end
 	return back, last.count, last.key
@@ -1292,7 +1292,10 @@ function ns.BagsPlacedPick(id)
 		Request("layout")
 		return true, "Flat UI: every item placed by hand goes back to its own section. The first line of Items placed by hand brings them back."
 	elseif id == "undo" then
-		local back, total = Categories.Unput()
+		local back, total, key = Categories.Unput()
+		if back > 0 and type(key) == "string" and type(Custom.Took) == "function" then
+			pcall(Custom.Took, "bags", key, nil, nil, "Back")
+		end
 		if back <= 0 then
 			return false, UNDO_SAY.none
 		elseif back < total then
