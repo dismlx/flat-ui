@@ -1,15 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- Flat UI: "FUi" in white on black, over flat health and mana bars.
-       Every edge sits on a 32-unit grid (1 px at 32 px, 2 px at 64 px): pixel-exact at 32 and 64 px.
-       Strokes are 3 cells wide; 4 cells of margin on every side. -->
   <rect width="1024" height="1024" fill="#000000"/>
-  <!-- F: stem, top arm, shorter middle arm -->
   <path d="M128 128H352V224H224V320H320V416H224V640H128Z" fill="#ffffff"/>
-  <!-- U: a 3-cell counter, stepped bottom corners -->
   <path d="M416 128H512V544H608V128H704V608H672V640H448V608H416Z" fill="#ffffff"/>
-  <!-- i: a small i, its square dot three cells below the cap line, two black rows, then a stem half the cap height -->
   <path d="M800 224H896V320H800ZM800 384H896V640H800Z" fill="#ffffff"/>
-  <!-- bars: grey tracks, flat health green (the addon's default) ending under the i, mana blue ending at the U's left stem -->
   <rect x="128" y="736" width="768" height="64" fill="#3a3d46"/>
   <rect x="128" y="736" width="672" height="64" fill="#2eb84d"/>
   <rect x="128" y="832" width="768" height="64" fill="#3a3d46"/>

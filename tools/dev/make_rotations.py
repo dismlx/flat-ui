@@ -1,33 +1,4 @@
 #!/usr/bin/env python3
-"""Makes FlatUI/RotationData.lua, the WoWSims rotations of the gear comparison's Overall line (GearModel.lua's Minute).
-
-Usage: python3 tools/dev/make_rotations.py [--check]
-
-Input: tools/dev/rotations/data.json, what the WoWSims Classic simulator (https://github.com/wowsims/classic, MIT licence, Copyright (c) 2024
-wowsims team; the bear from https://github.com/wowsims/sod, the same licence) does in a 3-minute fight against a level 63 boss with each spec's
-own defaults: each ability's casts a minute (hits a minute for a proc), its share of the player's damage and, for a tank, of the threat, the
-white swings, and the main-hand swings Heroic Strike and Maul take the place of (the licences are beside it). FlatUI/SpellData.lua is read for
-the keys and rank IDs of each class's entries, so an ability is written under the key GearModel.lua finds on a row's line: by its spell ID among
-the ranks of the class's entries (and of every class's: Attack, Auto Shot), else by ALIASES (the sim's names for the procs of a spell and the
-ranks of a poison), else by its own name in lower case. Rows of an item, of the sim's rage and mana bookkeeping, and the queue presses of a
-next-swing strike are left out; so are rows of no entry, which LEAVE names when they deal 1% or more of the damage or threat.
-
-The file: ns.RotationData = { SOURCE, LINK, FIGHT, CLASS }. CLASS[class] = { trees, stand, tank, forms, specs }: trees the spec of each talent
-tree (Core.lua's ns.PlayerTree, the trees in Core.lua's ROLE_TREES order), stand the trees whose spec is another tree's run, tank the spec of a
-tank, forms the spec of a druid form (GetShapeshiftFormID), specs[spec] = { label, from, dps, tps, abilities, swings }. abilities[key] =
-{ m, d, t, p }: m uses a minute (casts, or for p a proc's hits), d the share of damage and t of threat. swings = { mh, oh, extra, timer, next }:
-main-hand and off-hand white swings and extra attacks a minute, timer the main hand's swings a minute with those a next-swing strike took,
-next[key] the share of them that strike took.
-
---check writes nothing and exits 1 on a failed check or when FlatUI/RotationData.lua is not what the input makes; without it the file is
-written only when every check passes, and then luac5.4 -p and tools/dev/lua51_check.py run on it when they are there. The checks: every run
-of SPECS is in the input, with its class and its abilities; every spec PICKS names has a run of that class, and a tree that is no stand-in is
-the tree with the most points of its run's talents (the first of a tie, as Core.lua's MostPoints reads them), or one PICKS names as tied;
-every key written is an entry of the class (or of every class); every share between 0 and 1, and a run's damage shares sum to 1 within 0.02;
-every use a minute 0 or more; each next-swing strike an entry with nx, its share of the swings above 0 and at most 1; every row left out that
-deals 1% or more is in LEAVE; every alias names an entry of the class. Python 3, standard library only; deterministic, so a diff shows real
-changes.
-"""
 import json
 import os
 import re
@@ -45,9 +16,6 @@ SPELLDATA = os.path.join(ROOT, 'FlatUI', 'SpellData.lua')
 OUT = os.path.join(ROOT, 'FlatUI', 'RotationData.lua')
 CLASSES = ('WARRIOR', 'PALADIN', 'HUNTER', 'ROGUE', 'PRIEST', 'SHAMAN', 'MAGE', 'WARLOCK', 'DRUID')
 
-# The runs of data.json Flat UI counts: the class, the spec's name in the file and its label in the player's words. The two preset runs kept
-# for reference (warrior.protection_default_apl, a copy of the Fury list, and shaman.enhancement_default_apl, which never casts Stormstrike)
-# are not rotations to count.
 SPECS = {
     'warrior.arms': ('WARRIOR', 'arms', 'Arms warrior'),
     'warrior.fury': ('WARRIOR', 'fury', 'Fury warrior'),
@@ -67,10 +35,6 @@ SPECS = {
     'druid.feral_bear': ('DRUID', 'bear', 'Feral druid in Bear Form'),
 }
 
-# How GearModel.lua picks the player's run: a druid's form first (GetShapeshiftFormID: cat 1, bear 5, dire bear 8, SpellModel.lua's K.CAT and
-# K.BEARS), then a tank's spec, then the spec of the talent tree with the most points (1 to 3 in Core.lua's ROLE_TREES order). A healer has
-# none, and neither has a tree with none here: the Overall line then gives the even share of the global cooldowns. stand: a tree with no run
-# of its own that takes another tree's, with the reason.
 PICKS = {
     'WARRIOR': {'trees': {1: 'arms', 2: 'fury', 3: 'protection'}, 'tank': 'protection'},
     'PALADIN': {'trees': {2: 'protection', 3: 'retribution'}, 'tank': 'protection'},
@@ -81,14 +45,10 @@ PICKS = {
     'PRIEST': {'trees': {3: 'shadow'}},
     'SHAMAN': {'trees': {1: 'elemental', 2: 'enhancement'}},
     'MAGE': {'trees': {2: 'fire', 3: 'frost'}},
-    # The run's own talents (9/21/21, Demonic Sacrifice and Ruin) have as many points in Demonology as in Destruction, which MostPoints reads as
-    # Demonology, the first of the tie: so tree 2 is its own reading, not a stand-in.
     'WARLOCK': {'trees': {2: 'destruction', 3: 'destruction'}, 'tied': {3: 'the run reads as tree 2, the first of a 21/21 tie'}},
     'DRUID': {'trees': {1: 'balance', 2: 'cat'}, 'tank': 'bear', 'forms': {1: 'cat', 5: 'bear', 8: 'bear'}},
 }
 
-# The sim's names of rows that are no SpellData.lua entry's name, by the entry they belong to: the white swings (Attack), a seal's hits, Holy
-# Shield's block damage, Windfury Weapon's attack, Searing Totem's attacks, and the poisons by their rank's name.
 ALIASES = {
     'main hand': 'attack', 'off hand': 'attack', 'extra attacks': 'attack',
     'seal of command (on-hit)': 'seal of command', 'seal of righteousness (on-hit)': 'seal of righteousness',
@@ -96,7 +56,6 @@ ALIASES = {
     'deadly poison v': 'deadly poison', 'instant poison vi': 'instant poison',
 }
 
-# Rows of no entry that deal 1% or more of a run's damage or threat, and why they are left out.
 LEAVE = {
     'deep wounds': "a talent's bleed after a crit: no spell the player casts, and SpellData.lua has no entry",
     'ignite': "a talent's burn after a fire crit: no spell the player casts, and SpellData.lua has no entry",
@@ -105,7 +64,6 @@ LEAVE = {
     'blessing of sanctuary (block damage)': 'a blessing on the player, not a spell the comparison counts',
 }
 
-# The comparison kinds whose cast is one proc (GearModel.lua's EXPECT.proc, and a seal's hit): their uses a minute are the proc's hits.
 PROC_KINDS = ('proc', 'seal')
 
 
@@ -131,10 +89,7 @@ def rnd(x, places=4):
     return x
 
 
-# SpellData.lua ---------------------------------------------------------------------------------------------------------------------
-
 def closing(text, at):
-    """The index just past the brace that closes the one at text[at]."""
     depth = 0
     for i in range(at, len(text)):
         if text[i] == '{':
@@ -147,7 +102,6 @@ def closing(text, at):
 
 
 def spell_entries():
-    """{ class or ALL: { key: { ids, cmp, nx } } } from SpellData.lua's constructors."""
     with open(SPELLDATA, encoding='utf-8') as handle:
         text = handle.read()
     out = {}
@@ -172,15 +126,12 @@ def spell_entries():
     return out
 
 
-# The runs ------------------------------------------------------------------------------------------------------------------------------
-
 def spell_id(action):
     m = re.match(r'^spell:(\d+)', action)
     return int(m.group(1)) if m else None
 
 
 def match(name, row, own, every):
-    """The entry key of a row, or None."""
     for action in row['ids']:
         sid = spell_id(action)
         if sid is None:
@@ -198,7 +149,6 @@ def match(name, row, own, every):
 
 
 def most_points(talents):
-    """The tree with the most points of a talent string (the first of a tie, as Core.lua's MostPoints), 1 to 3, or None."""
     sums = [sum(int(c) for c in part) for part in talents.split('-')]
     best, most = None, 0
     for place, points in enumerate(sums, 1):
@@ -341,8 +291,6 @@ def build(data, entries):
     return classes
 
 
-# Writing ---------------------------------------------------------------------------------------------------------------------------------
-
 LUA_WORDS = {'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function', 'if', 'in', 'local', 'nil', 'not', 'or', 'repeat',
              'return', 'then', 'true', 'until', 'while'}
 
@@ -391,7 +339,6 @@ WIDTH = 150
 
 
 def comment(text, indent=''):
-    """Lua comment lines of a text, its paragraphs apart, each line at most WIDTH wide with its indent counted as four."""
     out = []
     for para in text.split('\n\n'):
         width = WIDTH - 4 * len(indent) - 3

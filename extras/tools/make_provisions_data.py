@@ -1,27 +1,4 @@
 #!/usr/bin/env python3
-"""Write extras/Provisions/Data.lua from the GrunzForever export of the WoW: Forever client.
-
-The export (MIT) is a SQLite file of the client's own DB2 tables with their hotfixes applied. Every consumable is
-classified from those tables, never by its name (a name is read only to drop the client's test items). The items
-read are those with an on-use effect of the consumable or miscellaneous class, and conjured items of any class (Mana
-Agate is of class 4 in the client); trade goods (raw fish, kept for cooking) and quest items are left out:
-
-  heal     an on-use item whose spell heals the player at once (Effect HEAL on the caster); amount = the mean heal
-           (the spell's base points: the variance is spread evenly on both sides of it)
-  mana     the same with an ENERGIZE effect of mana; amount = mana restored
-  stone    a heal item that is conjured (item flag), made by a spell (CREATE_ITEM) and restores no mana: the
-           healthstones
-  food     a seated aura of health regeneration (MOD_REGEN, broken by standing up); amount = health over its duration
-  drink    a seated aura of mana regeneration (MOD_POWER_REGEN of mana); amount = mana over its duration
-  both     an item that is food and drink: it is listed in both kinds
-  bandage  a channelled heal over time on a friendly target (PERIODIC_HEAL on TARGET_UNIT_TARGET_ALLY) that needs a
-           skill (First Aid, by the item's RequiredSkill); amount = healing over the channel, rank = the skill it needs
-  buff     food or drink whose eating also gives a lasting buff (by a TRIGGER_SPELL, a PERIODIC_TRIGGER_SPELL or a
-           PERIODIC_TRIGGER_SPELL_WITH_VALUE that hands its value to the buff); the buff's stat and amount are kept
-
-Run:  python3 -I extras/tools/make_provisions_data.py [path/to/export.sqlite]
-The output is the same for the same export: items are written in order of their ID.
-"""
 
 import collections
 import json
@@ -30,67 +7,58 @@ import re
 import sqlite3
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools", "dev"))
+import strip_lua
+
 DEFAULT_DB = ("/tmp/claude-0/-workspace-flat-ui/1819971d-cb59-55bd-aea4-74e460d4a9fd/scratchpad/spelltips/"
               "dl_grunz_sqlite/wow_wowf_1.60.1.70888.sqlite")
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Provisions", "Data.lua")
 
-# Item.ClassID of consumables and of miscellaneous items (holiday food and drink); ItemEffect.TriggerType of an
-# on-use effect. An item of another class counts only when it is conjured: Mana Agate (5514) is of class 4 (armor,
-# miscellaneous) in the client, while trade goods (raw fish, kept for cooking) and quest items are left out.
 CLASS_CONSUMABLE = 0
 CLASS_MISCELLANEOUS = 15
 TRIGGER_ON_USE = 0
-# ItemSparse.Flags[0] bits.
 ITEM_FLAG_CONJURED = 0x2
 ITEM_FLAG_DEPRECATED = 0x10
-# SpellEffect.Effect values.
 EFFECT_SCHOOL_DAMAGE = 2
 EFFECT_APPLY_AURA = 6
 EFFECT_HEAL = 10
 EFFECT_CREATE_ITEM = 24
 EFFECT_ENERGIZE = 30
 EFFECT_TRIGGER_SPELL = 64
-# SpellEffect.EffectAura values.
 AURA_PERIODIC_DAMAGE = 3
 AURA_PERIODIC_HEAL = 8
 AURA_PERIODIC_TRIGGER_SPELL = 23
-AURA_MOD_REGEN = 84            # food: health per 5 seconds while seated
-AURA_MOD_POWER_REGEN = 85      # drink: power (EffectMiscValue[0]) per 5 seconds while seated
+AURA_MOD_REGEN = 84
+AURA_MOD_POWER_REGEN = 85
 AURA_PERIODIC_TRIGGER_SPELL_WITH_VALUE = 227
-# ImplicitTarget[0] values.
 TARGET_UNIT_CASTER = 1
 TARGET_UNIT_TARGET_ALLY = 21
 POWER_MANA = 0
-# SpellInterrupts.AuraInterruptFlags[0] bit: the aura ends when the player stands up (food and drink).
 AURA_INTERRUPT_STANDING = 0x40000
-# A triggered aura that lasts at least this long is a buff, not part of the meal.
 BUFF_MIN_MS = 60000
 
-# The buff of a buff food, by the aura its spell applies: (aura, EffectMiscValue[0] or None) -> key.
 STAT_BY_MISC = {0: "str", 1: "agi", 2: "sta", 3: "int", 4: "spi", -1: "stats"}
 BUFF_AURAS = {
-    29: "stat",     # MOD_STAT, the stat in EffectMiscValue[0]
-    99: "ap",       # MOD_ATTACK_POWER
-    124: "rap",     # MOD_RANGED_ATTACK_POWER
-    13: "spell",    # MOD_DAMAGE_DONE (spell schools)
-    135: "healing", # MOD_HEALING_DONE
-    290: "crit",    # MOD_CRIT_PCT
-    52: "crit",     # MOD_WEAPON_CRIT_PERCENT
-    57: "spellcrit",  # MOD_SPELL_CRIT_CHANCE
-    85: "mp5",      # MOD_POWER_REGEN (mana, outside a meal)
-    161: "hp5",     # MOD_HEALTH_REGEN_IN_COMBAT
-    84: "hp5",      # MOD_REGEN (outside a meal)
-    22: "resist",   # MOD_RESISTANCE
-    189: "rating",  # MOD_RATING
-    24: "mp5",      # PERIODIC_ENERGIZE (mana, every few seconds)
-    129: "speed",   # MOD_INCREASE_SPEED
-    30: "skill",    # MOD_SKILL (a profession)
-    465: "armor",   # MOD_BONUS_ARMOR
+    29: "stat",
+    99: "ap",
+    124: "rap",
+    13: "spell",
+    135: "healing",
+    290: "crit",
+    52: "crit",
+    57: "spellcrit",
+    85: "mp5",
+    161: "hp5",
+    84: "hp5",
+    22: "resist",
+    189: "rating",
+    24: "mp5",
+    129: "speed",
+    30: "skill",
+    465: "armor",
 }
-# Auras that are no buff (harm or nothing to show).
-NOT_BUFF_AURAS = (AURA_PERIODIC_DAMAGE, 4)  # 4 = DUMMY
+NOT_BUFF_AURAS = (AURA_PERIODIC_DAMAGE, 4)
 
-# Names of the client's test and placeholder items (the only use of a name).
 TEST_NAME = re.compile(r"\b(test|qa|dnt|deprecated|unused|ph|old)\b|\[|mcweaksauce", re.I)
 
 
@@ -143,7 +111,6 @@ def main(argv):
     skill_parent = dict(con.execute("SELECT ID, ParentSkillLineID FROM SkillLine"))
 
     def chain(spell, depth=0):
-        """The effects of a spell and of the spells it triggers at once (TRIGGER_SPELL), with their spell."""
         out = []
         for e in effects.get(spell, []):
             out.append((spell, e))
@@ -152,8 +119,6 @@ def main(argv):
         return out
 
     def buff_of(spell, value):
-        """The stats and amounts of a buff spell, as {key: amount} (value: the amount its trigger hands over to it,
-        PERIODIC_TRIGGER_SPELL_WITH_VALUE, taken as the size of each of its auras; None: its own base points)."""
         if duration.get(spell, 0) < BUFF_MIN_MS:
             return None
         got = {}
@@ -207,8 +172,6 @@ def main(argv):
             item_cat = (use[7] or 0) & 0xFFFF
             cat = item_cat or spell_category.get(spell, 0)
             cd = use[8] if (use[8] or 0) > 0 else spell_category_cd.get(spell, 0)
-            # The shared cooldown, kept only for an instant item: its use starts the category's cooldown before
-            # the next line of the same macro press runs (Core.lua, Body).
             if cat and cd and cd > 0 and not category and cast_time.get(spell, 0) == 0:
                 category, cooldown = cat, cd
             for sp, e in chain(spell):
@@ -358,7 +321,7 @@ def write(items, buff_spells, skills, meta, counts):
     out.append("}")
     out.append("")
     with open(OUT, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write("\n".join(out))
+        fh.write(strip_lua.strip("\n".join(out)))
 
 
 if __name__ == "__main__":
