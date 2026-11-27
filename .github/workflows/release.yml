@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag, such as v0.5.47"
+        required: true
+      target:
+        description: "Commit to tag and build"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target || github.ref }}
+          fetch-depth: 1
+
+      - name: Build the zip and the notes
+        id: build
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          grep -q "^## Version: ${VERSION}$" FlatUI/FlatUI.toc
+          test -f FlatUI/Bindings.xml
+          mkdir -p pkg
+          git archive HEAD FlatUI | tar -x -C pkg
+          (cd pkg && zip -qr "../FlatUI-${VERSION}.zip" FlatUI)
+          python3 - "$VERSION" <<'PY'
+          import sys
+          version = sys.argv[1]
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          start = text.index("## " + version + "\n")
+          end = text.find("\n## ", start + 1)
+          section = text[start:end if end >= 0 else len(text)].rstrip("\n")
+          body = section.split("\n", 1)[1].strip("\n") if "\n" in section else ""
+          open("notes.md", "w", encoding="utf-8").write(body + "\n\nThe full list is in CHANGELOG.md, and in game with `/flatui new`.\n")
+          PY
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.build.outputs.version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "FlatUI-${VERSION}.zip" --clobber
+          else
+            gh release create "$TAG" "FlatUI-${VERSION}.zip" --target "${{ steps.build.outputs.sha }}" --title "Flat UI ${VERSION}" --notes-file notes.md --latest
+          fi
