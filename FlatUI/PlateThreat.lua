@@ -707,8 +707,9 @@ ns.AddSlash(KEY, "role", function(rest)
 	end
 	WorkOut()
 	local now, reason = PT.Role()
-	print(("Nameplate threat: you count as %s (%s)."):format(now == "tank" and "a tank" or "damage or healer", reason))
+	local marked = now == "tank" and Opt("threatSlipping") == true and PT.Active() and ", so enemies you are losing are marked" or ""
+	print(("Flat UI: nameplate threat reads you as %s (%s)%s."):format(now == "tank" and "a tank" or "damage or healer", reason, marked))
 	if not PT.Active() then
-		print("Nameplate threat: no nameplate shows threat while Restyle nameplates or Threat on nameplates is off.")
+		print("Flat UI: no nameplate shows threat while Restyle nameplates or Threat on nameplates is off.")
 	end
 end, HELP)

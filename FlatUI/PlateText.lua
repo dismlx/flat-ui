@@ -525,6 +525,11 @@ local function FollowThreat()
 	end
 end
 
+function ns.PlateNameShown(unitFrame)
+	local st = unitFrame ~= nil and not ns.IsSecret(unitFrame) and state[unitFrame] or nil
+	return not (st and st.nameFaded == true)
+end
+
 EXTRA.layout[#EXTRA.layout + 1] = Layout
 EXTRA.show[#EXTRA.show + 1] = FollowThreat
 EXTRA.show[#EXTRA.show + 1] = Layout

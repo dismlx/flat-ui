@@ -314,9 +314,9 @@ local function ValueColour(PT, rec, text, state)
 	rec.colourFor, rec.colourThreat = state, threat
 end
 
-local function Lift()
+local function Lift(unitFrame)
 	local options, constants = NamePlateSetupOptions, NamePlateConstants
-	if not Plain(options, "table") then
+	if not Plain(options, "table") or (type(ns.PlateNameShown) == "function" and ns.PlateNameShown(unitFrame) == false) then
 		return 0
 	end
 	local styles = Plain(constants, "table") and constants.NAME_ANCHOR_STYLES or nil
@@ -338,6 +338,9 @@ end
 local function OverpowerPlace(unitFrame)
 	if type(ns.PlateOverpowerPlace) == "function" then
 		pcall(ns.PlateOverpowerPlace, unitFrame)
+	end
+	if type(ns.PlateSlipPlace) == "function" then
+		pcall(ns.PlateSlipPlace, unitFrame)
 	end
 end
 
@@ -436,7 +439,7 @@ local function PlaceValue(unitFrame, rec, text)
 		if guide then
 			frame, key = guide, "guide"
 		else
-			lift = Lift()
+			lift = Lift(unitFrame)
 		end
 		if stale then
 			PlaceLater()
