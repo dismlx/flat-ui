@@ -2062,14 +2062,14 @@ function R.make(stage, count, columns)
 		local cell = MakeCell(o.root, "marks")
 		cell.data, cell.index = data, index
 		cell.sample = { name = data[1], class = data[2], role = data[3], dead = index == 7, away = index == 8, threat = index == 3,
-			low = index == 5 and 0.15 or nil, target = index == 3, marker = index == 1 and 8 or nil, leader = index == 1, assist = index == 4,
+			low = index == 5 and 0.15 or nil, target = index == 3, focus = index == 2, marker = index == 1 and 8 or nil, leader = index == 1, assist = index == 4,
 			afk = index == 5 }
 		o.cells[index] = cell
 	end
-	local first, aimed, away = o.cells[1], o.cells[3], o.cells[5]
+	local first, aimed, away, focused = o.cells[1], o.cells[3], o.cells[5], o.cells[2]
 	o.parts = { root = o.root, cell = first and first.frame, health = first and first.health, power = first and first.power, name = first and first.name,
 		status = first and first.status, role = first and first.role, marker = first and first.marker, lead = first and first.lead,
-		target = aimed and aimed.health, afk = away and away.afk }
+		target = aimed and aimed.health, afk = away and away.afk, focus = focused and focused.health }
 	return o
 end
 
@@ -2175,6 +2175,9 @@ local function PaintCell(cell, s, width, height, g)
 		edge = { ns.Colour(KEY .. ".targetColour") }
 	elseif aim ~= "off" then
 		edge = SELECT
+	end
+	if aim == "off" and s.focus and on and Get("focusBorder") == true then
+		edge = { ns.Colour(KEY .. ".focusBorderColour") }
 	end
 	EdgePaint(cell.hOutline, on, g.backdrop, edge, nil, true)
 	Round(cell.hOutline, on and g.radius or nil, t)
@@ -2312,6 +2315,7 @@ local MARK = {
 	bossPowerBar = { "boss", "power" },
 	raidRangeAlpha = { "raid", "cell" }, raidRoleIcon = { "raid", "role" }, raidName = { "raid", "name" }, raidStatusText = { "raid", "status" },
 	raidFrameMarker = { "raid", "marker" }, raidLeaderIcon = { "raid", "lead" }, targetBorder = { "raid", "target" }, targetColour = { "raid", "target" },
+	focusBorder = { "raid", "focus" }, focusBorderColour = { "raid", "focus" },
 	partyFrameMarker = { "party1", "marker" }, partyRezIcon = { "party5", "rez" }, roleIconRoles = { "party2", "role" }, raidAfk = { "raid", "afk" }, partyAfk = { "party4", "afk" },
 }
 
