@@ -2216,7 +2216,7 @@ ns.PAGES = {
 			choices = { { "ring", "Game's ring while the city map shows" }, { "cover", "Flat round cover" }, { "leave", "Leave as is" } } },
 		{ key = "shape", kind = "choice", default = "square", label = "Minimap shape", tip = "Square takes the ring and pointer off the map.",
 			choices = { { "round", "Round" }, { "square", "Square" } } },
-		{ key = "zoomReset", kind = "number", default = 0, min = 0, max = 60, step = 5, unit = " s", label = "Zoom out after", tip = "0 is off." },
+		{ key = "zoomReset", kind = "number", default = 0, min = 0, max = 60, step = 5, unit = " s", label = "Zoom out after", tip = "Zooms the minimap back out to its widest this long after you zoomed it, with the mouse off it, a step at a time. The mouse over the map stops it. 0 is off." },
 		{ key = "dayNight", kind = "bool", default = true, label = "Day and night icon" },
 		{ section = "Zone name" },
 		{ key = "zoneText", kind = "bool", default = true, label = "Zone name" },
@@ -2393,7 +2393,8 @@ ns.PAGES = {
 		{ key = "trackerTexture", kind = "choice", default = "default", label = "Tracker bar texture", needs = "trackerBars", choices = "BarChoicesDefault" },
 		{ key = "trackerPanel", kind = "bool", default = false, label = "Tracker background" },
 		{ key = "trackerHeaderSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Heading size" },
-		{ key = "trackerCombat", kind = "number", default = 100, min = 0, max = 100, step = 5, unit = "%", label = "Opacity in combat" },
+		{ key = "trackerCombat", kind = "number", default = 100, min = 0, max = 100, step = 5, unit = "%", label = "Opacity in combat",
+			tip = "The objective tracker, and Questie's, eases to this opacity as a fight starts and back as it ends. Under the mouse it comes back to full." },
 		-- QuestieSkin.lua: the same rows, and Flat UI's fonts, on the Questie addon's tracker.
 		{ key = "trackerQuestie", kind = "bool", default = true, label = "Questie's tracker",
 			tip = "Gives the quest tracker of the Questie addon the look of the rows above: background, headings, Heading size on its zone headings, item buttons and Opacity in combat, and the fonts of the Fonts page while that page is on. Needs Questie: without it this row does nothing. Off gives Questie its own look back." },
