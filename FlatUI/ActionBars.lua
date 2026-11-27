@@ -134,6 +134,14 @@ local function Empty(button)
 	return not has
 end
 
+local function Holding()
+	if type(GetCursorInfo) ~= "function" then
+		return false
+	end
+	local ok, kind = pcall(GetCursorInfo)
+	return ok and (ns.IsSecret(kind) or kind ~= nil)
+end
+
 local function Fill(button)
 	if OwnBarOf(button) then
 		withheldBy[button] = nil
@@ -147,7 +155,7 @@ local function Fill(button)
 	local mode = Opt("empty")
 	local alpha, back
 	if IsOn(button) and (group == "main" or group == "extra") and mode ~= "show" then
-		if Empty(button) then
+		if Empty(button) and not Holding() then
 			alpha = mode == "hidden" and 0 or Opt("emptyAlpha") / 100
 			back = alpha * ns.OutlineBackdropAlpha(own.outline)
 		end
@@ -398,18 +406,18 @@ local function EmptyPainter(button, state)
 	if not IsOn(button) or type(state) ~= "table" or state.empty ~= true or state.grid == true then
 		return nil
 	end
-	local mode = Opt("empty")
-	if mode ~= "faint" and mode ~= "hidden" then
-		return nil
-	end
 	if type(ns.OwnTwin) == "function" then
 		local ok, twin = pcall(ns.OwnTwin, button)
 		if ok and type(twin) == "table" and not ns.IsSecret(twin) then
 			local asked, shown = pcall(twin.IsShown, twin)
-			if asked and shown == true then
-				return nil
+			if asked and not ns.IsSecret(shown) and shown == false then
+				return 1, 1, 1, 0
 			end
 		end
+	end
+	local mode = Opt("empty")
+	if mode ~= "faint" and mode ~= "hidden" then
+		return nil
 	end
 	return 1, 1, 1, mode == "hidden" and 0 or Opt("emptyAlpha") / 100
 end
@@ -632,6 +640,9 @@ local function Restyle()
 		return
 	end
 	SyncOwn()
+	if OwnOn() and type(ns.OwnRepaintEmpty) == "function" then
+		pcall(ns.OwnRepaintEmpty)
+	end
 	for button in pairs(groups) do
 		if styled[button] or IsOn(button) then
 			ns.Each(KEY, Style, button)
@@ -786,6 +797,13 @@ end
 function ns.OwnButtonsChanged()
 	Changed()
 	RestyleLater()
+end
+
+function ns.GameButtonEmpty(button)
+	if button == nil or OwnBarOf(button) then
+		return nil
+	end
+	return Empty(button)
 end
 
 function ns.ButtonIsOwn(button)

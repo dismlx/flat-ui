@@ -17,7 +17,7 @@ local withheld = setmetatable({}, weak)
 local state = { hooked = false, queued = false, place = false, waiting = false, idle = false, dirty = true, noted = false, lightQueued = false }
 local pending = {}
 local DEFAULTS = {
-	hotkeyText = "game", hotkeyShow = "all", hotkeySize = 100, hotkeyOwn = false, hotkeyPoint = "topright", hotkeyX = 0, hotkeyY = 0,
+	hotkeyText = "game", hotkeyShow = "all", hotkeyEmpty = true, hotkeySize = 100, hotkeyOwn = false, hotkeyPoint = "topright", hotkeyX = 0, hotkeyY = 0,
 	nameShow = "all", nameSize = 100, nameColour = "ffffffff", namePoint = "bottom", countSize = 100, countColour = "ffffffff", countPoint = "bottomright",
 	textOutline = "game",
 }
@@ -37,6 +37,22 @@ end
 
 local function IsOwn(button)
 	return type(ns.ButtonIsOwn) == "function" and ns.ButtonIsOwn(button) == true
+end
+
+local function Holding()
+	if type(GetCursorInfo) ~= "function" then
+		return false
+	end
+	local ok, kind = pcall(GetCursorInfo)
+	return ok and (ns.IsSecret(kind) or kind ~= nil)
+end
+
+local function Blank(button, group, o, holding)
+	if o.hotkeyEmpty == true or holding or IsOwn(button) or (group ~= "main" and group ~= "side") or type(ns.GameButtonEmpty) ~= "function" then
+		return false
+	end
+	local ok, empty = pcall(ns.GameButtonEmpty, button)
+	return ok and empty == true
 end
 
 local function Record(button)
@@ -399,10 +415,12 @@ local function Pass()
 	end
 	state.dirty = false
 	local o, defaults = {}, true
+	local ownMain = (type(ns.OwnOn) == "function" and ns.OwnOn() == true) or (type(ns.OwnWanted) == "function" and ns.OwnWanted() == true)
 	for key, default in pairs(DEFAULTS) do
 		o[key] = Opt(key)
-		defaults = defaults and (key == "hotkeyText" or o[key] == default)
+		defaults = defaults and (key == "hotkeyText" or (key == "hotkeyEmpty" and ownMain) or o[key] == default)
 	end
+	local holding = Holding()
 	local flags = Flags(o)
 	local custom = o.hotkeyPoint ~= "topright" or o.hotkeyX ~= 0 or o.hotkeyY ~= 0
 	local countCustom, nameCustom = o.countPoint ~= DEFAULTS.countPoint, o.namePoint ~= DEFAULTS.namePoint
@@ -437,7 +455,7 @@ local function Pass()
 						Fade(record, "hotFaded", hotkey, false)
 					end
 				else
-					Fade(record, "hotFaded", hotkey, not hotShown)
+					Fade(record, "hotFaded", hotkey, not hotShown or (hotOn and Blank(button, group, o, holding)))
 					if not IsOwn(button) then
 						Short(record, hotkey, hotOn and o.hotkeyText == "short")
 					end
@@ -516,7 +534,8 @@ local function Pass()
 	state.sig = Signature()
 	state.idle = defaults and not state.place
 	if ownSeen and type(ns.OwnRepaint) == "function" then
-		local colour = tostring(Opt("hotkeyText")) .. tostring(Opt("hotkeyOwn")) .. tostring(Opt("hotkeyColour")) .. tostring(Opt("hotkeyShow")) .. tostring(moduleOn)
+		local colour = tostring(Opt("hotkeyText")) .. tostring(Opt("hotkeyOwn")) .. tostring(Opt("hotkeyColour")) .. tostring(Opt("hotkeyShow")) .. tostring(Opt("hotkeyEmpty"))
+			.. tostring(moduleOn)
 		if state.paintSig ~= colour then
 			state.paintSig = colour
 			pcall(ns.OwnRepaint)
@@ -607,6 +626,10 @@ function Signature()
 	return table.concat(parts, ";")
 end
 
+function ns.EmptyKeyHidden(button)
+	return ns.Enabled(KEY) == true and Opt("hotkeyEmpty") ~= true and type(ns.ButtonIsOn) == "function" and ns.ButtonIsOn(button) == true
+end
+
 function ns.ButtonTextRefresh()
 	Attach()
 	local sig = Signature()
@@ -636,11 +659,12 @@ end
 
 local events = CreateFrame("Frame")
 ns.Own[events] = true
-for _, event in ipairs({ "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR", "PLAYER_ENTERING_WORLD", "UPDATE_BINDINGS", "GAME_PAD_ACTIVE_CHANGED", "UPDATE_MULTI_CAST_ACTIONBAR", "PLAYER_REGEN_ENABLED" }) do
+local QUIET = { ACTIONBAR_SLOT_CHANGED = true, ACTIONBAR_PAGE_CHANGED = true, UPDATE_BONUS_ACTIONBAR = true, ACTIONBAR_SHOWGRID = true, ACTIONBAR_HIDEGRID = true }
+for _, event in ipairs({ "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR", "PLAYER_ENTERING_WORLD", "UPDATE_BINDINGS", "GAME_PAD_ACTIVE_CHANGED", "UPDATE_MULTI_CAST_ACTIONBAR", "PLAYER_REGEN_ENABLED", "ACTIONBAR_SHOWGRID", "ACTIONBAR_HIDEGRID" }) do
 	pcall(events.RegisterEvent, events, event)
 end
 events:SetScript("OnEvent", function(_, event)
-	if event ~= "ACTIONBAR_SLOT_CHANGED" and event ~= "ACTIONBAR_PAGE_CHANGED" and event ~= "UPDATE_BONUS_ACTIONBAR" then
+	if not QUIET[event] then
 		state.place = true
 		state.dirty = true
 	end

@@ -64,7 +64,7 @@ ns.SETUP_STOPS = {
 			{ id = "buttons", label = "Buttons", kind = "cards",
 				owns = { "actionbars.enabled", "actionbars.own", "actionbars.square", "actionbars.empty", "actionbars.nameShow", "actionbars.hotkeyShow" },
 				cards = {
-					{ id = "flat", label = "Flat buttons", line = "Square icons, thin borders, every slot shown.", suggest = { "else" }, values = {} },
+					{ id = "flat", label = "Flat buttons", line = "Square icons, thin borders, empty slots faint.", suggest = { "else" }, values = {} },
 					{ id = "quiet", label = "Flat and quiet", line = "Empty slots hidden, no macro names, hotkeys on the main bar only.", suggest = { "small" },
 						values = { ["actionbars.empty"] = "hidden", ["actionbars.nameShow"] = "none", ["actionbars.hotkeyShow"] = "main" } },
 					{ id = "round", label = "Round icons", line = "Flat buttons with the game's round icons. After a reload.",
