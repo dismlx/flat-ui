@@ -15,8 +15,16 @@ local K = {
 		23122, 18262, 12404, 7964, 2871, 2863, 2862, 12643, 7965, 3241, 3240, 3239,
 		23123, 20749, 20750, 20746, 20744, 20748, 20747, 20745, 3824, 3829,
 	},
-	KINDS = { none = {}, group = { group = true, buff = true, form = true, pet = true },
-		all = { group = true, buff = true, form = true, pet = true, weapon = true } },
+	KINDS = { none = {}, group = { group = true, buff = true, form = true, pet = true, item = true, tracking = true },
+		all = { group = true, buff = true, form = true, pet = true, item = true, tracking = true, weapon = true } },
+	PROBED = { item = true, tracking = true },
+	CONJURE = {
+		[5514] = 759, [5513] = 3552, [8007] = 10053, [8008] = 10054,
+		[5350] = 5504, [2288] = 5505, [2136] = 5506, [3772] = 6127, [8077] = 10138, [8078] = 10139, [8079] = 10140,
+		[5349] = 587, [1113] = 597, [1114] = 990, [1487] = 6129, [8075] = 10144, [8076] = 10145, [22895] = 28612,
+		[5512] = 6201, [5511] = 6202, [5509] = 5699, [5510] = 11729, [9421] = 11730,
+		[5232] = 693, [16892] = 20752, [16893] = 20755, [16895] = 20756, [16896] = 20757,
+	},
 	ATTRIBUTES = { "type", "spell", "unit", "item", "target-slot", "action", "macrotext" },
 	SINGLE = { [21562] = 1243, [21564] = 1243, [27681] = 14752, [27683] = 976, [23028] = 1459, [21849] = 1126, [21850] = 1126, [25782] = 19740,
 		[25916] = 19740, [25894] = 19742, [25918] = 19742, [25898] = 20217, [25895] = 1038, [25890] = 19977 },
@@ -26,7 +34,7 @@ local K = {
 	REFUSED = "Trackers: the game would not make a secure button, so a click on a tracker does nothing.",
 	MAX_ID = 2147483647, LEVEL = 10,
 	USAGE = "/flatui tracker use 1 Instant Poison - the item a click on weapon tracker 1 puts on the weapon, or clear for nothing chosen",
-	UNCLICKED = "a click puts nothing on a weapon unless Click to apply is Buffs, forms, the pet and weapons",
+	UNCLICKED = "a click puts nothing on a weapon unless Click to apply is Buffs, forms, pet, conjuring, tracking and weapons",
 }
 local S = {
 	buttons = {}, free = {}, owner = setmetatable({}, { __mode = "k" }), set = setmetatable({}, { __mode = "k" }),
@@ -297,9 +305,57 @@ local function Pet(entry)
 	return nil
 end
 
+local function Usable(id)
+	local call = type(C_Spell) == "table" and C_Spell.IsSpellUsable
+	if type(call) ~= "function" then
+		return true, false
+	end
+	local ok, usable, short = pcall(call, id)
+	if not ok or IsSecret(usable) or IsSecret(short) then
+		return true, false
+	end
+	return usable ~= false, short == true
+end
+
+local function CastSpell(id, reagent)
+	local name = SpellName(id)
+	if not name then
+		return nil
+	end
+	local usable, short = Usable(id)
+	if short then
+		return nil, ("would cast %s, but you lack the power for it now"):format(name)
+	elseif not usable then
+		return nil, ("would cast %s, but %s"):format(name, reagent and "you lack its reagent" or "you cannot now")
+	end
+	return { type = "spell", spell = id }, ("casts %s"):format(name)
+end
+
+local function Conjure(entry)
+	for _, id in ipairs(type(entry.items) == "table" and entry.items or {}) do
+		local spell = Whole(id) and K.CONJURE[id]
+		if spell and Known(spell) then
+			return CastSpell(spell, true)
+		end
+	end
+	return nil
+end
+
+local function Tracking()
+	local id = type(ns.TrackerTrackingSpell) == "function" and ns.TrackerTrackingSpell(Known) or nil
+	if Whole(id) and Known(id) then
+		return CastSpell(id, false)
+	end
+	return nil
+end
+
 local function Choose(entry, now)
 	if entry.kind == "weapon" then
 		return Weapon(entry)
+	elseif entry.kind == "item" then
+		return Conjure(entry)
+	elseif entry.kind == "tracking" then
+		return Tracking()
 	elseif entry.kind == "group" and type(ns.TrackerGroupChoice) == "function" then
 		return ns.TrackerGroupChoice(entry, now)
 	elseif entry.kind == nil or entry.kind == "buff" then
@@ -318,7 +374,13 @@ local function Allowed(entry)
 end
 
 function ns.TrackerClickCovers(entry)
-	return type(entry) == "table" and Allowed(entry)
+	if type(entry) ~= "table" or not Allowed(entry) then
+		return false
+	elseif K.PROBED[entry.kind] then
+		local action, text = Choose(entry)
+		return action ~= nil, text
+	end
+	return true
 end
 
 local function Fixable(entry, reading, how, record)
@@ -546,10 +608,12 @@ function ns.TrackerClickLine(entry)
 		return "Click: " .. (text and (text .. ".") or "nothing to do now.")
 	end
 	local kind = entry.kind or "buff"
-	if kind == "buff" or kind == "form" then
+	if kind == "buff" or kind == "form" or K.PROBED[kind] then
 		local action, text = Choose(entry)
 		if not action and not text then
 			return nil
+		elseif K.PROBED[kind] and not action then
+			return ("Click: none now. It %s."):format(text)
 		end
 	end
 	return "Click: none now. A click is offered out of combat while the tracker has something to fix, and for a buff while you have the power to cast it."

@@ -1158,7 +1158,7 @@ function D.SampleName(icon, index)
 	icon.name:Show()
 end
 
-function D.EndTest(token, cut)
+function D.EndTest(token, cut, why)
 	local test = D.testing
 	if not test or (token and test ~= token) then
 		return
@@ -1173,7 +1173,9 @@ function D.EndTest(token, cut)
 			icon.name:Hide()
 		end
 	end
-	if not test.quiet then
+	if not test.quiet and why == "pull" then
+		print("Defensives on you: the pull ended the test.")
+	elseif not test.quiet then
 		local ends = Opt("endSound")
 		local line = ("Defensives on you: the sweep ended on %d of 3 icons. Sound when one lands: %s."):format(done,
 			D.SoundWords(Opt("sound"), test.sound))
@@ -1435,7 +1437,7 @@ ns.Register(KEY, {
 		end,
 		PLAYER_REGEN_DISABLED = function()
 			if D.testing then
-				ns.Try(KEY, D.EndTest, nil, true)
+				ns.Try(KEY, D.EndTest, nil, true, "pull")
 			end
 		end,
 	},

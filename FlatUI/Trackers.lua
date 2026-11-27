@@ -2797,6 +2797,9 @@ local function FightStarts()
 	if K.held and K.held.preview then
 		K.held = nil
 	end
+	if next(testing) then
+		K.TestCut()
+	end
 	StartFight()
 	Pass()
 end
@@ -3407,8 +3410,13 @@ function K.TipLines(entry, tip, noClick)
 			end
 		end
 	end
-	if not noClick and (state == "low" or state == "missing") and type(ns.TrackerClickCovers) == "function" and ns.TrackerClickCovers(entry) then
-		tip:AddLine("Out of combat, a click fixes it.", dim[1], dim[2], dim[3], true)
+	if not noClick and (state == "low" or state == "missing") and type(ns.TrackerClickCovers) == "function" then
+		local covers, why = ns.TrackerClickCovers(entry)
+		if covers then
+			tip:AddLine("Out of combat, a click fixes it.", dim[1], dim[2], dim[3], true)
+		elseif Plain(why, "string") then
+			tip:AddLine(("A click %s."):format(why), dim[1], dim[2], dim[3], true)
+		end
 	end
 end
 function K.SampleTip(entry, tip)
@@ -3980,6 +3988,29 @@ local function KindTest(entries, run)
 	end
 end
 
+function K.TestCut()
+	testRun = testRun + 1
+	local cut = testing
+	testing = {}
+	for _, entry in pairs(cut) do
+		Slot("LowTest", entry, nil)
+		local kind = KINDS[entry.kind]
+		if kind and type(kind.Test) == "function" then
+			pcall(kind.Test, entry, false)
+		end
+	end
+	print("Trackers: the pull ended the test.")
+	ns.OutOfCombat(function()
+		for _, entry in pairs(cut) do
+			if not testing[entry.id] then
+				Slot("LowTest", entry, nil)
+				Slot("Show", entry, false)
+			end
+		end
+		Dirty()
+	end)
+end
+
 local function Test(number)
 	if InCombatLockdown() or SecretAuras() then
 		print("The test runs out of combat.")
@@ -4189,11 +4220,17 @@ function ns.TrackerLookChanged(path)
 end
 
 K.READY, K.LINE_GAP, K.COUNT_MOST, K.PLAYER_COUNTDOWN = 12, 15, 30, 2
+K.READY_MOST, K.COUNT_GUESS, K.NAMES_MOST = 60, 10, 3
+
+function ns.TrackerReminding()
+	return K.readyUntil ~= nil and not fighting and Now() < K.readyUntil
+end
 
 function K.Named(entry, state, kept)
 	local label = Label(entry)
 	if entry.kind == "group" and state == "missing" and Plain(kept.count, "number") and Plain(kept.total, "number") and kept.total > 0 then
-		return ("%s is missing on %d of %d"):format(label, kept.count, kept.total)
+		local who = type(ns.TrackerGroupWho) == "function" and ns.TrackerGroupWho(entry, K.NAMES_MOST, kept.count) or nil
+		return ("%s is missing on %d of %d%s"):format(label, kept.count, kept.total, Plain(who, "string") and (" (%s)"):format(who) or "")
 	elseif entry.kind == "durability" then
 		if state == "missing" then
 			return label .. " is broken"
@@ -4239,13 +4276,16 @@ function K.Reminder(why, length, words)
 	local now = Now()
 	K.reminders = K.reminders or {}
 	K.reminders[why] = now + length
+	K.serial = (K.serial or 0) + 1
+	K.serials = K.serials or {}
+	K.serials[why] = K.serial
 	K.ReminderEnds()
 	Dirty()
 	if C_Timer and C_Timer.After then
-		local stamp = K.reminders[why]
+		local stamp = K.serial
 		if words then
 			C_Timer.After(PASS + 0.15, function()
-				if K.reminders and K.reminders[why] == stamp then
+				if K.reminders and K.reminders[why] and K.serials[why] == stamp then
 					ns.Try(KEY, K.ReadyLine, words)
 				end
 			end)
@@ -4277,31 +4317,66 @@ function K.ReminderOff(why)
 	K.ReminderEnds()
 end
 
-function K.ReadyCheck()
+function K.ReadyCheck(left)
 	if not Opt("readyCheck") or InCombatLockdown() or not ns.Enabled(KEY) then
 		return
 	end
-	K.Reminder("ready", K.READY, "for the ready check")
+	local length = (not IsSecret(left) and ns.Finite(left)) and math.max(K.READY, math.min(left, K.READY_MOST)) or K.READY
+	K.readyStart = Now()
+	K.Reminder("ready", length, "for the ready check")
+end
+
+function K.ReadyDone()
+	local ends = K.reminders and K.reminders.ready
+	if not ends then
+		return
+	end
+	local now = Now()
+	local stop = math.max((K.readyStart or now) + K.READY, now)
+	if stop >= ends then
+		return
+	end
+	K.reminders.ready = stop
+	K.ReminderEnds()
+	Dirty()
+	if C_Timer and C_Timer.After then
+		C_Timer.After(stop - now + 0.05, Dirty)
+	end
+end
+
+function K.PlayerType()
+	local enums = type(Enum) == "table" and not IsSecret(Enum) and Enum.StartTimerType or nil
+	local value = type(enums) == "table" and enums.PlayerCountdown or nil
+	return (not IsSecret(value) and ns.Finite(value)) and value or K.PLAYER_COUNTDOWN
 end
 
 function K.PlayerCountdown(kind)
 	if IsSecret(kind) or not ns.Finite(kind) then
 		return false
 	end
-	local enums = type(Enum) == "table" and not IsSecret(Enum) and Enum.StartTimerType or nil
-	local value = type(enums) == "table" and enums.PlayerCountdown or nil
-	return kind == (ns.Finite(value) and value or K.PLAYER_COUNTDOWN)
+	return kind == K.PlayerType()
 end
 
-function K.Countdown(kind, remaining)
+function K.PullWords(who)
+	local name = Plain(who, "string") and who:match("^[^%-]+") or nil
+	local mine = Ask(UnitName, "player")
+	if name and name ~= "" and not (Plain(mine, "string") and mine == name) then
+		return ("before %s's pull"):format(name)
+	end
+	return "before the pull"
+end
+
+function K.Countdown(kind, remaining, who)
 	if not Opt("readyCheck") or InCombatLockdown() or fighting or not ns.Enabled(KEY) or not K.PlayerCountdown(kind) then
 		return
 	end
-	if IsSecret(remaining) or not ns.Finite(remaining) or remaining <= 0 then
+	if IsSecret(remaining) or not ns.Finite(remaining) then
+		remaining = K.COUNT_GUESS
+	elseif remaining <= 0 then
 		return
 	end
 	local recent = K.lineAt and Now() - K.lineAt < K.LINE_GAP
-	K.Reminder("countdown", math.min(remaining, K.COUNT_MOST) + 2, not recent and "before the pull" or nil)
+	K.Reminder("countdown", math.min(remaining, K.COUNT_MOST) + 2, not recent and K.PullWords(who) or nil)
 end
 
 function K.CountdownStop(kind)
@@ -4329,14 +4404,23 @@ ns.Register(KEY, {
 		PLAYER_CONTROL_GAINED = Dirty,
 		PLAYER_UPDATE_RESTING = Dirty,
 		SPELLS_CHANGED = SpellsChanged,
-		READY_CHECK = function()
-			ns.Try(KEY, K.ReadyCheck)
+		READY_CHECK = function(_, left)
+			ns.Try(KEY, K.ReadyCheck, left)
+		end,
+		READY_CHECK_FINISHED = function()
+			ns.Try(KEY, K.ReadyDone)
 		end,
 		START_TIMER = function(kind, remaining)
 			ns.Try(KEY, K.Countdown, kind, remaining)
 		end,
 		STOP_TIMER_OF_TYPE = function(kind)
 			ns.Try(KEY, K.CountdownStop, kind)
+		end,
+		START_PLAYER_COUNTDOWN = function(_, remaining, _, _, who)
+			ns.Try(KEY, K.Countdown, K.PlayerType(), remaining, who)
+		end,
+		CANCEL_PLAYER_COUNTDOWN = function()
+			ns.Try(KEY, K.CountdownStop, K.PlayerType())
 		end,
 	},
 	slash = { tracker = Slash },
