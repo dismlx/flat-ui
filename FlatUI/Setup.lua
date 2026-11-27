@@ -6,7 +6,9 @@ local _, ns = ...
 -- behind More settings and Every setting, the draft and Finish. Every choice goes into a draft kept for this character in FlatUIDB.setup.drafts.
 -- Nothing reaches a profile, a game setting or a list before Finish: the drawings read the draft through ns.Viewing, and a list row queues its pick.
 -- Finish saves the draft into the profile in use in one call (ns.ChangeProfile), or makes a profile of the character's own from it while the
--- character is on Default (ns.NewProfile), then closes the window so that the real screen shows the change. Enter, the arrow keys and Escape (which
+-- character is on Default (ns.NewProfile), then closes the window so that the real screen shows the change. The card that follows (SetupWelcome.lua)
+-- takes it back until a reload: Undo setup after a save (Core.lua, ns.BringBackProfile, as Bring back on the Profiles page does), Back to the
+-- profile in use before after a new one. Enter, the arrow keys and Escape (which
 -- closes an open list, question or the colour picker before the window) come through a frame of Flat UI's own that has the keyboard only out of
 -- combat. Everything here is in the table S, so that the file keeps few locals.
 
@@ -1479,9 +1481,11 @@ function S.Finish()
 		picks[path] = value
 		settings = settings + 1
 	end
+	-- The profile in use before, for Back to on the card after a new profile (SetupWelcome.lua, W.Back).
 	local ok, message
+	local before = ns.Profile()
 	if new then
-		ok, message = ns.NewProfile(name, ns.Profile(), picks)
+		ok, message = ns.NewProfile(name, before, picks)
 	else
 		name = ns.Profile()
 		ok, message = ns.ChangeProfile(picks)
@@ -1534,9 +1538,12 @@ function S.Finish()
 		character.setupResult = result
 	end
 	if ns.Get("setup.say") == "line" then
-		print((new and "Flat UI: %s is in use. %s." or "Flat UI: %s is saved. %s."):format(name, S.Totals(result)))
+		-- A save into the profile in use can be undone until a reload (Core.lua, ns.BringBackProfile): the card's Undo setup, or Bring back.
+		print((new and "Flat UI: %s is in use. %s." or "Flat UI: %s is saved. %s. Undo setup on the card, or Profiles > Bring back, puts it back until you reload."):format(name,
+			S.Totals(result)))
 	end
-	local finished = { name = name, new = new, users = S.Users(name), reloadLines = reloadLines, kept = kept, problems = problems }
+	local finished = { name = name, new = new, users = S.Users(name), reloadLines = reloadLines, kept = kept, problems = problems, game = game,
+		previous = new and before ~= ns.Profile() and before or nil }
 	S.Drop()
 	kit.Hide()
 	if type(ns.SetupAfter) == "function" then

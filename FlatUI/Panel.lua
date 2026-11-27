@@ -15,8 +15,9 @@ local ADDON_NAME, ns = ...
 -- held (Clickable, Button).
 -- The title bar names the profile in use, which a click opens, with a second line in the accent for a profile that waits for the fight's end
 -- (BuildProfileName), and the strip's Reload counts the changes that wait for a reload (BuildFoot). The strip's "3 changed on this tab" takes a
--- click, which goes to each changed row in turn (ui.NextChanged), and a tab holding changes has a dot (PanelTabs.lua). The Search box has a cross
--- that clears it while words are typed (BuildLeft). Reset profile and Delete profile have Bring back while what they took can come back, until a
+-- click, which goes to each changed row in turn (ui.NextChanged), and a tab holding changes has a dot (PanelTabs.lua), as a module of the sidebar
+-- does (PanelNav.lua). The Search box has a cross that clears it while words are typed (BuildLeft), and /flatui with words that are no command opens
+-- the window with them in it (ns.OpenPanelSearch). Reset profile and Delete profile have Bring back while what they took can come back, until a
 -- reload (BuildProfiles; Core.lua, ns.BringBackProfile and ns.BringBackDeleted). Every switch plays the game's checkbox sound on a click and its
 -- knob slides (SwitchClick, Slider).
 -- The wheel scrolls a page over a slider too, and Shift and the wheel step the slider (AddNumber). A sound row plays a line once as it is picked and
@@ -1700,7 +1701,8 @@ end
 
 -- The question box: onYes runs on the first button, onNo (when given) on the second. A click outside the box closes it and runs neither. The buttons
 -- say yesText and noText when those are given, and Yes and No otherwise. Enter presses the first button (BuildKeys), but not for a careful question,
--- one whose first button loses something for good (Delete, Reset, Copy from, Replace): an Enter meant for chat must not answer it. The box grows
+-- one whose first button takes a profile's settings away (Delete, Reset, Copy from, Replace; Bring back puts them back only until a reload, and
+-- each such question says so): an Enter meant for chat must not answer it. The box grows
 -- with the question, at least two lines of its 330 px column, so a long Delete or Copy from question is never cut short; the note and the buttons
 -- move down with it.
 function Ask(question, onYes, onNo, yesText, noText, careful)
@@ -1912,9 +1914,10 @@ local function Removable(name, current)
 	return name ~= current and name ~= "Default"
 end
 
--- The question of Delete profile: the name, and how many other characters use it. They start as new characters at their next login (Core.lua,
--- ns.DeleteProfile and OwnProfile), on Default.
+-- The question of Delete profile: the name, how many other characters use it, and that Bring back puts it back until a reload (Core.lua,
+-- ns.BringBackDeleted). They start as new characters at their next login (Core.lua, ns.DeleteProfile and OwnProfile), on Default.
 function ui.DeleteQuestion(name)
+	local back = "Bring back puts it back until you reload."
 	local db, count = ns.Account(), 0
 	local me = type(ns.CharacterKey) == "function" and ns.CharacterKey() or nil
 	for key, used in pairs(type(db) == "table" and type(db.profileOf) == "table" and db.profileOf or {}) do
@@ -1923,11 +1926,11 @@ function ui.DeleteQuestion(name)
 		end
 	end
 	if count == 0 then
-		return ('Delete "%s" for good? No other character uses it.'):format(name)
+		return ('Delete "%s"? No other character uses it. %s'):format(name, back)
 	elseif count == 1 then
-		return ('Delete "%s" for good? 1 other character uses it and starts as a new character at its next login.'):format(name)
+		return ('Delete "%s"? 1 other character uses it and starts as a new character at its next login. %s'):format(name, back)
 	end
-	return ('Delete "%s" for good? %d other characters use it and start as new characters at their next login.'):format(name, count)
+	return ('Delete "%s"? %d other characters use it and start as new characters at their next login. %s'):format(name, count, back)
 end
 
 local function BuildProfiles()
@@ -2047,7 +2050,7 @@ local function BuildProfiles()
 	end
 
 	if type(ns.CopyProfile) == "function" then
-		row = Row("Copy from", "Replaces every setting and frame position of the profile in use with those of another profile. To keep both, use Duplicate.")
+		row = Row("Copy from", "Replaces every setting and frame position of the profile in use with those of another profile. Bring back puts them back until you reload; to keep both, use Duplicate.")
 		local from
 		local menu = Menu(row, {
 			lines = function()
@@ -2063,7 +2066,7 @@ local function BuildProfiles()
 		})
 		Beside(row, "Copy", function()
 			if from then
-				Ask(('Replace "%s" with a copy of "%s"?'):format(Current(), from), function()
+				Ask(('Replace "%s" with a copy of "%s"? Bring back puts it back until you reload.'):format(Current(), from), function()
 					Act("CopyProfile", from)
 				end, nil, "Replace", "Keep", true)
 			else
@@ -2079,7 +2082,7 @@ local function BuildProfiles()
 	end
 
 	if type(ns.DeleteProfile) == "function" then
-		row = Row("Delete profile", "Deletes another profile for good. The profile in use and Default cannot be deleted.")
+		row = Row("Delete profile", "Deletes another profile; Bring back puts it back until you reload. The profile in use and Default cannot be deleted.")
 		local doomed
 		local menu = Menu(row, {
 			lines = function()
@@ -2149,9 +2152,9 @@ local function BuildProfiles()
 	end
 
 	if type(ns.ResetProfile) == "function" then
-		row = Row("Reset profile", "Every setting of the profile in use goes back to its default, and every frame you moved goes back to its own place.")
+		row = Row("Reset profile", "Every setting of the profile in use goes back to its default, and every frame you moved goes back to its own place. Bring back puts them back until you reload.")
 		local reset = Button(row.frame, "Reset", SMALL, function()
-			Ask(('Reset "%s"? Every setting and every frame position goes back to its default.'):format(Current()), function()
+			Ask(('Reset "%s"? Every setting and every frame position goes back to its default. Bring back puts them back until you reload.'):format(Current()), function()
 				Act("ResetProfile")
 			end, nil, "Reset", "Keep", true)
 		end)
@@ -2262,7 +2265,7 @@ local function BuildProfiles()
 				if ns.ProfileShare and ns.ProfileShare.Import(text) then
 					return
 				end
-				Ask(('Replace "%s" with the pasted settings?'):format(Current()), function()
+				Ask(('Replace "%s" with the pasted settings? Bring back puts them back until you reload.'):format(Current()), function()
 					if Act("ImportProfile", text) then
 						into:SetText("")
 					end
@@ -4036,6 +4039,31 @@ function ns.OpenPanelPage(key)
 		return false
 	end
 	Go(entry)
+	return true
+end
+
+-- /flatui <words> (Core.lua): opens the window, or leaves it open, with the words in Search, so the results show lit as when they are typed there, the
+-- first picked, and Enter opens it; a miss shows the closest pages. While setup has the window, or in a fight before the window was ever built
+-- (ns.OpenPanel says it opens after combat), nothing is searched and the answer is false.
+function ns.OpenPanelSearch(words)
+	if ui.window and ui.window:IsShown() and ui.mode then
+		print("Flat UI: setup has the options window. Search once it is closed.")
+		return false
+	end
+	if not (ui.window and ui.window:IsShown()) then
+		ns.OpenPanel()
+	end
+	if not (ui.window and ui.window:IsShown()) or ui.mode or not IsText(words) then
+		return false
+	end
+	-- OnTextChanged searches (BuildLeft); the same words again would not fire it.
+	if ui.search:GetText() == words then
+		Search(words)
+	else
+		ui.search:SetText(words)
+	end
+	ui.search:SetFocus()
+	pcall(ui.search.SetCursorPosition, ui.search, #words)
 	return true
 end
 

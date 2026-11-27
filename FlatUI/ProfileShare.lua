@@ -175,7 +175,8 @@ function Share.Import(text)
 		Run()
 	else
 		-- A careful question: Enter does not answer it (Panel.lua, Ask).
-		kit.Ask(('Replace "%s" with the pasted settings?'):format(Text(ns.Profile and ns.Profile())), Run, nil, "Replace", "Keep", true)
+		kit.Ask(('Replace "%s" with the pasted settings? Bring back puts them back until you reload.'):format(Text(ns.Profile and ns.Profile())), Run, nil,
+			"Replace", "Keep", true)
 	end
 	return true
 end

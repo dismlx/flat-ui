@@ -10,6 +10,7 @@ local _, ns = ...
 -- (Blizzard_ObjectiveTracker/Blizzard_ObjectiveTrackerManager.lua:97-106). Both are followed by events, and an object whose font is no longer the one set here
 -- takes the game's new font as the one to go back to.
 -- Font objects are shared, so other addons' text that uses them changes too. The chat window fonts and the nameplate fonts are left alone.
+-- Nothing is set in a fight: a change made in one waits for its end, and says so in chat once a fight while the options window shows.
 
 local KEY = "fonts"
 -- The game's faces by the file name in lower case, and the row that picks the face for the objects that use it.
@@ -256,13 +257,19 @@ local function Pass()
 	V.changed = changed
 end
 
--- Runs the pass now, or when combat ends.
-local function Queue()
+-- Runs the pass now, or when combat ends. A change of a row in a fight (`changed`) says once a fight, while the options window shows, that the
+-- fonts wait for the fight's end, as the cast bar sizes do (CastBarSize.lua); a pass the game's events or another module asked for says nothing.
+local function Queue(changed)
+	if changed and not V.told and InCombatLockdown() and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+		V.told = true
+		print("Flat UI: fonts change when the fight ends.")
+	end
 	if V.queued then
 		return
 	end
 	V.queued = true
 	ns.OutOfCombat(function()
+		V.told = false
 		Pass()
 	end)
 end
@@ -312,18 +319,23 @@ local function Watch()
 	watched = pcall(EventRegistry.RegisterCallback, EventRegistry, "EditMode.Exit", Later, V)
 end
 
-local function Refresh()
+-- `changed` for a pass a settings change asked for (the module's Start and Refresh), which says a fight's wait (Queue).
+local function Refresh(changed)
 	if ns.Enabled(KEY) then
 		Watch()
 	end
-	Queue()
+	Queue(changed == true)
+end
+
+local function Changed()
+	Refresh(true)
 end
 
 ns.Register(KEY, {
 	label = "Fonts",
 	counted = false,
-	Start = Refresh,
-	Refresh = Refresh,
+	Start = Changed,
+	Refresh = Changed,
 	events = {
 		-- The text scale of the game's settings; the game sets every scaled font again after VARIABLES_LOADED too.
 		CVAR_UPDATE = function(name)

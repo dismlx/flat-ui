@@ -6,7 +6,8 @@ local ADDON_NAME, ns = ...
 -- is in now asks whether to switch now (Switch now or Later); otherwise the switch waits for the next change of place. A switch due in a fight
 -- waits for its end, unless a profile is picked by hand meanwhile (Switch.Drop). A profile picked by hand in a fight (the options window, Home's
 -- Profile card, /flatui profile Name) waits here too (Switch.Keep), and wins over the rule: a frame after the fight ends it is put in use and chat
--- says "Flat UI: using Raid.". The window's title bar shows what waits, either kind (Switch.Wanted). Delete profile keeps the rules that pointed at
+-- says "Flat UI: using Raid.". Switch now of a rule's question in a fight waits the same way. The window's title bar shows what waits, either kind
+-- (Switch.Wanted). Delete profile keeps the rules that pointed at
 -- the profile for the session (Switch.RulesOf), and its Bring back puts them back (Switch.Restore).
 
 local Switch = {}
@@ -292,14 +293,20 @@ local PLACE = { dungeon = "You are in a dungeon now.", raid = "You are in a raid
 	other = "You are outside dungeons, raids and battlegrounds now." }
 
 -- A rule picked for the kind of place the character is in now asks to put its profile in use at once, since the switch itself waits for the next change
--- of place. Switch now uses the call that picking by hand makes, and in a fight it says that profiles change after combat.
+-- of place. Switch now uses the call that picking by hand makes; in a fight it keeps the pick for the fight's end, as a profile picked by hand in a
+-- fight is (Switch.Keep): the strip says so, the title bar shows it, and AfterFight puts it in use.
 local function Offer(kit, kind, name)
 	if name == "" or kind ~= Switch.Kind() or name == ns.Profile() or type(kit.Ask) ~= "function" then
 		return
 	end
 	kit.Ask(("%s Switch to %s now?"):format(PLACE[kind] or "", name), function()
-		local _, message = ns.UseProfile(name)
-		kit.Say(message)
+		if InCombatLockdown() then
+			Switch.Keep(name)
+			kit.Say(("Switches to %s when the fight ends."):format(name))
+		else
+			local _, message = ns.UseProfile(name)
+			kit.Say(message)
+		end
 		kit.Refresh()
 	end, nil, "Switch now", "Later")
 end

@@ -3,7 +3,8 @@ local _, ns = ...
 -- The preview band of the options window: a drawing of Flat UI setup above the settings of a page (SetupDraw.lua), read through ns.LiveView, so it follows
 -- the profile in use. It is made of textures, font strings and frames of the addon's own: no nameplate, unit frame or other protected frame of the game is
 -- touched, and every number in it is a fixed sample. Pointing at a part outlines it and fills its row; a click opens the tab of the row, scrolls to it and flashes
--- it. Pointing at a row brackets its part. Previews (Config.lua, panel.preview) is On, Collapsed or Off.
+-- it. Pointing at a row brackets its part. Previews (Config.lua, panel.preview) is On, Collapsed or Off. The Flat UI page and its Colours tab show setup's
+-- own drawings of the Look steps (SetupDraw.lua, D.Builds), which have no parts, so no hint.
 
 local Preview = {}
 ns.PanelPreview = Preview
@@ -35,6 +36,9 @@ local DRAWINGS = {
 	combattextYou = "mock-combat-alerts",
 	-- The Fonts page: a title, a body line, a number line and small print in the chosen faces beside the game's pop-up text (SetupDrawLook.lua).
 	fonts = "mock-text",
+	-- The Flat UI page: setup's bordered panel with a health and a mana bar; its Colours tab: setup's colour bars (health at four shares, the cast
+	-- colours, reaction and power). Both are SetupDraw.lua's own drawings, with no parts to point at.
+	general = "mock-panel", generalColours = "mock-bars",
 }
 
 -- The page of each frame of the Unit frames drawings, which the Per frame chooser shows.
@@ -46,7 +50,8 @@ Preview.FRAME_PAGE = FRAME_PAGE
 -- The id of the drawing a page shows, or nil for a page with none (or when the drawings are not loaded).
 function Preview.Drawing(key)
 	local id = DRAWINGS[key]
-	if id and ns.SetupDrawings and ns.SetupDrawings[id] then
+	local D = ns.SetupDraw
+	if id and ((ns.SetupDrawings and ns.SetupDrawings[id]) or (D and type(D.Builds) == "function" and D.Builds(id))) then
 		return id
 	end
 	return nil
@@ -346,6 +351,8 @@ function Preview.Build(right, host)
 				failed[id] = true
 				geterrorhandler()(err)
 			end
+			-- A drawing with no parts to point at has no hint.
+			hint:SetShown(not Look.Hinted() and type(drawing.parts) == "table" and next(drawing.parts) ~= nil)
 		end
 	end
 

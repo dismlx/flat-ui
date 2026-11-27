@@ -11,7 +11,8 @@ local _, ns = ...
 -- taken away since (Reset profile, Copy from, an import, setup's Finish) is left off the list until the value comes back, and a renamed profile
 -- keeps its changes (Home.Renamed); Ctrl+Z with nothing to undo then says that the Profiles page's Bring back puts the profile back (ns.LostProfile).
 -- Undo, Ctrl+Z and Ctrl+Y give the change they made with their words, so the window can show its row (Panel.lua, ui.ShowChange). Each line of Needs
--- a reload has an Undo of its own, dimmed in a fight, that puts that change alone back to its value at login (Home.UndoReload).
+-- a reload has an Undo of its own, dimmed in a fight, that puts that change alone back to its value at login (Home.UndoReload), noted as a batch of its
+-- own like the reload notice's Undo, so Recent changes shows it and Ctrl+Z makes the change again.
 
 local Home = {}
 ns.PanelHome = Home
@@ -300,9 +301,11 @@ function Home.UndoReload(entry)
 		geterrorhandler()(err)
 	elseif ns.Get(path) == was then
 		local item = ns.Def(path) or { path = path, label = label }
-		Home.Noted(item, now, was)
-		kit.Say(("Undid %s: back to %s. It needs no reload now."):format(type(label) == "string" and label or "a setting",
-			ns.PanelTrust.ValueText(item, was)))
+		local name = type(label) == "string" and label or "a setting"
+		-- A batch of its own, as the reload notice's Undo is (Reload.lua, NoticeUndo): Noted merges no batch with the line of the change it takes
+		-- back, so that line waits under it (hidden, as its value no longer stands) and Ctrl+Z on the new line makes the change again.
+		Home.Noted(item, now, was, { label = "Undo of " .. name, what = "Needs a reload's Undo" })
+		kit.Say(("Undid %s: back to %s. It needs no reload now. Ctrl+Z makes it again."):format(name, ns.PanelTrust.ValueText(item, was)))
 	end
 	kit.Refresh()
 end
