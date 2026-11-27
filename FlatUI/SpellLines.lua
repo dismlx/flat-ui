@@ -4,7 +4,8 @@ local _, ns = ...
 -- lines with the share of spell damage, spell healing or attack power the spell adds and what that is with the player's stats (Spell power and
 -- attack power lines, With your stats, Less for low ranks), the total of one cast with the player's stats, base and bonus together (Total,
 -- chat.spellTotal; 0.5.20) and its rates (chat.spellRates: the expected value with crits, misses and a spell's piercing, a second of cast time, a
--- point of mana), its threat on WoW: Forever with each multiplier in force (Threat lines), the lines a stance, form, aura or talent tooltip needs
+-- point of mana, a dim line each; 0.5.42), its threat on WoW: Forever, the threat of one hit or cast from that same total where its rule gives a
+-- number, with how it is made and each multiplier in force under it (Threat lines), the lines a stance, form, aura or talent tooltip needs
 -- that its own text leaves out, while a number shown is from before the fight now on, one dim line that says so, and last, on a spell whose next
 -- rank the player has yet to learn, the level of that rank, that it can be learned now, or for a rank of the class books of Ahn'Qiraj that it
 -- comes from a book (Next rank, chat.spellNextRank; 0.5.35, NextRank, made fresh for each build from the rank's level in SpellData.lua, SL.BOOKS,
@@ -64,11 +65,13 @@ local _, ns = ...
 -- data with at least the lines added then still there is the same build. The only writes are widget calls on the tooltip, each under pcall:
 -- NumLines, AddDoubleLine for a share and its number, AddLine for a line alone; one the game refuses ends the adding for that build.
 -- The look (0.5.20: one style for every line, SpellModel.lua's M.Fmt.Style): each block SpellModel gives (the power lines, the total, the threat
--- block, a rule's lines) opens with its title as one gold header (the game's NORMAL_FONT_COLOR) only where more than one line that is no note
--- follows; a figure's label light grey (0.82) and its value white, or light grey while it is from before the fight; and the notes dim (0.66,
--- 0.68, 0.62, HitTable.lua's DIM), wrapped at the tooltip's width by AddLine's fifth argument (Blizzard_SharedXML/SharedTooltipTemplates.lua:
--- 166-172), so a long note does not widen the tooltip: in Compact (chat.tipDetail) a block's notes are joined into one dim line at its end with
--- "; " between them, in Full each shows where it comes.
+-- block, a rule's lines) opens with its title as one gold header (the game's NORMAL_FONT_COLOR) only where more than one line that is not dim
+-- follows; a figure's label light grey (0.82) and its value white, or light grey while it is from before the fight; and the dim lines (0.66,
+-- 0.68, 0.62, HitTable.lua's DIM) of two kinds. A note is wrapped at the tooltip's width by AddLine's fifth argument (Blizzard_SharedXML/
+-- SharedTooltipTemplates.lua:166-172), so a long note does not widen the tooltip: in Compact (chat.tipDetail) a block's notes are joined into
+-- one dim line at its end with "; " between them, in Full each shows where it comes. A dim line SpellModel keeps short (0.5.42: the rates of the
+-- total, Expected, Per second and Per mana with a label and a figure by AddDoubleLine, and how a threat is made) stays where it comes in both and
+-- never wraps.
 -- /flatui status (design 4.12), while the module is on and a row wants lines: the build of the data and its number of spells (D.SPELLS, which the
 -- generator counts, so no other class's constructor runs), that the game withholds the stats in this fight (C_Secrets.ShouldUnitStatsBeSecret,
 -- Blizzard_APIDocumentationGenerated/SecretPredicateAPIDocumentation.lua:388-396) or when they were read (GetTime), what SpellModel's check of the
@@ -404,10 +407,11 @@ local function Role(state)
 	return nil
 end
 
--- A line of SpellModel's as Put adds it, { left, right, colour, rightColour, wrap, note }, and true when its number is from before the fight. Nil
--- for a line with no text, and for the sentence that the stats are old, which Shape adds once, last. In the style (M.Fmt.Style): a figure's label
--- light grey and its value white, or light grey while the value is old; a dim line is a note, in the dim colour, and wraps unless it says not
--- to; a share with no number is a line alone, wrapped when it asks.
+-- A line of SpellModel's as Put adds it, { left, right, colour, rightColour, wrap, note, dim }, and true when its number is from before the fight.
+-- Nil for a line with no text, and for the sentence that the stats are old, which Shape adds once, last. In the style (M.Fmt.Style): a figure's
+-- label light grey and its value white, or light grey while the value is old; a dim line in the dim colour, a note that wraps, or (0.5.42) one
+-- that stays where it comes and never wraps, a rate with its label and figure (Expected, Per second, Per mana) or a short line of how a threat is
+-- made, which SpellModel marks with a right text or with wrap false; a share with no number is a line alone, wrapped when it asks.
 local function Line(line, style)
 	if type(line) ~= "table" then
 		return nil, false
@@ -424,22 +428,23 @@ local function Line(line, style)
 		return nil, true
 	end
 	if dim then
-		return { left = left, right = right, colour = style.dim, rightColour = style.dim, wrap = right == nil and wrap ~= false, note = true }, false
+		local kept = right ~= nil or wrap == false
+		return { left = left, right = right, colour = style.dim, rightColour = style.dim, wrap = not kept, note = not kept, dim = true }, false
 	end
 	local old = right ~= nil and not IsSecret(tone) and tone == "old"
 	return { left = left, right = right, colour = style.label, rightColour = old and style.label or style.value, wrap = right == nil and wrap == true },
 		old
 end
 
--- A note's text for a joined line: its own words, with its right text after them, and no full stop at the end.
+-- A note's text for a joined line: its own words, and no full stop at the end.
 local function NoteText(line)
-	local text = line.right and (line.left .. " " .. line.right) or line.left
-	return (text:gsub("%.$", ""))
+	return (line.left:gsub("%.$", ""))
 end
 
 -- The lines of one block as they are added (0.5.20, the style): the block's title (its list's title) as one gold header where more than one line
--- that is no note follows; its lines in their order; and its notes, in Full each where it comes, in Compact joined into one dim line at its end
--- (chat.tipDetail). aged says a number shown is from before the fight.
+-- that is not dim follows; its lines in their order, a dim line that stays (a rate, how a threat is made; 0.5.42) where it comes in Compact too;
+-- and its notes, in Full each where it comes, in Compact joined into one dim line at its end (chat.tipDetail). aged says a number shown is from
+-- before the fight.
 local function Block(lines, raw, style, full)
 	local shaped, notes, figures, aged = {}, {}, 0, false
 	for _, line in ipairs(raw) do
@@ -449,7 +454,7 @@ local function Block(lines, raw, style, full)
 			notes[#notes + 1] = NoteText(one)
 		elseif one then
 			shaped[#shaped + 1] = one
-			figures = figures + (one.note and 0 or 1)
+			figures = figures + (one.dim and 0 or 1)
 		end
 	end
 	if #notes > 0 then
@@ -515,7 +520,7 @@ local function Build(M, id, entry, index, rank, state, stats, petLevel)
 		end
 		if made.mode ~= "off" and type(M.ThreatLines) == "function" then
 			blocks[#blocks + 1] = Gather(M.ThreatLines(entry, index, state, made.withStats and stats or nil,
-				{ mode = made.mode, petLevel = petLevel, role = Role(state) }))
+				{ mode = made.mode, petLevel = petLevel, role = Role(state), lowRank = made.lowRank }))
 		end
 	end
 	if made.mode ~= "off" and type(M.RuleLines) == "function" then

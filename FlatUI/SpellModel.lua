@@ -88,14 +88,17 @@ local _, ns = ...
 --
 -- The lines (design 1.2-1.4) are texts and colours' names only, in blocks each with its title (Spell power, Total, Threat), which SpellLines.lua
 -- shows as the block's header where more than one line follows: the share of a power part in words with what it adds with the player's stats,
--- the total of one cast (0.5.20: what it does now with the player's stats, base and bonus together) and its rates (the expected value with crits,
--- misses and a spell's Spell Piercing from GearModel.lua's G.Expect, looked up when asked; a second of cast time, from the castTime of
--- C_Spell.GetSpellInfo, SpellDocumentation.lua:416-430, else the rank's, the global cooldown at least; and a point of mana, from
--- C_Spell.GetSpellPowerCost, :535-549, with the casts from full mana, UnitPowerMax), the threat block with its multipliers (the rules of design 2.5, G), and the lines of a stance, form, aura or
--- talent tooltip. Amounts are worded with the rounding of design 1.2, and the gear comparison's with that of design 2.3 (M.Fmt, which GearLines.lua,
--- GearAvoid.lua and GearWindow.lua use too, with its one style of every line: M.Fmt.Style, whose header, good and bad colours are the game's
--- NORMAL_FONT_COLOR, GREEN_FONT_COLOR and RED_FONT_COLOR, read once as this file loads, Blizzard_SharedXMLBase/Color.lua:82-86), thousands broken by
--- the game's BreakUpLargeNumbers under pcall (as CombatText.lua:1445-1446), and a spell's name in a dim line is the game's (C_Spell.GetSpellName).
+-- the total of one cast (0.5.20: what it does now with the player's stats, base and bonus together, each part read at its own place of the rank,
+-- 0.5.42) and its rates, a dim line each with a label and a figure (0.5.42: Expected, the expected value with crits, misses and a spell's Spell
+-- Piercing from GearModel.lua's G.Expect, looked up when asked, which weighs the same parts; Per second, of cast time, from the castTime of
+-- C_Spell.GetSpellInfo, SpellDocumentation.lua:416-430, else the rank's, the global cooldown at least; and Per mana, a point of mana, from
+-- C_Spell.GetSpellPowerCost, :535-549, with the casts from full mana, UnitPowerMax), the threat block (0.5.42: the threat of one hit or cast as a
+-- number from that total and the rules of design 2.5, G, with how it is made and its multipliers in short dim lines under it), and the lines of a
+-- stance, form, aura or talent tooltip. The lines of the total and threat blocks keep to about K.LINE_WIDTH characters and never wrap. Amounts
+-- are worded with the rounding of design 1.2, and the gear comparison's with that of design 2.3 (M.Fmt, which GearLines.lua, GearAvoid.lua and
+-- GearWindow.lua use too, with its one style of every line: M.Fmt.Style, whose header, good and bad colours are the game's NORMAL_FONT_COLOR,
+-- GREEN_FONT_COLOR and RED_FONT_COLOR, read once as this file loads, Blizzard_SharedXMLBase/Color.lua:82-86), thousands broken by the game's
+-- BreakUpLargeNumbers under pcall (as CombatText.lua:1445-1446: 2,390), and a spell's name in a dim line is the game's (C_Spell.GetSpellName).
 
 local KEY, PART = "chat", "your stats"
 local IsSecret, Finite = ns.IsSecret, ns.Finite
@@ -138,8 +141,10 @@ local K = {
 	BASIS = { c = 1, m = 2, e = 3 },
 	-- What a word without digits matches in a line the game writes (a school's name), and the words a spell's name keeps small.
 	WORD = "(%D-)", SMALL = { of = true, the = true, ["and"] = true, a = true, ["in"] = true },
-	-- A note after a share shorter than this stays on its line; a longer one gets a dim line of its own that wraps (design 1.2).
-	NOTE_WIDTH = 50,
+	-- A note after a share shorter than this stays on its line; a longer one gets a dim line of its own that wraps (design 1.2). A line of the total
+	-- and threat blocks (0.5.42) keeps to LINE_WIDTH characters, its left and right text with the gap between them, so none wraps in a tooltip
+	-- of the usual width: a longer right text drops its unit, and the multipliers of a threat go on as many short lines as they need.
+	NOTE_WIDTH = 50, LINE_WIDTH = 44,
 	-- The first half of the dim line of a part the game's text counts otherwise (design 1.3: Seal of Righteousness).
 	OTHERWISE = "The game's text shows a range for any weapon",
 	-- The comparison kinds that deal damage (SpellData.lua, cmp), and the threat kinds the multipliers in force change (design 2.5: Fade's
@@ -171,6 +176,10 @@ local K = {
 	-- The unit of a total by the part's per (design 1.2), and of the strikes and swings by kind.
 	PER_UNIT = { hit = "a hit", block = "a block", stack = "a stack", proc = "a proc" },
 	KIND_UNIT = { strike = "a hit", apstrike = "a hit", finisher = "a hit at 5 points", auto = "a swing", shot = "a shot", wand = "a shot" },
+	-- The unit of a figure on a line of its own (Expected, the threat of one hit; 0.5.42) by kind, where the total's own unit is longer than one
+	-- clause (over 18 sec, 120 a tick) or there is no total (a seal, a proc).
+	SHORT_UNIT = { strike = "a hit", apstrike = "a hit", finisher = "a hit at 5 points", auto = "a swing", shot = "a shot", wand = "a shot",
+		channel = "a channel", seal = "a hit", proc = "a proc" },
 	-- The colours of the style (design of 0.5.20: one style for every line): the game's NORMAL_FONT_COLOR, GREEN_FONT_COLOR and RED_FONT_COLOR from
 	-- its colour table (Blizzard_SharedXMLBase/Color.lua:82-86, which makes each a global of r, g and b), else their usual values; the light grey
 	-- of a label, the white of a value and the dim of a note (the hit table's DIM, HitTable.lua:79).
@@ -1764,6 +1773,21 @@ local function Dim(text)
 	return Line(text, nil, "plain", true, true)
 end
 
+-- A dim line kept short that stays where it comes and never wraps (0.5.42): how a threat is made, which SpellLines.lua never joins with a
+-- block's notes. A dim line with a right text (a rate) stays so too.
+local function Kept(text)
+	return Line(text, nil, "plain", true, false)
+end
+
+-- The right text of a line that keeps its line within K.LINE_WIDTH characters (0.5.42: no line of the spell lines wraps): the long one where it
+-- fits beside its left text, else the short one.
+local function Fit(left, long, short)
+	if #left + 2 + #long <= K.LINE_WIDTH then
+		return long
+	end
+	return short
+end
+
 -- A threat multiplier in force, { name, m, b, background }, by place and by name; also: what it would be in another case.
 local function Factor(name, m, b, background, also)
 	return { name, m, b, background, name = name, m = m, b = b, background = background, also = also }
@@ -1812,7 +1836,8 @@ local function SpellName(entry, row)
 end
 
 -- The name of a rule of a stance or form for the form the player is in: its own, or for a rule of two forms the name of the spell of its tooltip
--- in the same place (Bear Form, Dire Bear Form). In a list of multipliers a stance is its first word (design 1.2: Defensive x1.8).
+-- in the same place (Bear Form, Dire Bear Form); without full, a stance by its first word (Defensive). The threat block names a stance in full
+-- (0.5.42: Defensive Stance x1.8).
 local function FormRuleName(rule, form, full)
 	local name = type(rule.name) == "string" and rule.name or (type(rule.id) == "string" and rule.id) or "?"
 	if type(rule.form) == "table" and type(rule.tip) == "table" then
@@ -2191,8 +2216,8 @@ local function Applies(rule, entry, state)
 	return m, b, also
 end
 
--- The name of a rule in a list of multipliers: a talent with its rank of its ranks (Frost Channeling 3/3), a stance by its first word, a rule of
--- two forms by the form the player is in.
+-- The name of a rule in a list of multipliers: a talent with its rank of its ranks (Frost Channeling 3/3), a stance by its full name (0.5.42:
+-- Defensive Stance), a rule of two forms by the form the player is in.
 local function RuleName(rule, state)
 	local name = type(rule.name) == "string" and rule.name or (type(rule.id) == "string" and rule.id) or "?"
 	if rule.talent ~= nil then
@@ -2202,7 +2227,7 @@ local function RuleName(rule, state)
 			name = ("%s %d/%d"):format(name, rank, most)
 		end
 	elseif rule.form ~= nil then
-		name = FormRuleName(rule, state.form, false)
+		name = FormRuleName(rule, state.form, true)
 	end
 	return name
 end
@@ -2270,9 +2295,14 @@ local function Gain(t, index, row, level)
 	return to > from and gain * (to - from) or 0
 end
 
--- The right text of the threat line and its clauses for the dim line, by the kind of the spell's threat (design 1.2): own, its own rule (it
--- shows the block where threat is special); first, the clauses of its own rule; after, those after its note; factors, the multipliers it takes.
-local function Threat(kind, t, entry, row, index, state, stats, opts, G, factors, Gb)
+-- The right text of the threat line, how it is made and its clauses, by the kind of the spell's threat (design 1.2; 0.5.42): own, its own rule (it
+-- shows the block where threat is special); right, the threat of one hit or cast as a number where the rule has one a hit and total is given (the
+-- Total line's, with its short unit and whether it is healing: a damage rule counts a total of damage, a heal's a total of healing), ~ before it
+-- when the total, the rule or a multiplier is an estimate, else the rule in words as before (no stats, a seal, a shield not worn, a taunt, a flat
+-- threat, Mocking Blow's unknown more); formula, how the number is made ("(damage + 255) x 2.16"), nil where the right text says it already;
+-- ownFactor, the spell's own multiplier by name, named with the multipliers in force where they multiply with it; first, the other clauses of its
+-- own rule; after, those after its note; factors, the multipliers it takes.
+local function Threat(kind, t, entry, row, index, state, stats, opts, G, factors, Gb, total)
 	local r = { tone = "plain", own = false, first = {}, after = {}, factors = K.TAKES_G[kind] and factors or {} }
 	if not K.TAKES_G[kind] then
 		G, Gb = 1, "c"
@@ -2285,6 +2315,11 @@ local function Threat(kind, t, entry, row, index, state, stats, opts, G, factors
 	local guess = (basis == "e" or Gb == "e") and "~" or ""
 	local ap = t and Finite(t.ap) and t.ap or nil
 	local power = ap and stats and Finite(stats.ap) and stats.ap or nil
+	-- The total a number is made from, and the multipliers as a formula writes them (x 2.16) and as the rule in words does (x2.16).
+	local hit = total and Finite(total.value) and total.value > 0 and total or nil
+	local damage = hit and not hit.heal and hit or nil
+	local times = G ~= 1 and (" x " .. (Gb == "e" and "~" or "") .. Dec(G)) or ""
+	local word = G ~= 1 and (" " .. Mult(G)) or ""
 	if t and t.forms ~= nil and not InSet(t.forms, state.form) then
 		r.own, r.factors = true, {}
 		r.right = "only in " .. (FormNames(t.forms) or "a form")
@@ -2293,35 +2328,40 @@ local function Threat(kind, t, entry, row, index, state, stats, opts, G, factors
 	if kind == "mult" then
 		local v = Finite(value) and value or 1
 		r.own = t ~= nil and v ~= 1
-		r.right = guess .. "damage " .. Mult(v * G)
 		if r.own then
-			r.first[1] = SpellName(entry, row) .. " " .. (basis == "e" and "~" or "") .. Mult(v)
+			r.ownFactor = SpellName(entry, row) .. " " .. (basis == "e" and "~" or "") .. Mult(v)
+		end
+		if damage then
+			r.right = ((guess ~= "" or damage.estimate) and "~" or "") .. Num(Toward(damage.value * v * G)) .. " " .. damage.short
+			r.formula = (v * G ~= 1 or #r.factors > 0) and ("damage x " .. guess .. Dec(v * G)) or "equal to the damage"
+			r.tone = damage.old and "old" or "plain"
+		else
+			r.right = guess .. "damage " .. Mult(v * G)
 		end
 	elseif kind == "bonus" or kind == "flat" then
-		-- The amount of its own, and its share of attack power, multiplied with damage threat (bonus: Heroic Strike, damage x2.16 + ~324) or alone
-		-- (flat: Sunder Armor, 552). With no stats the rule stands in the right text, and the dim line names only the multipliers (design 1.3).
+		-- The amount of its own and its share of attack power, added to the damage before the multipliers (bonus: Heroic Strike, ~2,390 a hit from
+		-- (damage + ~150) x 2.16) or alone (flat: Sunder Armor, 552 from (206 + 5% of attack power) x 2.16). With no stats or no total the rule
+		-- stands in the right text (damage x2.16 + ~550), and the dim lines name only the multipliers (design 1.3).
 		r.own = true
-		local rule = Num(raw) .. (ap and (" + " .. Pct(ap) .. " of attack power") or "")
-		local times = G ~= 1 and (" " .. Mult(G)) or ""
 		local mine = (basis == "e" or (ap and t.apb == "e")) and "~" or ""
-		local head = ""
-		if kind == "bonus" then
-			head = (Gb == "e" and "~" or "") .. "damage" .. times .. " + "
-		elseif Gb == "e" then
-			mine = "~"
-		end
-		if ap and not power then
-			r.right = head .. mine .. (G ~= 1 and ("(" .. rule .. ")" .. times) or rule)
+		local rule = mine .. Num(raw) .. (ap and (" + " .. Pct(ap) .. " of attack power") or "")
+		local amount = not (ap and not power) and raw + (ap and power * ap or 0) or nil
+		if kind == "bonus" and damage and amount then
+			r.right = ((mine ~= "" or Gb == "e" or damage.estimate) and "~" or "") .. Num(Toward((damage.value + amount) * G)) .. " " .. damage.short
+			r.formula = G ~= 1 and ("(damage + " .. rule .. ")" .. times) or ("damage + " .. rule)
+			r.tone = (damage.old or (ap and stats.old)) and "old" or "plain"
+		elseif kind == "bonus" then
+			local head = (Gb == "e" and "~" or "") .. "damage" .. word .. " + "
+			r.right = head .. (amount and (mine .. Num(Toward(amount * G))) or (G ~= 1 and ("(" .. rule .. ")" .. word) or rule))
+			r.tone = amount and ap and stats.old and "old" or "plain"
+		elseif amount then
+			r.right = ((mine ~= "" or Gb == "e") and "~" or "") .. Num(Toward(amount * G))
+			if ap or G ~= 1 then
+				r.formula = (ap and G ~= 1) and ("(" .. rule .. ")" .. times) or (rule .. times)
+			end
+			r.tone = ap and stats.old and "old" or "plain"
 		else
-			r.right = head .. mine .. Num(Toward((raw + (ap and power * ap or 0)) * G))
-			if kind == "bonus" then
-				r.first[1] = "damage + " .. mine .. rule
-			elseif ap or G ~= 1 then
-				r.first[1] = rule
-			end
-			if ap and stats.old then
-				r.tone = "old"
-			end
+			r.right = (Gb == "e" and "~" or "") .. (G ~= 1 and ("(" .. rule .. ")" .. word) or rule)
 		end
 	elseif kind == "more" then
 		r.own = true
@@ -2333,7 +2373,9 @@ local function Threat(kind, t, entry, row, index, state, stats, opts, G, factors
 	elseif kind == "drop" then
 		r.own = true
 		r.right = guess .. Num(Toward(-math.abs(raw) * G))
-		r.first[1] = Num(-math.abs(raw))
+		if G ~= 1 then
+			r.formula = Num(-math.abs(raw)) .. times
+		end
 	elseif kind == "temp" then
 		r.own = true
 		r.right = guess .. Num(Toward(-math.abs(raw))) .. (duration and (" for " .. Sec(duration)) or "")
@@ -2359,10 +2401,18 @@ local function Threat(kind, t, entry, row, index, state, stats, opts, G, factors
 		local data, general = ns.SpellData, ModelOf("healThreat")
 		local paladin = type(data) == "table" and type(data.HEAL_THREAT) == "table" and data.HEAL_THREAT[entry.key] or nil
 		local v = (Finite(paladin) and paladin) or (Finite(value) and value) or general
+		local split = (t == nil or t.split) and ", split" or ""
+		local healing = hit and hit.heal and hit or nil
 		r.own = Finite(paladin) or (t ~= nil and v ~= general)
-		r.right = guess .. Dec(v * G) .. " x healing" .. ((t == nil or t.split) and ", split" or "")
 		if r.own then
-			r.first[1] = SpellName(entry, row) .. " " .. Dec(v)
+			r.ownFactor = SpellName(entry, row) .. " " .. Dec(v)
+		end
+		if healing then
+			r.right = ((guess ~= "" or healing.estimate) and "~" or "") .. Num(Toward(healing.value * v * G)) .. " " .. healing.short .. split
+			r.formula = "healing x " .. guess .. Dec(v * G)
+			r.tone = healing.old and "old" or "plain"
+		else
+			r.right = guess .. Dec(v * G) .. " x healing" .. split
 		end
 	elseif kind == "caster" then
 		-- Faerie Fire in a bear form: twice the caster's level (research_threat_tanks.md §2, EV-0034).
@@ -2370,9 +2420,9 @@ local function Threat(kind, t, entry, row, index, state, stats, opts, G, factors
 		local v, who = Finite(value) and value or 0, entry.pet and "your pet's level" or "your level"
 		if Finite(level) then
 			r.right = guess .. Num(Toward(v * level * G))
-			r.first[1] = Dec(v) .. " x " .. who
+			r.formula = G ~= 1 and ("(" .. Dec(v) .. " x " .. who .. ")" .. times) or (Dec(v) .. " x " .. who)
 		else
-			r.right = Dec(v) .. " x " .. who .. (G ~= 1 and (" " .. Mult(G)) or "")
+			r.right = Dec(v) .. " x " .. who .. word
 		end
 	elseif kind == "rage" then
 		-- Rage gained: v is threat a point of rage, split, and no multiplier of the spell changes it; the data's note says which rage a stance
@@ -2628,6 +2678,8 @@ end
 -- The spell totals -----------------------------------------------------------------------------------------------------------------------------
 
 -- The base of a part at the player's level: the rank's mean at lv and its gain a level up to mx (design 3.2), as GearModel.lua's Base counts it.
+-- at, here and in the totals below, is the part's place in the entry's parts, by which a rank lists its values (bm, bl, c, n, w), never the
+-- rank's own place (0.5.42: Total read the rank's place, so every rank but the first lost its base, Shield Slam Rank 4 its 655).
 local function PartBase(row, at, level)
 	local base = PartValue(row.bm, at) or 0
 	local gain = PartValue(row.bl, at)
@@ -2826,11 +2878,13 @@ local function TotalUnit(kind, t, row, state)
 	return unit
 end
 
--- What one cast does now with the player's stats (0.5.20, Total): { value, base, bonus, unit, estimate }, the sum of the parts its kind counts
--- (a heal's healing parts, any other kind's other parts, as GearModel.lua's Suits; never a part on the caster, nor the off hand of a strike while
--- the player does not dual wield), the base what the spell and the weapon give and the bonus what the player's stats add. Nil for a kind it is
--- not worked out for (a seal, a proc, a threat alone), a strike whose weapon the player lacks, or a spell that needs a dagger or shield not worn.
-local function Total(entry, row, at, state, stats, lowRank)
+-- What one cast does now with the player's stats (0.5.20, Total): { value, base, bonus, unit, estimate, heal }, the sum of the parts its kind
+-- counts (a heal's healing parts, any other kind's other parts, as GearModel.lua's Suits; never a part on the caster, nor the off hand of a strike
+-- while the player does not dual wield), the base what the spell and the weapon give and the bonus what the player's stats add, each part read at
+-- its own place of the rank (0.5.42), so it counts the same parts as GearModel.lua's G.Expect and its expected value weighs this total; heal is
+-- true for a total of healing. Nil for a kind it is not worked out for (a seal, a proc, a threat alone), a strike whose weapon the player lacks,
+-- or a spell that needs a dagger or shield not worn.
+local function Total(entry, row, state, stats, lowRank)
 	local kind = TotalKind(entry)
 	if not K.TOTAL_KINDS[kind] or not Equipped(entry, state) then
 		return nil
@@ -2845,16 +2899,16 @@ local function Total(entry, row, at, state, stats, lowRank)
 				local damage = type(stats.rdmg) == "table" and stats.rdmg or {}
 				base, bonus, estimate = mean and mean * (Finite(damage.pct) and damage.pct or 1), 0, true
 			elseif part[1] == "wpn" then
-				base, bonus, estimate = WeaponTotal(entry, row, at, part, state, stats)
+				base, bonus, estimate = WeaponTotal(entry, row, index, part, state, stats)
 			else
-				base, bonus, estimate = PartTotal(entry, row, at, part, state, stats, lowRank)
+				base, bonus, estimate = PartTotal(entry, row, index, part, state, stats, lowRank)
 			end
 			if base == nil then
 				return nil
 			end
 			t.base, t.bonus, t.any = t.base + base, t.bonus + bonus, true
 			t.estimate = t.estimate or estimate == true
-			local ticks = PartValue(row.n, at) or part.n
+			local ticks = PartValue(row.n, index) or part.n
 			if Finite(ticks) and ticks >= 2 then
 				t.ticks, t.period = ticks, Finite(part.p) and part.p or t.period
 			else
@@ -2871,7 +2925,24 @@ local function Total(entry, row, at, state, stats, lowRank)
 	if not t.any then
 		return nil
 	end
-	return { value = t.base + t.bonus, base = t.base, bonus = t.bonus, unit = TotalUnit(kind, t, row, state), estimate = t.estimate }
+	return { value = t.base + t.bonus, base = t.base, bonus = t.bonus, unit = TotalUnit(kind, t, row, state), estimate = t.estimate, heal = heal }
+end
+
+-- The unit of a figure on a line of its own (0.5.42: Expected, the threat of one hit or cast): a target for a total on each target (Cleave,
+-- Consecration, Holy Nova), whose figure is one target's; the total's unit where it is one clause (a hit, a block, a hit at 5 points), else the
+-- kind's (K.SHORT_UNIT: a cast for a spell over time, whose total is over its duration), a swing of each hand for both hands' swings.
+local function ShortUnit(entry, state, total)
+	local unit = total and total.unit
+	if type(unit) == "string" and unit:find(", each target$") then
+		return "a target"
+	elseif type(unit) == "string" and not unit:find(",", 1, true) and not unit:find("^over ") then
+		return unit
+	end
+	local kind = TotalKind(entry)
+	if kind == "auto" and state.dual == true then
+		return "a swing of each hand"
+	end
+	return K.SHORT_UNIT[kind] or "a cast"
 end
 
 -- The seconds of one cast for "a second of casting": a channel's duration, else C_Spell.GetSpellInfo's castTime of the rank (SpellDocumentation.lua:
@@ -2916,12 +2987,14 @@ local function ManaCost(id)
 	return nil
 end
 
--- The rates line (0.5.20, chat.spellRates): the expected value with crits and misses (GearModel.lua's G.Expect, looked up when asked, its cast; with
--- crits alone for a heal, which never misses; 0.5.26: and Spell Piercing for a damage spell of a school of magic on the Spell line, the damage it
--- adds), then a second of cast time (the global cooldown for an instant), or for what rides on the swings or shots its own figure a second, and a
--- point of mana, each of the expected value, else of the total; ~ before an estimate; and after the mana how many casts a full bar of mana gives
--- (0.5.36, the player's UnitPowerMax of mana over the cost, kept with the stats). Nil with nothing to say.
-local function Rates(entry, at, row, state, stats, total, lowRank)
+-- The rates lines (0.5.20, chat.spellRates; 0.5.42 a dim line each, a label on the left and its figure on the right, so none wraps): Expected,
+-- the expected value of a cast with crits and misses (GearModel.lua's G.Expect, looked up when asked, its cast, which weighs the same parts as the
+-- total, so it is above the total only by what crits add; with crits alone for a heal, which never misses; 0.5.26: and Spell Piercing for a damage
+-- spell of a school of magic on the Spell line, the damage it adds), with its unit (ShortUnit) where the line has room; Per second, of cast time
+-- (of the global cooldown for an instant), or for what rides on the swings or shots its own figure a second; and Per mana, a point of mana, with
+-- how many casts a full bar of mana gives (0.5.36, the player's UnitPowerMax of mana over the cost, kept with the stats); each of the expected
+-- value, else of the total; ~ before an estimate. None with nothing to say.
+local function Rates(out, entry, at, row, state, stats, total, lowRank)
 	local G = ns.GearModel
 	local result = nil
 	if type(G) == "table" and type(G.Expect) == "function" then
@@ -2930,51 +3003,53 @@ local function Rates(entry, at, row, state, stats, total, lowRank)
 			result = value
 		end
 	end
-	local words, figure, guess = {}, nil, ""
+	local figure, guess = nil, ""
 	if result then
 		figure, guess = result.cast, result.estimate == true and "~" or ""
+	elseif total then
+		figure, guess = total.value, total.estimate and "~" or ""
+	end
+	if not figure or figure <= 0 then
+		return
+	end
+	if result then
 		local with = " with crits and misses"
 		if K.HEALS[TotalKind(entry)] then
 			with = " with crits"
 		elseif entry.roll == "spell" and entry.school ~= 1 and entry.cmp ~= "threat" then
 			with = " with crits, misses and Spell Piercing"
 		end
-		words[1] = "Expected " .. guess .. Num(figure) .. with
-	elseif total then
-		figure, guess = total.value, total.estimate and "~" or ""
-	end
-	if not figure or figure <= 0 then
-		return nil
+		local amount = guess .. Num(figure)
+		out[#out + 1] = Line("Expected", Fit("Expected", amount .. " " .. ShortUnit(entry, state, total) .. with, amount .. with), "plain", true)
 	end
 	if result and result.perSecond then
 		if Finite(result.second) then
-			words[#words + 1] = guess .. Num(result.second) .. " a second"
+			out[#out + 1] = Line("Per second", guess .. Num(result.second) .. " at your attack speed", "plain", true)
 		end
-	elseif not entry.nx then
-		local seconds, instant = CastSeconds(entry, row)
-		words[#words + 1] = guess .. Num(figure / seconds) .. (instant and " a second of the global cooldown" or " a second of casting")
-		local mana = ManaCost(row[1])
-		if mana then
-			words[#words + 1] = guess .. Num(figure / mana) .. " a point of mana"
-			-- How often a full bar of mana casts it (0.5.36), without the mana that comes back meanwhile.
-			local full = type(stats) == "table" and stats.mana or nil
-			if Finite(full) and full >= mana then
-				local casts = math.floor(full / mana)
-				words[#words + 1] = casts .. (casts == 1 and " cast" or " casts") .. " from full mana"
-			end
+		return
+	elseif entry.nx then
+		return
+	end
+	local seconds, instant = CastSeconds(entry, row)
+	out[#out + 1] = Line("Per second", guess .. Num(figure / seconds) .. (instant and " of the global cooldown" or " of cast time"), "plain", true)
+	local mana = ManaCost(row[1])
+	if mana then
+		local right = guess .. Num(figure / mana)
+		-- How often a full bar of mana casts it (0.5.36), without the mana that comes back meanwhile. With the short label the line keeps to
+		-- K.LINE_WIDTH even at "~12.5, 1,234 casts from full mana".
+		local full = type(stats) == "table" and stats.mana or nil
+		if Finite(full) and full >= mana then
+			local casts = math.floor(full / mana)
+			right = right .. ", " .. Num(casts) .. (casts == 1 and " cast" or " casts") .. " from full mana"
 		end
+		out[#out + 1] = Line("Per mana", right, "plain", true)
 	end
-	if #words == 0 then
-		return nil
-	end
-	words[1] = words[1]:sub(1, 1):upper() .. words[1]:sub(2)
-	return table.concat(words, "; ")
 end
 
 -- The total block of a rank (0.5.20), titled "Total" (out.title): a line "Total" with what one cast does now with the player's stats, base and
--- bonus together ("973 a cast  (556 + 417)", Total; while chat.spellTotal is on), and one dim line of its rates (Rates; while chat.spellRates is
--- on). opts { total, rates, lowRank }, each on unless false. Nothing without stats (With your stats off) or for a pet's spell, whose power is the
--- pet's own. tone is "old" while the stats are from before a fight now on.
+-- bonus together ("973 a cast  (556 + 417)", Total; while chat.spellTotal is on), and under it the dim lines of its rates (Rates; while
+-- chat.spellRates is on). opts { total, rates, lowRank }, each on unless false. Nothing without stats (With your stats off) or for a pet's spell,
+-- whose power is the pet's own. tone is "old" while the stats are from before a fight now on.
 function M.TotalLines(entry, rank, state, stats, opts)
 	local out = { title = "Total" }
 	if type(entry) ~= "table" or entry.pet or type(entry.parts) ~= "table" or type(entry.ranks) ~= "table" or type(stats) ~= "table" then
@@ -2987,7 +3062,7 @@ function M.TotalLines(entry, rank, state, stats, opts)
 	state = type(state) == "table" and state or S.state
 	opts = type(opts) == "table" and opts or {}
 	local lowRank = opts.lowRank ~= false
-	local total = Total(entry, row, at, state, stats, lowRank)
+	local total = Total(entry, row, state, stats, lowRank)
 	if total and opts.total ~= false then
 		local right = (total.estimate and "~" or "") .. Num(total.value) .. " " .. total.unit
 		if total.base >= 1 and total.bonus >= 1 then
@@ -2996,18 +3071,45 @@ function M.TotalLines(entry, rank, state, stats, opts)
 		out[#out + 1] = Line("Total", right, stats.old and "old" or "plain")
 	end
 	if opts.rates ~= false then
-		local text = Rates(entry, at, row, state, stats, total, lowRank)
-		if text then
-			out[#out + 1] = Dim(text)
-		end
+		Rates(out, entry, at, row, state, stats, total, lowRank)
 	end
 	return out
 end
 
--- The threat block of a rank (design 1.2, 1.4; titled "Threat"), or none: a line "Threat" with the value and a dim line naming the spell's own
--- rule and each multiplier in force. opts { mode = "special", "all" or "off", petLevel, role }. Where threat is special or changed the block shows
--- for a rule of the spell's own, a heal whose half a point something changes, or a multiplier the player can change that is not background;
--- background ones are named when something else brings the block.
+-- How a threat is made, as short dim lines that stay where they come (Kept; 0.5.42): its formula with the multipliers named after it on one line
+-- where that fits K.LINE_WIDTH, else the formula and then the names, as many to a line as fit; or the names alone where the right text is the
+-- formula itself (no stats, or a rule with no number a hit).
+local function Made(out, formula, names)
+	local list = table.concat(names, ", ")
+	if formula and #names > 0 and #formula + 2 + #list <= K.LINE_WIDTH then
+		out[#out + 1] = Kept(formula .. ": " .. list)
+		return
+	elseif formula then
+		out[#out + 1] = Kept(formula)
+	end
+	local line = nil
+	for _, name in ipairs(names) do
+		if line and #line + 2 + #name <= K.LINE_WIDTH then
+			line = line .. ", " .. name
+		else
+			if line then
+				out[#out + 1] = Kept(line)
+			end
+			line = name
+		end
+	end
+	if line then
+		out[#out + 1] = Kept(line)
+	end
+end
+
+-- The threat block of a rank (design 1.2, 1.4; titled "Threat"), or none: a line "Threat" with the threat of one hit or cast as a number where
+-- its rule gives one (0.5.42: from the same total as the Total line, Total, its damage, or its healing for a heal; "~2,400 a hit"), else the rule
+-- in words; under it how it is made, once, in short dim lines (Made: "(damage + 255) x 2.16" and the multipliers in force, "Defensive Stance
+-- x1.8, Defiance 3/3 x1.2"), never the right text again in another form; then one dim note of the rest of its own rule (Mocking Blow's forced
+-- attacks, the data's note, Fade's time). opts { mode = "special", "all" or "off", petLevel, role, lowRank }. Where threat is special or changed
+-- the block shows for a rule of the spell's own, a heal whose half a point something changes, or a multiplier the player can change that is not
+-- background; background ones are named when something else brings the block.
 function M.ThreatLines(entry, rank, state, stats, opts)
 	local out = { title = "Threat" }
 	if type(entry) ~= "table" or type(entry.ranks) ~= "table" then
@@ -3033,8 +3135,14 @@ function M.ThreatLines(entry, rank, state, stats, opts)
 	if not kind or kind == "unknown" then
 		return out
 	end
+	-- The total of one hit or cast with the player's stats, as the Total line has it, and its unit on a line of its own.
+	local total = stats and type(entry.parts) == "table" and Total(entry, row, state, stats, opts.lowRank ~= false) or nil
+	if total then
+		total.short = ShortUnit(entry, state, total)
+		total.old = stats.old == true
+	end
 	local G, factors, Gb = Factors(entry, state, opts.role or state.role)
-	local r = Threat(kind, t, entry, row, index, state, stats, opts, G, factors, Gb)
+	local r = Threat(kind, t, entry, row, index, state, stats, opts, G, factors, Gb, total)
 	if not r then
 		return out
 	end
@@ -3045,6 +3153,16 @@ function M.ThreatLines(entry, rank, state, stats, opts)
 	if not show then
 		return out
 	end
+	-- The names of the multipliers, the spell's own first where others multiply with it (the formula or the right text has it alone).
+	local names = {}
+	if r.ownFactor and #r.factors > 0 then
+		names[1] = r.ownFactor
+	end
+	for _, factor in ipairs(r.factors) do
+		names[#names + 1] = factor.name .. " " .. (factor.b == "e" and "~" or "") .. Mult(factor.m) .. (factor.also and (", " .. factor.also) or "")
+	end
+	out[1] = Line("Threat", r.right, r.tone)
+	Made(out, r.formula, names)
 	local clauses = {}
 	for _, clause in ipairs(r.first) do
 		clauses[#clauses + 1] = clause
@@ -3055,16 +3173,8 @@ function M.ThreatLines(entry, rank, state, stats, opts)
 	for _, clause in ipairs(r.after) do
 		clauses[#clauses + 1] = clause
 	end
-	local named = {}
-	for _, factor in ipairs(r.factors) do
-		named[#named + 1] = factor.name .. " " .. (factor.b == "e" and "~" or "") .. Mult(factor.m) .. (factor.also and (", " .. factor.also) or "")
-	end
-	if #named > 0 then
-		clauses[#clauses + 1] = table.concat(named, ", ")
-	end
-	out[1] = Line("Threat", r.right, r.tone)
 	if #clauses > 0 then
-		out[2] = Dim(table.concat(clauses, "; "))
+		out[#out + 1] = Dim(table.concat(clauses, "; "))
 	end
 	return out
 end
