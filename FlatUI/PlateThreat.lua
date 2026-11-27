@@ -23,7 +23,8 @@ local _, ns = ...
 -- (Modules/Threat.lua:247-253). The other parts hear a change of a plate's level (PT.OnChange), and every update (PT.OnUpdate).
 -- The role is worked out on events and not for each plate, and while threat is off at each ask of PT.Role, which Flat UI setup and the hit table
 -- make (ns.PlayerRole, Core.lua): the role the group gave, the raid's Main Tank, the game's tank aura, then a warrior's Defensive Stance, a druid's
--- bear form and a paladin's Righteous Fury, as Threat Plates' Classic path has them. Nothing of the game is changed: every call only reads, and a
+-- bear form and a paladin's Righteous Fury, as Threat Plates' Classic path has them. PT.AutoRole gives what that automatic choice works out now
+-- without keeping it, for setup's threat samples at a draft of From your role, stance or form. Nothing of the game is changed: every call only reads, and a
 -- frame of the file's own hears UPDATE_SHAPESHIFT_FORM for a warrior or a druid while the role is automatic.
 
 local KEY = "nameplates"
@@ -247,33 +248,36 @@ end
 -- (UnitHasEffectivelyTankAura, UnitDocumentation.lua:1365-1379, which the game's PlayerUtil.IsPlayerEffectivelyTank asks first,
 -- Blizzard_SharedXML/UnitUtil.lua:109-121; that is a table of the game, so the client's own function is called, as Setup.lua does), else Defensive
 -- Stance, a bear form or Righteous Fury by class. Threat Plates reads the aura and the class alone (Nameplate.lua:2397-2418). True when the role changed.
+-- Auto is the part of From your role, stance or form: whether it makes the player a tank now, and why; it writes nothing.
+local function Auto()
+	local given = Call(UnitGroupRolesAssigned, "player")
+	if given == "TANK" then
+		return true, "your group role"
+	elseif given == "HEALER" or given == "DAMAGER" then
+		return false, "your group role"
+	elseif Assigned("MAINTANK", "player") then
+		return true, "Main Tank"
+	elseif Call(UnitHasEffectivelyTankAura, "player") == true then
+		return true, "a tank aura"
+	end
+	local kind = Class()
+	if kind == "WARRIOR" and Form() == DEFENSIVE then
+		return true, "Defensive Stance"
+	elseif kind == "DRUID" and InBearForm() then
+		return true, "Bear Form"
+	elseif kind == "PALADIN" and fury then
+		return true, "Righteous Fury"
+	end
+	return false, "no tank stance or form"
+end
+
 local function WorkOut()
 	local choice = Opt("threatRole")
 	local tank, reason
 	if choice == "tank" or choice == "damage" then
 		tank, reason = choice == "tank", "your choice"
 	else
-		local given = Call(UnitGroupRolesAssigned, "player")
-		if given == "TANK" then
-			tank, reason = true, "your group role"
-		elseif given == "HEALER" or given == "DAMAGER" then
-			tank, reason = false, "your group role"
-		elseif Assigned("MAINTANK", "player") then
-			tank, reason = true, "Main Tank"
-		elseif Call(UnitHasEffectivelyTankAura, "player") == true then
-			tank, reason = true, "a tank aura"
-		else
-			local kind = Class()
-			if kind == "WARRIOR" and Form() == DEFENSIVE then
-				tank, reason = true, "Defensive Stance"
-			elseif kind == "DRUID" and InBearForm() then
-				tank, reason = true, "Bear Form"
-			elseif kind == "PALADIN" and fury then
-				tank, reason = true, "Righteous Fury"
-			else
-				tank, reason = false, "no tank stance or form"
-			end
-		end
+		tank, reason = Auto()
 	end
 	local changed = role.reason ~= nil and role.tank ~= tank
 	role.tank, role.reason, role.choice = tank, reason, choice
@@ -557,6 +561,17 @@ function PT.Role()
 		WorkOut()
 	end
 	return role.tank and "tank" or "damage", role.reason
+end
+
+-- "tank" or "damage", and why, as From your role, stance or form works it out now, whatever Your role says, writing nothing the live plates read
+-- (Righteous Fury is read first while threat is off, as PT.Role reads it): Flat UI setup's threat samples ask it while the draft's Your role is
+-- at that choice (SetupDrawPlates.lua's P.Damage), so they show the colours the plates will take, and the role kept for the plates stays theirs.
+function PT.AutoRole()
+	if not PT.Active() then
+		ReadFury()
+	end
+	local tank, reason = Auto()
+	return tank and "tank" or "damage", reason
 end
 
 -- True once a plate has had an answer of the game this session: threat is in use.

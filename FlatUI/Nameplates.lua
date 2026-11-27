@@ -7,8 +7,8 @@ local _, ns = ...
 -- (UpdateAnchors puts them back): when the plate gets its unit, and after the game's nameplate options change. Class icons are frames of the addon's own beside the health bar. An elite, a rare or a boss
 -- has a mark after its level number and a coloured border, and any plate can have a fading row behind its name.
 -- A size or place the game will not let addon code set on a protected plate in a fight waits for its end (QueueSizes); when it was a change of one
--- of those rows in the options window (Health bar height, Nameplate cast bar height, Bar width, the level box, the raid marker, the class icons),
--- chat says once a fight, while the window shows, that the plates take it as the fight ends. A class icon that comes or goes places the row of
+-- of those rows in the options window (Restyle friendly nameplates, Health bar height, Nameplate cast bar height, Bar width, the level box, the raid
+-- marker, the class icons), chat says once a fight, while the window shows, that the plates take it as the fight ends. A class icon that comes or goes places the row of
 -- combo points again (PlateCombo.lua's ns.PlateComboPlace), which hangs under a Below icon.
 
 local KEY = "nameplates"
@@ -74,7 +74,7 @@ local classQueue, classAll, classQueued = {}, false, false
 local layoutQueued, sizesQueued = false, false
 -- The chat line of a size change that waits for the end of a fight: rows (the rows that size or place what the game may protect), last (their values
 -- at the last refresh, as one string), refreshing (true while a refresh that changed one of them styles the plates) and told (said this fight).
-local TELL = { rows = { "enabled", "healthHeight", "castHeight", "barWidth", "level", "levelShape", "levelGap", "levelSize", "raidMarker", "raidMarkerSize",
+local TELL = { rows = { "enabled", "friendly", "healthHeight", "castHeight", "barWidth", "level", "levelShape", "levelGap", "levelSize", "raidMarker", "raidMarkerSize",
 	"raidMarkerX", "raidMarkerY", "classEnemy", "classFriendly", "classPosition", "classFit", "classSize", "classGap" }, last = nil, refreshing = false,
 	told = false }
 -- layoutFresh: every request for the queued layout came after the game laid the plates out. optionsPending: the game's options changed since the last layout.
