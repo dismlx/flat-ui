@@ -1474,6 +1474,26 @@ function ns.TrinketWindowSlot()
 	return U.IsOpen() and W.n or nil
 end
 
+function ns.TrinketWindowOwns(owner)
+	local frame = W.frame
+	if frame == nil then
+		return false
+	end
+	for _ = 1, 8 do
+		if owner == nil or IsSecret(owner) or type(owner) ~= "table" then
+			return false
+		elseif rawequal(owner, frame) then
+			return true
+		end
+		local ok, parent = pcall(owner.GetParent, owner)
+		if not ok then
+			return false
+		end
+		owner = parent
+	end
+	return not IsSecret(owner) and rawequal(owner, frame)
+end
+
 function ns.TrinketWindowLines()
 	return T.LINES
 end

@@ -236,6 +236,9 @@ local function AuraTime(seconds)
 		end
 		return ("%d"):format(math.max(0, seconds))
 	end
+	if format == "clock" and seconds < 86400 then
+		return ("%dh%02d"):format(math.floor(seconds / 3600), math.floor(seconds % 3600 / 60))
+	end
 	if (format == "tight" or format == "clock") and type(cooldown) == "string" and not cooldown:find("%%d%s") then
 		form = form:gsub("(%%d)%s+", "%1")
 	end

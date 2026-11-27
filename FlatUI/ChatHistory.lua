@@ -17,7 +17,7 @@ local TAGS = { CHAT_MSG_PARTY = "[Party] ", CHAT_MSG_PARTY_LEADER = "[Party Lead
 	CHAT_MSG_GUILD = "[Guild] ", CHAT_MSG_OFFICER = "[Officer] " }
 
 local S = { frame = nil, given = {}, withheld = 0, shown = false, session = {}, box = nil, closing = false }
-local COPY = { LINES = { { 50, "The last 50 lines" }, { 200, "The last 200 lines" } }, FIRST = 50, WIDTH = 560, HEIGHT = 340, PAD = 8, HELP = 24,
+local COPY = { LINES = { { 50, "The last 50 lines" }, { 200, "The last 200 lines" } }, FIRST = 50, WIDTH = 560, HEIGHT = 340, PAD = 8, HELP = 24, ROOM = 24,
 	WHEEL = 42,
 	MOVES = { LEFT = true, RIGHT = true, UP = true, DOWN = true, HOME = true, END = true, PAGEUP = true, PAGEDOWN = true },
 	SAY = "The last %d %s heard: press %s to copy %s, or select a part first. Escape closes this.",
@@ -135,6 +135,10 @@ local function Keep(event, ...)
 		return
 	end
 	local line = { time = now, event = event, sender = sender, text = text }
+	local guid = select(12, ...)
+	if Plain(guid, "string") and guid:find("^Player%-") then
+		line.guid = guid
+	end
 	if event == CHANNEL then
 		if Opt("restoreChannels") ~= true or not Plain(channel, "string") or channel == "" or not Plain(index, "number") or index ~= math.floor(index) then
 			return
@@ -194,19 +198,55 @@ local function Dimmed(hex)
 	return table.concat(out)
 end
 
+local function ClassHex(guid)
+	if not Plain(guid, "string") or type(GetPlayerInfoByGUID) ~= "function" or not Plain(RAID_CLASS_COLORS, "table") then
+		return nil
+	end
+	local ok, _, class = pcall(GetPlayerInfoByGUID, guid)
+	if not ok or not Plain(class, "string") then
+		return nil
+	end
+	local colour = RAID_CLASS_COLORS[class]
+	if not Plain(colour, "table") then
+		return nil
+	end
+	local r, g, b = colour.r, colour.g, colour.b
+	if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		return nil
+	end
+	local function byte(value)
+		return math.floor(math.max(0, math.min(1, value)) * 255 + 0.5)
+	end
+	return ("%02x%02x%02x"):format(byte(r), byte(g), byte(b))
+end
+
+local function Named(line, name, brackets)
+	local shown = brackets and "[" .. name .. "]" or name
+	local sender = line.sender
+	if not Plain(sender, "string") or sender:find("[|:]") or name:find("|", 1, true) then
+		return shown
+	end
+	local link = "|Hplayer:" .. sender .. "|h" .. shown .. "|h"
+	local hex = ClassHex(line.guid)
+	if hex then
+		return "|cff" .. Dimmed(hex) .. link .. "|r"
+	end
+	return link
+end
+
 local function Line(line)
 	local name, body = Short(line.sender), nil
 	if line.event == "CHAT_MSG_EMOTE" then
-		body = name .. " " .. line.text
+		body = Named(line, name, false) .. " " .. line.text
 	elseif line.event == "CHAT_MSG_WHISPER" then
-		body = "[" .. name .. "] whispers: " .. line.text
+		body = Named(line, name, true) .. " whispers: " .. line.text
 	elseif line.event == "CHAT_MSG_WHISPER_INFORM" then
-		body = "To [" .. name .. "]: " .. line.text
+		body = "To " .. Named(line, name, true) .. ": " .. line.text
 	elseif line.event == CHANNEL then
 		local label = type(ns.ChatChannelLabel) == "function" and ns.ChatChannelLabel(line.channel) or line.channel
-		body = "[" .. (Plain(label, "string") and label or line.channel) .. "] [" .. name .. "]: " .. line.text
+		body = "[" .. (Plain(label, "string") and label or line.channel) .. "] " .. Named(line, name, true) .. ": " .. line.text
 	else
-		body = (TAGS[line.event] or "") .. "[" .. name .. "]: " .. line.text
+		body = (TAGS[line.event] or "") .. Named(line, name, true) .. ": " .. line.text
 	end
 	return "[" .. Clock(line.time) .. "] " .. body
 end
@@ -325,9 +365,13 @@ local function CloseCopy()
 		return
 	end
 	S.closing = true
+	local ok, was = pcall(box.frame.IsShown, box.frame)
 	pcall(box.edit.ClearFocus, box.edit)
 	pcall(box.frame.Hide, box.frame)
 	S.closing = false
+	if ok and not ns.IsSecret(was) and was == true and type(ns.ChatBoxSound) == "function" then
+		ns.ChatBoxSound(false)
+	end
 end
 
 local function Mac()
@@ -371,7 +415,7 @@ local function BuildCopy()
 	local help = ns.OwnText(frame, "OVERLAY", "GameFontNormalSmall")
 	if help then
 		help:SetPoint("TOPLEFT", frame, "TOPLEFT", COPY.PAD, -7)
-		help:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -COPY.PAD, -7)
+		help:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -COPY.ROOM, -7)
 		pcall(help.SetJustifyH, help, "LEFT")
 	end
 	local scroll = CreateFrame("ScrollFrame", nil, frame)
@@ -394,6 +438,9 @@ local function BuildCopy()
 		pcall(edit.SetFocus, edit)
 	end)
 	local box = { frame = frame, help = help, scroll = scroll, edit = edit }
+	if type(ns.ChatBoxDress) == "function" then
+		box.dress = ns.ChatBoxDress(frame, CloseCopy)
+	end
 	local function Wheel(_, delta)
 		if ns.Finite(delta) then
 			local ok, now = pcall(scroll.GetVerticalScroll, scroll)
@@ -502,7 +549,11 @@ local function OpenCopy(count)
 	end
 	box.frame:ClearAllPoints()
 	box.frame:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
+	local okShown, was = pcall(box.frame.IsShown, box.frame)
 	box.frame:Show()
+	if type(ns.ChatBoxOpened) == "function" then
+		ns.ChatBoxOpened(box.dress, okShown and not ns.IsSecret(was) and was == true)
+	end
 	pcall(box.edit.SetFocus, box.edit)
 	pcall(box.edit.HighlightText, box.edit)
 	local ok, focus = pcall(box.edit.HasFocus, box.edit)

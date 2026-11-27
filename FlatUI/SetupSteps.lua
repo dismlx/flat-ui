@@ -1001,6 +1001,7 @@ ns.SETUP_STEPS = {
 		{ "chat.mentionColour", "r", "behaviour", "Sets the colour your name takes in other players' chat lines." },
 		{ "chat.mentionSound", "o", "behaviour", "Plays a sound once for each chat line that names you." },
 		{ "chat.mentionTab", "o", "behaviour", "Lights a chat tab that is not chosen in Your name colour when a line in it names you, until you click it." },
+		{ "chat.mentionFlash", "o", "behaviour", "Flashes the game's icon on the taskbar or dock for a line that names you while the game is in the background." },
 		{ "chat.mentionWords", "r", "behaviour", "Adds a word that chat colours as your name, or lists those words; choose one to stop colouring it." },
 	} },
 	{ id = "tips", area = "Tooltips", title = "Tooltips", draw = "mock-tooltip", built = true, rows = {
@@ -1015,6 +1016,8 @@ ns.SETUP_STEPS = {
 		{ "chat.tipBorder", "r", "mock-tooltip" },
 		{ "chat.unitBorder", "c", "mock-tooltip" },
 		{ "chat.nameClass", "c", "mock-tooltip" },
+		{ "chat.raidMarker", "o", "behaviour", "Shows the raid marker a unit carries as a small icon before its name on its tooltip." },
+		{ "chat.awayTag", "o", "behaviour", "Writes a dim <AFK> or <DND> after the name of a player who is away or busy on their tooltip." },
 		{ "chat.classLine", "c", "behaviour", "Colours the line with a player's level, race and class in the class colour." },
 		{ "chat.guildLine", "c", "behaviour", "Colours a player's guild line, green for your own guild and blue for another, with the member's rank after it." },
 		{ "chat.tipScale", "c", "mock-tooltip" },

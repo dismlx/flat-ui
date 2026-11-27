@@ -976,6 +976,45 @@ local function ItemLevelLine(tooltip, data)
 	end
 end
 
+local function Marks(line, token)
+	local marker, away = Opt("raidMarker") == true, Opt("awayTag") == true
+	if not (marker or away) or not Usable(line) then
+		return
+	end
+	local ok, text = pcall(line.GetText, line)
+	if not ok or ns.IsSecret(text) or type(text) ~= "string" or text == "" then
+		return
+	end
+	local function Yes(fn)
+		if type(fn) ~= "function" then
+			return false
+		end
+		local done, value = pcall(fn, token)
+		return done and not ns.IsSecret(value) and value == true
+	end
+	local changed = text
+	if marker and type(GetRaidTargetIndex) == "function" and not text:find("UI-RaidTargetingIcon", 1, true) then
+		local done, index = pcall(GetRaidTargetIndex, token)
+		if done and ns.Finite(index) and index >= 1 and index <= 8 and index == math.floor(index) then
+			changed = ("|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_%d:0|t %s"):format(index, changed)
+		end
+	end
+	if away and Yes(UnitIsPlayer) then
+		local tag
+		if Yes(UnitIsAFK) then
+			tag = type(CHAT_FLAG_AFK) == "string" and CHAT_FLAG_AFK or "<AFK>"
+		elseif Yes(UnitIsDND) then
+			tag = type(CHAT_FLAG_DND) == "string" and CHAT_FLAG_DND or "<DND>"
+		end
+		if tag and not ns.IsSecret(tag) and tag ~= "" and not changed:find(tag, 1, true) then
+			changed = changed .. " |cff9a9a9a" .. tag .. "|r"
+		end
+	end
+	if changed ~= text then
+		pcall(line.SetText, line, changed)
+	end
+end
+
 local function UnitLine(tooltip, lineData)
 	if not ns.Enabled(KEY) or not Usable(tooltip) or not Usable(lineData) then
 		return
@@ -986,7 +1025,11 @@ local function UnitLine(tooltip, lineData)
 	end
 	local mode, names = Opt("unitBorder"), Opt("nameClass") == true
 	local token = lineData.unitToken
-	if (mode == "plain" and not names) or ns.IsSecret(token) or type(token) ~= "string" or ns.Forbidden(tooltip) then
+	if ns.IsSecret(token) or type(token) ~= "string" or ns.Forbidden(tooltip) then
+		return
+	end
+	Marks(tooltip.TextLeft1, token)
+	if mode == "plain" and not names then
 		return
 	end
 	local cr, cg, cb

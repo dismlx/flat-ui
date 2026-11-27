@@ -39,7 +39,7 @@ The **Chat** page has two tabs: **General** for the look of the chat windows and
 
 - **Lines kept per window** (128, up to 2048) sets how far back you can scroll.
 - **Fade old messages** (on) fades lines after **Fade after** (120 s).
-- **Show recent chat after a reload** (off): each time you reload or log in, the lines of the last hour show again in your main chat window. That covers say, yell, emotes, party, raid, guild, officer and whispers. **Lines to show again** (50, 10 to 200) sets how many. They are kept in this character's saved settings. Lines the game withholds in fights and dungeons are not kept.
+- **Show recent chat after a reload** (off): each time you reload or log in, the lines of the last hour show again in your main chat window. That covers say, yell, emotes, party, raid, guild, officer and whispers. **Lines to show again** (50, 10 to 200) sets how many. Each name in those lines is a player link, in its class colour where the game knows it: click it to whisper, or right-click it for the player menu, as on a live line. They are kept in this character's saved settings. Lines the game withholds in fights and dungeons are not kept.
 - **Numbered channels too** (off) adds General, Trade and the other numbered channels, both after a reload and in **Copy recent chat**. It works on its own, with **Show recent chat after a reload** off too.
 
 #### Copy recent chat
@@ -52,7 +52,7 @@ The **Chat** page has two tabs: **General** for the look of the chat windows and
 
 The box holds say, yell, emotes, party, raid, guild, officer and whispers, and with **Numbered channels too** the numbered channels. With **Show recent chat after a reload** on, it also holds lines from before your last reload. Each line reads as "[21:04] [Party] [Mara]: text", with links as their name in brackets and colours left out.
 
-Every line is selected as the box opens, so Ctrl+C copies them all and the line over the box says "Copied 50 lines." To copy a part, drag over it, or use Shift and the arrows. After a click in the box, Ctrl+A (Cmd+A on a Mac) selects every line again. Escape closes the box. It never opens in a fight.
+Every line is selected as the box opens, so Ctrl+C copies them all and the line over the box says "Copied 50 lines." To copy a part, drag over it, or use Shift and the arrows. After a click in the box, Ctrl+A (Cmd+A on a Mac) selects every line again. The box fades in with the game's window sounds. Escape, or the small cross at its top right, closes it. It never opens in a fight.
 
 #### Channels
 
@@ -60,7 +60,7 @@ Every line is selected as the box opens, so Ctrl+C copies them all and the line 
 
 #### Links
 
-- **Web addresses as links** (on): a web address in a chat line becomes a link. Click it for a box with the address selected, ready to copy. Ctrl+C there says "Copied." and closes the box a moment later, so your keys move your character again. Not in a fight: chat then says to click it again after.
+- **Web addresses as links** (on): a web address in a chat line becomes a link. Click it for a box with the address selected, ready to copy. Ctrl+C there says "Copied." and closes the box a moment later, so your keys move your character again. The box fades in with the game's window sounds, and the small cross at its top right closes it too. Not in a fight: chat then says to click it again after.
 - **Tooltips of chat links** (on): while the mouse is over an item, spell, achievement or quest link in a chat window, its tooltip shows. A quest's shows its level, text and objectives. Not in a fight.
 
 #### Mentions
@@ -69,6 +69,7 @@ Every line is selected as the box opens, so Ctrl+C copies them all and the line 
 
 - **Sound when you are named** (**None** by default, or **Spell alert**, **Chimes**, **Bell**, **Warhorn**, **Raid warning**, **Alarm** or **Whisper warning**) plays once for each line that names you, at most once a second. Picking a sound plays it.
 - **Light the tab that names you** (on) needs **Chat tabs** on the **General** tab. A chat tab you are not looking at, such as Trade, Guild or LFG, lights up in **Your name colour** with a slow, soft pulse when a line in it names you. A small number at its top right corner counts those lines, up to "9+". It goes back as you click the tab.
+- **Flash the game's icon when you are named** (on): while the game is in the background, its icon on the taskbar or dock flashes for a line that names you, as it does for a whisper, at most once every 10 seconds. A player who has alt-tabbed out while waiting for a raid call or a "Mara, inv?" in guild chat sees it.
 
 **Other words to colour** colours more words the same way, with the same sound: "tank", the name of your alt, or your guild's raid call word.
 
@@ -94,6 +95,8 @@ The **Tooltips** page has two tabs: **General** for the look of every tooltip, a
 
 - **Unit tooltip border** is **Plain** (the default), **Reaction colour** or **Class colour for players**.
 - **Class colour on player names** (on) and **Class colour on the class line** (on) colour a player's name and the line with their level, race and class.
+- **Raid marker on the name** (on) puts the skull, moon or other raid marker a unit carries as a small icon before its name, so the sheep target stands out in a dungeon.
+- **Away and busy after the name** (on) writes a dim <AFK> or <DND> after the name of a player who is away or busy, as "Mara <AFK>".
 - **Guild colour and rank** (on) colours a player's guild line green for your own guild and a soft blue for another, with their rank after the guild's name, as "Officer".
 
 #### Size and text
