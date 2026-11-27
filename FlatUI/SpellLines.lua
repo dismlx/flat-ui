@@ -70,8 +70,8 @@ local _, ns = ...
 -- 0.68, 0.62, HitTable.lua's DIM) of two kinds. A note is wrapped at the tooltip's width by AddLine's fifth argument (Blizzard_SharedXML/
 -- SharedTooltipTemplates.lua:166-172), so a long note does not widen the tooltip: in Compact (chat.tipDetail) a block's notes are joined into
 -- one dim line at its end with "; " between them, in Full each shows where it comes. A dim line SpellModel keeps short (0.5.42: the rates of the
--- total, Expected and Per second with a label and a figure by AddDoubleLine, and how a threat is made) stays where it comes in both and never
--- wraps.
+-- total, Expected, Per second and Per mana with a label and a figure by AddDoubleLine, and how a threat is made) stays where it comes in both and
+-- never wraps.
 -- /flatui status (design 4.12), while the module is on and a row wants lines: the build of the data and its number of spells (D.SPELLS, which the
 -- generator counts, so no other class's constructor runs), that the game withholds the stats in this fight (C_Secrets.ShouldUnitStatsBeSecret,
 -- Blizzard_APIDocumentationGenerated/SecretPredicateAPIDocumentation.lua:388-396) or when they were read (GetTime), what SpellModel's check of the
@@ -410,8 +410,8 @@ end
 -- A line of SpellModel's as Put adds it, { left, right, colour, rightColour, wrap, note, dim }, and true when its number is from before the fight.
 -- Nil for a line with no text, and for the sentence that the stats are old, which Shape adds once, last. In the style (M.Fmt.Style): a figure's
 -- label light grey and its value white, or light grey while the value is old; a dim line in the dim colour, a note that wraps, or (0.5.42) one
--- that stays where it comes and never wraps, a rate with its label and figure (Expected, Per second) or a short line of how a threat is made,
--- which SpellModel marks with a right text or with wrap false; a share with no number is a line alone, wrapped when it asks.
+-- that stays where it comes and never wraps, a rate with its label and figure (Expected, Per second, Per mana) or a short line of how a threat is
+-- made, which SpellModel marks with a right text or with wrap false; a share with no number is a line alone, wrapped when it asks.
 local function Line(line, style)
 	if type(line) ~= "table" then
 		return nil, false

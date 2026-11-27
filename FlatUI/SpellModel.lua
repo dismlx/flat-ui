@@ -91,7 +91,7 @@ local _, ns = ...
 -- the total of one cast (0.5.20: what it does now with the player's stats, base and bonus together, each part read at its own place of the rank,
 -- 0.5.42) and its rates, a dim line each with a label and a figure (0.5.42: Expected, the expected value with crits, misses and a spell's Spell
 -- Piercing from GearModel.lua's G.Expect, looked up when asked, which weighs the same parts; Per second, of cast time, from the castTime of
--- C_Spell.GetSpellInfo, SpellDocumentation.lua:416-430, else the rank's, the global cooldown at least; and Per point of mana, from
+-- C_Spell.GetSpellInfo, SpellDocumentation.lua:416-430, else the rank's, the global cooldown at least; and Per mana, a point of mana, from
 -- C_Spell.GetSpellPowerCost, :535-549, with the casts from full mana, UnitPowerMax), the threat block (0.5.42: the threat of one hit or cast as a
 -- number from that total and the rules of design 2.5, G, with how it is made and its multipliers in short dim lines under it), and the lines of a
 -- stance, form, aura or talent tooltip. The lines of the total and threat blocks keep to about K.LINE_WIDTH characters and never wrap. Amounts
@@ -2353,6 +2353,7 @@ local function Threat(kind, t, entry, row, index, state, stats, opts, G, factors
 		elseif kind == "bonus" then
 			local head = (Gb == "e" and "~" or "") .. "damage" .. word .. " + "
 			r.right = head .. (amount and (mine .. Num(Toward(amount * G))) or (G ~= 1 and ("(" .. rule .. ")" .. word) or rule))
+			r.tone = amount and ap and stats.old and "old" or "plain"
 		elseif amount then
 			r.right = ((mine ~= "" or Gb == "e") and "~" or "") .. Num(Toward(amount * G))
 			if ap or G ~= 1 then
@@ -2927,12 +2928,14 @@ local function Total(entry, row, state, stats, lowRank)
 	return { value = t.base + t.bonus, base = t.base, bonus = t.bonus, unit = TotalUnit(kind, t, row, state), estimate = t.estimate, heal = heal }
 end
 
--- The unit of a figure on a line of its own (0.5.42: Expected, the threat of one hit or cast): the total's unit where it is one clause (a hit, a
--- block, a hit at 5 points), else the kind's (K.SHORT_UNIT: a cast for a spell over time, whose total is over its duration), a swing of each hand
--- for both hands' swings.
+-- The unit of a figure on a line of its own (0.5.42: Expected, the threat of one hit or cast): a target for a total on each target (Cleave,
+-- Consecration, Holy Nova), whose figure is one target's; the total's unit where it is one clause (a hit, a block, a hit at 5 points), else the
+-- kind's (K.SHORT_UNIT: a cast for a spell over time, whose total is over its duration), a swing of each hand for both hands' swings.
 local function ShortUnit(entry, state, total)
 	local unit = total and total.unit
-	if type(unit) == "string" and not unit:find(",", 1, true) and not unit:find("^over ") then
+	if type(unit) == "string" and unit:find(", each target$") then
+		return "a target"
+	elseif type(unit) == "string" and not unit:find(",", 1, true) and not unit:find("^over ") then
 		return unit
 	end
 	local kind = TotalKind(entry)
@@ -2988,9 +2991,9 @@ end
 -- the expected value of a cast with crits and misses (GearModel.lua's G.Expect, looked up when asked, its cast, which weighs the same parts as the
 -- total, so it is above the total only by what crits add; with crits alone for a heal, which never misses; 0.5.26: and Spell Piercing for a damage
 -- spell of a school of magic on the Spell line, the damage it adds), with its unit (ShortUnit) where the line has room; Per second, of cast time
--- (of the global cooldown for an instant), or for what rides on the swings or shots its own figure a second; and Per point of mana, with how many
--- casts a full bar of mana gives (0.5.36, the player's UnitPowerMax of mana over the cost, kept with the stats); each of the expected value, else of
--- the total; ~ before an estimate. None with nothing to say.
+-- (of the global cooldown for an instant), or for what rides on the swings or shots its own figure a second; and Per mana, a point of mana, with
+-- how many casts a full bar of mana gives (0.5.36, the player's UnitPowerMax of mana over the cost, kept with the stats); each of the expected
+-- value, else of the total; ~ before an estimate. None with nothing to say.
 local function Rates(out, entry, at, row, state, stats, total, lowRank)
 	local G = ns.GearModel
 	local result = nil
@@ -3031,15 +3034,15 @@ local function Rates(out, entry, at, row, state, stats, total, lowRank)
 	out[#out + 1] = Line("Per second", guess .. Num(figure / seconds) .. (instant and " of the global cooldown" or " of cast time"), "plain", true)
 	local mana = ManaCost(row[1])
 	if mana then
-		local left, right = "Per point of mana", guess .. Num(figure / mana)
-		-- How often a full bar of mana casts it (0.5.36), without the mana that comes back meanwhile.
+		local right = guess .. Num(figure / mana)
+		-- How often a full bar of mana casts it (0.5.36), without the mana that comes back meanwhile. With the short label the line keeps to
+		-- K.LINE_WIDTH even at "~12.5, 1,234 casts from full mana".
 		local full = type(stats) == "table" and stats.mana or nil
 		if Finite(full) and full >= mana then
 			local casts = math.floor(full / mana)
-			local count = right .. ", " .. Num(casts) .. (casts == 1 and " cast" or " casts")
-			right = Fit(left, count .. " from full mana", count .. " from full")
+			right = right .. ", " .. Num(casts) .. (casts == 1 and " cast" or " casts") .. " from full mana"
 		end
-		out[#out + 1] = Line(left, right, "plain", true)
+		out[#out + 1] = Line("Per mana", right, "plain", true)
 	end
 end
 
