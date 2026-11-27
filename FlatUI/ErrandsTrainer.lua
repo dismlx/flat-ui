@@ -394,7 +394,7 @@ function part.Status()
 		return { "Trainer: the trainer window has no Train button here, so there is no Train all button." }
 	end
 	if TheirsShown() then
-		return { "Trainer: EnhanceQoL's Train All button is shown, so this one stands aside. /flatui train still works." }
+		return { "Trainer: another addon's Train All button is shown, so this one stands aside. /flatui train still works." }
 	end
 	local lines = { "Trainer: Train all button." }
 	if last then

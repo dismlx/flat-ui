@@ -108083,8 +108083,8 @@ do
 	W.out = {}
 	W.env.EQOLTrainAllButton = W.B(W.env.ClassTrainerFrame, {}, { name = "EQOLTrainAllButton", width = 80, height = 22 })
 	W.fire("TRAINER_UPDATE")
-	check("train all: with EnhanceQoL's own button shown, this one stands aside, and the status says so", not EQ.shown(W, made[1])
-		and has(W.status(), "Trainer: EnhanceQoL's Train All button is shown, so this one stands aside."), W.status())
+	check("train all: with another addon's own button shown, this one stands aside, and the status says so", not EQ.shown(W, made[1])
+		and has(W.status(), "Trainer: another addon's Train All button is shown, so this one stands aside."), W.status())
 	W.env.EQOLTrainAllButton = nil
 	W.fire("TRAINER_UPDATE")
 	check("train all: back once it is gone", EQ.shown(W, made[1]))

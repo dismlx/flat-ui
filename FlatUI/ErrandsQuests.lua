@@ -160,12 +160,12 @@ local function Table(value)
 end
 
 local function Theirs()
-	local eqol, questie = _G.EnhanceQoL, _G.Questie
-	local eqolQuests = Table(eqol) and Setting(function()
-		return eqol.db.autoChooseQuest
+	local other, questie = _G.EnhanceQoL, _G.Questie
+	local otherQuests = Table(other) and Setting(function()
+		return other.db.autoChooseQuest
 	end)
-	local eqolGossip = Table(eqol) and Setting(function()
-		return eqol.db.autoChooseGossip
+	local otherGossip = Table(other) and Setting(function()
+		return other.db.autoChooseGossip
 	end)
 	local questieAccept = Table(questie) and Setting(function()
 		return questie.db.profile.autoAccept.enabled
@@ -173,8 +173,8 @@ local function Theirs()
 	local questieTurnIn = Table(questie) and Setting(function()
 		return questie.db.profile.autocomplete
 	end)
-	return { accept = eqolQuests or questieAccept, turnIn = eqolQuests or questieTurnIn, gossip = eqolGossip, eqolQuests = eqolQuests,
-		eqolGossip = eqolGossip, questieAccept = questieAccept, questieTurnIn = questieTurnIn }
+	return { accept = otherQuests or questieAccept, turnIn = otherQuests or questieTurnIn, gossip = otherGossip, otherQuests = otherQuests,
+		otherGossip = otherGossip, questieAccept = questieAccept, questieTurnIn = questieTurnIn }
 end
 
 local function EndLater(current)
@@ -1225,11 +1225,11 @@ function part.Status()
 	if others.questieTurnIn and E.Opt("questTurnIn") == true then
 		lines[#lines + 1] = "Quests: Questie's own auto complete is on, so handing in quests is left to it."
 	end
-	if others.eqolQuests and (E.Opt("questAccept") == true or E.Opt("questTurnIn") == true) then
-		lines[#lines + 1] = "Quests: EnhanceQoL's own quest automation is on, so quests are left to it."
+	if others.otherQuests and (E.Opt("questAccept") == true or E.Opt("questTurnIn") == true) then
+		lines[#lines + 1] = "Quests: another addon's quest automation is on, so quests are left to it."
 	end
-	if others.eqolGossip and (mode == "saved" or mode == "all") then
-		lines[#lines + 1] = "Quests: EnhanceQoL's own gossip automation is on, so gossip is left to it."
+	if others.otherGossip and (mode == "saved" or mode == "all") then
+		lines[#lines + 1] = "Quests: another addon's gossip automation is on, so gossip is left to it."
 	end
 	if E.Opt("questAccept") == true and type(AcceptQuest) ~= "function" then
 		lines[#lines + 1] = "Quests: this client cannot accept quests for you."
