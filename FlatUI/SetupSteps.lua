@@ -1185,7 +1185,7 @@ ns.SETUP_STEPS = {
 		{ "trackers.artTime", "o", "behaviour", "Counts down the seconds left of a proc as a large number on its art." },
 		{ "trackers.glow", "c", "mock-proc" },
 		{ "trackers.glowStyle", "o", "mock-proc" },
-		{ "trackers.glowTime", "o", "behaviour", "Counts down the seconds left of a proc on its glowing button." },
+		{ "trackers.glowTime", "o", "behaviour", "Counts down the seconds left of a proc on its button, with or without the glow." },
 	} },
 	{ id = "tr-def", area = "Trackers", title = "Defensives on you", draw = "mock-tracker", built = true, rows = {
 		{ "defensives.enabled", "c", "mock-tracker" },

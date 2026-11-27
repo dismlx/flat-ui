@@ -1635,8 +1635,8 @@ ns.PAGES = {
 		{ key = "glowStyle", kind = "choice", default = "soft", label = "Glow style", changed = "ProcGlowChanged",
 			choices = { { "soft", "Soft" }, { "game", "As the game has it" } },
 			tip = "Soft: a faint glow that hugs the button's edge and breathes slowly, and a slow, gentle pulse of the art. As the game has it: the game's burst and loop, which lie over the buttons beside it, and the game's own pulse and fade-in of the art; with Art size 100% and Art opacity 65% it is the game's whole look. The art, Glow on procs of the cooldown icons and Game glow on Flat UI's own buttons follow it too, with or without Glow on the action button." },
-		{ key = "glowTime", kind = "bool", default = true, label = "Seconds left on the button", needs = "glow", changed = "ProcGlowChanged",
-			tip = "While a proc with a time, such as Overpower or Revenge, is up, its glowing button counts down the seconds left in the proc's colour, at Hotkey size and Button text outline, in a corner clear of the hotkey, macro name and count. It turns white and grows a little for the last 2 seconds. Execute and other procs with no time show none." },
+		{ key = "glowTime", kind = "bool", default = true, label = "Seconds left on the button", changed = "ProcGlowChanged",
+			tip = "While a proc with a time, such as Overpower or Revenge, is up, its glowing button counts down the seconds left in the proc's colour, at Hotkey size and Button text outline, in a corner clear of the hotkey, macro name and count. It turns white and grows a little for the last 2 seconds. Execute and other procs with no time show none. With Glow on the action button off, the number shows alone, with no glow and no border." },
 	},
 	{
 		key = "tracker", label = "Edit a tracker", parent = "trackers", switch = "trackers",
