@@ -276,7 +276,8 @@ function Home.Counts(model)
 			local top = Nav.Top(model, entry)
 			top = top.partOf and model.byKey[top.partOf] or top
 			for _, item in ipairs(page) do
-				if item.path and item.kind ~= "list" and item.kind ~= "entries" and not ns.RowUnsaved(item) and ns.Get(item.path) ~= item.default then
+				if item.path and ns.RowShown(item.path) and ((item.shows and ns.PanelTrust.Changed(item)) or (item.kind ~= "list" and item.kind ~= "entries"
+					and not ns.RowUnsaved(item) and ns.Get(item.path) ~= item.default)) then
 					counts[top] = (counts[top] or 0) + 1
 				end
 			end
@@ -334,17 +335,21 @@ function Home.RowOf(model, path)
 	return nil
 end
 
-local function Crumb(model, item)
-	local entry = Home.EntryOf(model, item)
-	if not entry then
-		return ""
-	end
+function Home.Place(model, entry)
 	local top = Nav.Top(model, entry)
 	if top == entry then
 		return entry.label
 	end
 	local frame = ns.PanelTabs.FrameName(entry)
 	return top.label .. " > " .. (ns.PanelTabs.Label(model, entry) or entry.label) .. (frame and " > " .. frame or "")
+end
+
+local function Crumb(model, item)
+	local entry = Home.EntryOf(model, item)
+	if not entry then
+		return ""
+	end
+	return Home.Place(model, entry)
 end
 Home.Crumb = Crumb
 
@@ -584,6 +589,24 @@ function Home.Build(host)
 		view.all = not view.all
 		view.Update()
 	end)
+	local every = kit.Frame(recent)
+	every:SetSize(100, 20)
+	local everyText = kit.Dim(kit.Label(every, "GameFontHighlightSmall", "RIGHT", 100))
+	everyText:SetPoint("RIGHT", every, "RIGHT", 0, 0)
+	everyText:SetText("Every change")
+	kit.Clickable(every, function()
+		if type(ns.OpenPanelSearch) == "function" then
+			ns.OpenPanelSearch("#changed")
+		end
+	end)
+	every:SetScript("OnEnter", function()
+		kit.Tint(everyText, "text")
+		kit.Tip("Every setting of this profile that is off its default, in Search, with its reset arrow.")
+	end)
+	every:SetScript("OnLeave", function()
+		kit.Tint(everyText, "text-dim")
+		kit.Tip("")
+	end)
 	local empty = kit.Dim(kit.Label(recent, "GameFontHighlight", "LEFT", 300))
 	empty:SetText("No changes yet.")
 	local lines = {}
@@ -720,6 +743,14 @@ function Home.Build(host)
 		local shownLines = view.all and total or math.min(total, SHOWN)
 		more:SetShown(total > SHOWN)
 		moreText:SetText(view.all and "Show fewer" or "Show all")
+		every:ClearAllPoints()
+		if total > SHOWN then
+			local ok, width = pcall(moreText.GetStringWidth, moreText)
+			width = ok and ns.Finite(width) and width > 0 and width or 60
+			every:SetPoint("TOPRIGHT", recent, "TOPRIGHT", -16 - math.ceil(width) - 16, -8)
+		else
+			every:SetPoint("TOPRIGHT", recent, "TOPRIGHT", -16, -8)
+		end
 		empty:SetShown(total == 0)
 		empty:ClearAllPoints()
 		empty:SetPoint("TOPLEFT", recent, "TOPLEFT", 16, -(32 + (rowH - 14) / 2))

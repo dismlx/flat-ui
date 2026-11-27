@@ -18,6 +18,7 @@ local POLL, BAR_EVERY = 0.25, 0.5
 local UNDER_PANEL = 300
 local BAR_W, BAR_H, TOP = 1044, 40, -8
 local DOUBLE = 0.3
+local FADE_IN, FADE_OUT = 0.15, 0.2
 local SOURCES = { panel = "options", movers = "/flatui move", slash = "/flatui test", key = "key" }
 local GROUPS = { { "solo", "Solo", 0 }, { "party", "Party", 4 }, { "raid10", "Raid 10", 10 }, { "raid20", "Raid 20", 20 }, { "raid40", "Raid 40", 40 } }
 local GROUP_SIZE = { solo = 0, party = 4, raid10 = 10, raid20 = 20, raid40 = 40 }
@@ -47,7 +48,7 @@ local TIPS = {
 	Finder = { "Finder", "Opens or closes the item finder, as the Find button of the Gear comparison window." },
 	Queue = { "Queue", "Opens or closes the Trinket queue window, as /flatui queue." },
 	Move = { "Move", "Opens /flatui move with these samples, so each frame can be placed where it shows. Press it again to close it." },
-	Title = { "Test mode bar", "Drag the bar to move it; double-click here to put it back." },
+	Title = { "Test mode bar", "Drag the bar to move it; it stays there. Double-click here to put it back." },
 	End = { "End", "Turns test mode off. Nothing was saved." },
 }
 
@@ -458,6 +459,57 @@ local function BarSpot()
 	return "below", window
 end
 
+local function Kept(make)
+	local db = type(ns.Account) == "function" and ns.Account() or nil
+	if type(db) ~= "table" then
+		return nil
+	end
+	if type(db.testBar) ~= "table" then
+		if not make then
+			return nil
+		end
+		db.testBar = {}
+	end
+	return db.testBar
+end
+
+local function Load()
+	local kept = not S.loaded and Kept(false)
+	if type(ns.Account) == "function" and type(ns.Account()) == "table" then
+		S.loaded = true
+	end
+	if kept and type(kept.group) == "string" and GROUP_SIZE[kept.group] then
+		S.group = kept.group
+	end
+end
+
+local function KeepPlace()
+	local bar = ui.bar
+	local ok, point, relative, relativePoint, x, y = pcall(bar.GetPoint, bar, 1)
+	if not (ok and type(point) == "string" and not ns.IsSecret(point) and CORNERS[point] and type(relativePoint) == "string"
+		and not ns.IsSecret(relativePoint) and CORNERS[relativePoint] and ns.Finite(x) and ns.Finite(y)) then
+		return
+	end
+	if relative ~= nil and relative ~= UIParent then
+		return
+	end
+	local kept = Kept(true)
+	if kept then
+		kept.point, kept.relative, kept.x, kept.y = point, relativePoint, x, y
+	end
+end
+
+local function KeptPlace()
+	local kept = Kept(false)
+	if not (kept and type(kept.point) == "string" and CORNERS[kept.point] and type(kept.relative) == "string" and CORNERS[kept.relative]
+		and ns.Finite(kept.x) and ns.Finite(kept.y)) then
+		return
+	end
+	ui.bar:ClearAllPoints()
+	ui.bar:SetPoint(kept.point, UIParent, kept.relative, kept.x, kept.y)
+	ui.dragged = true
+end
+
 local function PlaceBar()
 	if ui.dragged then
 		return
@@ -515,6 +567,7 @@ local function BuildBar()
 	bar:SetScript("OnDragStop", function(self)
 		self:StopMovingOrSizing()
 		ui.dragged = true
+		Safe(KeepPlace)
 	end)
 	local outline = ns.Outline(bar, bar, true)
 	kit.Painted(function()
@@ -533,6 +586,7 @@ local function BuildBar()
 	grip:SetScript("OnDragStop", function()
 		bar:StopMovingOrSizing()
 		ui.dragged = true
+		Safe(KeepPlace)
 	end)
 	grip:SetScript("OnMouseDown", function(_, button)
 		if button ~= "LeftButton" then
@@ -542,6 +596,10 @@ local function BuildBar()
 		if ui.clicked and now - ui.clicked <= DOUBLE then
 			ui.clicked = nil
 			ui.dragged, ui.spot, ui.at = false, nil, nil
+			local kept = Kept(false)
+			if kept then
+				kept.point, kept.relative, kept.x, kept.y = nil, nil, nil, nil
+			end
 			Safe(PlaceBar)
 		else
 			ui.clicked = now
@@ -661,17 +719,49 @@ local function BarRect()
 	return left, bottom, width, height, ui.dragged and "dragged" or ui.spot or "top"
 end
 
+local function Fade(show)
+	local bar = ui.bar
+	local shown = bar:IsShown() == true
+	if (show and shown and not ui.fadingOut) or (not show and (not shown or ui.fadingOut)) then
+		return
+	end
+	local ok, alpha = pcall(bar.GetAlpha, bar)
+	local at = shown and ok and ns.Finite(alpha) and alpha or (show and 0 or 1)
+	local span = show and FADE_IN or FADE_OUT
+	ui.fadingOut = not show
+	bar:SetAlpha(at)
+	bar:Show()
+	bar:SetScript("OnUpdate", function(self, elapsed)
+		local step = (ns.Finite(elapsed) and elapsed or span) / span
+		at = show and math.min(1, at + step) or math.max(0, at - step)
+		self:SetAlpha(at)
+		if show and at >= 1 then
+			self:SetScript("OnUpdate", nil)
+		elseif not show and at <= 0 then
+			self:SetScript("OnUpdate", nil)
+			ui.fadingOut = false
+			self:Hide()
+			self:SetAlpha(1)
+		end
+	end)
+end
+
 local function Controls()
 	if S.on then
 		if not ui.bar and type(ns.PanelKit) == "table" then
 			Safe(BuildBar)
+			if ui.bar then
+				ui.bar:Hide()
+				Safe(KeptPlace)
+			end
 		end
 		if ui.bar then
-			ui.bar:Show()
+			Safe(Fade, true)
 			Safe(UpdateBar)
 		end
 	elseif ui.bar then
-		ui.bar:Hide()
+		Untip(nil)
+		Safe(Fade, false)
 	end
 	if type(ns.RefreshPanel) == "function" then
 		Safe(ns.RefreshPanel)
@@ -720,6 +810,7 @@ local function Frame(_, elapsed)
 end
 
 local function Begin()
+	Load()
 	S.dirty = false
 	clock.poll, clock.bar = 0, 0
 	StartAll()
@@ -856,10 +947,15 @@ function TM.GroupSize()
 end
 
 function TM.SetGroup(group)
+	Load()
 	if not GROUP_SIZE[group] or group == S.group then
 		return false
 	end
 	S.group = group
+	local kept = Kept(true)
+	if kept then
+		kept.group = group
+	end
 	if TM.IsOn() then
 		Tell("test.group")
 		Safe(Poll)

@@ -181,8 +181,14 @@ local function ShadowPart(object, record, restore)
 	end
 end
 
+local function Rows()
+	return table.concat({ tostring(ns.Enabled(KEY)), tostring(Opt("body")), tostring(Opt("numbers")), tostring(Opt("titles")), tostring(Opt("outline")),
+		tostring(Opt("shadow")), tostring(Opt("size")), tostring(Opt("minimum")) }, "|")
+end
+
 local function Pass()
 	V.queued = false
+	V.applied = Rows()
 	local restore = not ns.Enabled(KEY) or AtGame()
 	if restore and not V.walked then
 		return
@@ -284,7 +290,7 @@ local function Refresh(changed)
 end
 
 local function Changed()
-	Refresh(true)
+	Refresh(V.applied ~= Rows())
 end
 
 ns.Register(KEY, {

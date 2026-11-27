@@ -8,9 +8,23 @@ local SWATCH = "|TInterface\\Buttons\\WHITE8X8:12:12:0:0:8:8:0:8:0:8:%d:%d:%d|t"
 local TIP_W, TIP_PAD, TIP_DELAY = 280, 10, 0.35
 local tip, token = nil, 0
 
+function Trust.Partner(item)
+	local owner = type(item.shows) == "string" and type(item.path) == "string" and item.path:match("^(.+)%.[^.]+$")
+	local def = owner and ns.Def(owner .. "." .. item.shows)
+	return type(def) == "table" and def.default ~= nil and def or nil
+end
+
 function Trust.Changed(item)
 	local kit = ns.PanelKit
+	local partner = item.shows and Trust.Partner(item)
+	if partner then
+		local ok, value = pcall(ns.Get, partner.path)
+		return ok and value ~= partner.default
+	end
 	if not item.key or item.read or item.default == nil or item.kind == "list" or item.kind == "entries" or ns.RowLive(item) then
+		return false
+	end
+	if type(item.path) == "string" and not ns.RowShown(item.path) then
 		return false
 	end
 	local ok, value = pcall(kit.Read, item)
@@ -229,7 +243,8 @@ function Trust.Attach(row, item)
 			reset = kit.Button(row.frame, "", 16, function()
 				if row.active then
 					Trust.Hide()
-					kit.Write(item, item.default)
+					local target = item.shows and Trust.Partner(item) or item
+					kit.Write(target, target.default)
 					kit.Refresh()
 					kit.Say(Trust.ResetText(item))
 				end

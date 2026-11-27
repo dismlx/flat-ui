@@ -3495,7 +3495,7 @@ SlashCmdList["FLATUI"] = function(msg)
 			opened, reason = ns.OpenOptions()
 		end
 		if reason == "combat" then
-			print("Options open after combat.")
+			print("Flat UI: options open after combat.")
 		elseif not opened then
 			for _, line in ipairs(ns.StatusLines()) do
 				print(line)
@@ -3512,12 +3512,14 @@ SlashCmdList["FLATUI"] = function(msg)
 				others[#others + 1] = name
 			end
 		end
-		print(("Profile: %s"):format(current))
-		print(#others > 0 and ("Other profiles: %s"):format(table.concat(others, ", ")) or "No other profiles.")
+		print(("Flat UI: profile %s. %s"):format(tostring(current), #others > 0 and ("Others: %s."):format(table.concat(others, ", ")) or "No other profiles."))
 	elseif verb and verb:lower() == "profile" then
+		local function Miss()
+			print(("Flat UI: no profile named %s. Profiles: %s."):format(rest, table.concat(ns.Profiles(), ", ")))
+		end
 		local found = db and InCombatLockdown() and Find(rest)
 		if db and InCombatLockdown() and not found then
-			print("No such profile.")
+			Miss()
 		elseif found and found ~= current and ns.ProfileSwitch and ns.ProfileSwitch.Keep then
 			ns.ProfileSwitch.Keep(found)
 			print(("Flat UI: switches to %s when the fight ends."):format(found))
@@ -3528,7 +3530,12 @@ SlashCmdList["FLATUI"] = function(msg)
 			ns.ProfileSwitch.Keep(nil)
 			print(("Flat UI: stays on %s."):format(found))
 		else
-			print((select(2, ns.UseProfile(rest))))
+			local done, message = ns.UseProfile(rest)
+			if not done and message == "No such profile." then
+				Miss()
+			else
+				print("Flat UI: " .. (tostring(message):gsub("^%u", string.lower)))
+			end
 		end
 	elseif text == "scale off" or text:find("^scale%s+%d+$") then
 		local percent = tonumber(text:match("%d+"))
@@ -3571,6 +3578,7 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui scale 70 - the UI scale in percent, 35 to 115; under 65 uses Small scale")
 		print("/flatui scale off - the game's own UI scale")
 		print("/flatui <words> - opens the options window and searches for them")
+		print("/flatui #changed - every setting you changed")
 		print("/flatui test - samples of your hidden frames on screen until you turn it off; test on and test off also work")
 		print("/flatui taint - the action button click path, checked for values an add-on changed")
 		print("/flatui lava - what the lava tick timer sees; lava test shows a sample, lava trace prints each hit on you")
