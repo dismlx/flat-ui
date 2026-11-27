@@ -133,6 +133,7 @@ local T = {
 		"Best and Worst: the lines on show with the largest gain and loss in percent, as their Change says, weight 0 too; none under Avoidance.",
 		"Damage taken: what an enemy's swing does to you after misses, dodges, parries, blocks, crits, crushing blows and armor, as a share of a plain hit, so less is better. Block value counts against an enemy hit of %s before armor (Enemy hit for block value, an estimate).",
 		"Green is better for you and red worse; ~ marks an estimate.",
+		"Shift-click: put this line in chat.",
 	},
 	WEIGHT_TIP = "Weight %s",
 	WEIGHT_LINES = { "How much this line counts in the Overall line against the others: its minute, of swings and shots or of its casts in WoWSims' rotation for your class (else an even share of the casts), times this; 0 leaves it out, 5 counts it five times.",
@@ -2294,6 +2295,9 @@ function U.OverallTip()
 		lines[#lines + 1] = T.OVERALL_LINES[3]:format(figure and figure(swing) or tostring(math.floor(swing)))
 	end
 	lines[#lines + 1] = T.OVERALL_LINES[4]
+	if W.link then
+		lines[#lines + 1] = T.OVERALL_LINES[5]
+	end
 	Say(W.overallBox, T.OVERALL, lines)
 end
 
@@ -2348,6 +2352,44 @@ function U.ItemModified(link)
 		return true
 	end
 	return false
+end
+
+function U.OverallClick(mouse)
+	if Drop() then
+		return
+	end
+	if mouse ~= "LeftButton" or not W.link or not U.Modified("CHATLINK") then
+		return
+	end
+	local first = W.view and W.view.overall and W.view.overall[1]
+	if not Text(first) then
+		return
+	end
+	local plain = first:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", ""):gsub("%s%s+", " ")
+	plain = plain:match("^%s*(.-)%s*$")
+	local line = (U.WholeLink(W.link) or "") .. " " .. plain
+	local base = W.used and U.WholeLink(W.used)
+	if base then
+		line = line .. " vs " .. base
+	end
+	line = line:match("^%s*(.-)%s*$")
+	local util = _G.ChatFrameUtil
+	local active = Fn(util, "GetActiveWindow") or Fn(_G, "ChatEdit_GetActiveWindow")
+	local okActive, box = false, nil
+	if active then
+		okActive, box = pcall(active)
+	end
+	if okActive and not IsSecret(box) and box then
+		local insert = Fn(util, "InsertLink") or Fn(_G, "ChatEdit_InsertLink")
+		if insert then
+			pcall(insert, line)
+		end
+		return
+	end
+	local open = Fn(util, "OpenChat") or Fn(_G, "ChatFrame_OpenChat")
+	if open then
+		pcall(open, line)
+	end
 end
 
 local function ItemClick(mouse)
@@ -2653,7 +2695,10 @@ function U.MakeOverall(frame)
 	box:SetScript("OnLeave", function()
 		Untip(box)
 	end)
-	Drops(box, true)
+	Drops(box)
+	box:SetScript("OnMouseUp", function(_, mouse)
+		Run(U.OverallClick, mouse)
+	end)
 	box:Hide()
 	W.overallBox = box
 	W.owners[#W.owners + 1] = box
