@@ -249,6 +249,10 @@ local function KeyHeld()
 	return true
 end
 
+function ns.FadeKeyHeld()
+	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and KeyHeld()
+end
+
 local function Wanted()
 	return (Opt("combat") and Fighting()) or Holding() or FlyoutOpen() or ns.EditModeOpen() or MoversOpen()
 		or (Opt("cast") == true and Casting()) or (Opt("hurt") == true and Hurt()) or KeyHeld()

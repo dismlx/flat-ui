@@ -528,6 +528,9 @@ local function Full(plan)
 			end
 		end
 	end
+	if type(ns.FadeKeyHeld) == "function" and ns.FadeKeyHeld() == true then
+		return true
+	end
 	if Opt("fadeHurt") == true and Hurt() then
 		return true
 	end

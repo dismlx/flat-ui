@@ -177,7 +177,7 @@ These rows bring faded frames back to full while something is going on:
 - **While casting**: while you cast or channel, for a moment after each instant spell or item, and for **Wait before fading** after. So a buff, a meal, a hearthstone or an instant spell outside a fight brings the bars back.
 - **While a proc is up** (on as Flat UI comes): an action bar that holds the spell of a proc alert of the **Trackers** page, such as Overpower, Revenge or Execute, is at full while the proc is up. See [Combat](Combat).
 - **Until health and mana are full**: faded frames stay at full while your health, or your mana if you have mana, is under full. So the bars are there while you eat and drink after a fight. Not while you are dead.
-- **While a key is held**: **None**, **Shift**, **Ctrl** or **Alt**. Holding the key brings every faded frame back to full at once, the frames a **When shown** rule keeps faded too, so you can glance at a cooldown or your bags. They fade again after **Wait before fading** once you let go. It does nothing while you type in a box.
+- **While a key is held**: **None**, **Shift**, **Ctrl** or **Alt**. Holding the key brings every faded frame back to full at once, the frames a **When shown** rule keeps faded too and the bars of a block that fades on the **Bar block** page, so you can glance at a cooldown or your bags. They fade again after **Wait before fading** once you let go. It does nothing while you type in a box.
 
 ## Hidden frames
 

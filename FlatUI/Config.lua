@@ -3715,7 +3715,7 @@ ns.PAGES = {
 			tip = "Faded frames stay at full while your health, or your mana if you have mana, is under full, so they are there while you eat and drink, then fade after Wait before fading. Not while you are dead." },
 		{ key = "holdKey", kind = "choice", default = "none", label = "While a key is held",
 			choices = { { "none", "None" }, { "shift", "Shift" }, { "ctrl", "Ctrl" }, { "alt", "Alt" } },
-			tip = "Holding the key brings every faded frame back to full at once, so you can glance at a cooldown or your bags. They fade again after Wait before fading once you let go. Not while you type in a box." },
+			tip = "Holding the key brings every faded frame back to full at once, so you can glance at a cooldown or your bags. Bars in a block that fades on the Bar block page come back too. They fade again after Wait before fading once you let go. Not while you type in a box." },
 	},
 }
 

@@ -220,6 +220,7 @@ The block comes back to full:
 - as you cast, with **Full opacity as you cast** (off): while you cast, for a moment after each instant spell or item, and for **Wait before fading** after,
 - while a proc is up, with **Full opacity while a proc is up** (on), for a block that holds the spell of a proc alert of the **Trackers** page, such as Overpower, Revenge, Execute or Clearcasting,
 - until your health and mana are full, with **Full opacity until health and mana are full** (off), so the bars are there while you eat and drink. Not while you are dead.
+- while you hold the key of **While a key is held** on the **Fading** page, its panel and Flat UI's experience bar under it included. Once you let go, it fades again after **Wait before fading**.
 
 The block is also at full while something is on the cursor or a spell flyout is open, in Edit Mode, and while `/flatui move` is open, so you can see the bars you line up. After **Done**, it waits **Wait before fading** and fades again.
 
