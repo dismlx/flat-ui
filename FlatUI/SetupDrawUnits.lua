@@ -27,8 +27,9 @@ local ADDON_NAME, ns = ...
 -- colours and places of your class's heals over time, or two sample squares for a class with none, left of the type icon's spot on a right-hand
 -- corner while Debuff type icon on party frames is on, the last at half opacity with Fade as one runs out, as one in its last seconds). With Blink as one lands the border and type icon blink three times as the marks are first
 -- drawn, as they come into view and each time the row is turned on, in the live blink's steps (UnitGroupMarks.lua Blink). The setup's party frames show Mara's Star with
--- Raid marker on party frames, and Fay dead while someone resurrects her, with the game's resurrection icon centred on her picture, or at the left end
--- of her health bar with Picture None, with Resurrection icon on party frames (UnitGroupMarks.lua PlaceRez). Role icons for leaves out the icons of the
+-- Raid marker on party frames, and Fay dead while someone resurrects her, with the game's resurrection icon centred on her picture (or on its empty
+-- square with Picture None in Separate parts), or at the left end of her health bar with Picture None in One frame, with Resurrection icon on party
+-- frames (UnitGroupMarks.lua PlaceRez). Role icons for leaves out the icons of the
 -- roles it leaves out on the party frames and the raid cells, as the live frames do (UnitParts.lua X.roleLeftOut). Its raid cells show the marks of
 -- their rows: Aria's Skull (Raid marker on raid frames), her leader crown and Dru's
 -- assistant icon (Leader and assistant icons on raid frames), and Cole as your target, with the border of Border for your target in the game's white or
@@ -1849,6 +1850,8 @@ function E.icons(o, g, L)
 	end
 	if o.pic then
 		local shown = L.drawn or L.gameFace
+		-- The square the party marks sit in: the picture, or the empty place of Picture None in Separate parts, which E.picture places hidden.
+		local square = shown or L.cell
 		local px, py, side = L.picLeft, L.picTop, L.side
 		-- On a round picture the level and the PvP plate move in by INSET of the side on both axes, onto the circle at 45 degrees (UnitFrameLevel.lua
 		-- Update, UnitFrames.lua PlacePlate).
@@ -1897,16 +1900,16 @@ function E.icons(o, g, L)
 		if shown and s.marker and g.raidMarker and (s.kind == "target" or s.kind == "focus") then
 			Marker(o.pic, "BOTTOM", "TOP", 0, 1)
 		elseif s.marker and s.kind == "party" and L.on and Get("partyFrameMarker") == true then
-			-- A party member's marker is centred on the top of its picture, or of its health bar with none, at 16 units (UnitGroupMarks.lua MarkerSpot,
-			-- PARTY_MARK).
-			Marker(shown and o.pic or o.health, "CENTER", "TOP", 0, 0, 16)
+			-- A party member's marker is centred on the top of its picture, or of the empty square of Picture None in Separate parts (L.cell), or of its
+			-- health bar with none in One frame, at 16 units (UnitGroupMarks.lua MarkerSpot, PARTY_MARK).
+			Marker(square and o.pic or o.health, "CENTER", "TOP", 0, 0, 16)
 		end
-		-- A dead party member someone resurrects: the game's resurrection icon centred on the picture, or with none at the left end of the health
-		-- bar, clear of the Dead word (UnitGroupMarks.lua PlaceRez).
+		-- A dead party member someone resurrects: the game's resurrection icon centred on the picture or the empty square, or with none in One frame
+		-- at the left end of the health bar, clear of the Dead word (UnitGroupMarks.lua PlaceRez).
 		if o.rez and s.rez and L.on and Get("partyRezIcon") == true then
 			Art(o.rez, "rez")
 			o.rez:ClearAllPoints()
-			if shown then
+			if square then
 				o.rez:SetSize(REZ.size, REZ.size)
 				o.rez:SetPoint("CENTER", o.pic, "CENTER", 0, 0)
 			else

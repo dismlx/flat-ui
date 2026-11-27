@@ -756,8 +756,10 @@ end
 
 -- Where the marker of a frame sits: at the top of a raid frame, and on a party frame at the top of the picture Flat UI draws (a Game portrait too), or
 -- of the game's portrait while that shows, as the game centres the marker of its target frame on the top of the portrait (Mainline/TargetFrame.xml:
--- 282-287), or at the top of the health bar of a frame that shows neither. The game's classic party frames have no marker (Mainline/
--- PartyFrameTemplates.xml:79-368).
+-- 282-287). With no picture at all (Picture None, or the frame's picture switch off) in Separate parts the picture's square stays empty
+-- (UnitFrames.lua ApplyPicture), so the marks take that square: the picture's frame while it is laid out (it has a side), else the game's portrait,
+-- which is only hidden and keeps its place. In One frame, where None takes the square away, they sit on the health bar. The game's classic party
+-- frames have no marker (Mainline/PartyFrameTemplates.xml:79-368).
 local function MarkerSpot(rec)
 	if rec.kind ~= "party" then
 		return rec.frame, "TOP", -1
@@ -767,6 +769,12 @@ local function MarkerSpot(rec)
 		return pic.frame, "CENTER", 0
 	elseif portrait ~= nil and not (pic ~= nil and pic.none) then
 		return portrait, "CENTER", 0
+	elseif pic ~= nil and pic.none and not X.joined(rec) then
+		if pic.side ~= nil then
+			return pic.frame, "CENTER", 0
+		elseif portrait ~= nil then
+			return portrait, "CENTER", 0
+		end
 	end
 	return HealthBar(rec), "CENTER", 0
 end
@@ -873,8 +881,9 @@ end)
 -- 1473-1474). A summon its party frames show already, in the icon right of the frame (UpdateNotPresentIcon, Mainline/PartyMemberFrame.lua:589-616, on
 -- INCOMING_SUMMON_CHANGED, :716-717), so that is left to the game. With Resurrection icon on party frames (on by default) a texture of the addon's own on
 -- a frame of its own over the holder of the marks shows that atlas while someone resurrects the member: REZ_SIZE units, centred on the picture Flat UI
--- draws or the game's portrait (MarkerSpot), or on a frame with neither (Picture None, as the ready-made Healer look has it) REZ_BAR units at the left
--- end of the health bar, 1 unit in, so the Dead word in the middle of the 10-unit bar (UnitText.lua Say) still reads. UnitHasIncomingResurrection is not
+-- draws or the game's portrait, or on the empty square of Picture None (as the ready-made Healer look has it) in Separate parts (MarkerSpot), or with
+-- Picture None in One frame REZ_BAR units at the left end of the health bar, 1 unit in, so the Dead word in the middle of the 10-unit bar (UnitText.lua
+-- Say) still reads. UnitHasIncomingResurrection is not
 -- in the generated docs, so its answer goes unread to the icon's opacity (FromAnswer). While the member is plainly dead (UnitIsDeadOrGhost) its frame
 -- breathes, an Alpha animation from 1 to REZ_LOW and back every REZ_BEAT seconds, so the icon is not missed beside the marker, the leader crown and the
 -- debuff icons; under the icon's opacity of 0 the beat plays unseen, as the low health beat does (HealthColour.lua). The icon is drawn again on
@@ -1012,8 +1021,8 @@ end)
 
 -- The game's unit frames show nobody away, nor do its raid frames (Blizzard_UnitFrame has no UnitIsAFK). With AFK on party frames (on by default) a
 -- font string of the addon's own on the holder of the marks says AFK, in a soft grey with an outline in the face and Small frame text size of the
--- bar text rows (X.ownSpec, UnitText.lua), at the bottom of the picture Flat UI draws or of the game's portrait (MarkerSpot), 2 units up, or on a frame
--- with neither at the left end of the health bar, 2 units in. It shows while UnitIsAFK is plainly true and goes when it is plainly false (it is plain
+-- bar text rows (X.ownSpec, UnitText.lua), at the bottom of the picture Flat UI draws, of the game's portrait or of the empty square of Picture None in
+-- Separate parts (MarkerSpot), 2 units up, or with Picture None in One frame at the left end of the health bar, 2 units in. It shows while UnitIsAFK is plainly true and goes when it is plainly false (it is plain
 -- except under chat lockdown, UnitDocumentation.lua:1778-1791); a withheld answer keeps what shows. It hides while the member is plainly dead or
 -- offline, where the Dead or Offline word and the resurrection icon speak. Each frame hears PLAYER_FLAGS_CHANGED, UNIT_CONNECTION and UNIT_HEALTH for
 -- its own member on a frame of the addon's own (RegisterUnitEvent, as the game's raid frames hear them, Shared/CompactUnitFrame.lua:339-352), whose
@@ -1432,3 +1441,8 @@ table.insert(X.after.picture, { part = MARKER, fn = Follow })
 table.insert(X.after.picture, { part = REZ, fn = FollowRez })
 table.insert(X.after.picture, { part = AFK, fn = FollowAfk })
 table.insert(X.after.layout, { part = AIM, fn = PlaceAim })
+-- A change of Frame style lands in Layout alone (rec.joined), out of combat: the marks that follow the picture take the empty square of Picture None, or
+-- leave it, there too.
+table.insert(X.after.layout, { part = MARKER, fn = Follow })
+table.insert(X.after.layout, { part = REZ, fn = FollowRez })
+table.insert(X.after.layout, { part = AFK, fn = FollowAfk })
