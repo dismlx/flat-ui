@@ -3194,15 +3194,21 @@ end
 -- The colour of a hit of yours and the name to show after it, by the slot it took. Without Colour by school of magic every hit of a spell or
 -- special attack (cast slot, next swing, channel, spin, sweep, counter) is yellow, whatever its school, and every swing, extra attack, shot and
 -- swing of your pet's is white. With it, the school gives the colour, except that Physical ability hits Yellow makes a physical hit of a spell
--- or special attack yellow. Without the school colours, Physical ability hits White makes a physical hit of one white. Next melee ability names
--- After the number gives the name of the ability (spell) to each report of its pair.
+-- or special attack yellow. Without the school colours, Physical ability hits White makes a physical hit of one white. Spell names (abilityName)
+-- Next melee abilities gives the name of the ability (spell) to each report of its pair; After every spell (0.5.41) gives every hit of a spell
+-- or special attack of yours its name too (cast slot, channel, spin, sweep, counter, and the tick of a damage over time, aura slot), the plain
+-- name of your own cast the slot was matched to, while swings, shots and your pet's swings stay bare.
 local function Ability(why, school, r, g, b, spell)
+	local mode = Opt("abilityName")
+	if why == "aura slot" then
+		return r, g, b, mode == "every" and Plain(spell, "string") and spell or nil
+	end
 	local named = why == "cast slot" or why == "next swing" or why == "channel" or why == "spin" or why == "sweep" or why == "counter"
 	if not (named or why == "swing slot" or why == "extra slot" or why == "shot slot" or why == "pet swing") then
 		return r, g, b
 	end
 	local physical = ns.IsSecret(school) or type(school) ~= "number" or school == 1
-	local name = why == "next swing" and Opt("abilityName") == "after" and Plain(spell, "string") and spell or nil
+	local name = Plain(spell, "string") and ((why == "next swing" and mode ~= "off") or (named and mode == "every")) and spell or nil
 	if Opt("school") then
 		if named and physical and Opt("abilityColour") == "spell" then
 			r, g, b = Colour(0)
