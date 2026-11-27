@@ -2105,6 +2105,8 @@ ns.PAGES = {
 			tip = "A thin line on the bar at the mana a shift into the form you are in costs, for a powershift: fill past it pays for one." },
 		{ key = "manaRule", kind = "bool", default = false, label = "Five-second rule",
 			tip = "After you spend mana, a spark crosses your mana bar over 5 seconds. Spirit refills your mana again once it reaches the end. A druid in Bear or Cat Form sees it on the druid mana bar." },
+		{ key = "energyTick", kind = "bool", default = false, label = "Energy tick",
+			tip = "For a rogue, or a druid in Cat Form: a spark crosses your energy bar every 2 seconds and reaches its end as the next energy comes in, also in a fight. It finds the beat from the first tick it sees." },
 	},
 	{
 		key = "unitframesTarget", label = "Target frame", parent = "unitframes", owner = "unitframes",

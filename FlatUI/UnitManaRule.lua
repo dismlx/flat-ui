@@ -8,6 +8,10 @@ local SPARK = "Interface\\CastingBar\\UI-CastingBar-Spark"
 local SPARK_TALL, SPARK_MIN, SPARK_WIDE, SPARK_ALPHA = 2, 8, 0.6, 0.9
 local FLARE_SCALE, FLARE_TIME = 1.6, 0.3
 local TELL_WAITS = "Flat UI: the five-second rule spark shows when the fight ends."
+local TICK_PART = "Energy tick"
+local ENERGY, TICK, ON_BEAT, RISE, MISSES, FRESH = 3, 2, 0.25, 15, 3, 0.5
+local TELL_TICK = "Flat UI: the energy tick spark shows when the fight ends."
+local TICK_EVENTS = { "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER" }
 
 local IsSecret = ns.IsSecret
 
@@ -21,6 +25,7 @@ local function Own(object)
 end
 
 local S = { ear = nil, hearing = false, rec = nil, start = nil, sample = nil, kind = nil, flared = nil }
+local E = { ear = nil, hearing = false, rec = nil, anchor = nil, last = nil, misses = 0, sample = nil, phase = nil, driving = false, flaredAt = nil }
 local costly = {}
 
 local function Wanted()
@@ -47,19 +52,29 @@ local function PowerBar(rec)
 	return power and power.target or rec.parts.power
 end
 
-local function MakeSet(parent)
-	local holder = X.frame(parent)
-	local spacer = Own(holder:CreateTexture(nil, "OVERLAY", nil, 6))
-	spacer:SetColorTexture(0, 0, 0, 0)
-	spacer:SetWidth(0.01)
+local function Spark(holder)
 	local spark = Own(holder:CreateTexture(nil, "OVERLAY", nil, 7))
 	spark:SetTexture(SPARK)
 	pcall(spark.SetBlendMode, spark, "ADD")
 	spark:SetAlpha(SPARK_ALPHA)
-	spark:SetPoint("CENTER", spacer, "RIGHT", 0, 0)
 	spark:Hide()
+	return spark
+end
+
+local function MakeSet(parent, still)
+	local holder = X.frame(parent)
+	local spacer = Own(holder:CreateTexture(nil, "OVERLAY", nil, 6))
+	spacer:SetColorTexture(0, 0, 0, 0)
+	spacer:SetWidth(0.01)
+	local spark = Spark(holder)
+	spark:SetPoint("CENTER", spacer, "RIGHT", 0, 0)
+	local burst = spark
+	if still then
+		burst = Spark(holder)
+		burst:SetPoint("CENTER", holder, "RIGHT", 0, 0)
+	end
 	local ok, flare = pcall(function()
-		local group = spark:CreateAnimationGroup()
+		local group = burst:CreateAnimationGroup()
 		Own(group)
 		local grow = group:CreateAnimation("Scale")
 		grow:SetScaleFrom(1, 1)
@@ -72,12 +87,12 @@ local function MakeSet(parent)
 		fade:SetDuration(FLARE_TIME)
 		pcall(group.SetToFinalAlpha, group, true)
 		group:SetScript("OnFinished", function()
-			spark:Hide()
-			spark:SetAlpha(SPARK_ALPHA)
+			burst:Hide()
+			burst:SetAlpha(SPARK_ALPHA)
 		end)
 		return group
 	end)
-	return { holder = holder, spacer = spacer, spark = spark, flare = ok and flare or nil }
+	return { holder = holder, spacer = spacer, spark = spark, burst = burst, flare = ok and flare or nil }
 end
 
 local function PlaceSet(set, over)
@@ -99,6 +114,7 @@ local function PlaceSet(set, over)
 	set.spacer:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, 0)
 	local high = math.max(SPARK_MIN, tall * SPARK_TALL)
 	set.spark:SetSize(high * SPARK_WIDE, high)
+	set.burst:SetSize(high * SPARK_WIDE, high)
 	set.over, set.key = over, key
 end
 
@@ -369,14 +385,265 @@ local function OnRefresh()
 	end
 end
 
+local function TickWanted()
+	return ns.Enabled(KEY) and Opt("energyTick") == true and not ns.PartStopped(KEY, TICK_PART)
+end
+
+local function Energetic()
+	local ok, _, class = pcall(UnitClass, "player")
+	return ok and not IsSecret(class) and (class == "ROGUE" or class == "DRUID")
+end
+
+local function TickSet(rec)
+	local over, parent = PowerBar(rec), rec.parts.badges or rec.parts.owner
+	if over == nil or parent == nil or ns.Forbidden(over) or ns.Forbidden(parent) then
+		return false
+	end
+	local set = rec.energyTick
+	if InCombatLockdown() then
+		return set == nil or set.over ~= over
+	end
+	if set == nil then
+		set = MakeSet(parent, true)
+		rec.energyTick = set
+	end
+	PlaceSet(set, over)
+	return false
+end
+
+local function TickOn()
+	local rec = E.rec
+	local set = rec and rec.energyTick
+	if set == nil or E.ear == nil or E.anchor == nil or not TickWanted() then
+		return nil
+	end
+	if PowerKind() ~= ENERGY or PowerBar(rec) ~= set.over then
+		return nil
+	end
+	return set
+end
+
+local function Burst(set, now)
+	E.flaredAt = now
+	if set.flare == nil then
+		return
+	end
+	pcall(set.flare.Stop, set.flare)
+	set.burst:SetAlpha(SPARK_ALPHA)
+	set.burst:Show()
+	if not pcall(set.flare.Play, set.flare) then
+		set.burst:Hide()
+	end
+end
+
+local function Unburst(set)
+	if set.flare ~= nil then
+		pcall(set.flare.Stop, set.flare)
+	end
+	set.burst:Hide()
+	set.burst:SetAlpha(SPARK_ALPHA)
+end
+
+local TickDrive
+
+local function TickSweep()
+	local set, now = TickOn(), Now()
+	if set == nil or now == nil then
+		TickDrive()
+		return
+	end
+	local ok, width = pcall(set.holder.GetWidth, set.holder)
+	if not ok or not ns.Finite(width) or width <= 0 then
+		set.spark:Hide()
+		return
+	end
+	local phase = (now - E.anchor) % TICK
+	if E.phase ~= nil and phase < E.phase then
+		Burst(set, now)
+	end
+	E.phase = phase
+	set.spacer:SetWidth(math.max(0.01, width * phase / TICK))
+	set.spark:Show()
+end
+
+local function OnTickUpdate()
+	X.run(TICK_PART, TickSweep)
+end
+
+function TickDrive()
+	local set = TickOn()
+	if set ~= nil then
+		if not E.driving then
+			E.driving, E.phase = true, nil
+			E.ear:SetScript("OnUpdate", OnTickUpdate)
+		end
+		TickSweep()
+		return
+	end
+	if E.driving then
+		E.driving, E.phase = false, nil
+		E.ear:SetScript("OnUpdate", nil)
+	end
+	local rec = E.rec
+	if rec ~= nil and rec.energyTick ~= nil then
+		rec.energyTick.spark:Hide()
+	end
+end
+
+local function TickStop()
+	E.last, E.phase, E.misses = nil, nil, 0
+	if E.sample then
+		E.anchor, E.sample = nil, nil
+	end
+	E.driving = false
+	if E.ear ~= nil then
+		E.ear:SetScript("OnUpdate", nil)
+	end
+	local set = E.rec and E.rec.energyTick
+	if set ~= nil then
+		set.spark:Hide()
+		Unburst(set)
+	end
+end
+
+local function Energy()
+	local ok, value = pcall(UnitPower, "player", ENERGY)
+	if ok and ns.Finite(value) then
+		return value
+	end
+	return nil
+end
+
+local function Rise(now)
+	local anchor = E.anchor
+	if anchor == nil or E.sample then
+		E.anchor, E.misses, E.sample = now, 0, nil
+	else
+		local off = (now - anchor) % TICK
+		if math.min(off, TICK - off) <= ON_BEAT then
+			E.anchor, E.misses = now, 0
+		else
+			E.misses = E.misses + 1
+			if E.misses < MISSES then
+				return
+			end
+			E.anchor, E.misses = now, 0
+		end
+	end
+	E.phase = nil
+	TickDrive()
+	local set = TickOn()
+	if set ~= nil and (E.flaredAt == nil or now - E.flaredAt > FRESH) then
+		Burst(set, now)
+	end
+end
+
+local function OnTickEvent(event, unit)
+	if event ~= "PLAYER_ENTERING_WORLD" and unit ~= nil and not IsSecret(unit) and unit ~= "player" then
+		return
+	end
+	if event ~= "UNIT_POWER_FREQUENT" then
+		E.last = Energy()
+		TickDrive()
+		return
+	end
+	local value = Energy()
+	local last = E.last
+	E.last = value
+	if value == nil or last == nil or value - last < RISE then
+		return
+	end
+	local now = Now()
+	if now ~= nil then
+		Rise(now)
+	end
+end
+
+local function TickHear(on)
+	if E.hearing == on then
+		return
+	end
+	local ear = E.ear
+	if ear == nil then
+		if not on then
+			return
+		end
+		ear = Own(CreateFrame("Frame"))
+		ear:SetScript("OnEvent", function(_, event, unit)
+			X.run(TICK_PART, OnTickEvent, event, unit)
+		end)
+		E.ear = ear
+	end
+	pcall(ear.UnregisterAllEvents, ear)
+	E.hearing = false
+	if not on then
+		return
+	end
+	for _, event in ipairs(TICK_EVENTS) do
+		local ok, done = false, nil
+		if type(ear.RegisterUnitEvent) == "function" then
+			ok, done = pcall(ear.RegisterUnitEvent, ear, event, "player")
+		end
+		if not (ok and (IsSecret(done) or done ~= false)) then
+			pcall(ear.RegisterEvent, ear, event)
+		end
+	end
+	pcall(ear.RegisterEvent, ear, "PLAYER_ENTERING_WORLD")
+	E.last = Energy()
+	E.hearing = true
+end
+
+local EnergyTick
+
+function EnergyTick(rec)
+	if rec.kind ~= "player" then
+		return
+	end
+	E.rec = rec
+	if not TickWanted() or not Energetic() then
+		TickHear(false)
+		TickStop()
+		return
+	end
+	if TickSet(rec) then
+		X.tell(TELL_TICK)
+		if not rec.energyTickQueued then
+			rec.energyTickQueued = true
+			ns.OutOfCombat(function()
+				rec.energyTickQueued = nil
+				X.run(TICK_PART, EnergyTick, rec)
+			end)
+		end
+	end
+	TickHear(true)
+	if Testing() then
+		if E.anchor == nil then
+			E.anchor, E.sample = Now(), true
+		end
+	elseif E.sample then
+		E.anchor, E.sample = nil, nil
+	end
+	TickDrive()
+end
+
+local function OnTickRefresh()
+	local rec = X.known(_G.PlayerFrame)
+	if rec then
+		EnergyTick(rec)
+	end
+end
+
 table.insert(X.after.apply, { part = PART, fn = ManaRule })
 table.insert(X.after.refresh, { part = PART, fn = OnRefresh })
+table.insert(X.after.apply, { part = TICK_PART, fn = EnergyTick })
+table.insert(X.after.refresh, { part = TICK_PART, fn = OnTickRefresh })
 
 if ns.TestMode then
 	ns.TestMode.Watch(function()
 		local rec = X.known(_G.PlayerFrame)
 		if rec then
 			X.run(PART, ManaRule, rec)
+			X.run(TICK_PART, EnergyTick, rec)
 		end
 	end)
 end
