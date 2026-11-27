@@ -1074,6 +1074,15 @@ function Categories.Of(record)
 	if pinned then
 		return "keep"
 	end
+	local ruleKeys, matches = Custom.RuleKeys, B.Search and B.Search.Matches
+	if type(ruleKeys) == "function" and type(matches) == "function" then
+		local rule = Custom.Rule
+		for _, key in ipairs(ruleKeys()) do
+			if matches(rule(key), record) == true then
+				return key
+			end
+		end
+	end
 	return Rules(record)
 end
 
