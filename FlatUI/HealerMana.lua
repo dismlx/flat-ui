@@ -3,7 +3,10 @@ local _, ns = ...
 -- Healer mana: a small window of Flat UI's own with the mana of the healers of the group, one bar each in the order of the group, in the class
 -- colour of the member, with the share of mana left. A healer is a member whose role is healer (UnitGroupRolesAssigned, UnitDocumentation.lua:
 -- 1318-1332), or, while nobody in the group has that role, a member with no role of a class that heals (Priest, Paladin, Shaman and Druid, as
--- Setup.lua lists them): in a group that uses the healer role, a member who set none is most likely no healer, as H.Read says. The share is
+-- Setup.lua lists them): in a group that uses the healer role, a member who set none is most likely no healer, as H.Read says. The guess by
+-- class leaves out the player while his role reads tank, or damage with talent points spent (ns.PlayerRole, ns.PlayerTree: a Retribution
+-- paladin, a Feral druid, a Shadow priest), and anyone else while the game gives him its tank aura (a Righteous Fury paladin, a bear), plain
+-- answers only (H.Healer); it is read again as talents change and as each fight ends, so a tank who took his form for the pull drops off. The share is
 -- UnitPowerPercent of the member's mana through the game's curve to 100 (UnitDocumentation.lua:2838-2857, CurveConstants.lua:9-12), as
 -- UnitText.lua writes a power share, so a druid in a form shows mana too. The game may withhold it (SecretWhenUnitPowerRestricted): it is never
 -- read, compared or added, and goes as it is to SetValue of the bar and to SetFormattedText of its text, which take it
@@ -20,8 +23,8 @@ local _, ns = ...
 -- 45% while UnitInRange says he is out of range, also in a fight: that answer is always withheld (UnitDocumentation.lua UnitInRange), so it goes as it is to SetAlphaFromBoolean of the bar,
 -- which takes it, as the party frames dim (UnitExtras.lua); a client that refuses leaves the bars bright and says so in /flatui status. The window shows in a dungeon or raid, or in
 -- any group, as Show says, while the group has a healer; it is drawn again on a step of half a second only while it shows, and the group is
--- read again when it changes (GROUP_ROSTER_UPDATE, PLAYER_ROLES_ASSIGNED, PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA; a burst is read once,
--- a moment after the first).
+-- read again when it changes (GROUP_ROSTER_UPDATE, PLAYER_ROLES_ASSIGNED, PLAYER_ENTERING_WORLD, ZONE_CHANGED_NEW_AREA, and for the guess by
+-- class PLAYER_TALENT_UPDATE, CHARACTER_POINTS_CHANGED and PLAYER_REGEN_ENABLED; a burst is read once, a moment after the first).
 -- A bar glides to each new share (Enum.StatusBarInterpolation.ExponentialEaseOut, as the Threat list and the pet target bar have it), a withheld one
 -- too, while it shows the same healer (his unit token); a bar that turns to another healer, comes back from Offline or Dead or from hiding as the
 -- list shrank, a sample, a list that just showed or a client with no interpolation takes the value at once.
@@ -251,8 +254,29 @@ function H.Allowed()
 	return ok and not IsSecret(inside) and inside == true and not IsSecret(kind) and (kind == "party" or kind == "raid")
 end
 
--- True for a healer: the role says so, or the member has no role and is of a class that heals, and then the second answer is true. A withheld
--- role counts as none.
+-- True when a member of a class that heals is plainly no healer now, for the guess by class: the player, when ns.PlayerRole (Core.lua: the
+-- tank stance, form or aura nameplate threat reads, else the talents) says tank, or says damage while ns.PlayerTree finds points in a tree, so a
+-- Retribution paladin or a Shadow priest is left out and a low-level healer with no points spent keeps the guess; anyone else, while the game
+-- gives him its tank aura (UnitHasEffectivelyTankAura, his tank stance, form or aura, plain for party members as nameplate threat reads it,
+-- PlateThreat.lua), so a Righteous Fury paladin or a bear tank is left out. A withheld or missing answer keeps the guess.
+local function NoHealer(unit)
+	if Ask(UnitIsUnit, unit, "player") == true then
+		local ok, role = pcall(ns.PlayerRole)
+		if not ok or IsSecret(role) then
+			return false
+		elseif role == "tank" then
+			return true
+		elseif role == "damage" and type(ns.PlayerTree) == "function" then
+			local fine, tree = pcall(ns.PlayerTree)
+			return fine and ns.Finite(tree) and true or false
+		end
+		return false
+	end
+	return Ask(UnitHasEffectivelyTankAura, unit) == true
+end
+
+-- True for a healer: the role says so, or the member has no role and is of a class that heals and is not plainly something else now (NoHealer),
+-- and then the second answer is true. A withheld role counts as none.
 function H.Healer(unit)
 	local role = Ask(UnitGroupRolesAssigned, unit)
 	if role == "HEALER" then
@@ -261,7 +285,12 @@ function H.Healer(unit)
 		return false, false
 	end
 	local class = Ask(UnitClassBase, unit)
-	return type(class) == "string" and HEALERS[class] == true, true
+	if type(class) ~= "string" or HEALERS[class] ~= true then
+		return false, true
+	elseif NoHealer(unit) then
+		return false, true
+	end
+	return true, true
 end
 
 -- The healers of the group in its order: in a raid raid1 to raid40, the player among them; else the player, then party1 to party4. A member with
@@ -1017,7 +1046,8 @@ ns.Register(KEY, {
 	Refresh = H.Refresh,
 	Resized = H.Refresh,
 	Status = H.Status,
-	events = { GROUP_ROSTER_UPDATE = Soon, PLAYER_ROLES_ASSIGNED = Soon, PLAYER_ENTERING_WORLD = Soon, ZONE_CHANGED_NEW_AREA = Soon },
+	events = { GROUP_ROSTER_UPDATE = Soon, PLAYER_ROLES_ASSIGNED = Soon, PLAYER_ENTERING_WORLD = Soon, ZONE_CHANGED_NEW_AREA = Soon,
+		PLAYER_TALENT_UPDATE = Soon, CHARACTER_POINTS_CHANGED = Soon, PLAYER_REGEN_ENABLED = Soon },
 	slash = { healers = H.Slash },
 	help = HELP,
 })

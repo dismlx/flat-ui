@@ -1278,6 +1278,7 @@ ns.SETUP_STEPS = {
 		{ "partycd.side", "c", "mock-party-cooldowns" },
 		{ "partycd.show", "c", "behaviour", "Chooses whether party icons always show or only while on cooldown." },
 		{ "partycd.raid", "o", "behaviour", "Chooses whether a raid group gets its own row or none." },
+		{ "partycd.grow", "o", "behaviour", "Chooses whether the raid group stack grows down from the top of its spot or up from the bottom." },
 		{ "partycd.ownRow", "o", "mock-party-cooldowns" },
 		{ "partycd.count", "o", "mock-party-cooldowns" },
 		{ "partycd.size", "c", "mock-party-cooldowns" },
@@ -1674,6 +1675,7 @@ ns.SETUP_STEPS = {
 		{ "threat.warnAt", "r", "behaviour", "Sets the share of threat at which the warning starts." },
 		{ "threat.lost", "o", "behaviour", "As a tank, makes your bar pulse red and plays the warning sound once when an enemy you held turns to someone else." },
 		{ "threat.others", "o", "behaviour", "As a tank, turns amber the bar of a member who is about to pull aggro from you." },
+		{ "threat.otherTanks", "o", "behaviour", "As a tank, stays quiet when another tank of the group takes an enemy from you." },
 		{ "threat.warnSound", "r", "behaviour", "Chooses the sound that plays once for either warning." },
 	} },
 	{ id = "healermana", area = "Healer mana", title = "Healer mana", draw = "mock-screen", built = false, rows = {
@@ -1723,6 +1725,11 @@ ns.SETUP_STEPS = {
 	{ id = "pingbar", area = "Ping bar", title = "Ping bar", draw = "mock-screen", built = false, rows = {
 		{ "pingbar.enabled", "c", "behaviour", "Shows a bar with a button for each ping of the game: click one, then click where to ping, or another to switch. Each also has a key in the game's Key Bindings that pings what is under the mouse, and the movers place the bar." },
 		{ "pingbar.show", "o", "behaviour", "Chooses whether the bar shows in a group, always, or never, when only its keys ping." },
+		{ "pingbar.ping", "o", "behaviour", "Shows the Ping button, where the game picks the kind of ping, on the ping bar." },
+		{ "pingbar.attack", "o", "behaviour", "Shows the Attack button on the ping bar." },
+		{ "pingbar.warning", "o", "behaviour", "Shows the Warning button on the ping bar." },
+		{ "pingbar.onMyWay", "o", "behaviour", "Shows the On My Way button on the ping bar." },
+		{ "pingbar.assist", "o", "behaviour", "Shows the Assist button on the ping bar." },
 		{ "pingbar.cooldown", "r", "behaviour", "Shows on the buttons when you can ping again." },
 		{ "pingbar.size", "o", "behaviour", "Sets the size of the buttons." },
 		{ "pingbar.spacing", "r", "behaviour", "Sets the room between the buttons." },

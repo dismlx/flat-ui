@@ -31,11 +31,15 @@ local _, ns = ...
 -- as on a boss, warns of nothing. Not for a tank: while ns.PlayerRole (Core.lua: the group role, else the stance, form or aura nameplate
 -- threat reads, else the talents) says tank, read at the start of each fight and at each refresh, his bar never pulses near aggro. A tank has
 -- Warn when you lose aggro instead: when an enemy he was tanking (isTanking, plain only, on that enemy's GUID) turns to someone else while it is
--- still the enemy of the list, his bar pulses red for 2 seconds and Warning sound plays once, and for those 2 seconds the bar of the member
--- or pet now tanking it (isTanking true, plain only) pulses red with his (T.Took), so the one to taunt off is marked; a new enemy, a withheld
--- share or the list hiding forgets what he held. With Show who is near your aggro, while his role is a tank's, the bar of any other member or pet at Warn at or above who
--- is not tanking (plain share and isTanking only) wears a steady amber wash under its text, with no sound, so he sees who is about to pull and
--- can taunt or slow down (T.Others). The samples preview all three: for a damage dealer or healer the player's sample bar passes 90% at some
+-- still the enemy of the list, his bar pulses red for up to 2 seconds, until he holds it again (his taunt landed), and Warning sound plays
+-- once, and for those seconds the bar of the member or pet now tanking it (isTanking true, plain only) pulses red with his (T.Took), so the
+-- one to taunt off is marked; a new enemy, a withheld share or the list hiding forgets what he held. With Calm when another tank takes it
+-- (on), an enemy that turns to another tank of the group (his tank role, the raid's Main Tank, or outside a raid the game's tank aura: his
+-- stance, form or aura; plain answers only, the rules of nameplate threat's Enemies held by another tank, T.OtherTank) plays nothing and
+-- marks nobody, as an off-tank's taunt is meant. With Show who is near your aggro, while his role is a tank's, the bar of any other member or
+-- pet at Warn at or above who is not tanking (plain share and isTanking only) wears a steady amber wash under its text, with no sound, so he
+-- sees who is about to pull and can taunt or slow down (T.Others); another tank does not, while Calm when another tank takes it is on. The
+-- samples preview all three: for a damage dealer or healer the player's sample bar passes 90% at some
 -- steps of test mode and every fifth step reaches 100% and holds aggro; while his role is a tank's his sample bar holds aggro at 100%, every
 -- fifth step (10 seconds) a sample Mage takes it for one step, so his bar and the Mage's pulse as Warn when you lose aggro has it, and two steps after each of
 -- those the sample Rogue climbs to 94% and turns amber. Each sound plays once for each time test mode is turned on (TestMode.lua's gate,
@@ -612,18 +616,49 @@ function T.Holding(entry)
 	return Opt("warn") ~= false and not T.tank and entry ~= nil and entry.me == true and not entry.withheld and entry.tanking == true
 end
 
+-- True when the raid gave a unit the assignment: a plain answer the game's own test (if GetPartyAssignment(...) then) takes as true, as
+-- nameplate threat asks it (PlateThreat.lua).
+local function Assigned(assignment, unit)
+	if type(GetPartyAssignment) ~= "function" then
+		return false
+	end
+	local ok, yes = pcall(GetPartyAssignment, assignment, unit)
+	return ok and not IsSecret(yes) and yes ~= nil and yes ~= false
+end
+
+-- True when an entry is another tank of the group, by the rules nameplate threat has for Enemies held by another tank (PlateThreat.lua): a
+-- member, not the player and no pet, with the tank role or the raid's Main Tank, or outside a raid with the game's tank aura (his stance,
+-- form or aura; plain for party members), as groups on Forever often have no roles. Plain answers only (Ask drops a withheld one). The
+-- samples are no tanks, so test mode looks the same with Calm when another tank takes it on or off.
+function T.OtherTank(entry)
+	local member = entry and entry.member
+	if not member or entry.me or member.pet or type(member.unit) ~= "string" then
+		return false
+	end
+	local unit = member.unit
+	if Ask(UnitGroupRolesAssigned, unit) == "TANK" or Assigned("MAINTANK", unit) then
+		return true
+	end
+	return Ask(IsInRaid) ~= true and Ask(UnitHasEffectivelyTankAura, unit) == true
+end
+
 -- True when an entry of another member is about to pull aggro from the player as a tank: Show who is near your aggro is on, ns.PlayerRole says
--- tank (T.tank), the member is not tanking and his plain share is at Warn at or above. His bar then turns a steady amber, with no sound.
+-- tank (T.tank), the member is not tanking and his plain share is at Warn at or above, and with Calm when another tank takes it on he is no
+-- tank (T.OtherTank), so an off-tank who builds threat on purpose stays as he is. His bar then turns a steady amber, with no sound.
 function T.Others(entry)
 	if not T.tank or Opt("others") == false or not entry or entry.me or entry.withheld or entry.tanking then
 		return false
 	end
-	return ns.Finite(entry.scaled) and entry.scaled >= Number("warnAt", 90)
+	if not (ns.Finite(entry.scaled) and entry.scaled >= Number("warnAt", 90)) then
+		return false
+	end
+	return Opt("otherTanks") == false or not T.OtherTank(entry)
 end
 
--- True while the player's bar pulses because he lost aggro as a tank (T.Lost).
+-- True while the player's bar pulses because he lost aggro as a tank (T.Lost); never while he holds the enemy again (plain isTanking), so the
+-- red stops on the draw where his taunt lands.
 function T.Losing(entry)
-	if not T.lostUntil or not entry or not entry.me then
+	if not T.lostUntil or not entry or not entry.me or entry.tanking == true then
 		return false
 	end
 	local now = Ask(GetTime)
@@ -637,6 +672,10 @@ function T.Took(entry)
 	if not T.lostUntil or not entry or entry.me or entry.withheld or entry.tanking ~= true then
 		return false
 	end
+	-- Another tank who has since taunted it off the one who pulled it is no one to taunt off (Calm when another tank takes it).
+	if Opt("otherTanks") ~= false and T.OtherTank(entry) then
+		return false
+	end
 	local now = Ask(GetTime)
 	return ns.Finite(now) and now < T.lostUntil
 end
@@ -648,9 +687,11 @@ function T.ReadRole()
 end
 
 -- Warn when you lose aggro: while the player is a tank, his plain isTanking on the enemy (its GUID, else its token: who) is kept, and when an
--- enemy he held is still the enemy of the list but no longer his, his bar pulses red for LOST_TIME and Warning sound plays once. A new enemy, a
--- withheld entry, no entry of his or the list hiding (who nil) forget what he held.
-function T.Lost(entry, who)
+-- enemy he held is still the enemy of the list but no longer his, his bar pulses red for LOST_TIME and Warning sound plays once. Holding it
+-- again ends the pulse at once (his taunt landed). With Calm when another tank takes it on, an enemy that turns to another tank of the group
+-- (the first other entry of entries with plain isTanking, T.OtherTank) is let go quietly: no pulse, no sound and no red on the other tank. A
+-- new enemy, a withheld entry, no entry of his or the list hiding (who nil) forget what he held.
+function T.Lost(entry, who, entries)
 	if who ~= T.lostOn then
 		T.held, T.lostUntil, T.lostOn = nil, nil, who
 	end
@@ -659,9 +700,19 @@ function T.Lost(entry, who)
 		return
 	end
 	if entry.tanking then
-		T.held = who
+		T.held, T.lostUntil = who, nil
 	elseif T.held == who then
 		T.held = nil
+		if Opt("otherTanks") ~= false and type(entries) == "table" then
+			for _, other in ipairs(entries) do
+				if other.tanking == true and not other.me then
+					if T.OtherTank(other) then
+						return
+					end
+					break
+				end
+			end
+		end
 		local now = Ask(GetTime)
 		T.lostUntil = ns.Finite(now) and now + LOST_TIME or nil
 		-- The bars are drawn again as the pulse ends, so it lasts LOST_TIME however far the next step is (the samples move every 2 seconds).
@@ -854,7 +905,7 @@ function T.Draw(mob, entries)
 			row.who = nil
 		end
 	end
-	T.Lost(own, who)
+	T.Lost(own, who, entries)
 	local shown = T.Shown(entries, n, own, at)
 	for index = 1, n do
 		T.Fill(T.rows[index], shown[index])

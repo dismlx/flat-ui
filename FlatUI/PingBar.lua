@@ -4,8 +4,9 @@ local _, ns = ...
 -- on a dark background, the game's own ping icon inside. A module of its own, on by default, whose page is in the Group group. The bar shows in
 -- a group, always, or never (then only its keys ping), as Show says, and /flatui move places it (FlatUIPingBar in Movers.lua: the top left
 -- corner of the bar is the top left corner of the box). While test mode is on (TestMode.lua, out of combat only) Show reads as Always and the bar
--- shows also while pings are blocked for you, greyed, with the reason in each tooltip, and a cooldown swipe runs once as a sample. No frame or
--- setting of the game is changed.
+-- shows also while pings are blocked for you, greyed, with the reason in each tooltip, and a cooldown swipe runs once as a sample. The rows
+-- under Pings (Ping, Attack, Warning, On My Way, Assist, all on) choose which of those buttons the bar shows (P.Wanted), and it closes up around
+-- the rest, laid out again out of combat; every key under Key Bindings still pings. No frame or setting of the game is changed.
 --
 -- How the game pings. The ping wheel is the game's own (Blizzard_PingUI, for the game type mainline, Blizzard_PingUI.toc:4, which this client's
 -- camelot loads too: Blizzard_UnitFrame.toc:20 has to exclude camelot from a mainline line). Its key (TOGGLEPINGLISTENER, Blizzard_PingUI/Bindings.xml:3-5)
@@ -113,15 +114,15 @@ local SAMPLE = 3
 -- of Enum.PingSubjectType and its number where the client has no enum (PingConstantsDocumentation), the number /ping reads, the texture kit, the
 -- global string of its name (SlashCommandsOverrides.lua:43-53) and its English name, the game's own binding, and the colour of its border.
 local KINDS = {
-	{ id = "Ping", kit = "NonThreat", name = "Ping", game = "TOGGLEPINGLISTENER", colour = { 1, 0.82, 0.2 } },
+	{ id = "Ping", kit = "NonThreat", name = "Ping", game = "TOGGLEPINGLISTENER", colour = { 1, 0.82, 0.2 }, row = "ping" },
 	{ id = "Attack", enum = "Attack", value = 0, word = "1", kit = "Attack", global = "PING_TYPE_ATTACK", name = "Attack", game = "PINGATTACK",
-		colour = { 0.93, 0.27, 0.22 } },
+		colour = { 0.93, 0.27, 0.22 }, row = "attack" },
 	{ id = "Warning", enum = "Warning", value = 1, word = "2", kit = "Warning", global = "PING_TYPE_WARNING", name = "Warning", game = "PINGWARNING",
-		colour = { 1, 0.6, 0.13 } },
+		colour = { 1, 0.6, 0.13 }, row = "warning" },
 	{ id = "OnMyWay", enum = "OnMyWay", value = 3, word = "3", kit = "OnMyWay", global = "PING_TYPE_ON_MY_WAY", name = "On My Way",
-		game = "PINGONMYWAY", colour = { 0.32, 0.64, 1 } },
+		game = "PINGONMYWAY", colour = { 0.32, 0.64, 1 }, row = "onMyWay" },
 	{ id = "Assist", enum = "Assist", value = 2, word = "4", kit = "Assist", global = "PING_TYPE_ASSIST", name = "Assist", game = "PINGASSIST",
-		colour = { 0.35, 0.85, 0.38 } },
+		colour = { 0.35, 0.85, 0.38 }, row = "assist" },
 	{ id = "NotThreat", enum = "AlertNotThreat", value = 5, word = "5", kit = "NonThreat", global = "PING_TYPE_NOT_THREAT", name = "Not a threat",
 		colour = { 1, 0.82, 0.2 } },
 	{ id = "Threat", enum = "AlertThreat", value = 4, word = "6", kit = "Threat", global = "PING_TYPE_THREAT", name = "Threat",
@@ -349,12 +350,21 @@ function P.Allowed()
 	return show == "always" or Truth(IsInGroup) == true
 end
 
--- The places in KINDS of the buttons that show now: none while the module is off, Show does not allow the bar or the game made no secure button.
+-- The places in KINDS of the buttons that show now: none while the module is off, Show does not allow the bar or the game made no secure button;
+-- else those of P.Order whose row under Pings is on (a kind's row; Not a threat and Threat have none and show wherever the wheel offers them).
+-- A new list each time, so P.order is never changed. None at all hides the bar, as Show Never does; the keys still ping.
 function P.Wanted()
 	if not ns.Enabled(KEY) or P.broken or not P.Allowed() then
 		return {}
 	end
-	return P.Order()
+	local list = {}
+	for _, index in ipairs(P.Order()) do
+		local row = KINDS[index] and KINDS[index].row
+		if not row or Opt(row) ~= false then
+			list[#list + 1] = index
+		end
+	end
+	return list
 end
 
 -- The buttons --------------------------------------------------------------------------------------------------------------------------------
@@ -737,6 +747,10 @@ function P.Layout(list)
 		if not shown[entry] then
 			entry.frame:Hide()
 			entry.cover:Hide()
+			-- A ping that waits on a button its row under Pings just took off gives up, as nothing would show it waits.
+			if entry.armed then
+				P.Cancel()
+			end
 		end
 	end
 	P.panel:SetSize(math.max(1, width), math.max(1, height))
