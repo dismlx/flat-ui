@@ -353,7 +353,7 @@ end
 
 local function Read(entry)
 	local id, now = entry.id, Now()
-	local most = Most(RowOf(entry))
+	local most = (entry.trigger == nil or entry.trigger == "aura") and Most(RowOf(entry)) or nil
 	if Off(entry) then
 		P.ended[id], P.since[id] = nil, nil
 		if most then
