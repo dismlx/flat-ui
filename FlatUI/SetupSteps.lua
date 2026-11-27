@@ -122,6 +122,8 @@ ns.SETUP_STEPS = {
 		{ "nameplates.threatFlash", "r", "mock-nameplate-threat" },
 		{ "nameplates.threatRingPx", "r", "mock-nameplate-threat" },
 		{ "nameplates.threatSlipping", "o", "mock-nameplate-threat" },
+		{ "nameplates.threatSlipGrow", "o", "mock-nameplate-threat" },
+		{ "nameplates.threatSlipScale", "r", "mock-nameplate-threat" },
 		{ "nameplates.threatBorder", "r", "mock-nameplate-threat" },
 		{ "nameplates.threatBackground", "r", "mock-nameplate-threat" },
 		{ "nameplates.threatFade", "o", "mock-nameplate-threat" },
