@@ -517,7 +517,7 @@ function L.Count(d, count, animate, now)
 		end
 	end
 	d.lit = lit
-	local pulse = count == 1 and 1 or nil
+	local pulse = count == 1 and not (d.family and d.family.stacks) and 1 or nil
 	if d.pulse ~= pulse and d.pulse and d.orbs[d.pulse] then
 		local orb = d.orbs[d.pulse]
 		orb.frame:SetScale(1)

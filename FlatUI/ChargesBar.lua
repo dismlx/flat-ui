@@ -5,14 +5,14 @@ local B = { exists = {}, looks = {} }
 ns.ChargesBar = B
 
 B.GAP, B.WIDTH, B.STACK = 3, 160, 6
-B.PIECES = { "shadow", "socket", "rim", "back", "gem", "glow", "deplete" }
-B.TINTED = { back = true, gem = true, glow = true, deplete = true }
+B.PIECES = { "shadow", "socket", "rim", "back", "gem", "frame", "glow", "deplete" }
+B.TINTED = { back = true, gem = true, frame = true, glow = true, deplete = true }
 B.SHAPES = { Top = 0.5, Center = 1 }
 B.ORB_FILL = { file = L.GLOW, w = 1.6, h = 1.6, y = 0, blend = "ADD", tint = true, a = 1 }
 B.ORB_GHOST = { file = L.RING, w = L.GHOST, h = L.GHOST, y = 0, blend = "ADD", tint = true, a = 0.32 }
 B.KITS = {
 	rogue = { ref = 20, shadow = { "uf-roguecp-bg-shadow", y = -4 }, socket = { "uf-roguecp-bg-dis" }, rim = { "uf-roguecp-bg-anima-dis" },
-		back = { "uf-roguecp-bg-anima" }, gem = { "uf-roguecp-icon-blue" }, glow = { "uf-roguecp-bg-animaglow" }, deplete = { "uf-roguecp-fx-blue" } },
+		gem = { "uf-roguecp-icon-blue" }, frame = { "uf-roguecp-bg-anima" }, glow = { "uf-roguecp-bg-animaglow" }, deplete = { "uf-roguecp-fx-blue" } },
 	druid = { ref = 20, shadow = { "UF-DruidCP-BG-Shadow", y = -2 }, socket = { "UF-DruidCP-BG-Dis" }, back = { "UF-DruidCP-BG-Active" },
 		gem = { "UF-DruidCP-Icon" }, glow = { "UF-DruidCP-Ring-Glow" }, deplete = { "UF-DruidCP-Deplete" } },
 	arcane = { ref = 21, shadow = { "UF-Arcane-BGShadow", y = -2.5 }, socket = { "UF-Arcane-BG" }, gem = { "UF-Arcane-Icon" },
@@ -167,26 +167,46 @@ function B.Apply(texture, piece, r, g, b)
 	texture:SetVertexColor(cr, cg, cb, piece.a or 1)
 end
 
-function B.Fill(bar, piece, r, g, b)
-	local set = false
-	if piece.atlas then
-		set = pcall(bar.SetStatusBarTexture, bar, piece.atlas)
-		local ok, fill = pcall(bar.GetStatusBarTexture, bar)
-		if set and ok and type(fill) == "table" and not IsSecret(fill) then
-			local read, got = pcall(fill.GetAtlas, fill)
-			set = not read or IsSecret(got) or got == nil or got == piece.atlas
-		end
+function B.FillOf(bar)
+	local ok, fill = pcall(bar.GetStatusBarTexture, bar)
+	if ok and type(fill) == "table" and not IsSecret(fill) then
+		return fill
 	end
+	return nil
+end
+
+function B.AtlasFill(bar, atlas)
+	local ok, done = pcall(bar.SetStatusBarTexture, bar, atlas)
+	local fill = ok and done ~= false and B.FillOf(bar) or nil
+	if not fill then
+		return false
+	end
+	local read, got = pcall(fill.GetAtlas, fill)
+	if read and not IsSecret(got) and got == atlas then
+		return true
+	end
+	local put, made = pcall(fill.SetAtlas, fill, atlas, false)
+	return put and made ~= false
+end
+
+function B.Tint(piece, set, r, g, b)
+	local cr, cg, cb = B.Rgb((set or not piece.atlas) and piece or B.MEDIA.gem, r, g, b)
+	return { cr, cg, cb, piece.a or 1 }
+end
+
+function B.Fill(bar, piece, r, g, b)
+	local set = piece.atlas ~= nil and B.AtlasFill(bar, piece.atlas)
 	if not set then
 		pcall(bar.SetStatusBarTexture, bar, piece.file or L.GLOW)
 	end
-	local ok, fill = pcall(bar.GetStatusBarTexture, bar)
-	if ok and type(fill) == "table" and not IsSecret(fill) then
+	local fill = B.FillOf(bar)
+	if fill then
 		pcall(fill.SetBlendMode, fill, piece.blend or "BLEND")
 		pcall(fill.SetDesaturated, fill, set and piece.tint == true)
 	end
-	local cr, cg, cb = B.Rgb((set or not piece.atlas) and piece or B.MEDIA.gem, r, g, b)
-	return { cr, cg, cb, piece.a or 1 }
+	local tint = B.Tint(piece, set, r, g, b)
+	tint.set = set
+	return tint
 end
 
 function B.Region(texture, piece, size, stretch, spot, r, g, b, shown)
@@ -215,7 +235,7 @@ function B.Pip(d, index)
 	frame:SetPoint("CENTER", spot, "CENTER", 0, 0)
 	frame:SetFrameLevel(d.own:GetFrameLevel() + 3)
 	orb.frame = frame
-	orb.bars = { L.Bar(frame, index, 0), L.Bar(frame, index, 1) }
+	orb.bars = { L.Bar(frame, index, 0), L.Bar(frame, index, 1), L.Bar(frame, index, 2) }
 	orb.pop = B.Texture(d.fx, "ARTWORK", 0)
 	orb.burst = B.Texture(d.fx, "ARTWORK", 1)
 	orb.flash = L.Glow(d.fx, "ARTWORK", 2)
@@ -250,8 +270,7 @@ function B.Layer(d, index)
 end
 
 function B.Sizes(d)
-	local s = math.min(d.pip, d.cell or d.pip)
-	return s, math.max(0, (d.cell or d.pip) - d.pip)
+	return d.pip, 0
 end
 
 function B.PaintBar(bar, piece, w, h, y, owner, r, g, b, shown)
@@ -276,10 +295,11 @@ function B.PaintPip(d, orb)
 	B.Region(orb.ghost, look.socket, s, stretch, orb.spot, r, g, b, used)
 	B.Region(orb.rim, look.rim, s, stretch, orb.spot, r, g, b, used)
 	orb.frame:SetSize(s, s)
-	local back, gem = look.back, look.gem
+	local back, gem, cap = look.back, look.gem, look.frame
 	orb.tints = {
 		back and B.PaintBar(orb.bars[1], back, back.w * s + stretch, back.h * s, back.y * s, orb.frame, r, g, b, true) or B.PaintBar(orb.bars[1]),
 		B.PaintBar(orb.bars[2], gem, gem.w * s, gem.h * s, gem.y * s, orb.frame, r, g, b, true),
+		cap and B.PaintBar(orb.bars[3], cap, cap.w * s, cap.h * s, cap.y * s, orb.frame, r, g, b, true) or B.PaintBar(orb.bars[3]),
 	}
 	B.Region(orb.pop, look.glow, s, 0, orb.spot, r, g, b, true)
 	B.Region(orb.burst, look.deplete, s, 0, orb.spot, r, g, b, true)
@@ -313,24 +333,32 @@ function B.PaintArt(texture, d, w, h, r, g, b, a)
 	texture:SetSize(w, h)
 end
 
+function B.ArtFill(bar, d)
+	pcall(bar.SetStatusBarTexture, bar, d.art.file)
+	local fill = B.FillOf(bar)
+	if fill then
+		pcall(fill.SetDesaturated, fill, d.artTint == true)
+		pcall(fill.SetBlendMode, fill, "BLEND")
+	end
+end
+
+function B.ArtTint(d)
+	local r, g, b = B.ArtColour(d)
+	return { r, g, b, B.LayerAlpha(d.n) }
+end
+
 function B.ArtBar(bar, d, owner, shown)
 	if not shown then
 		bar:Hide()
 		return nil
 	end
 	local art = d.art
-	local r, g, b = B.ArtColour(d)
-	pcall(bar.SetStatusBarTexture, bar, art.file)
-	local ok, fill = pcall(bar.GetStatusBarTexture, bar)
-	if ok and type(fill) == "table" and not IsSecret(fill) then
-		pcall(fill.SetDesaturated, fill, d.artTint == true)
-		pcall(fill.SetBlendMode, fill, "BLEND")
-	end
+	B.ArtFill(bar, d)
 	bar:SetSize(art.w, art.h)
 	bar:ClearAllPoints()
 	bar:SetPoint("CENTER", owner, "CENTER", 0, 0)
 	bar:Show()
-	return { r, g, b, B.LayerAlpha(d.n) }
+	return B.ArtTint(d)
 end
 
 function B.ArtGhost(texture, d, spot, shown)
@@ -385,11 +413,30 @@ function B.Line(d)
 	return text and math.floor(d.pip * 0.5 + 6) or 0
 end
 
+function B.Small(d)
+	return math.max(75, math.min(160, d.pip / 20 * 95))
+end
+
+function B.TimeWidth(d)
+	return math.floor(d.pip * 1.1 + 4)
+end
+
+function B.NameWidth(d)
+	local name = d.name
+	if not name or Opt("name") == false then
+		return 0
+	end
+	L.Style(name, B.Small(d))
+	name:SetText(d.title or "")
+	local ok, width = pcall(name.GetStringWidth, name)
+	return ok and ns.Finite(width) and width or 0
+end
+
 function B.Geometry(d)
 	local n, pip = math.max(1, d.n), d.pip
 	local width = B.Width()
 	local room = Opt("count") ~= false and math.floor(pip * 1.2 + 6) or 0
-	d.line, d.room = B.Line(d), room
+	d.line, d.room, d.narrow = B.Line(d), room, false
 	if d.kind == "art" then
 		local art = B.ArtFor(d.family)
 		local w = math.min(width or B.WIDTH, B.WIDTH * 1.5) * art.scale
@@ -400,12 +447,15 @@ function B.Geometry(d)
 		d.cx, d.cy = 0, d.h / 2 - d.art.h / 2
 		return
 	end
-	local cell = pip
-	if width and width - room - (n - 1) * B.GAP > n * 6 then
-		cell = (width - room - (n - 1) * B.GAP) / n
+	local least = n * pip + (n - 1) * B.GAP
+	local wide = width and n > 1 and width - room > least and width - room or least
+	if Opt("time") ~= false and B.NameWidth(d) + B.TimeWidth(d) + 6 > wide then
+		d.narrow = true
+		room = room + B.TimeWidth(d)
+		wide = width and n > 1 and width - room > least and width - room or least
 	end
-	d.cell = cell
-	d.rowW = n * cell + (n - 1) * B.GAP
+	d.room, d.cell, d.rowW = room, pip, wide
+	d.step = n > 1 and (wide - pip) / (n - 1) or 0
 	if width then
 		d.w, d.cx = d.rowW + room, -room / 2
 	else
@@ -419,7 +469,7 @@ function B.PlaceSpots(d)
 	for index = 1, d.n do
 		local x = 0
 		if d.kind == "pip" then
-			x = -d.rowW / 2 + d.cell / 2 + (index - 1) * (d.cell + B.GAP)
+			x = -d.rowW / 2 + d.cell / 2 + (index - 1) * d.step
 		end
 		local spot = d.spots[index]
 		spot:ClearAllPoints()
@@ -429,14 +479,14 @@ end
 
 function B.TextLook(d, set)
 	local pip = d.pip
-	local small = math.max(75, math.min(160, pip / 20 * 95))
+	local small = B.Small(d)
 	local time, number, name = set.time, set.number, set.name
 	L.Style(time, small)
 	L.Style(number, math.max(90, math.min(220, pip / 20 * 125)))
 	L.Style(name, small)
 	local spots = B.TEXT[d.kind == "art" and "art" or "pip"]
 	for key, text in pairs({ time = time, number = number, name = name }) do
-		local spot = spots[key]
+		local spot = key == "time" and d.narrow and B.TEXT.after or spots[key]
 		text:ClearAllPoints()
 		text:SetJustifyH(spot[1])
 		local x, y = spot[3](d)
@@ -454,6 +504,9 @@ function B.TextLook(d, set)
 end
 
 B.TEXT = {
+	after = { "LEFT", "number", function()
+		return 3, 0
+	end, "LEFT", "RIGHT" },
 	art = {
 		number = { "CENTER", "centre", function(d)
 			return 0, -d.art.h / 2 - 1

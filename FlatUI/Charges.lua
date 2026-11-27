@@ -13,13 +13,14 @@ local SAMPLES = {
 	maelstrom = { id = 408505, icon = "Interface\\Icons\\Spell_Shaman_MaelstromWeapon", top = 5, length = 30, steps = { { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 }, { 6, 5 }, { 6.6, 0 } } },
 }
 local BARS = { "HealthBarsContainer", "PowerBar", "AlternatePowerBar" }
+local TOLD = { "TrackerPlaceAgain", "CooldownsMoved", "DefensivesMoved" }
 local NOTE_OWN = "Charges: the personal resource display is off or hidden, so the row is at its own spot (/flatui move, Charges)."
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 local FAMILIES = {
 	{ key = "lightning", class = "SHAMAN", rgb = { 0.35, 0.72, 1 }, ids = { 324, 325, 905, 945, 8134, 10431, 10432 }, name = "Lightning Shield" },
 	{ key = "water", class = "SHAMAN", rgb = { 0.2, 0.84, 0.7 }, ids = { 408510 }, name = "Water Shield" },
 	{ key = "earth", rgb = { 0.56, 0.72, 0.3 }, ids = { 974, 408514 }, name = "Earth Shield" },
-	{ key = "maelstrom", class = "SHAMAN", rgb = { 0.72, 0.9, 1 }, ids = { 408505 }, name = "Maelstrom Weapon", stacks = true, most = 10 },
+	{ key = "maelstrom", class = "SHAMAN", rgb = { 0.72, 0.9, 1 }, ids = { 408505 }, name = "Maelstrom Weapon", stacks = true, start = 5, most = 10 },
 	{ key = "innerfire", class = "PRIEST", rgb = { 1, 0.8, 0.28 }, ids = { 588, 7128, 602, 1006, 10951, 10952 }, name = "Inner Fire" },
 	{ key = "shadowguard", class = "PRIEST", rgb = { 0.68, 0.42, 1 }, ids = { 18137, 19308, 19309, 19310, 19311, 19312 }, name = "Shadowguard" },
 	{ key = "holyshield", class = "PALADIN", rgb = { 1, 0.93, 0.72 }, ids = { 20925, 20927, 20928, 1239570 }, name = "Holy Shield" },
@@ -395,7 +396,7 @@ end
 function C.Place(again)
 	local holder = C.Holder()
 	local target, side = C.Target()
-	if not again and C.target == target and C.side == side and C.spot ~= nil then
+	if not again and C.target == target and C.side == side and C.spot ~= nil and (target == nil or C.spot ~= "own") then
 		return
 	end
 	C.target, C.side = target, side
@@ -422,6 +423,27 @@ function C.Place(again)
 	if not again then
 		C.Resized()
 	end
+	C.Tell()
+end
+
+function C.Tell()
+	local key = ns.Enabled(KEY) and C.wantShown == true and tostring(C.spot) or "off"
+	if key == C.told then
+		return
+	end
+	C.told = key
+	for _, name in ipairs(TOLD) do
+		if type(ns[name]) == "function" then
+			pcall(ns[name])
+		end
+	end
+end
+
+function ns.ChargesHolder(side)
+	if C.holder and C.spot == side and C.wantShown == true and ns.Enabled(KEY) then
+		return C.holder
+	end
+	return nil
 end
 
 function C.Width()
@@ -459,9 +481,26 @@ function C.Display(family)
 		local top = saved and saved.top[family.key]
 		d.memory = ns.Finite(top) and top >= 1 and math.min(top, MOST_TOP) or nil
 		C.displays[family.key] = d
-		L.Paint(d, d.memory or DEFAULT_TOP)
+		L.Paint(d, C.Start(d))
 	end
 	return d
+end
+
+function C.Least(family)
+	local most = family.start or 1
+	local call = type(C_Spell) == "table" and C_Spell.GetSpellMaxCumulativeAuraApplications or nil
+	local value = Ask(call, family.ids[1])
+	if ns.Finite(value) and value > most then
+		most = value
+	end
+	return math.min(most, family.most or MOST_TOP)
+end
+
+function C.Start(d)
+	if d.family.stacks then
+		return math.max(d.memory or 0, C.Least(d.family))
+	end
+	return d.memory or DEFAULT_TOP
 end
 
 function C.Remember(d, top)
@@ -484,7 +523,7 @@ end
 function C.Up(d, st, now)
 	local family = d.family
 	local fresh = NewCast(d, st, now) and not family.stacks
-	local top = d.top or d.memory or DEFAULT_TOP
+	local top = d.top or C.Start(d)
 	if not d.up then
 		top = d.memory or st.count or top
 	end
@@ -492,6 +531,9 @@ function C.Up(d, st, now)
 		top = st.top
 	elseif st.count then
 		top = fresh and st.count or math.max(top, st.count)
+		if family.stacks then
+			top = math.max(top, C.Least(family))
+		end
 		top = math.min(top, family.most or MOST_TOP)
 		if top ~= d.memory and not C.sample then
 			C.Remember(d, top)
@@ -569,6 +611,10 @@ function C.Known(family)
 	return false
 end
 
+function C.Holds(family)
+	return C.Known(family) or (family.stacks == true and family.class ~= nil and C.Mine(family))
+end
+
 function C.Hide(d, now)
 	if d.up then
 		C.Down(d, now, true)
@@ -581,9 +627,9 @@ end
 function C.Apply(family, st, now)
 	local d = C.displays[family.key]
 	if st == "hidden" then
-		d = d or ((C.Known(family) or false) and C.Display(family))
+		d = d or ((C.Holds(family) or false) and C.Display(family))
 		if d then
-			d.held = d.up or d.held or C.Known(family) or (family.stacks == true and d.memory ~= nil)
+			d.held = d.up or d.held or C.Holds(family)
 			if d.held then
 				C.SetMode(d, "hidden")
 			end
@@ -837,7 +883,7 @@ function C.Repaint()
 	C.width = C.Width()
 	for _, d in pairs(C.displays) do
 		d.rgb = d.family.rgb
-		L.Paint(d, d.top or d.memory or DEFAULT_TOP)
+		L.Paint(d, d.top or C.Start(d))
 		if d.mode == "read" and d.lastCount then
 			L.Count(d, d.lastCount, false, Now())
 		end
@@ -857,6 +903,7 @@ function C.Off()
 		C.holder:SetAlpha(0)
 		C.Shown(false)
 	end
+	C.Tell()
 	local game = ns.ChargesGame
 	if game then
 		game.Off()
@@ -1037,7 +1084,7 @@ function C.Hold()
 	local mode = ns.TestMode
 	local on = mode ~= nil and mode.IsOn() == true and ns.Enabled(KEY) and not InCombatLockdown()
 	if on and not C.AnyUp() then
-		if not (C.sample and C.sample.held) then
+		if not (C.sample and C.sample.held) or C.sample.key ~= C.SampleKey() then
 			C.StartSample("test", nil, true)
 		end
 	elseif C.sample and C.sample.held then
@@ -1134,6 +1181,8 @@ function C.Status()
 	local game = ns.ChargesGame
 	if game and game.refused then
 		lines[#lines + 1] = "Charges: the game refused its own icons, so in a fight, while it hides your buffs, the charges do not show."
+	elseif game and game.barRefused then
+		lines[#lines + 1] = "Charges: the game refused some of its own gems, so in a fight, while it hides your buffs, some gems may not light or keep their old look."
 	end
 	if type(C_UnitAuras) ~= "table" or type(C_UnitAuras.GetPlayerAuraBySpellID) ~= "function" then
 		lines[#lines + 1] = "Charges: the game gives no buff information."
@@ -1168,6 +1217,9 @@ ns.Register(KEY, {
 		end,
 		ADDON_RESTRICTION_STATE_CHANGED = function()
 			C.Queue()
+		end,
+		EDIT_MODE_LAYOUTS_UPDATED = function()
+			ns.ChargesMoved()
 		end,
 	},
 	slash = { charges = C.Slash },

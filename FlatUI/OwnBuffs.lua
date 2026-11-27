@@ -258,6 +258,9 @@ function B.Tell()
 	if type(ns.DefensivesMoved) == "function" then
 		pcall(ns.DefensivesMoved)
 	end
+	if type(ns.ChargesMoved) == "function" then
+		pcall(ns.ChargesMoved)
+	end
 end
 
 local function EdgeColour()

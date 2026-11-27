@@ -1233,7 +1233,7 @@ ns.SETUP_STEPS = {
 		{ "charges.add", "o", "behaviour", "Adds a buff with charges to Charges." },
 		{ "charges.remove", "o", "behaviour", "Takes a spell off Charges." },
 		{ "charges.style", "o", "behaviour", "Draws the charges as a resource bar of gems, as the spell's own alert art, or as orbs in a ring, an arc or a row round the icon." },
-		{ "charges.fill", "r", "behaviour", "Stretches the sockets to the width of the bars of the personal resource display." },
+		{ "charges.fill", "r", "behaviour", "Spreads the gems from end to end of the bars of the personal resource display." },
 		{ "charges.pipSize", "r", "behaviour", "Sets the size of each gem and its socket." },
 		{ "charges.icon", "r", "behaviour", "Shows the round spell icon in the middle of the orbs." },
 		{ "charges.spin", "r", "behaviour", "Turns the ring of orbs slowly, fast or not at all." },

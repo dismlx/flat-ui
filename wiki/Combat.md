@@ -484,7 +484,7 @@ The **Personal resource display** page can also lay your shields over its health
 
 ## Charges
 
-The **Charges** page (on by default) shows your own buffs that have charges as a row of glowing gems, like the game's own class resources: combo points, arcane charges, chi or holy power. Each charge is a gem in a socket: lit gems are the charges left, and empty sockets the ones used. The spell's name sits small above the left end of the row, the charges left as a large number at its right end, and the time left small above its right end, all outlined. The row sits just under the bars of the personal resource display, the width of the bars, stays while the buff is up and fades out as it leaves you.
+The **Charges** page (on by default) shows your own buffs that have charges as a row of glowing gems, like the game's own class resources: combo points, arcane charges, chi or holy power. Each charge is a gem in a socket: lit gems are the charges left, and empty sockets the ones used. The spell's name sits small above the left end of the row, the charges left as a large number at its right end, and the time left small above its right end, all outlined; where the row is too short for the name and the time side by side, the time sits after the count. The row sits just under the bars of the personal resource display, the width of the bars, stays while the buff is up and fades out as it leaves you.
 
 It covers Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, the stacks of a shaman's Maelstrom Weapon, and any buff with more than one charge that you add yourself.
 
@@ -508,24 +508,24 @@ Where the game lacks a piece of that art, the next set fills in for it, and then
 - As a charge goes, its gem plays the game's fade of a spent resource with a quick white flash, with **Burst as a charge goes** (on).
 - As you cast the buff again, or it gains charges or stacks, the gems light in turn, each with a short glow.
 - On the last charge, the last gem pulses.
-- There are as many gems as the most charges the buff has had since you cast it, at most 10. Maelstrom Weapon keeps as many as the most stacks it has had, at most 10, and lights one more with each stack.
+- There are as many gems as the most charges the buff has had since you cast it, at most 10. Maelstrom Weapon has at least 5 gems, or as many as the game says it can stack, and more once it has had more stacks, at most 10; it lights one more with each stack, and its first stack does not pulse. In a fight it shows its stacks even when it was not on you as the fight began.
 - With **Show used charges** (on), each charge you use stays as an empty socket. Off, only the charges left show.
-- Two buffs at once, such as a shaman's Lightning Shield and Maelstrom Weapon, sit one above the other.
+- Two buffs at once, such as a shaman's Lightning Shield and Maelstrom Weapon, sit one above the other, or side by side with the ring, arc or row of orbs.
 
 ### Look
 
 - **Orb style**: **Resource bar** (the default), **Spell art**, **Ring round the icon**, **Arc over the icon** or **Row under the icon**.
 - **Spell art** shows the game's own spell alert art for the buff, Maelstrom Weapon's for now, fainter on one charge and brighter with each one, with the count, time and name under it. A buff without such art, such as Lightning Shield, shows the resource bar.
-- **Fill the width** (on) stretches the sockets to share the width of the bars; the gems keep their shape. Off, square gems sit centred. At its own spot the row keeps square gems.
-- **Gem size** (20 px) sets the height of each gem, 3 px apart. The text grows and shrinks with it.
+- **Fill the width** (on) spreads the gems out from end to end of the bars, each keeping its shape. Off, the gems sit 3 px apart in the middle, as they do at the row's own spot. With **Spell art**, the art takes the width of the bars, at most 240 px.
+- **Gem size** (20 px) sets the size of each gem and its socket. The text grows and shrinks with it. With **Spell art**, it sets only the size of the text under the art.
 - **Name**, **Count** and **Time left** (all on) choose the text. The time turns amber in its last 10 seconds. With **Count** off, the number shows only past 10 charges.
 - **Colour**: the **Spell's own colour** (the default, as listed above), your **Class colour**, or **One colour**, set with **Orb colour**. Class colour and One colour tint the gems.
 
-The ring, arc and row of orbs round the icon stay as choices. Their orbs sit close round the middle, and **Spell icon** (off) shows the round spell icon there; without it the orbs ring the count. **Spin** (**Slow** by default, or **Still** or **Fast**) turns the ring, or sways the orbs of an arc or a row, and **Icon size** (40 px) and **Orb size** (12 px) set their sizes.
+The ring, arc and row of orbs round the icon stay as choices. Their orbs sit close round the middle, with the spell's name above them while **Name** is on, and **Spell icon** (off) shows the round spell icon there; without it the orbs ring the count. **Spin** (**Slow** by default, or **Still** or **Fast**) turns the ring, or sways the orbs of an arc or a row, and **Icon size** (40 px) and **Orb size** (12 px) set their sizes.
 
 ### Where it sits
 
-**Place** puts the row **Under the personal resource display** (the default), **Above the personal resource display**, or at its **Own spot**. Under or above, it sits just clear of the bars, past a **Your buffs** row on that side, and follows them. While that display is off or hidden, the row goes to its own spot, the **Charges** box of `/flatui move`, under the middle of the screen until you move it.
+**Place** puts the row **Under the personal resource display** (the default), **Above the personal resource display**, or at its **Own spot**. Under or above, it sits just clear of the bars, past a **Your buffs** row on that side, and follows them, also as Edit Mode moves the display or **Your buffs** changes its place. **Defensives on you**, a **Cooldowns** row and the **Trackers** placed at that display sit past it in turn, so nothing overlaps. While that display is off or hidden, the row goes to its own spot, the **Charges** box of `/flatui move`, under the middle of the screen until you move it.
 
 ### When it shows
 

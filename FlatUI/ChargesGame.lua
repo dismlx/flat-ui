@@ -120,13 +120,60 @@ end
 
 function G.InitOrb(rec, index, button)
 	G.Quiet(button)
+	rec.buttons[index] = button
+	G.BindBar(rec, index)
+end
+
+function G.FillFor(d)
+	local B = ns.ChargesBar
+	if d.kind == "pip" and d.look and d.look.gem then
+		local gem = d.look.gem
+		return "pip:" .. tostring(gem.atlas or gem.file) .. ":" .. tostring(gem.tint), gem
+	elseif d.kind == "art" and d.art then
+		return "art:" .. tostring(d.art.file) .. ":" .. tostring(d.artTint), nil
+	end
+	return "orb", B.ORB_FILL
+end
+
+function G.BindBar(rec, index)
+	local button, old, d = rec.buttons[index], rec.orbs[index], rec.d
+	if not button or (old and InCombatLockdown()) then
+		return
+	end
+	local B = ns.ChargesBar
+	local sig, piece = G.FillFor(d)
+	if old and old.sig == sig then
+		return
+	end
 	local bar = L.Bar(button, index, 2)
-	bar:SetPoint("CENTER", L.Spot(rec.d, index), "CENTER", 0, 0)
+	bar:SetPoint("CENTER", L.Spot(d, index), "CENTER", 0, 0)
+	local set = false
+	if piece then
+		set = B.Fill(bar, piece, 1, 1, 1).set
+	else
+		B.ArtFill(bar, d)
+	end
 	local ok = pcall(button.SetApplicationBar, button, bar, { minApplications = index - 1, maxApplications = index })
-	rec.orbs[index] = { bar = bar, ok = ok }
-	if not ok then
+	if ok then
+		if old then
+			Call(old.bar, "SetAlpha", 0)
+		end
+		rec.orbs[index] = { bar = bar, sig = sig, set = set }
+		return
+	end
+	bar:Hide()
+	G.barRefused = true
+	if old then
+		old.sig = sig
+	else
 		rec.orbRefused = true
 	end
+end
+
+function G.Size(bar, w, h, y, spot, on)
+	Call(bar, "SetSize", w, h)
+	Call(bar, "SetPoint", "CENTER", spot, "CENTER", 0, y)
+	Call(bar, "SetAlpha", on and 1 or 0)
 end
 
 function G.Slots(rec, container, set)
@@ -156,7 +203,7 @@ function G.Build(d)
 		return
 	end
 	Own(container)
-	local rec = { d = d, orbs = {}, container = container, on = true }
+	local rec = { d = d, orbs = {}, buttons = {}, container = container, on = true }
 	local made = pcall(function()
 		container:SetEditModePreviewEnabled(false)
 		container:SetUnit("player")
@@ -201,6 +248,7 @@ function G.Paint(d)
 	pcall(L.PaintFace, rec.face, d.size, r, g, b, d.faceShown)
 	pcall(G.Bind, rec)
 	for index = 1, L.MOST do
+		pcall(G.BindBar, rec, index)
 		pcall(G.PaintSlot, d, rec, index, r, g, b)
 	end
 	pcall(L.TextLook, d, rec)
@@ -223,21 +271,30 @@ function G.PaintSlot(d, rec, index, r, g, b)
 		B.Region(ghosts[2], look.socket, s, stretch, spot, r, g, b, used)
 		B.Region(ghosts[3], look.rim, s, stretch, spot, r, g, b, used)
 		local gem = look.gem
-		tint = bar and B.PaintBar(bar, gem, gem.w * s, gem.h * s, gem.y * s, spot, r, g, b, on)
+		if bar then
+			G.Size(bar, gem.w * s, gem.h * s, gem.y * s, spot, on)
+			tint = B.Tint(gem, orb.set, r, g, b)
+		end
 	elseif d.kind == "art" then
 		B.ArtGhost(ghosts[1], d, spot, used and index == 1)
 		ghosts[2]:Hide()
 		ghosts[3]:Hide()
-		tint = bar and B.ArtBar(bar, d, spot, on)
+		if bar then
+			G.Size(bar, d.art.w, d.art.h, 0, spot, on)
+			tint = B.ArtTint(d)
+		end
 	else
 		B.Region(ghosts[1], B.ORB_GHOST, d.orb, 0, spot, r, g, b, used)
 		ghosts[2]:Hide()
 		ghosts[3]:Hide()
 		local fill = B.ORB_FILL
-		tint = bar and B.PaintBar(bar, fill, d.orb * fill.w, d.orb * fill.h, 0, spot, r, g, b, on)
+		if bar then
+			G.Size(bar, d.orb * fill.w, d.orb * fill.h, 0, spot, on)
+			tint = B.Tint(fill, false, r, g, b)
+		end
 	end
 	if tint then
-		bar:SetStatusBarColor(tint[1], tint[2], tint[3], tint[4])
+		Call(bar, "SetStatusBarColor", tint[1], tint[2], tint[3], tint[4])
 	end
 end
 
