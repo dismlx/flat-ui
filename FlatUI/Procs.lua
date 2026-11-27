@@ -945,7 +945,7 @@ function ns.ProcPreview()
 		return
 	end
 	local again = P.preview ~= nil and P.up[entry.id] == entry
-	P.preview = P.preview or { entry = entry, token = 0 }
+	P.preview = P.preview or { entry = entry, token = 0, since = Now() }
 	local preview = P.preview
 	preview.token = preview.token + 1
 	P.up[entry.id] = entry
@@ -1023,7 +1023,7 @@ local function Hold(entry)
 	if P.before[entry.id] == nil then
 		P.before[entry.id] = P.up[entry.id] ~= nil
 	end
-	P.held = entry
+	P.held, P.heldSince = entry, Now()
 	P.up[entry.id] = entry
 	if ns.TestMode.Sound(P.TEST_SOUND) then
 		Sound(entry, true)
@@ -1042,6 +1042,27 @@ end
 
 function ns.ProcHeld(entry)
 	return entry ~= nil and P.held == entry
+end
+
+function ns.ProcEnds(entry)
+	if type(entry) ~= "table" or entry.id == nil then
+		return nil
+	end
+	local time = Number(entry.time)
+	if time <= 0 then
+		return nil
+	end
+	local now = Now()
+	local preview = P.preview
+	local start = (preview ~= nil and preview.entry == entry and preview.since) or (P.held == entry and P.heldSince) or nil
+	if Plain(start, "number") then
+		return now + time - (now - start) % time
+	end
+	local since = P.up[entry.id] == entry and P.since[entry.id]
+	if Plain(since, "number") and not P.ended[entry.id] and since + time > now then
+		return since + time
+	end
+	return nil
 end
 
 local function HeldStart()

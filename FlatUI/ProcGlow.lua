@@ -95,12 +95,12 @@ local function Unstyled(names, set)
 	end
 end
 
-local function Holders(entry)
+local function Holders(entry, any)
 	local set, seen = {}, {}
-	if entry.glow == false or type(entry.lights) ~= "table" then
+	if (entry.glow == false and not any) or type(entry.lights) ~= "table" then
 		return set
 	end
-	for index = 1, math.min(#entry.lights, 40) do
+	for index = 1, any and #entry.lights or math.min(#entry.lights, 40) do
 		local id = entry.lights[index]
 		local name = Plain(id, "number") and SpellName(id)
 		if name and not seen[name:lower()] then
@@ -145,6 +145,18 @@ local FADE_OUT = 0.2
 
 local function Stopped(made)
 	made.fadeLeft = nil
+	if made.unmark then
+		made.unmark = nil
+		if users[made.button] == nil then
+			ns.SetButtonMark(made.button, "proc", nil)
+			drawn[made.button] = nil
+		end
+	end
+	if made.time then
+		made.shown = nil
+		made.time:Hide()
+	end
+	made.mark = nil
 	if not pcall(function()
 		made.frame:SetScript("OnUpdate", nil)
 		made.frame:SetAlpha(0)
@@ -154,6 +166,40 @@ local function Stopped(made)
 		end
 	end) then
 		Refused()
+	end
+end
+
+local function Count(made, seconds)
+	local text = made.time
+	if not text then
+		return
+	end
+	made.timeClock = (made.timeClock or 0) - seconds
+	if made.timeClock > 0 then
+		return
+	end
+	made.timeClock = 0.1
+	local mark, left = made.mark, nil
+	if type(mark) == "table" and type(mark[5]) == "table" and type(ns.ProcEnds) == "function" and ns.Get(KEY .. ".glowTime") == true then
+		local ok, ends = pcall(ns.ProcEnds, mark[5])
+		local okNow, now = pcall(GetTime)
+		if ok and okNow and Plain(ends, "number") and Plain(now, "number") then
+			left = ends - now
+		end
+	end
+	if not (left and left > 0) then
+		if made.shown then
+			made.shown = nil
+			text:Hide()
+		end
+		return
+	end
+	local n = math.ceil(left)
+	text:SetTextColor(mark[1], mark[2], mark[3])
+	if made.shown ~= n then
+		made.shown = n
+		text:SetText(n)
+		text:Show()
 	end
 end
 
@@ -175,7 +221,8 @@ local function Tick(made, seconds)
 		made.alpha = wanted
 		made.frame:SetAlpha(wanted)
 	end
-	if wanted ~= 1 or made.look ~= "game" then
+	Count(made, seconds)
+	if wanted <= 0 or made.look ~= "game" then
 		return
 	end
 	local start = made.start
@@ -337,6 +384,11 @@ local function MakeGlow(button)
 	if fine and type(soft) == "table" then
 		made.soft = soft
 	end
+	local time = frame:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+	ns.Own[time] = true
+	time:SetPoint("TOP", button, "TOP", 0, -2)
+	time:Hide()
+	made.time = time
 	made.step = function(_, seconds)
 		Tick(made, seconds)
 	end
@@ -377,6 +429,8 @@ local function Play(made, carry)
 	if not look then
 		return
 	end
+	made.unmark = nil
+	made.timeClock = 0
 	if made.fadeLeft then
 		made.fadeLeft = nil
 		carry = true
@@ -442,6 +496,14 @@ Refresh = function(button, carry)
 		end
 	end
 	local made = glows[button]
+	if made and (first ~= nil or ownGame[button]) then
+		made.mark = first
+	end
+	if first == nil and made and (made.playing or made.fadeLeft) and not ownGame[button] then
+		made.unmark = true
+		Halt(made)
+		return
+	end
 	if first == nil then
 		ns.SetButtonMark(button, "proc", nil)
 		drawn[button] = nil
@@ -497,7 +559,7 @@ local function Apply(rec, set, carry)
 			list = {}
 			users[button] = list
 		end
-		list[id] = { r, g, b, rec.order }
+		list[id] = { r, g, b, rec.order, rec.entry }
 		Refresh(button, carry)
 	end
 	rec.set = set
@@ -608,8 +670,8 @@ function ns.ProcGlowStart(entry, again)
 		active[entry.id] = rec
 	end
 	rec.entry = entry
-	rec.up = Holders(entry)
-	local set = Wanted() and rec.up or {}
+	rec.up = Holders(entry, true)
+	local set = Wanted() and entry.glow ~= false and rec.up or {}
 	for button in pairs(set) do
 		Sync(button)
 	end
@@ -643,8 +705,8 @@ end
 
 function ns.ProcGlowChanged(path)
 	for _, rec in pairs(active) do
-		rec.up = Holders(rec.entry)
-		Apply(rec, Wanted() and rec.up or {})
+		rec.up = Holders(rec.entry, true)
+		Apply(rec, Wanted() and rec.entry.glow ~= false and rec.up or {})
 	end
 	for _, made in pairs(glows) do
 		if made and made.playing then
@@ -688,9 +750,26 @@ function ns.ProcUpOn(name)
 		return false
 	end
 	local own = type(ns.OwnBarOf) == "function" and ns.OwnBarOf(name) or nil
+	local mode = ns.TestMode
+	local testing = type(mode) == "table" and type(mode.IsOn) == "function" and mode.IsOn() == true
+	local held = testing and type(ns.ProcHeld) == "function" and ns.ProcHeld or nil
 	for _, rec in pairs(active) do
-		for button in pairs(rec.up or {}) do
-			if OnBar(button, name, own) then
+		if not (held and held(rec.entry)) then
+			if rec.bars == nil or rec.barsOf ~= rec.up then
+				rec.barsOf, rec.bars = rec.up, {}
+			end
+			local on = rec.bars[name]
+			if on == nil then
+				on = false
+				for button in pairs(rec.up or {}) do
+					if OnBar(button, name, own) then
+						on = true
+						break
+					end
+				end
+				rec.bars[name] = on
+			end
+			if on then
 				return true
 			end
 		end
@@ -727,8 +806,8 @@ end
 if type(ns.OnButtonsChanged) == "function" then
 	ns.OnButtonsChanged(function()
 		for _, rec in pairs(active) do
-			rec.up = Holders(rec.entry)
-			Apply(rec, Wanted() and rec.up or {})
+			rec.up = Holders(rec.entry, true)
+			Apply(rec, Wanted() and rec.entry.glow ~= false and rec.up or {})
 		end
 	end)
 end

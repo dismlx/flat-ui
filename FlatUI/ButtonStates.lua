@@ -412,7 +412,7 @@ local function IconPainter(button, shown)
 	if not wanted then
 		return nil
 	end
-	if TINT.button == button and GetTime() < TINT.ends then
+	if TINT.button == button and GetTime() < TINT.ends and Opt(TINT.path == "rangeColour" and "rangeTint" or "usableOwn") == true then
 		return ns.Colour(KEY .. "." .. TINT.path)
 	end
 	local own, tint = Opt("usableOwn") == true, Opt("rangeTint") == true
@@ -831,7 +831,19 @@ local function TintSample(button, path)
 	end
 end
 
+function TINT.Check()
+	local lit = TINT.button
+	if lit == nil or Opt(TINT.path == "rangeColour" and "rangeTint" or "usableOwn") == true then
+		return
+	end
+	TINT.button = nil
+	if type(ns.OwnRepaint) == "function" then
+		ns.OwnRepaint(lit)
+	end
+end
+
 local function Preview(path)
+	TINT.Check()
 	local row = type(path) == "string" and path:match("^" .. KEY .. "%.(.+)$")
 	local mode = ns.TestMode
 	local tint = row and TINTS[row]
@@ -896,10 +908,15 @@ function ns.ButtonNumbersSet(_, value)
 	if InCombatLockdown() then
 		local queued = NUMBERS.pending ~= nil
 		NUMBERS.pending = on
+		if not NUMBERS.told and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+			NUMBERS.told = true
+			print(on and "Flat UI: cooldown numbers show when the fight ends." or "Flat UI: cooldown numbers go when the fight ends.")
+		end
 		if not queued then
 			ns.OutOfCombat(function()
 				local wanted = NUMBERS.pending
 				NUMBERS.pending = nil
+				NUMBERS.told = nil
 				if wanted ~= nil then
 					WriteNumbers(wanted)
 				end
@@ -917,6 +934,7 @@ function ns.ButtonStatesTint(button, path)
 	if not tint then
 		return false
 	end
+	TINT.Check()
 	if Plain(button, "table") and not InCombatLockdown() and Opt(tint == "rangeColour" and "rangeTint" or "usableOwn") == true then
 		TintSample(button, tint)
 	end
