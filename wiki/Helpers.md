@@ -111,7 +111,11 @@ To put one on a bar, pick it under **Put a macro on your cursor**, out of a figh
 
 ## Consumables bar
 
-The **Consumables bar** page puts a bar of buttons on screen for your consumables. It is off as Flat UI comes: tick **Show the consumables bar**. A click uses the item from whichever bag holds it, also in a fight. Each button shows the item's icon, how many you carry, its cooldown sweep and its tooltip, and flashes white once as a cooldown ends (never after a global cooldown).
+The **Consumables bar** page puts a bar of buttons on screen for your consumables. It is off as Flat UI comes: tick **Show the consumables bar**. A click uses the item from whichever bag holds it, also in a fight. Each button shows the item's icon, how many you carry, its cooldown sweep and its tooltip, and flashes white once as a cooldown ends (never after a global cooldown). A button lights up under the mouse with an accent border and a soft white wash, and darkens and sinks a pixel while its key or the mouse button is held.
+
+- While an item cools down, its tooltip says how long is left, as "Ready in 1:42" in warm text, and counts down while the mouse stays. It says "Ready" in green as the cooldown ends.
+- An elixir, flask or scroll whose buff is on you gets a green border and the minutes left at its top right, as "14m". When the buff runs out the button goes plain again, so a missing buff stands out.
+- An oil, sharpening stone, weightstone or poison goes straight onto your weapon, with no glowing hand to aim: a click puts it on your main hand, and a right-click on a weapon in your off hand. Its tooltip says "Click: on your main hand. Right-click: on your off hand." Shift and right-click still put it on your list or take it off.
 
 The first six buttons have keys of their own under **Flat UI** in the game's Key Bindings: **Consumables bar button 1** to **6**. A key uses the item as you press it, as the game's action bars do, and a mouse click acts as you let go. `/flatui move` places the bar, with the **Consumables bar** box, above the chat window at first.
 
@@ -122,7 +126,7 @@ The first six buttons have keys of their own under **Flat UI** in the game's Key
   - **Your list**: only the items you chose, in your order.
   - **Your list, then the rest**: your list first, then the other consumables in your bags.
 - **An item of your list with none left** stays on the bar so its button keeps its place: **Show it greyed with 0** (the default) or **Leave a gap**. A click on it says in chat that your bags hold none.
-- **Show count** (on) shows how many you carry across your bags. A stack of one shows no number, except on a button of your list.
+- **Show count** (on) shows how many you carry across your bags. A stack of one shows no number, except on a button of your list. A count of 3 or fewer shows amber, so the last few stand out, and none shows a red 0; the count goes white again after you restock.
 
 ### Your list
 
@@ -178,8 +182,9 @@ The **World and cursor** page holds aids for the world around you: a glow on her
 - **Quest item sparkle** (on) makes quest items in the world sparkle. It sets a game setting that the game's options do not show. Turned off, the game's own value is back from its next start.
 - **Sparkle strength** thickens the sparkle by raising the game's particle settings: **As the game has it**, **Strong** or **Strongest** (the default). A higher value of yours stays. More particles can cost frame rate in busy fights.
 - **Glow on the nearest object** (on) puts a pulsing glow with twinkling stars on the herb, vein or quest object your Interact Key would use. **Glow colour** is **Gold** (the default) or **By what it is**: herbs green, ore copper, quest objects gold, and loot and chests white. **Glow size** sizes the glow, its ring and its stars together, from 50% to 200%. **Glow sound** plays once as the glow lands on an object, out of a fight; picking one plays it.
+- With nothing glowing near you, ticking **Glow on the nearest object** or changing **Glow colour** or **Glow size** out of a fight shows the glow for 3 seconds a little above the middle of the screen, at its new size, so you can judge it in a city. With **By what it is** it steps through green, copper, gold and white, so the four colours can be compared.
 - The glow shows only while the game gives that object a nameplate. That needs Enable Interact Key in the game's Controls options and Interact Key Icons at Show All in its Accessibility options. **Turn on what the glow needs** sets both for you, out of a fight, and chat says what changed. Show All also shows the key's icons over enemies.
-- **Maximum camera distance** (off) lets the camera zoom out past the farthest the game's own Max Camera Distance allows, and glides it out as you tick it. It is a game setting, the same in every profile. Turned off, the distance you had comes back.
+- **Maximum camera distance** (off) lets the camera zoom out past the farthest the game's own Max Camera Distance allows, and glides it out as you tick it. It is a game setting, the same in every profile. Turned off, the distance you had comes back. Ticked in a fight, chat says "Flat UI: Maximum camera distance changes when the fight ends.", and the camera glides out as the fight ends.
 
 ### Cursor
 
@@ -189,7 +194,7 @@ The **World and cursor** page holds aids for the world around you: a glow on her
 - **In combat only**: the ring fades in and out with the fight.
 - **When you shake the mouse**: no ring until you shake the pointer from side to side. Then it fades in swollen, eases back to its size and fades out about a second later.
 
-The ring takes no clicks and hides while you turn the camera with the mouse. Set its look with **Cursor ring size** and **Cursor ring colour**, or tick **Class colour** to paint it in your class colour.
+The ring takes no clicks and hides while you turn the camera with the mouse. Set its look with **Cursor ring size** and **Cursor ring colour**, or tick **Class colour** to paint it in your class colour. **Cursor ring colour** greys out with "Needs Class colour off." while **Class colour** is on.
 
 With **Always** or **In combat only**:
 
@@ -206,7 +211,7 @@ Changing these rows out of a fight shows the ring for a moment, and the cast and
 - **In lava zones** (the default) works in Molten Core, Blackrock Depths and Spire, Ragefire Chasm, Searing Gorge, Burning Steppes and Un'Goro Crater. **Anywhere** works everywhere, and **Off** turns it off.
 - After a lava tick, a bar under your character counts down to the next one. It turns to **Jump** in **Jump colour** for the last **Jump lead** (400 ms as it comes), with a flash while **Flash when it is time to jump** is on, and a **Jump sound** if you pick one.
 - Each tick says **Hit**, and a tick you were in the air for says **Dodged**, then **Dodged x2**, **x3** as the dodges in a row build. From 3 on, a dodge that beats your best of the session reads **Best x7** in gold. The bar goes 5 seconds after the last tick.
-- **Lava bar width**, **Lava bar height** and **Lava bar colour** set its look. `/flatui move` places it with the **Lava tick timer** box.
+- **Lava bar width**, **Lava bar height** and **Lava bar colour** set its look. `/flatui move` places it with the **Lava tick timer** box, as wide and tall as the bar, so it lines up with other frames and the snap guides.
 
 It is an estimate. The game tells addons that fire hit you, not that it was lava, so in a fight it counts only fire hits that keep the 2-second rhythm, and the first tick of each visit always lands. Changing one of its rows out of a fight shows a sample bar for a few seconds.
 

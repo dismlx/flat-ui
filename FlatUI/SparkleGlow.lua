@@ -22,6 +22,9 @@ for _, name in ipairs(CURSORS) do
 end
 local EVENTS = { "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_SOFT_INTERACT_CHANGED", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }
 local FADE_IN, SOUND_EVERY = 0.25, 2
+local PREVIEW, PREVIEW_STEP, PREVIEW_Y = 3, 0.75, 120
+local PREVIEW_ROWS = { ["general.sparkleGlow"] = true, ["general.sparkleGlowColour"] = true, ["general.sparkleGlowSize"] = true }
+local PREVIEW_KINDS = { "GatherHerbs", "Mine", "quest", "LootAll" }
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 local SOUND_CHANNEL = "Gameplay SFX"
 
@@ -32,6 +35,7 @@ local anchor, anchorUnit
 local listener, hearing, probe
 local cursorIDs
 local seen, broken, toldSize
+local preview = { token = 0 }
 local Stop
 
 local function Wanted()
@@ -311,9 +315,30 @@ local function Grow()
 	end
 end
 
+local function Previewing()
+	return preview.ends ~= nil
+end
+
+local function EndPreview()
+	if not Previewing() then
+		return
+	end
+	preview.ends = nil
+	preview.token = preview.token + 1
+	if holder and anchor == nil then
+		Hide()
+		holder:ClearAllPoints()
+		holder:SetParent(UIParent)
+	end
+end
+
 local function Attach(plate, unit)
 	if not holder then
 		Build()
+	end
+	if Previewing() then
+		preview.ends = nil
+		preview.token = preview.token + 1
 	end
 	holder:SetParent(plate)
 	local level = Ask(plate.GetFrameLevel, plate)
@@ -341,6 +366,9 @@ local function Evaluate()
 	end
 	local plate, unit, kind = Find()
 	if plate == nil then
+		if Previewing() and anchor == nil then
+			return
+		end
 		Hide()
 		if not InCombatLockdown() then
 			Detach()
@@ -413,6 +441,7 @@ local function Off()
 	if listener then
 		Listen(false)
 	end
+	EndPreview()
 	Hide()
 	if InCombatLockdown() then
 		ns.OutOfCombat(function()
@@ -460,10 +489,63 @@ local function Apply()
 	Grow()
 end
 
+local function PreviewStep(token, index)
+	if preview.token ~= token or anchor ~= nil or broken then
+		return
+	end
+	local now = Ask(_G.GetTime)
+	if index > #PREVIEW_KINDS or not ns.Finite(now) or now >= preview.ends or InCombatLockdown() then
+		EndPreview()
+		return
+	end
+	Tint(preview.kinds and PREVIEW_KINDS[index] or "quest")
+	C_Timer.After(PREVIEW_STEP, function()
+		local ok, err = pcall(PreviewStep, token, index + 1)
+		if not ok then
+			Stop(err)
+		end
+	end)
+end
+
+local function Preview()
+	if not holder then
+		Build()
+	end
+	if not preview.stage then
+		local stage = CreateFrame("Frame", nil, UIParent)
+		ns.Own[stage] = true
+		stage:SetFrameStrata("DIALOG")
+		stage:SetAllPoints(UIParent)
+		preview.stage = stage
+	end
+	local now = Ask(_G.GetTime)
+	if not ns.Finite(now) or type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then
+		return
+	end
+	preview.token = preview.token + 1
+	preview.ends = now + PREVIEW
+	preview.kinds = ns.Get("general.sparkleGlowColour") == "kind"
+	holder:SetParent(preview.stage)
+	Grow()
+	local scale = Ask(holder.GetScale, holder)
+	scale = ns.Finite(scale) and scale > 0 and scale or 1
+	holder:ClearAllPoints()
+	holder:SetPoint("CENTER", UIParent, "CENTER", 0, PREVIEW_Y / scale)
+	PreviewStep(preview.token, 1)
+	Show()
+end
+
 function ns.SparkleGlowChanged(path)
 	local ok, err = pcall(Apply)
 	if not ok then
 		Stop(err)
+	end
+	if PREVIEW_ROWS[path] and not broken and anchor == nil and Wanted() and not InCombatLockdown() and type(ns.PanelShown) == "function"
+		and ns.PanelShown() == true then
+		ok, err = pcall(Preview)
+		if not ok then
+			Stop(err)
+		end
 	end
 	if not InCombatLockdown() then
 		toldSize = false

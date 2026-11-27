@@ -3,6 +3,7 @@ local _, ns = ...
 local CVAR = "cameraDistanceMaxZoomFactor"
 local TOP, TOP_TEXT, SLACK = 2.6, "2.6", 1e-4
 local LABEL = "Maximum camera distance"
+local WAIT_LINE = "Flat UI: " .. LABEL .. " changes when the fight ends."
 
 local ZOOM_OUT = 50
 
@@ -119,28 +120,33 @@ function ns.CameraZoomGet()
 	return AtTop(number)
 end
 
+local function Now(on)
+	local below = on and not AtTop(Factor(Text()))
+	Apply(on)
+	if below and result == "ok" and AtTop(Factor(Text())) and type(_G.CameraZoomOut) == "function" then
+		pcall(_G.CameraZoomOut, ZOOM_OUT)
+	end
+end
+
 function ns.CameraZoomSet(_, value)
 	local on = value == true
 	if InCombatLockdown() then
 		local queued = pending ~= nil
 		pending = on
 		if not queued then
+			print(WAIT_LINE)
 			ns.OutOfCombat(function()
 				local wanted = pending
 				pending = nil
 				if wanted ~= nil then
-					Apply(wanted)
+					Now(wanted)
 				end
 			end)
 		end
 		return
 	end
 	pending = nil
-	local below = on and not AtTop(Factor(Text()))
-	Apply(on)
-	if below and result == "ok" and AtTop(Factor(Text())) and type(_G.CameraZoomOut) == "function" then
-		pcall(_G.CameraZoomOut, ZOOM_OUT)
-	end
+	Now(on)
 end
 
 function ns.CameraZoomStatus()

@@ -104,7 +104,7 @@ local LIST = {
 	{ name = "FlatUIHealerMana", label = "Healer mana", point = "CENTER", kind = "hud", own = true, noScale = true, width = 158, height = 76, x = 420, y = -130,
 		gate = "HealerManaShown", changed = "HealerManaMoved" },
 	{ name = "FlatUILavaTimer", label = "Lava tick timer", point = "CENTER", kind = "hud", own = true, noScale = true, width = 160, height = 14, x = 0, y = -100,
-		gate = "LavaTimerShown", changed = "LavaTimerMoved" },
+		gate = "LavaTimerShown", changed = "LavaTimerMoved", widthOf = "LavaTimerWidth", heightOf = "LavaTimerHeight" },
 	{ name = "FlatUILootRolls", label = "Loot rolls", point = "BOTTOM", kind = "hud", own = true, noScale = true, width = 277, height = 367, x = 0, y = 150,
 		gate = "LootRollsShown", changed = "LootRollsMoved", start = "LootRollsStart" },
 	{ name = "FlatUIBags", label = "Flat UI bags", point = "BOTTOMRIGHT", kind = "hud", own = true, noScale = true, width = 360, height = 260, x = -60, y = 110,
@@ -590,6 +590,13 @@ local function BoxSize(info)
 		local ok, w = pcall(widthOf)
 		if ok and Number(w) and w > 0 then
 			width = w
+		end
+	end
+	local heightOf = info.heightOf and ns[info.heightOf]
+	if type(heightOf) == "function" then
+		local ok, h = pcall(heightOf)
+		if ok and Number(h) and h > 0 then
+			height = h
 		end
 	end
 	local character = info.sized and ns.Character and ns.Character()

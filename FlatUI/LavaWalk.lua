@@ -687,6 +687,14 @@ function ns.LavaSoundPicked(path)
 	end
 end
 
+function ns.LavaTimerWidth()
+	return Number("lavaWidth", BOX_W, 80, 400)
+end
+
+function ns.LavaTimerHeight()
+	return Number("lavaHeight", BOX_H, 8, 30)
+end
+
 function ns.LavaTimerShown()
 	return not S.broken and Mode() ~= nil
 end
