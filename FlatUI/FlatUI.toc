@@ -177,6 +177,7 @@ BagsCurrency.lua
 BagsCustom.lua
 ConsumableData.lua
 Consumables.lua
+ConsumeBar.lua
 DataPanels.lua
 DataStreams.lua
 CastBarSize.lua

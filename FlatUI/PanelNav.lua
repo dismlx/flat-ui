@@ -25,6 +25,8 @@ local CELLS = { general = 0, fonts = 1, unitframes = 2, nameplates = 3, resource
 	tooltip = 21, home = 22, setup = 23, profiles = 24, chevron = 25, check = 26, search = 27, close = 28, reset = 29, eye = 30, more = 31, errands = 32, datapanels = 33, threat = 34, healermana = 35, consumables = 36, mount = 37, grouptools = 38, pingbar = 11,
 	bags = 39, hide = 30, absorbs = 12, gearCompare = 27, chatSpells = 21, hudHitTable = 11, hudBuffs = 13, hudBars = 5, hudTracker = 26, hudMessages = 34,
 	chatTips = 21, windowsItems = 8, generalWorld = 23, trinkets = 10 }
+-- Consumables bar shares the flask of Drink and health macros (cell 36).
+CELLS.consumebar = 36
 local COLUMNS, ROWS = 8, 8
 Nav.CELLS = CELLS
 
@@ -40,7 +42,7 @@ Nav.GROUPS = {
 	{ label = "HUD", "hud", "hudBuffs", "hudTracker", "hudMessages", "hudBars", "datapanels" },
 	{ label = "Chat and windows", "chat", "chatTips", "windows" },
 	{ label = "Bags and items", "bags", "windowsItems" },
-	{ label = "Helpers", "errands", "consumables", "mount", "generalWorld" },
+	{ label = "Helpers", "errands", "consumables", "consumebar", "mount", "generalWorld" },
 	{ label = "Layout", "movers", "fade", "hide", "tooltip" },
 }
 

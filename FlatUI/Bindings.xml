@@ -19,6 +19,21 @@
 	</Binding>
 	<Binding name="CLICK FlatUIPingThreat:LeftButton" category="Flat UI">
 	</Binding>
+	<!-- ConsumeBar.lua: the keys of the first six buttons of the Consumables bar. Each clicks the secure button at that place of the bar, which
+	     Flat UI makes once the bar has that many buttons; it uses that button's item, in a fight too. ConsumeBar.lua names them in the game's
+	     Key Bindings. -->
+	<Binding name="CLICK FlatUIConsumeButton1:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIConsumeButton2:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIConsumeButton3:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIConsumeButton4:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIConsumeButton5:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUIConsumeButton6:LeftButton" category="Flat UI">
+	</Binding>
 	<!-- BagsBank.lua: the key of Flat UI bank. It clicks a plain button of Flat UI's own that opens or closes the bank window of the Bags page:
 	     live at the banker with Flat UI's bank window, else your bank as you last left it. BagsBank.lua names it in the game's Key Bindings. -->
 	<Binding name="CLICK FlatUIBankButton:LeftButton" category="Flat UI">

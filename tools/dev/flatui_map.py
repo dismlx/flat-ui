@@ -1458,7 +1458,7 @@ AREAS = [
         ItemIndex RotationData GearSearch GearButton TrinketQueue TrinketQueueWindow TrinketQueueButtons Movers MoversMode MoversSnap Hide Tooltip"""),
     ("errands", "Errands, panels and world", """Sparkle SparkleGlow CameraZoom CursorRing MountKey Errands ErrandsMerchant
         ErrandsLoot ErrandsTrainer ErrandsPopups ErrandsSocial ErrandsQuests ErrandsRanks ErrandsLevelling
-        ErrandsNavigation ErrandsBulkBuy ConsumableData Consumables DataPanels DataStreams LavaWalk"""),
+        ErrandsNavigation ErrandsBulkBuy ConsumableData Consumables ConsumeBar DataPanels DataStreams LavaWalk"""),
 ]
 AREA_PATTERNS = [("SetupDraw*", re.compile(r"^SetupDraw"), "setup")]
 
