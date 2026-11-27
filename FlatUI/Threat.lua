@@ -19,6 +19,8 @@ local REARM = 10
 local LOST_TIME = 2
 local TAKEN = { 1, 0.3, 0.3 }
 local OWNER_LIGHT = 0.45
+local TIP_SHARE = "%d%% of the threat that pulls aggro: at 100%% %s"
+local TIP_WITHHELD = "The game withholds the threat on this enemy."
 local FADE_IN, FADE_OUT = 0.15, 0.35
 local MARKERS, MARKER_GAP = "Interface\\TargetingFrame\\UI-RaidTargetingIcons", 3
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
@@ -33,7 +35,7 @@ local SAMPLE = {
 }
 
 local IsSecret = ns.IsSecret
-local T = { rows = {}, heard = {}, fighting = false, withheld = false }
+local T = { rows = {}, heard = {}, fighting = false, withheld = false, lift = 0 }
 ns.ThreatList = T
 
 local function Opt(key)
@@ -427,6 +429,7 @@ function T.Showing(on, now)
 		T.drawnOn = nil
 		for _, row in ipairs(T.rows) do
 			row.who = nil
+			pcall(T.Untip, row)
 		end
 		Look("Forget", T.rows)
 	end
@@ -448,15 +451,40 @@ function T.Marker(mob)
 	marker:SetShown(shown)
 	if T.marked ~= shown then
 		T.marked = shown
-		local title = T.title
-		title:ClearAllPoints()
-		if shown then
-			title:SetPoint("TOPLEFT", marker, "TOPRIGHT", MARKER_GAP, -1)
-		else
-			title:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD + INSET, -PAD)
-		end
-		title:SetPoint("TOPRIGHT", T.frame, "TOPRIGHT", -(PAD + INSET), -PAD)
+		T.Anchor()
 	end
+end
+
+function T.Anchor()
+	local title, marker = T.title, T.marker
+	if not title or not marker then
+		return
+	end
+	local y = -PAD - (ns.Finite(T.lift) and T.lift or 0)
+	marker:ClearAllPoints()
+	marker:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD + INSET, y)
+	title:ClearAllPoints()
+	if T.marked then
+		title:SetPoint("TOPLEFT", marker, "TOPRIGHT", MARKER_GAP, -1)
+	else
+		title:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD + INSET, y)
+	end
+	title:SetPoint("TOPRIGHT", T.frame, "TOPRIGHT", -(PAD + INSET), y)
+end
+
+function T.Lift(value)
+	value = ns.Finite(value) and value or 0
+	if T.lift == value then
+		return false
+	end
+	T.lift = value
+	if T.frame and T.laidN then
+		T.laid = nil
+		T.Layout(T.laidN)
+	else
+		T.Anchor()
+	end
+	return true
 end
 
 function T.Row(index)
@@ -513,7 +541,55 @@ function T.Row(index)
 	row = { bar = bar, track = track, name = name, share = share, mine = mine, alarm = alarm, near = near, pulse = made and pulse or nil }
 	T.rows[index] = row
 	Look("Dress", row)
+	T.Hover(row)
 	return row
+end
+
+function T.Hover(row)
+	local bar = row.bar
+	if type(bar.SetMouseMotionEnabled) ~= "function" or type(bar.SetMouseClickEnabled) ~= "function" then
+		return
+	end
+	if not (pcall(bar.SetMouseMotionEnabled, bar, true) and pcall(bar.SetMouseClickEnabled, bar, false)) then
+		pcall(bar.EnableMouse, bar, false)
+		return
+	end
+	bar:SetScript("OnEnter", function(self)
+		ns.Try(KEY, T.Tip, row, self)
+	end)
+	bar:SetScript("OnLeave", function()
+		pcall(T.Untip, row)
+	end)
+end
+
+function T.Untip(row)
+	if not row.tipped then
+		return
+	end
+	row.tipped = nil
+	local tip = GameTooltip
+	if not ns.Forbidden(tip) then
+		local ok, owned = pcall(tip.IsOwned, tip, row.bar)
+		if ok and owned == true then
+			tip:Hide()
+		end
+	end
+end
+
+function T.Retip(row)
+	if not row.tipped then
+		return
+	end
+	local tip = GameTooltip
+	local ok, owned = false, false
+	if not ns.Forbidden(tip) then
+		ok, owned = pcall(tip.IsOwned, tip, row.bar)
+	end
+	if ok and owned == true then
+		T.Tip(row, row.bar)
+	else
+		row.tipped = nil
+	end
 end
 
 function T.Near(entry)
@@ -689,9 +765,10 @@ function T.Layout(n)
 	end
 	T.title:SetTextHeight(text)
 	T.marker:SetSize(text + 2, text + 2)
-	local key = ("%s:%s:%s"):format(n, width, height)
-	local top = PAD + text + 2 + GAP
-	T.bottom = top + n * height + (n - 1) * GAP
+	local lift = ns.Finite(T.lift) and T.lift or 0
+	local key = ("%s:%s:%s:%s"):format(n, width, height, lift)
+	local top = PAD + lift + text + 2 + GAP
+	T.bottom, T.laidN = top + n * height + (n - 1) * GAP, n
 	if T.laid == key then
 		return
 	end
@@ -702,6 +779,7 @@ function T.Layout(n)
 		bar:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD, -(top + (index - 1) * (height + GAP)))
 		bar:SetSize(width, height)
 	end
+	T.Anchor()
 	Look("Laid", T.rows, n, PAD, top, height + GAP, width)
 	T.frame:SetSize(width + 2 * PAD, T.bottom + PAD)
 end
@@ -741,6 +819,8 @@ function T.Fill(row, entry)
 		row.share:SetText(("%d%%"):format(math.floor(entry.scaled + 0.5)))
 	end
 	row.bar:Show()
+	row.entry = entry
+	T.Retip(row)
 end
 
 function T.Place()
@@ -801,6 +881,7 @@ function T.Draw(mob, entries)
 	for index = n + 1, #T.rows do
 		T.Pulse(T.rows[index], false)
 		T.rows[index].near:Hide()
+		pcall(T.Untip, T.rows[index])
 		T.rows[index].bar:Hide()
 		T.rows[index].who = nil
 	end
@@ -857,6 +938,52 @@ function T.Owner(title, mob)
 	end
 	T.titleForm = form
 	return true
+end
+
+function T.TipName(tip, entry, r, g, b)
+	local spec = entry.sample
+	if spec and spec[1] ~= false then
+		return pcall(tip.AddLine, tip, spec[1], r, g, b)
+	end
+	local ok, name = pcall(UnitName, spec and "player" or entry.member.unit)
+	return ok and Named(name) and pcall(tip.AddLine, tip, name, r, g, b)
+end
+
+function T.Tip(row, owner)
+	local entry, tip = row.entry, GameTooltip
+	if type(entry) ~= "table" or ns.Forbidden(tip) then
+		return
+	end
+	tip:SetOwner(owner, "ANCHOR_LEFT")
+	local r, g, b = T.Colour(entry)
+	if not T.TipName(tip, entry, r, g, b) then
+		tip:AddLine(entry.me and "You" or "Member", r, g, b)
+	end
+	local warnAt = Number("warnAt", 90)
+	if entry.withheld then
+		tip:AddLine(TIP_WITHHELD, DIM[1], DIM[2], DIM[3], true)
+	elseif entry.tanking then
+		tip:AddLine(entry.me and "You hold aggro" or "Holds aggro", 1, 1, 1)
+	elseif ns.Finite(entry.scaled) then
+		tip:AddLine(TIP_SHARE:format(math.floor(entry.scaled + 0.5), entry.me and "you take it" or "they take it"), 1, 1, 1, true)
+	end
+	if entry.me and not T.tank and Opt("warn") ~= false then
+		tip:AddLine(("Your bar: it pulses red from Warn at (%d%%)"):format(warnAt), DIM[1], DIM[2], DIM[3], true)
+	elseif entry.me then
+		tip:AddLine("Your bar", DIM[1], DIM[2], DIM[3])
+	end
+	if T.Took(entry) then
+		tip:AddLine("Took the enemy from you: taunt it back", TAKEN[1], TAKEN[2], TAKEN[3], true)
+	elseif T.tank and Opt("otherTanks") ~= false and T.OtherTank(entry) then
+		tip:AddLine("Another tank: calm", DIM[1], DIM[2], DIM[3])
+	elseif T.Others(entry) then
+		tip:AddLine("Close to your aggro", NEAR[1], NEAR[2], NEAR[3], true)
+	end
+	if entry.sample then
+		tip:AddLine("Sample", DIM[1], DIM[2], DIM[3])
+	end
+	tip:Show()
+	row.tipped = true
 end
 
 function T.Title(mob, entries)

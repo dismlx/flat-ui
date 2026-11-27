@@ -863,11 +863,18 @@ function M.Claim()
 		T.Pulse(row, false)
 		row.near:Hide()
 		row.mine:Hide()
+		if type(T.Untip) == "function" then
+			pcall(T.Untip, row)
+		end
 		row.bar:Hide()
 		row.who = nil
 	end
 	Look("Forget", T.rows)
 	T.drawnOn = nil
+	if T.lift ~= 0 then
+		T.lift = 0
+		T.Anchor()
+	end
 	M.below, M.belowLaid, M.last, M.readAt = nil, nil, nil, nil
 	if M.line then
 		M.line:Hide()
@@ -985,13 +992,14 @@ function M.LayBelow(k, extra)
 	for index = 1, k do
 		Paint(M.Row(index), file, TextHeight(small), small)
 	end
-	local bottom = ns.Finite(T.bottom) and T.bottom or 0
-	local start = bottom + 2 * GAP + 1
-	local tall = start + k * small + (k - 1) * GAP + PAD
-	if extra then
-		tall = tall + GAP + TextHeight(small)
+	local up = Opt("grow") == "up" and k > 0
+	local section = k * small + (k - 1) * GAP + (extra and GAP + TextHeight(small) or 0)
+	if T.Lift(up and section + 2 * GAP + 1 or 0) then
+		M.belowLaid = nil
 	end
-	T.frame:SetSize(width + 2 * PAD, k > 0 and tall or bottom + PAD)
+	local bottom = ns.Finite(T.bottom) and T.bottom or 0
+	local start = up and PAD or bottom + 2 * GAP + 1
+	T.frame:SetSize(width + 2 * PAD, (k > 0 and not up) and start + section + PAD or bottom + PAD)
 	if k < 1 then
 		if M.line then
 			M.line:Hide()
@@ -1003,7 +1011,7 @@ function M.LayBelow(k, extra)
 		return
 	end
 	local slip = Number("slipAt", 80)
-	local key = ("%s:%s:%s:%s:%s"):format(tostring(T.laid), bottom, k, slip, extra and 1 or 0)
+	local key = ("%s:%s:%s:%s:%s:%s"):format(tostring(T.laid), bottom, k, slip, extra and 1 or 0, up and 1 or 0)
 	if M.belowLaid == key then
 		return
 	end
@@ -1018,7 +1026,7 @@ function M.LayBelow(k, extra)
 	end
 	local line = M.Divider()
 	line:ClearAllPoints()
-	line:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD, -(bottom + GAP))
+	line:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD, -(up and PAD + section + GAP or bottom + GAP))
 	line:SetSize(width, 1)
 	line:Show()
 	for index = 1, k do
@@ -1167,6 +1175,7 @@ function M.BelowOff(keep)
 	if M.more then
 		M.more:Hide()
 	end
+	T.Lift(0)
 	if T.frame and ns.Finite(T.bottom) then
 		T.frame:SetSize(Number("barWidth", 180) + 2 * PAD, T.bottom + PAD)
 	end
@@ -1191,6 +1200,10 @@ function M.Stop()
 	end
 	Look("Forget", M.rows)
 	T.laid = nil
+	if T.lift ~= 0 then
+		T.lift = 0
+		T.Anchor()
+	end
 	if T.title then
 		T.title:SetTextColor(DIM[1], DIM[2], DIM[3], 1)
 	end

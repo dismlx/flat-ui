@@ -1700,7 +1700,7 @@ ns.PAGES = {
 		{ key = "pets", kind = "bool", default = true, label = "Pets", tip = "A bar for each pet, a shade darker than its owner's." },
 		{ key = "rows", kind = "number", default = 5, min = 1, max = 10, step = 1, label = "Number of bars", tip = "The highest threat first; in Enemies you fight the most urgent first, and a last line counts the rest. The small rows of the enemies you are losing under your target count apart, at most 4, and a last line counts the rest." },
 		{ key = "grow", kind = "choice", default = "down", label = "Bars stack", choices = { { "down", "Down" }, { "up", "Up" } },
-			tip = "Up keeps the bottom of the list on the bottom of its box in /flatui move, so more bars grow upward: for a list above your action bars." },
+			tip = "Up keeps the bottom of the list on the bottom of its box in /flatui move, so more bars grow upward: for a list above your action bars. The enemies you are losing then show above the title, so the group bars stay put as they come and go." },
 		{ key = "barWidth", kind = "number", default = 180, min = 100, max = 400, step = 5, unit = " px", label = "Bar width" },
 		{ key = "barHeight", kind = "number", default = 16, min = 10, max = 30, step = 1, unit = " px", label = "Bar height", tip = "Also the height of text." },
 		{ key = "barTexture", kind = "choice", default = "default", label = "Bar texture", choices = "BarChoicesDefault" },
