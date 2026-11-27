@@ -1062,6 +1062,9 @@ function P.Make(map)
 end
 
 function P.Round()
+	if ns.MinimapSquare ~= nil then
+		return not ns.MinimapSquare()
+	end
 	return not ns.Enabled(KEY) or ns.PartStopped(KEY, "minimap") or ns.Get(KEY .. ".shape") ~= "square"
 end
 
