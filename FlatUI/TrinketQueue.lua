@@ -943,7 +943,7 @@ function D.Riding(n, now, threshold, blocked, blockedAt, quiet)
 		return "riding", nil, RIDING, ride
 	end
 	local why, at, entry, copy
-	if Q.Auto(n) and #Q.List(n) > 0 then
+	if Q.Auto(n) and #Q.List(n) > 0 and Q.Held(n) == nil then
 		why, at, entry, copy = D.Slot(n, now, threshold)
 		if entry and copy then
 			return "dismounted", nil, entry.item, copy
