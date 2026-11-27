@@ -27,7 +27,8 @@ local _, ns = ...
 -- a frame of Flat UI's own hangs from the game's PlayerFrame or TargetFrame by SetPoint on Flat UI's frame, out of combat, as Your buffs hangs
 -- from the player frame (OwnBuffs.lua). CooldownLooks.lua has the rules, the lists of one icon, the glows, the buff time and the samples of test
 -- mode (TestMode.lua) and of the look preview (ns.CooldownLookChanged): Update, Ready and Recheck ask it first, and Layout asks it for the samples
--- of an empty row.
+-- of an empty row. While they show, Paint tints the second icon as out of range and the third as short of power and Keybind gives a sample the key
+-- of its place, so those rows show on the samples too.
 -- ns.SpellKnown, ns.SpellBookList, ns.BarSpells and ns.ActionSpell also give the gear comparison and the spell lines of Chat and tooltips their
 -- list, their bar import and the spell of a macro's slot (GearLines.lua, SpellLines.lua): the same reads of the spell book and the action slots as
 -- Add a spell and Add the spells of a bar make, whatever the switch of this page, and nothing is written.
@@ -1049,10 +1050,22 @@ end
 -- first, as the game's own cooldown manager colours its icons (CooldownViewer.lua:1204-1232). A withheld answer is handed to
 -- SetVertexColorFromBoolean (SimpleRegionAPIDocumentation.lua:205-216) and never read, true being in range or short of power; with both
 -- withheld only the range is shown, and a client without the call leaves the icon untinted.
+-- In test mode and the look preview (record.held, CooldownLooks.lua) the second icon of the samples, or of the icons shown, is out of range and the
+-- third short of power while their rows are on, so Tint when out of range, Tint without enough power and their colours show on the samples; the
+-- icon's own answers are neither read nor written then, and the next pass after gives it its own tint.
 local function Paint(record, level)
 	local texture = record.texture
 	local range, power
-	if record.spell and not ns.PartStopped(KEY, TINT_PART) then
+	local held = record.held
+	if held and not ns.PartStopped(KEY, TINT_PART) then
+		local place = record.sample or held.index
+		if Opt("rangeTint") and place == 2 then
+			range = false
+		end
+		if Opt("powerTint") and place == 3 then
+			power = true
+		end
+	elseif record.spell and not ns.PartStopped(KEY, TINT_PART) then
 		if Opt("rangeTint") then
 			range = record.range
 		end
@@ -2067,14 +2080,17 @@ local function BindingText(spellID)
 	return ""
 end
 
+-- A sample of test mode and of the look preview (record.held and record.sample) carries the key of its place, 1, 2 or 3, in Keybind size and the
+-- corner rules, so the keybind rows show on it.
 local function Keybind(record)
-	if not Opt("keybind") or not record.spell then
+	local sample = record.held ~= nil and record.sample or nil
+	if not Opt("keybind") or not (record.spell or sample) then
 		if record.bind then
 			record.bind:SetText("")
 		end
 		return
 	end
-	if not (C_ActionBar and C_ActionBar.FindSpellActionButtons and GetBindingKey and GetBindingText) then
+	if not sample and not (C_ActionBar and C_ActionBar.FindSpellActionButtons and GetBindingKey and GetBindingText) then
 		ns.Note(KEY, NO_BINDS)
 		return
 	end
@@ -2084,7 +2100,7 @@ local function Keybind(record)
 		bind:SetPoint("TOPRIGHT", record.top, "TOPRIGHT", -2, -2)
 		record.bind, record.bindCorner = bind, "tr"
 	end
-	record.bind:SetText(BindingText(record.spell))
+	record.bind:SetText(sample and tostring(sample) or BindingText(record.spell))
 	TextSizes(record)
 end
 

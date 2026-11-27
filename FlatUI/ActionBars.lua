@@ -1130,7 +1130,8 @@ local function Still()
 end
 
 -- A change while test mode is on: a change of profile plays every sample again; Cast fill animation, Interrupt flash or Aim highlight plays its own
--- unless it shows; a cast bar colour colours the samples that show; any other action bar row gives the sweep sample its look, or plays it. Moving
+-- unless it shows; a cast bar colour colours the samples that show; a usability or range row paints the first sample button in its colour for 2 s
+-- (ns.ButtonStatesTint); any other action bar row gives the sweep sample its look, or plays it. Moving
 -- off holds them (every sample started again, then held mid-way, so each look shows), and Moving on lets them go on.
 local function SampleChanged(path)
 	if path == "*" then
@@ -1158,6 +1159,9 @@ local function SampleChanged(path)
 		if button and type(ns.ButtonEffectsSample) == "function" then
 			ns.ButtonEffectsSample({ [row[1]] = button })
 		end
+	elseif type(ns.ButtonStatesTint) == "function" and ns.ButtonStatesTint(ns.ButtonSamples()[1], path) then
+		-- A usability or range row paints the first sample button in its colour (ButtonStates.lua), as with test mode off; the sweep is left alone.
+		return
 	elseif path:match("^actionbars%.") then
 		local list = ns.ButtonSamples()
 		local button = list[4] or list[#list]
