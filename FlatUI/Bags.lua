@@ -1394,3 +1394,61 @@ if type(ns.ErrandsListsWatch) == "function" then
 		B.Request("footer", "bags")
 	end)
 end
+
+local FULL = { GAP = 10, KITS = { bell = 3, chimes = 2, alarm = 6, raid = 5 }, free = nil, at = nil }
+
+function FULL.Sound(choice)
+	local kit = FULL.KITS[choice]
+	local sound = kit and type(ns.SOUNDS) == "table" and ns.SOUNDS[kit]
+	if type(sound) == "table" and type(ns.PlayKit) == "function" then
+		ns.PlayKit(sound[1], KEY)
+	end
+end
+
+function FULL.General()
+	local ok, rows = pcall(B.Data.Free, nil, "bags")
+	if not ok or type(rows) ~= "table" then
+		return nil
+	end
+	for _, row in ipairs(rows) do
+		if type(row) == "table" and row.general == true then
+			return row
+		end
+	end
+	return nil
+end
+
+function FULL.Check()
+	if not B.On() or B.Opt("fullSay") == false or type(B.Data.Free) ~= "function" then
+		FULL.free = nil
+		return
+	end
+	local general = FULL.General()
+	local free, total = general and general.free, general and general.total
+	if not ns.Finite(free) or not ns.Finite(total) or total <= 0 then
+		return
+	end
+	local was = FULL.free
+	FULL.free = free
+	if type(was) ~= "number" or was <= 0 or free > 0 then
+		return
+	end
+	local now = Now()
+	if FULL.at and now > 0 and now >= FULL.at and now - FULL.at < FULL.GAP then
+		return
+	end
+	FULL.at = now > 0 and now or nil
+	print(("Flat UI: your bags are full (0 of %d free)."):format(total))
+	FULL.Sound(B.Opt("fullSound"))
+end
+
+function ns.BagsFullSoundPicked(path)
+	if type(path) ~= "string" or InCombat() or not (type(ns.PanelShown) == "function" and ns.PanelShown() == true) then
+		return
+	end
+	FULL.Sound(ns.Get(path))
+end
+
+ns.AddEvent(KEY, "BAG_UPDATE_DELAYED", function()
+	B.Part("full", FULL.Check)
+end)

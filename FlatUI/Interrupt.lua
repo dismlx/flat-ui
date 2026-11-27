@@ -296,16 +296,20 @@ function ns.InterruptCooldown()
 	if type(call) ~= "function" then
 		return nil
 	end
+	local petDuration, petId = nil, nil
 	for _, ab in ipairs(Abilities()) do
-		if ab.id ~= nil and ab.usable and not ab.pet and ab.ready == false then
+		if ab.id ~= nil and ab.usable and ab.ready == false then
 			local ok, duration = pcall(call, ab.id, true)
 			if ok and duration ~= nil then
-				return duration, ab.id
+				if not ab.pet then
+					return duration, ab.id
+				elseif petDuration == nil then
+					petDuration, petId = duration, ab.id
+				end
 			end
-			return nil
 		end
 	end
-	return nil
+	return petDuration, petId
 end
 
 local function GlowOn()

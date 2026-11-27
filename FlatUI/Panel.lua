@@ -2314,6 +2314,23 @@ local function BuildSearchView()
 		for _, row in ipairs(view.shown) do
 			row.Update()
 		end
+		if not (ui.searching and view.only and ui.view == view) then
+			return
+		end
+		local count = 0
+		for _, row in ipairs(view.shown) do
+			if row.item then
+				local changed = ns.PanelTrust.Changed(row.item) == true
+				if changed then
+					count = count + 1
+				end
+				row.frame:SetAlpha((row.active == false and DIM or 1) * (changed and 1 or 0.5))
+			end
+		end
+		if count ~= view.count then
+			view.count = count
+			ui.head.Set(nil, ui.ChangedHead(count, view.rest, true))
+		end
 	end
 	return view
 end
@@ -2486,9 +2503,33 @@ local function Show(view)
 	view.scroller.frame:Show()
 end
 
+local function Changing(words)
+	local changed, rest = false, {}
+	for _, word in ipairs(words) do
+		if word == CHANGED_WORD then
+			changed = true
+		else
+			rest[#rest + 1] = word
+		end
+	end
+	return changed, rest
+end
+
+function ui.ChangedHead(count, rest, now)
+	local typed = rest and #rest > 0 and table.concat(rest, " ") or nil
+	if count == 0 then
+		if typed then
+			return ('No changed settings for "%s"'):format(typed)
+		end
+		return now and "Every setting is at its default now" or "No changed settings"
+	end
+	local head = count == 1 and "1 changed setting" or ("%d changed settings"):format(count)
+	return typed and ('%s for "%s"'):format(head, typed) or head
+end
+
 local function Collect(words)
 	local groups = {}
-	local only = #words == 1 and words[1] == CHANGED_WORD
+	local only, rest = Changing(words)
 	for _, entry in ipairs(ui.model.pages) do
 		local section, group, place, named = "", nil, nil, nil
 		for _, item in ipairs(entry.page) do
@@ -2502,7 +2543,7 @@ local function Collect(words)
 				end
 				local tier
 				if only then
-					tier = ns.PanelTrust.Changed(item) and 1 or nil
+					tier = ns.PanelTrust.Changed(item) and (#rest == 0 and 1 or ns.PanelSearch.Tier(rest, item.label, item.tip, section, named)) or nil
 				else
 					tier = ns.PanelSearch.Tier(words, item.label, item.tip, section, named)
 				end
@@ -2558,7 +2599,7 @@ local function Collect(words)
 		end
 	end
 	if only then
-		return groups
+		return #rest == 0 and groups or ns.PanelSearch.Sort(groups)
 	end
 	for _, group in ipairs({ profiles, steps, actions }) do
 		if #group.hits > 0 then
@@ -2630,7 +2671,9 @@ local function Search(typed)
 	end
 	view.shown, view.picks = {}, {}
 	local groups = Collect(words)
-	local only = #words == 1 and words[1] == CHANGED_WORD
+	local only, rest = Changing(words)
+	view.only, view.rest, view.count = only, rest, nil
+	local lit = only and rest or words
 	local y = 8
 	local chips = {}
 	if not only then
@@ -2664,8 +2707,11 @@ local function Search(typed)
 				row.Place(y)
 				row.frame:Show()
 				row.Update()
+				if row.item then
+					row.frame:SetAlpha(row.active == false and DIM or 1)
+				end
 				if row.label then
-					row.label:SetText(Lit(hit.label, words))
+					row.label:SetText(Lit(hit.label, lit))
 				end
 				view.shown[#view.shown + 1] = row
 				view.picks[#view.picks + 1] = { row = row, Open = hit.Open }
@@ -2673,7 +2719,7 @@ local function Search(typed)
 			end
 		end
 	end
-	view.empty:SetText(only and "Every setting is at its default." or "No settings match.")
+	view.empty:SetText(only and (#rest == 0 and "Every setting is at its default." or "No changed setting matches.") or "No settings match.")
 	view.empty:SetShown(#view.shown == 0)
 	if #view.shown == 0 then
 		view.empty:ClearAllPoints()
@@ -2687,7 +2733,8 @@ local function Search(typed)
 	ui.title:SetText("Search")
 	local found = #view.shown
 	if only then
-		ui.head.Set(nil, found == 0 and "No changed settings" or found == 1 and "1 changed setting" or ("%d changed settings"):format(found))
+		view.count = found
+		ui.head.Set(nil, ui.ChangedHead(found, rest))
 	else
 		ui.head.Set(nil, found == 0 and "No results" or found == 1 and "1 result" or ("%d results"):format(found))
 	end
@@ -3060,7 +3107,7 @@ local function BuildLeft(window)
 	end)
 	box:SetScript("OnEnter", function()
 		if not ui.mode then
-			ui.message, ui.tip = nil, "Words of a setting, its tip or its page. " .. CHANGED_WORD .. " lists every setting you changed. Ctrl+F from any page."
+			ui.message, ui.tip = nil, "Words of a setting, its tip or its page. " .. CHANGED_WORD .. " lists every setting you changed; " .. CHANGED_WORD .. " nameplate narrows it. Ctrl+F from any page."
 			ShowStrip()
 		end
 	end)
@@ -3773,12 +3820,17 @@ function ns.OpenPanel()
 		if InCombatLockdown() then
 			if not ui.waiting then
 				ui.waiting = true
-				print("Flat UI: Options open after combat.")
+				print(ui.pendingSearch and "Flat UI: the options window opens after the fight, with your search." or "Flat UI: the options window opens after the fight.")
 				ns.OutOfCombat(function()
 					ui.waiting = false
 					if not ui.window then
 						Build()
 						Place()
+					end
+					local words = ui.pendingSearch
+					ui.pendingSearch = nil
+					if words then
+						ns.OpenPanelSearch(words)
 					end
 				end)
 			end
@@ -3829,7 +3881,7 @@ function ns.OpenPanelMode(mode)
 		if InCombatLockdown() then
 			if not ui.waiting then
 				ui.waiting = true
-				print(mode.waiting or "Flat UI: Options open after combat.")
+				print(mode.waiting or "Flat UI: the options window opens after the fight.")
 				ns.OutOfCombat(function()
 					ui.waiting = false
 					if not ui.window then
@@ -3869,6 +3921,9 @@ function ns.OpenPanelSearch(words)
 		print("Flat UI: setup has the options window. Search once it is closed.")
 		return false
 	end
+	if not ui.window and InCombatLockdown() and IsText(words) then
+		ui.pendingSearch = words
+	end
 	if not (ui.window and ui.window:IsShown()) then
 		ns.OpenPanel()
 	end
@@ -3882,6 +3937,25 @@ function ns.OpenPanelSearch(words)
 	end
 	ui.search:SetFocus()
 	pcall(ui.search.SetCursorPosition, ui.search, #words)
+	return true
+end
+
+function ns.OpenPanelRow(path)
+	if ui.window and ui.window:IsShown() and ui.mode then
+		print("Flat UI: setup has the options window. Open the setting once it is closed.")
+		return false
+	end
+	if not (ui.window and ui.window:IsShown()) then
+		ns.OpenPanel()
+	end
+	if not (ui.window and ui.window:IsShown()) or ui.mode or not IsText(path) or not ui.model then
+		return false
+	end
+	local entry, item = ns.PanelHome.RowOf(ui.model, path)
+	if not entry then
+		return false
+	end
+	Arrive(entry, item)
 	return true
 end
 

@@ -3503,7 +3503,14 @@ SlashCmdList["FLATUI"] = function(msg)
 			opened, reason = ns.OpenOptions()
 		end
 		if reason == "combat" then
-			print("Flat UI: options open after combat.")
+			print("Flat UI: the game's options open after the fight.")
+			if not ns.optionsWaiting then
+				ns.optionsWaiting = true
+				ns.OutOfCombat(function()
+					ns.optionsWaiting = nil
+					pcall(ns.OpenOptions)
+				end)
+			end
 		elseif not opened then
 			for _, line in ipairs(ns.StatusLines()) do
 				print(line)
@@ -3587,7 +3594,7 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui scale 70 - the UI scale in percent, 35 to 115; under 65 uses Small scale")
 		print("/flatui scale off - the game's own UI scale")
 		print("/flatui <words> - opens the options window and searches for them")
-		print("/flatui #changed - every setting you changed")
+		print("/flatui #changed - every setting you changed; /flatui #changed nameplate narrows it to those words")
 		print("/flatui test - samples of your hidden frames on screen until you turn it off; test on and test off also work")
 		print("/flatui taint - the action button click path, checked for values an add-on changed")
 		print("/flatui lava - what the lava tick timer sees; lava test shows a sample, lava trace prints each hit on you")

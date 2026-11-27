@@ -16,6 +16,7 @@ local MOVES = { MOVEFORWARD = "moves you forward", MOVEBACKWARD = "moves you bac
 	TURNLEFT = "turns you left", TURNRIGHT = "turns you right", JUMP = "makes you jump", TOGGLEAUTORUN = "turns on auto-run",
 	MOVEANDSTEER = "moves and steers you", CAMERAZOOMIN = "zooms the camera in", CAMERAZOOMOUT = "zooms the camera out" }
 local CONFIRM_GAP = 0.4
+local SAY_GAP = 10
 local MOUSE_KEYS = { MiddleButton = "BUTTON3", Button4 = "BUTTON4", Button5 = "BUTTON5" }
 local PROMPT = "Press the key for Mount or travel form, or a mouse button or the wheel over this box.\nEscape or a left click cancels."
 local PROMPT_MOVES = "%s %s.\n%s it again to use it anyway, or press another key."
@@ -34,7 +35,7 @@ local IsSecret = ns.IsSecret
 
 local S = { button = nil, broken = false, text = nil, texts = nil, cast = false, mount = nil, list = nil, dirty = true, pick = nil, moving = false,
 	listener = nil, hearing = false, soonMove = false, soon = false, later = false, fall = nil, fallText = nil, scripted = false, held = false,
-	owner = nil, chord = nil, refused = nil, prompt = nil, confirm = nil, confirmAt = nil }
+	owner = nil, chord = nil, refused = nil, prompt = nil, confirm = nil, confirmAt = nil, pressed = false, wasMounted = false, fell = false, saidAt = nil }
 local M = {}
 
 local function Opt(key)
@@ -270,7 +271,14 @@ local function Build()
 		return false
 	end
 	ns.Own[button] = true
-	if not pcall(button.RegisterForClicks, button, "LeftButtonDown", "LeftButtonUp") then
+	if not pcall(button.RegisterForClicks, button, "LeftButtonDown", "LeftButtonUp") or not pcall(function()
+		button:SetScript("PreClick", function(self, _, down)
+			ns.Try(KEY, M.PreClick, self, down)
+		end)
+		button:SetScript("PostClick", function(self, _, down)
+			ns.Try(KEY, M.PostClick, self, down)
+		end)
+	end) then
 		S.broken = true
 		return false
 	end
@@ -364,24 +372,36 @@ local function PostClick(self)
 	S.held = false
 end
 
+function M.PreClick(self, down)
+	if down == true or not S.pressed then
+		S.wasMounted, S.fell = Yes(Ask(IsMounted)), false
+	end
+	S.pressed = down == true
+	PreClick(self)
+	S.fell = S.fell or S.held
+end
+
+function M.PostClick(self, down)
+	PostClick(self)
+	if down == true then
+		return
+	end
+	S.pressed = false
+	if S.fell or S.wasMounted or S.cast or S.text == nil or not ns.Enabled(KEY) then
+		return
+	end
+	local now = Ask(GetTime)
+	if ns.Finite(now) and ns.Finite(S.saidAt) and now >= S.saidAt and now - S.saidAt < SAY_GAP then
+		return
+	end
+	S.saidAt = ns.Finite(now) and now or nil
+	print(S.list and #S.list > 0 and LINE_UNUSABLE or LINE_NOTHING)
+end
+
 local function Arm(name)
 	S.fall = name
 	S.fallText = name and ("/cast [@player] " .. name) or nil
-	local want = name ~= nil
-	if not S.button or S.scripted == want then
-		return
-	end
-	if Fighting() then
-		Later()
-		return
-	end
-	local ok = pcall(function()
-		S.button:SetScript("PreClick", want and PreClick or nil)
-		S.button:SetScript("PostClick", want and PostClick or nil)
-	end)
-	if ok then
-		S.scripted = want
-	end
+	S.scripted = name ~= nil and S.button ~= nil
 end
 
 function M.Moved()

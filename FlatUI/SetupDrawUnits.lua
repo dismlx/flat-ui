@@ -300,7 +300,7 @@ local function Words(mode, numbers)
 	elseif mode == "curpct" then
 		return formats.curpct:format(Num(numbers.cur), numbers.pct)
 	elseif mode == "miss" then
-		return Num(numbers.miss)
+		return numbers.miss >= 1 and (formats.miss or "-%s"):format(Num(numbers.miss)) or nil
 	end
 	return nil
 end
@@ -825,6 +825,7 @@ function E.make(stage, id, given)
 	o.rez = sample.kind == "party" and Tex(top, "OVERLAY", 3) or nil
 	o.afk = sample.kind == "party" and Text(top) or nil
 	o.rule = sample.kind == "player" and given == nil and Tex(top, "OVERLAY", 4) or nil
+	o.tick = sample.kind == "player" and given == nil and Tex(top, "OVERLAY", 4) or nil
 	o.auras = {}
 	for index, aura in ipairs(sample.auras or {}) do
 		local icon = ns.IconNew(top)
@@ -1291,7 +1292,11 @@ function E.bars(o, g, L)
 		if mode == "game" and k.bare then
 			words = nil
 		end
-		if mode ~= "game" and (g.ownTextWhen == "hover" or (g.ownTextWhen == "notfull" and numbers.cur >= numbers.max)) then
+		local brim = numbers.cur >= numbers.max
+		if role == "power" and token == "RAGE" then
+			brim = numbers.cur <= 0
+		end
+		if mode ~= "game" and (g.ownTextWhen == "hover" or (g.ownTextWhen == "notfull" and brim)) then
 			words = nil
 		end
 		if s.dead or s.offline or (L.on and role == "power" and Get("lookNoPowerText") == true) or not (role == "health" or L.power) then
@@ -1735,6 +1740,9 @@ function E.petTarget(o, g, L)
 		r, gr, b = ns.Colour("general.reactionHostile")
 	end
 	r, gr, b = Mute(r, gr, b)
+	if g.flat and g.healthByLeft then
+		r, gr, b = Left(PET_TARGET.share)
+	end
 	Stretch(p.fill, p.frame, 0, width * PET_TARGET.share, height)
 	Fill(p.fill, FileOf("health"), r, gr, b, 1)
 	CutFill(p.frame, p.fill, radius)
@@ -1841,10 +1849,9 @@ function E.druidMana(o, g, L)
 	return top + tall + L.t, right
 end
 
-local MANA_RULE = { share = 0.4, file = "Interface\\CastingBar\\UI-CastingBar-Spark", tall = 2, least = 8, wide = 0.6, alpha = 0.9 }
+local MANA_RULE = { share = 0.4, tick = 0.6, file = "Interface\\CastingBar\\UI-CastingBar-Spark", tall = 2, least = 8, wide = 0.6, alpha = 0.9 }
 
 function E.manaRule(o, g, L)
-	local spark = o.rule
 	local bar = nil
 	if g.enabled and Get("manaRule") == true then
 		if L.druid then
@@ -1853,6 +1860,17 @@ function E.manaRule(o, g, L)
 			bar = o.power
 		end
 	end
+	E.spark(o.rule, bar, L, MANA_RULE.share)
+end
+
+function E.energyTick(o, g, L)
+	local rest = REST[o.s.class]
+	local energy = L.druid or (rest ~= nil and rest[1] == "ENERGY")
+	local bar = g.enabled and Get("energyTick") == true and L.power and energy and o.power or nil
+	E.spark(o.tick, bar, L, MANA_RULE.tick)
+end
+
+function E.spark(spark, bar, L, share)
 	spark:SetShown(bar ~= nil)
 	if bar == nil then
 		return
@@ -1863,7 +1881,7 @@ function E.manaRule(o, g, L)
 	tall = okTall and ns.Finite(tall) and tall > 0 and tall or L.size.power
 	local high = math.max(MANA_RULE.least, tall * MANA_RULE.tall)
 	spark:ClearAllPoints()
-	spark:SetPoint("CENTER", bar, "LEFT", width * MANA_RULE.share, 0)
+	spark:SetPoint("CENTER", bar, "LEFT", width * share, 0)
 	spark:SetSize(high * MANA_RULE.wide, high)
 	spark:SetTexture(MANA_RULE.file)
 	spark:SetVertexColor(1, 1, 1, 1)
@@ -1933,6 +1951,9 @@ function E.draw(o, g)
 	end
 	if o.rule then
 		E.manaRule(o, g, L)
+	end
+	if o.tick then
+		E.energyTick(o, g, L)
 	end
 	o.layout = L
 	return k
@@ -2044,14 +2065,14 @@ function R.make(stage, count, columns)
 		local cell = MakeCell(o.root, "marks")
 		cell.data, cell.index = data, index
 		cell.sample = { name = data[1], class = data[2], role = data[3], dead = index == 7, away = index == 8, threat = index == 3,
-			low = index == 5 and 0.15 or nil, target = index == 3, marker = index == 1 and 8 or nil, leader = index == 1, assist = index == 4,
+			low = index == 5 and 0.15 or nil, target = index == 3, focus = index == 2, marker = index == 1 and 8 or nil, leader = index == 1, assist = index == 4,
 			afk = index == 5 }
 		o.cells[index] = cell
 	end
-	local first, aimed, away = o.cells[1], o.cells[3], o.cells[5]
+	local first, aimed, away, focused = o.cells[1], o.cells[3], o.cells[5], o.cells[2]
 	o.parts = { root = o.root, cell = first and first.frame, health = first and first.health, power = first and first.power, name = first and first.name,
 		status = first and first.status, role = first and first.role, marker = first and first.marker, lead = first and first.lead,
-		target = aimed and aimed.health, afk = away and away.afk }
+		target = aimed and aimed.health, afk = away and away.afk, focus = focused and focused.health }
 	return o
 end
 
@@ -2158,6 +2179,9 @@ local function PaintCell(cell, s, width, height, g)
 	elseif aim ~= "off" then
 		edge = SELECT
 	end
+	if aim == "off" and s.focus and on and Get("focusBorder") == true then
+		edge = { ns.Colour(KEY .. ".focusBorderColour") }
+	end
 	EdgePaint(cell.hOutline, on, g.backdrop, edge, nil, true)
 	Round(cell.hOutline, on and g.radius or nil, t)
 	cell.inner = width - 2 * inset
@@ -2257,6 +2281,7 @@ local MARK = {
 	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "boss", "health" },
 	lowHealth = { "party1", "health" }, lowHealthAt = { "party1", "health" }, lowHealthColour = { "party1", "health" }, hoverHighlight = { "player", "health" },
 	druidMana = { "player", "druid" }, druidManaText = { "player", "druid" }, druidManaHeight = { "player", "druid" }, druidManaShift = { "player", "druid" }, manaRule = { "player", "power" },
+	energyTick = { "player", "power" },
 	petTarget = { "pet", "petTarget" }, petTargetWidth = { "pet", "petTarget" }, petTargetWarn = { "pet", "petTarget" }, petTargetWarnColour = { "pet", "petTarget" },
 	lowHealthTarget = { "target", "health" }, lowHealthTargetAt = { "target", "health" }, lowHealthPulse = { "party1", "health" }, dispelBorder = { "party1", "health" }, dispelIcon = { "party1", "health" },
 	dispelFlash = { "party1", "health" },
@@ -2293,6 +2318,7 @@ local MARK = {
 	bossPowerBar = { "boss", "power" },
 	raidRangeAlpha = { "raid", "cell" }, raidRoleIcon = { "raid", "role" }, raidName = { "raid", "name" }, raidStatusText = { "raid", "status" },
 	raidFrameMarker = { "raid", "marker" }, raidLeaderIcon = { "raid", "lead" }, targetBorder = { "raid", "target" }, targetColour = { "raid", "target" },
+	focusBorder = { "raid", "focus" }, focusBorderColour = { "raid", "focus" },
 	partyFrameMarker = { "party1", "marker" }, partyRezIcon = { "party5", "rez" }, roleIconRoles = { "party2", "role" }, raidAfk = { "raid", "afk" }, partyAfk = { "party4", "afk" },
 }
 

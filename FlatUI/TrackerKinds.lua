@@ -1764,11 +1764,16 @@ local function TrackingRead(entry)
 		end
 	end
 	if active then
-		local name, texture = Field(active, "name"), Field(active, "texture")
+		local name, texture, spell = Field(active, "name"), Field(active, "texture"), Field(active, "spellID")
 		if Fileish(texture) then
 			mem.icons[id] = texture
 		end
-		mem.last[id] = { types = types, active = Plain(name, "string") and name or "not named" }
+		spell = Whole(spell) and spell or nil
+		mem.last[id] = { types = types, active = Plain(name, "string") and name or "not named", spell = spell }
+		local saved = spell and ns.Character()
+		if type(saved) == "table" and saved.trackingSpell ~= spell then
+			saved.trackingSpell = spell
+		end
 		return { state = "fine", hidden = false, icon = mem.icons[id] }
 	elseif hidden then
 		mem.last[id] = { types = types, word = "an answer was withheld" }
@@ -1792,6 +1797,23 @@ end
 
 local TrackingClean, TrackingAdd = Single("tracking")
 
+function ns.TrackerTrackingSpell(known)
+	local saved = ns.Character()
+	local last = type(saved) == "table" and saved.trackingSpell or nil
+	if Whole(last) and (type(known) ~= "function" or known(last)) then
+		return last
+	end
+	local types = Ask(type(C_Minimap) == "table" and C_Minimap.GetNumTrackingTypes)
+	for index = 1, Plain(types, "number") and math.floor(types) or 0 do
+		local ok, info = pcall(C_Minimap.GetTrackingInfo, index)
+		local spell = ok and not IsSecret(info) and type(info) == "table" and Field(info, "spellID") or nil
+		if Whole(spell) and (type(known) ~= "function" or known(spell)) then
+			return spell
+		end
+	end
+	return nil
+end
+
 if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("tracking", {
 		Read = TrackingRead, Clean = TrackingClean, Add = TrackingAdd, Icon = function(entry) return mem.icons[entry.id] end, Lines = TrackingLines,
@@ -1801,12 +1823,15 @@ if type(ns.TrackerKind) == "function" then
 end
 
 local D = {
-	FIRST = 1, LAST = 19, READY = 12, READY_LOW = 40, ICON = 136241,
+	FIRST = 1, LAST = 19, READY_LOW = 40, ICON = 136241,
 	NO_CALL = "Trackers: the game gave no durability, so the durability tracker shows a grey icon.",
 	SLOTS = { [1] = "head", [3] = "shoulders", [5] = "chest", [6] = "waist", [7] = "legs", [8] = "feet", [9] = "wrists", [10] = "hands",
 		[16] = "main hand", [17] = "off hand", [18] = "ranged weapon" },
-	ready = 0,
 }
+
+function D.Reminding()
+	return type(ns.TrackerReminding) == "function" and ns.TrackerReminding() == true
+end
 
 local function EquipSlot(value, fallback)
 	return (Plain(value, "number") and value >= 0 and value <= 30 and value == math.floor(value)) and value or fallback
@@ -1851,7 +1876,7 @@ local function DurabilityLow(entry)
 		local page = ns.Get(KEY .. ".durabilityMin")
 		low = Plain(page, "number") and page or 0
 	end
-	if low > 0 and Now() < D.ready then
+	if low > 0 and D.Reminding() then
 		low = math.max(low, D.READY_LOW)
 	end
 	return low
@@ -1890,22 +1915,10 @@ local function DurabilityAdd(argument, entries)
 end
 
 local function DurabilityWanted(_, state)
-	if (state == "low" or state == "missing") and Now() < D.ready then
+	if (state == "low" or state == "missing") and D.Reminding() then
 		return 1
 	end
 	return nil
-end
-
-local function DurabilityEvent(event)
-	if event ~= "READY_CHECK" then
-		return
-	end
-	D.ready = Now() + D.READY
-	for _, entry in ipairs(type(ns.TrackerEntries) == "function" and ns.TrackerEntries() or {}) do
-		if entry.kind == "durability" and type(ns.TrackerWake) == "function" then
-			ns.TrackerWake(entry, D.ready)
-		end
-	end
 end
 
 local function DurabilityLines(entry)
@@ -1919,7 +1932,7 @@ local function DurabilityLines(entry)
 	end
 	local low = DurabilityLow(entry)
 	local shown = last.percent == 0 or (low > 0 and last.percent <= low)
-	local ready = (shown and Now() < D.ready) and ", shown for the ready check" or ""
+	local ready = (shown and D.Reminding()) and ", shown until the pull" or ""
 	return { ("Durability: lowest %d%%, %s, %d of %d, low %s%s."):format(last.percent, D.SLOTS[last.slot] or ("slot %d"):format(last.slot),
 		math.floor(last.now), math.floor(last.most), low > 0 and ("at %d%% or less"):format(low) or "never", ready) }
 end
@@ -1932,8 +1945,8 @@ end
 if type(ns.TrackerKind) == "function" then
 	ns.TrackerKind("durability", {
 		Read = DurabilityRead, Clean = DurabilityClean, Add = DurabilityAdd, Icon = function() return D.ICON end, Lines = DurabilityLines, Tip = DurabilityTip,
-		Wanted = DurabilityWanted, Event = DurabilityEvent,
-		events = { "UPDATE_INVENTORY_DURABILITY", "PLAYER_EQUIPMENT_CHANGED", "READY_CHECK" },
+		Wanted = DurabilityWanted,
+		events = { "UPDATE_INVENTORY_DURABILITY", "PLAYER_EQUIPMENT_CHANGED" },
 		what = "durability", hiddenAble = false,
 	})
 end

@@ -10,6 +10,7 @@ local LEVEL_WAIT, LOGIN_WAIT = 2, 8
 local TOLD_QUIET = 10
 local WAY_WAIT, WAIT_STEP, WAIT_TRIES = 3, 0.5, 120
 local WAY, WAY_KEY = "/way", "FLATUIWAY"
+local ARRIVE_EVENT, ARRIVE_SOUND, PIN_SLACK = "NAVIGATION_DESTINATION_REACHED", 2, 0.001
 local TYPE_RANK = { [3] = 1, [2] = 2, [5] = 3, [6] = 4, [4] = 5 }
 local MICRO = 5
 local MOST_MAPS, MOST_NAMES = 5000, 4
@@ -703,6 +704,24 @@ local function Drop()
 	way.token = way.token + 1
 end
 
+local function PinNow()
+	local M = Map()
+	if not M or E.Ask(M.HasUserWaypoint) ~= true then
+		return nil
+	end
+	local pin = E.Ask(M.GetUserWaypoint)
+	local position = Field(pin, "position")
+	local id, x, y = Field(pin, "uiMapID"), Field(position, "x"), Field(position, "y")
+	if not (ns.Finite(id) and ns.Finite(x) and ns.Finite(y)) then
+		return nil
+	end
+	return { map = id, x = x, y = y }
+end
+
+local function SamePin(a, b)
+	return a ~= nil and b ~= nil and a.map == b.map and math.abs(a.x - b.x) <= PIN_SLACK and math.abs(a.y - b.y) <= PIN_SLACK
+end
+
 local function ClearNow()
 	Drop()
 	local M = Map()
@@ -711,7 +730,7 @@ local function ClearNow()
 	if S then
 		E.Call(S.SetSuperTrackedUserWaypoint, false)
 	end
-	way.last = nil
+	way.last, way.point = nil, nil
 	Tell("Waypoint cleared.")
 end
 
@@ -726,9 +745,47 @@ local function SetNow(map, p, point)
 	if S then
 		E.Call(S.SetSuperTrackedUserWaypoint, true)
 	end
+	way.point = PinNow() or { map = map.id, x = p.x / 100, y = p.y / 100 }
 	way.last = ("%s %s, %s"):format(map.name, Coord(p.x), Coord(p.y))
 	Tell(("Waypoint at %s%s."):format(way.last, p.note and (": " .. p.note) or ""))
 end
+
+local function ArriveEvent()
+	local events = C_EventUtils
+	if type(events) ~= "table" or ns.IsSecret(events) then
+		return nil
+	end
+	return E.Ask(events.IsEventValid, ARRIVE_EVENT)
+end
+
+local function Arrived(isWaypoint)
+	local point = way.point
+	if not point or ns.IsSecret(isWaypoint) or isWaypoint == true or not E.On("wayCommand") or not E.On("wayArrive") then
+		return
+	end
+	local pin = PinNow()
+	if not SamePin(pin, point) then
+		way.point = nil
+		return
+	end
+	local S = Track()
+	if S and E.Ask(S.IsSuperTrackingUserWaypoint) == false and E.Ask(S.IsSuperTrackingAnything) ~= false then
+		return
+	end
+	E.Call(Map().ClearUserWaypoint)
+	if S then
+		E.Call(S.SetSuperTrackedUserWaypoint, false)
+	end
+	local text = way.last
+	way.last, way.point = nil, nil
+	Tell(text and ("you reached the waypoint at %s."):format(text) or "you reached your waypoint.")
+	local sound = type(ns.SOUNDS) == "table" and ns.SOUNDS[ARRIVE_SOUND] or nil
+	if type(sound) == "table" and type(ns.PlayKit) == "function" then
+		ns.PlayKit(sound[1], "errands")
+	end
+end
+
+E.Listen(part, ARRIVE_EVENT, Arrived)
 
 local function LookForMap(token, tries)
 	local pending = way.pending
@@ -1008,6 +1065,9 @@ function part.Status()
 		end
 		if way.last then
 			lines[#lines + 1] = ("Levelling: last waypoint %s."):format(way.last)
+		end
+		if E.Opt("wayArrive") == true and ArriveEvent() == false then
+			lines[#lines + 1] = "Levelling: this client does not say when you reach a waypoint, so a /way pin stays until /way clear."
 		end
 		local pending = way.pending
 		if pending and pending.clear then

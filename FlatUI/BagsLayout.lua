@@ -207,16 +207,23 @@ local function Scale()
 	return size / SLOT
 end
 
+function Layout.Fit()
+	local ok, screen = pcall(UIParent.GetWidth, UIParent)
+	if ok and Finite(screen) and screen > 0 then
+		return math.max(1, math.floor(((screen * SCREEN_SHARE - 2 * WINDOW_PAD) / Scale() + SPACE) / PITCH))
+	end
+	return nil
+end
+
 local function Columns(which)
 	local value = which == "bank" and Opt("bankColumns") or Opt("columns")
 	if not Finite(value) then
 		value = which == "bank" and DEFAULTS.bankColumns or DEFAULTS.columns
 	end
 	local columns = math.max(1, math.floor(value + 0.5))
-	local ok, screen = pcall(UIParent.GetWidth, UIParent)
-	if ok and Finite(screen) and screen > 0 then
-		local fit = math.floor(((screen * SCREEN_SHARE - 2 * WINDOW_PAD) / Scale() + SPACE) / PITCH)
-		columns = math.min(columns, math.max(1, fit))
+	local fit = Layout.Fit()
+	if fit then
+		columns = math.min(columns, fit)
 	end
 	return columns
 end
@@ -227,8 +234,9 @@ end
 
 local function Sign()
 	local hidden = Call(Categories, "HiddenSign")
-	return ("%s:%s:%s:%s:%s:%s:%s"):format(tostring(Opt("freeSlots")), tostring(Opt("gear")), tostring(Opt("consumables")),
-		tostring(Opt("tradeGoods")), tostring(Opt("newItems")), tostring(Opt("addSlots")), type(hidden) == "string" and hidden or "")
+	return ("%s:%s:%s:%s:%s:%s:%s:%s"):format(tostring(Opt("freeSlots")), tostring(Opt("gear")), tostring(Opt("consumables")),
+		tostring(Opt("tradeGoods")), tostring(Opt("newItems")), tostring(Opt("addSlots")), type(hidden) == "string" and hidden or "",
+		tostring(Opt("itemOrder")))
 end
 
 local function Containers(which, key)
@@ -343,6 +351,9 @@ end
 
 local function SortEntries(st, entries, plain)
 	local compare = not plain and Fn(Categories, "Compare")
+	if compare then
+		pcall(Call, Categories, "SortMode", Opt("itemOrder"))
+	end
 	if compare and pcall(table.sort, entries, function(a, b)
 		return compare(a.record, b.record) == true
 	end) then
@@ -530,10 +541,18 @@ function Layout.ListTip(tip, entries, opts)
 		end
 	end
 	table.sort(list, function(a, b)
-		if a.count ~= b.count then
+		if worth then
+			local brings, other = (a.price or -1) * a.count, (b.price or -1) * b.count
+			if brings ~= other then
+				return brings > other
+			end
+		elseif a.count ~= b.count then
 			return a.count > b.count
 		end
-		return (a.name or "") < (b.name or "")
+		if (a.name or "") ~= (b.name or "") then
+			return (a.name or "") < (b.name or "")
+		end
+		return a.id < b.id
 	end)
 	local colour = type(C_Item) == "table" and C_Item.GetItemQualityColor or nil
 	for index = 1, math.min(#list, FOLD_LINES) do
@@ -551,8 +570,10 @@ function Layout.ListTip(tip, entries, opts)
 		local name = item.link or Plain(item.name or ("Item %d"):format(item.id))
 		local times = item.count > 1 and ("x" .. item.count) or nil
 		if worth then
-			local right = item.price and item.price > 0 and Money(item.price * item.count) or " "
-			tip:AddDoubleLine(icon .. name .. (times and (" " .. times) or ""), right, r, g, b, 1, 1, 1)
+			local right = item.price and item.price > 0 and Money(item.price * item.count) or (item.price == nil and "?" or " ")
+			local shade = item.price == nil and DIM or nil
+			tip:AddDoubleLine(icon .. name .. (times and (" " .. times) or ""), right, r, g, b, shade and shade[1] or 1, shade and shade[2] or 1,
+				shade and shade[3] or 1)
 		else
 			tip:AddDoubleLine(icon .. name, times or " ", r, g, b, DIM[1], DIM[2], DIM[3])
 		end
@@ -625,7 +646,7 @@ local function TitleTip(title)
 			return
 		end
 		head, line = sec.label, text
-		folded = sec.folded and #sec.entries > 0
+		folded = (sec.folded or sec.key == JUNK) and #sec.entries > 0
 		if sec.key == JUNK and #sec.entries > 0 then
 			local value, unknown = Worth(sec)
 			if value > 0 then
@@ -640,7 +661,9 @@ local function TitleTip(title)
 	if worth and not sec.strip then
 		tip:AddLine(worth, 1, 1, 1, true)
 	end
-	if folded then
+	if folded and sec.key == JUNK and not sec.strip then
+		Layout.ListTip(tip, sec.entries, { worth = true })
+	elseif folded then
 		FoldedTip(tip, sec)
 	end
 	if worth and sec.strip then
@@ -1178,7 +1201,7 @@ local function BuildSections(st)
 			end
 		end
 	end
-	if st.mine then
+	if st.which == "bags" and st.mine then
 		local okBack, count, key = pcall(Call, Categories, "LastPutBack")
 		if okBack and Finite(count) and count > 0 and type(key) == "string" and not IsSecret(key) and key ~= NEW and key ~= FREE and key ~= KEEP
 			and not byKey[key] and not Hid(key) then
@@ -1531,6 +1554,21 @@ function Layout.Dim(which)
 				end
 			end
 			local alpha = matches == 0 and TITLE_FADED or 1
+			if type(st.test) == "function" and not sec.strip and sec.key ~= FREE and not sec.add and not sec.unhide then
+				local any = false
+				for _, entry in ipairs(sec.entries) do
+					if entry.record ~= nil then
+						local okTest, hit = pcall(st.test, entry.record)
+						if okTest and hit == true then
+							any = true
+							break
+						end
+					end
+				end
+				if not any then
+					alpha = TITLE_FADED
+				end
+			end
 			title.text:SetAlpha(alpha)
 			title.rule:SetAlpha(alpha)
 		end

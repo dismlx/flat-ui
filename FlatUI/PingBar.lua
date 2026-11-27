@@ -415,9 +415,10 @@ function P.MakePlace(header)
 		place:SetScript("OnLeave", function()
 			ns.Try(KEY, P.Uncursor)
 		end)
-		place:SetScript("PostClick", function(_, button, down)
+		place:SetScript("PostClick", function(self, button, down)
 			if button == "LeftButton" and not down then
-				ns.Try(KEY, P.Pressed)
+				local ok, id = pcall(self.GetAttribute, self, "flatui-kind")
+				ns.Try(KEY, P.Pressed, ok and not IsSecret(id) and type(id) == "string" and id or nil)
 			end
 		end)
 		SecureHandlerWrapScript(place, "OnClick", header, PLACE_PRE, PLACED)
@@ -457,7 +458,8 @@ function P.Cover(panel, entry, header)
 			ns.Try(KEY, P.Leave, entry)
 		end)
 		cover:SetScript("PostClick", function()
-			ns.Try(KEY, P.Pressed)
+			local now = Ask(IsShiftKeyDown) == true and Ask(UnitExists, "target") == true
+			ns.Try(KEY, P.Pressed, now and entry.kind.id or nil)
 		end)
 		SecureHandlerWrapScript(cover, "OnClick", header, ARM)
 	end)
@@ -477,7 +479,7 @@ function P.Key(kind)
 	local done = pcall(function()
 		key:RegisterForClicks("AnyDown", "AnyUp")
 		key:SetScript("PostClick", function()
-			ns.Try(KEY, P.Pressed)
+			ns.Try(KEY, P.Pressed, kind.id)
 		end)
 	end)
 	if not done then
@@ -787,23 +789,32 @@ function P.Swipe(start, length)
 	end
 end
 
-function P.ReadCooldown()
-	if not P.panel or Opt("cooldown") == false then
+function P.ReadCooldown(id, at)
+	if not P.panel then
 		return
 	end
 	local start, length = P.Cooldown()
-	if start then
+	if start and Opt("cooldown") ~= false then
 		P.Swipe(start, length)
+	end
+	if start and id and ns.Finite(at) and math.abs(start - at) < 0.5 and P.flashed ~= start then
+		P.flashed = start
+		for _, entry in ipairs(P.buttons) do
+			if entry.kind.id == id then
+				ns.IconFlash(entry)
+			end
+		end
 	end
 end
 
-function P.Pressed()
+function P.Pressed(id)
+	local at = Ask(GetTime)
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, AFTER_PRESS, function()
-		ns.Try(KEY, P.ReadCooldown)
+		ns.Try(KEY, P.ReadCooldown, id, at)
 	end) then
 		return
 	end
-	P.ReadCooldown()
+	P.ReadCooldown(id, at)
 end
 
 function P.Sample()

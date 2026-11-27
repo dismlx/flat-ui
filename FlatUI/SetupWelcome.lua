@@ -73,7 +73,7 @@ end
 
 function ns.WelcomeReturn(view)
 	if InCombatLockdown() then
-		print("Flat UI: The welcome screen opens after combat.")
+		print("Flat UI: the welcome screen opens after the fight.")
 	end
 	ns.OutOfCombat(function()
 		W.Open(view == "after" and "after" or "start", W.finished)
@@ -760,7 +760,7 @@ end
 
 function ns.OpenWelcome()
 	if InCombatLockdown() then
-		print("Flat UI: The welcome screen opens after combat.")
+		print("Flat UI: the welcome screen opens after the fight.")
 	end
 	ns.OutOfCombat(W.Show)
 	return true

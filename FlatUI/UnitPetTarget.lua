@@ -51,6 +51,10 @@ local function Shown()
 	return ok and not IsSecret(shown) and shown == true
 end
 
+local function LeftOn()
+	return Opt("healthByLeft") == true and Opt("flat") == true and type(ns.HealthLeftTint) == "function"
+end
+
 local function File()
 	local file = X.fillFile("health")
 	if file == nil then
@@ -161,17 +165,19 @@ local function Fill(jump)
 	elseif not pcall(Percent, pct) then
 		pct:SetText("")
 	end
-	local r, g, b = GREY, GREY, GREY
-	if not dead then
-		r, g, b = ns.ReactionColour(UNIT)
-		if r == nil then
-			r, g, b = ns.Colour(KEY .. ".healthColour")
+	if dead or not (LeftOn() and ns.HealthLeftTint(bar, UNIT)) then
+		local r, g, b = GREY, GREY, GREY
+		if not dead then
+			r, g, b = ns.ReactionColour(UNIT)
+			if r == nil then
+				r, g, b = ns.Colour(KEY .. ".healthColour")
+			end
+			if type(X.mute) == "function" then
+				r, g, b = X.mute(r, g, b)
+			end
 		end
-		if type(X.mute) == "function" then
-			r, g, b = X.mute(r, g, b)
-		end
+		pcall(bar.SetStatusBarColor, bar, r, g, b, 1)
 	end
-	pcall(bar.SetStatusBarColor, bar, r, g, b, 1)
 	Marker(P)
 	Warn(P)
 end
@@ -228,10 +234,29 @@ local function OnShow()
 	X.run(PART, P.SampleOn)
 end
 
-local function OnHide()
-	if P.lit then
-		P.lit:Hide()
+local function Halt(group)
+	if group ~= nil and group:IsPlaying() then
+		pcall(group.Stop, group)
 	end
+end
+
+local function Unlit(now)
+	local lit = P.lit
+	if lit == nil then
+		return
+	end
+	Halt(P.litIn)
+	local out = P.litOut
+	if not now and out ~= nil and lit:IsShown() and (out:IsPlaying() or pcall(out.Play, out)) then
+		return
+	end
+	Halt(out)
+	lit:Hide()
+	lit:SetAlpha(1)
+end
+
+local function OnHide()
+	Unlit(true)
 	Tick(false)
 	X.run(PART, P.SampleOn)
 end
@@ -247,8 +272,16 @@ local function Tooltip(self)
 end
 
 local function OnEnter(self)
-	if P.lit then
-		P.lit:SetShown(Opt("hoverHighlight") == true)
+	local lit = P.lit
+	if lit and Opt("hoverHighlight") == true and not ns.PartStopped(KEY, "Mouse highlight") then
+		Halt(P.litOut)
+		lit:SetAlpha(1)
+		lit:Show()
+		if P.litIn ~= nil then
+			pcall(P.litIn.Play, P.litIn)
+		end
+	elseif lit then
+		Unlit(true)
 	end
 	if not pcall(Tooltip, self) then
 		self.UpdateTooltip = nil
@@ -256,9 +289,7 @@ local function OnEnter(self)
 end
 
 local function OnLeave(self)
-	if P.lit then
-		P.lit:Hide()
-	end
+	Unlit(false)
 	self.UpdateTooltip = nil
 	if type(GameTooltip) == "table" then
 		local ok, owned = pcall(GameTooltip.IsOwned, GameTooltip, self)
@@ -325,6 +356,9 @@ local function Children(frame, t)
 	lit:SetVertexColor(1, 1, 1, X.hoverAlpha or 0.12)
 	lit:Hide()
 	t.lit = lit
+	if type(X.hoverFades) == "function" then
+		t.litIn, t.litOut = X.hoverFades(lit)
+	end
 	local warn = X.frame(frame, X.number(level) and level + 2 or nil)
 	warn:SetAllPoints(frame)
 	warn:SetAlpha(0)
@@ -600,6 +634,9 @@ local function SampleFill()
 	end
 	if type(X.mute) == "function" then
 		r, g, b = X.mute(r, g, b)
+	end
+	if LeftOn() and type(ns.HealthLeftColour) == "function" then
+		r, g, b = ns.HealthLeftColour(SAMPLE.share / 100)
 	end
 	bar:SetStatusBarColor(r, g, b, 1)
 	Marker(S, true)

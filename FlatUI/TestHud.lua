@@ -9,7 +9,7 @@ local CASTS = {
 	{ id = "castPlayer", game = "PlayerCastingBarFrame", module = "castbars", opt = "player", label = "Cast bar", offset = 0, ticks = 5,
 		names = { channel = "Drain Life" } },
 	{ id = "castTarget", game = "TargetFrameSpellBar", module = "castbars", opt = "target", label = "Target cast bar", unit = "target", offset = 0.8,
-		small = true, kick = "ready", aim = "> You", names = { cast = "Fireball", shield = "Polymorph" } },
+		small = true, kick = "ready", aim = "> You", round = "target", names = { cast = "Fireball", shield = "Polymorph" } },
 	{ id = "castFocus", game = "FocusFrameSpellBar", module = "castbars", opt = "focus", label = "Focus cast bar", unit = "focus", offset = 1.6,
 		small = true, kick = "far", cool = 1.5, aim = "> You", names = { cast = "Frostbolt", shield = "Fear" } },
 	{ id = "castPet", game = "PetCastingBarFrame", module = "castbars", opt = "pet", label = "Pet cast bar", unit = "pet", offset = 2.4,
@@ -20,6 +20,7 @@ local CASTS = {
 local ROUNDS = {
 	player = { { "cast", 2.5, 0.5 }, { "channel", 2.5, 0.5 }, { "interrupted", 1, 0 } },
 	enemy = { { "cast", 2.5, 0.5 }, { "shield", 2.5, 0.5 } },
+	target = { { "cast", 1.8, 0 }, { "interrupted", 1, 0.5 }, { "shield", 2.5, 0.5 } },
 	pet = { { "cast", 2, 0.5 } },
 }
 local SWINGS = {
@@ -106,6 +107,13 @@ local function CastStandIn(spec)
 	local function Shows(holder, state, part, left, into, total)
 		if spec.opt == "player" and state == "interrupted" and holder.row.state ~= "interrupted" and type(ns.CastKickedSample) == "function" then
 			pcall(ns.CastKickedSample)
+		end
+		if spec.opt == "target" and holder.row.state ~= state then
+			if state == "cast" and type(ns.CastWatchSample) == "function" then
+				pcall(ns.CastWatchSample, "target")
+			elseif state == "interrupted" and type(ns.CastLandSample) == "function" then
+				pcall(ns.CastLandSample)
+			end
 		end
 		if spec.cool then
 			ns.DrawCasts.CastKick(holder.row, KickOf(spec, state, into), spec.cool - (into or 0), state)
@@ -221,7 +229,14 @@ local function AuraTime(seconds)
 		return ("%d"):format(seconds)
 	end
 	local cooldown = _G.COOLDOWN_DURATION_MIN
-	if ns.Get("hud.enabled") == true and ns.Get("hud.durationFormat") == "tight" and type(cooldown) == "string" and not cooldown:find("%%d%s") then
+	local format = ns.Get("hud.enabled") == true and ns.Get("hud.durationFormat")
+	if format == "clock" and seconds < 3600 then
+		if seconds >= 60 then
+			return ("%d:%02d"):format(math.floor(seconds / 60), math.floor(seconds % 60))
+		end
+		return ("%d"):format(math.max(0, seconds))
+	end
+	if (format == "tight" or format == "clock") and type(cooldown) == "string" and not cooldown:find("%%d%s") then
 		form = form:gsub("(%%d)%s+", "%1")
 	end
 	local done, text = pcall(string.format, form, number)

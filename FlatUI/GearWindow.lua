@@ -43,7 +43,7 @@ local CASTS = { proc = "a proc" }
 local FORMS = { [1] = "cat", [5] = "bear", [8] = "bear" }
 local HANDS = { main = 16, off = 17, both = 16, ranged = 18 }
 local NORM, SWING = { one = 2.4, dagger = 1.7, two = 3.3, ranged = 2.8 }, { cat = 1.0, bear = 2.5 }
-local TICK, LOOK, DROP_AGAIN, FADE_IN = 0.5, 0.1, 0.3, 0.1
+local TICK, LOOK, DROP_AGAIN, FADE_IN, DOUBLE_CLICK = 0.5, 0.1, 0.3, 0.1, 0.35
 local NOTES, FOOT, OVERALL, MOST_ROWS, LEAST_ROWS = 10, 7, 4, 80, 3
 local SEPARATOR = 0.07
 local FONT, TITLE_FONT = "GameFontHighlightSmall", "GameFontHighlight"
@@ -141,7 +141,8 @@ local T = {
 	NO_WEIGHT = "Gear comparison: the list of spells is not running, so the weight was not changed.",
 	GRIP = "Size",
 	GRIP_LINES = { "Drag to size the window; its size is kept for this character.",
-		"Reset the window on the Window and finder tab of Gear comparison puts its size and place back." },
+		"Reset the window on the Window and finder tab of Gear comparison, or a double-click on the title bar, puts its size and place back." },
+	BAR_LINES = { "Drag to move the window.", "Double-click: put it back at its first size and place." },
 	RESET_LINE = "Put its size and place back",
 	RESET_DONE = "Gear comparison: the window is back at its first size and place.",
 	RESET_FAILED = "Gear comparison: the window could not be put back. /flatui status says why.",
@@ -1184,6 +1185,8 @@ function O.Overall(view, lines)
 		cands = O.Firsts(avoid)
 	end
 	local texts, acc, sep = {}, {}, "  " .. FAINT_HEX .. "\194\183|r  "
+	local state, vs = Touch(), {}
+	view.overallVs = vs
 	for _, c in ipairs(cands) do
 		local where = #cands > 1 and Where(c) or nil
 		local totals = O.Totals(main, c, lines, "cast") or {}
@@ -1201,6 +1204,8 @@ function O.Overall(view, lines)
 		if #parts > 0 then
 			local head = where and T.OVERALL_SLOT:format(where) or T.OVERALL
 			texts[#texts + 1] = HexOf(Styled("label", LABEL)) .. head .. "|r  " .. table.concat(parts, sep)
+			local slot = type(c.slots) == "table" and c.slots[1] or nil
+			vs[#texts] = W.used or (not c.empty and Finite(slot) and Worn(state, slot)) or nil
 			O.Extremes(acc, onShow, where)
 		end
 	end
@@ -1825,6 +1830,7 @@ end
 local function DragStart()
 	W.frame:StartMoving()
 	W.moving = true
+	W.barDragged = true
 end
 
 function Dropped()
@@ -1954,6 +1960,27 @@ function Z.Reset()
 		Paint(W.view)
 	end
 	return true, T.RESET_DONE
+end
+
+function Z.BarUp(mouse)
+	if Drop() then
+		W.lastBarUp = nil
+		return
+	end
+	if W.moving or W.barDragged or mouse ~= "LeftButton" then
+		W.barDragged, W.lastBarUp = nil, nil
+		return
+	end
+	local now = Now()
+	if W.lastBarUp and now - W.lastBarUp <= DOUBLE_CLICK then
+		W.lastBarUp = nil
+		local done, said = Z.Reset()
+		if done and type(said) == "string" then
+			print(said)
+		end
+		return
+	end
+	W.lastBarUp = now
 end
 
 local function Held()
@@ -2368,7 +2395,8 @@ function U.OverallClick(mouse)
 	local plain = first:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", ""):gsub("%s%s+", " ")
 	plain = plain:match("^%s*(.-)%s*$")
 	local line = (U.WholeLink(W.link) or "") .. " " .. plain
-	local base = W.used and U.WholeLink(W.used)
+	local vs = W.view.overallVs
+	local base = U.WholeLink(W.used or (type(vs) == "table" and vs[1]) or nil)
 	if base then
 		line = line .. " vs " .. base
 	end
@@ -2592,7 +2620,16 @@ local function MakeBar(frame)
 			pcall(Dropped)
 		end
 	end)
-	Drops(bar, true)
+	Drops(bar)
+	bar:SetScript("OnMouseUp", function(_, mouse)
+		Run(Z.BarUp, mouse)
+	end)
+	bar:SetScript("OnEnter", function()
+		Run(Say, bar, T.TITLE, T.BAR_LINES)
+	end)
+	bar:SetScript("OnLeave", function()
+		Untip(bar)
+	end)
 	W.bar = bar
 	W.title = Label(bar, TITLE_FONT)
 	W.title:SetPoint("LEFT", bar, "LEFT", L.PAD, 0)

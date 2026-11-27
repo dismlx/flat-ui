@@ -20,6 +20,7 @@ local FONT = "GameFontHighlightSmall"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local TRACK = { 0.2, 0.2, 0.2, 0.5 }
 local RED, GREEN, TEXT = { 0.95, 0.25, 0.2 }, { 0.2, 0.85, 0.35 }, { 1, 1, 1 }
+local GOLD, RECORD_FROM = { 1, 0.82, 0.25 }, 3
 local GAPS_KEPT = 5
 local STEPS_MOST = 50
 
@@ -317,6 +318,7 @@ local function Settle(k, air, now)
 	end
 	if air then
 		S.streak = S.streak + 1
+		local record = not S.sample and S.streak > S.best and S.streak >= RECORD_FROM
 		if not S.sample then
 			S.dodged = S.dodged + 1
 			S.best = math.max(S.best, S.streak)
@@ -324,8 +326,13 @@ local function Settle(k, air, now)
 		if S.streak <= DODGE_MAX then
 			S.lastAlive = now
 		end
-		Say(S.streak > 1 and ("Dodged x%d"):format(S.streak) or "Dodged", GREEN, now)
-		Flash(GREEN, 0.3, now)
+		if record then
+			Say(("Best x%d"):format(S.streak), GOLD, now)
+			Flash(GOLD, 0.5, now)
+		else
+			Say(S.streak > 1 and ("Dodged x%d"):format(S.streak) or "Dodged", GREEN, now)
+			Flash(GREEN, 0.3, now)
+		end
 	elseif not S.sample then
 		S.unseen = S.unseen + 1
 	end

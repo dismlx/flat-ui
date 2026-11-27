@@ -77,9 +77,9 @@ local function NameColour(rec)
 		if player then
 			return ns.ClassColourOf(unit)
 		end
-		return ns.ReactionColour(unit)
+		return X.reaction(unit)
 	elseif mode == "reaction" then
-		return ns.ReactionColour(unit)
+		return X.reaction(unit)
 	end
 	return nil
 end
@@ -349,6 +349,8 @@ local FROM = {
 local live, todo, ticker = {}, {}, { waited = 0 }
 local HOVER_IN, HOVER_OUT = 0.1, 0.15
 local full = {}
+local CURVES = { full = { 0, 1, 1, 0 }, empty = { 0, 0, 0.005, 1 }, both = { 0, 0, 0.005, 1, 1, 0 } }
+local RAGE = 1
 
 local function Mode(rec, entry, on)
 	local keys = entry.role == "health" and HEALTH_KEY or POWER_KEY
@@ -371,7 +373,7 @@ local function Num(value)
 	return call(value)
 end
 
-X.formats = { curmax = "%s / %s", pct = "%.0f%%", curpct = "%s (%.0f%%)" }
+X.formats = { curmax = "%s / %s", pct = "%.0f%%", curpct = "%s (%.0f%%)", miss = "-%s" }
 
 local function Write(text, mode, unit, role)
 	local from = FROM[role]
@@ -384,7 +386,12 @@ local function Write(text, mode, unit, role)
 	elseif mode == "curpct" then
 		text:SetFormattedText(X.formats.curpct, Num(from.cur(unit)), from.pct(unit))
 	else
-		text:SetText(C_StringUtil.TruncateWhenZero(from.miss(unit)))
+		local miss = from.miss(unit)
+		if ns.IsSecret(miss) or (ns.Finite(miss) and miss >= 1) then
+			text:SetFormattedText(X.formats.miss, Num(miss))
+		else
+			text:SetText("")
+		end
 	end
 end
 
@@ -399,23 +406,35 @@ local function Blank(own)
 	end
 end
 
-local function FullCurve()
-	if full.curve == nil and not full.failed then
+local function Curve(name)
+	if full[name] == nil then
 		local ok, curve = pcall(function()
 			local made = C_CurveUtil.CreateCurve()
 			made:SetType(Enum.LuaCurveType.Step)
-			made:AddPoint(0, 1)
-			made:AddPoint(1, 0)
+			local points = CURVES[name]
+			for index = 1, #points, 2 do
+				made:AddPoint(points[index], points[index + 1])
+			end
 			return made
 		end)
-		full.curve, full.failed = ok and curve or nil, not ok
+		full[name] = ok and curve or false
 	end
-	return full.curve
+	return full[name] or nil
 end
 
-local function Shade(own, unit, role)
-	if Opt("ownTextWhen") == "notfull" and unit ~= nil then
-		local curve = FullCurve()
+local function Rage(unit)
+	local ok, kind = pcall(UnitPowerType, unit)
+	return ok and ns.Finite(kind) and kind == RAGE
+end
+
+local function Shade(own, unit, role, mode)
+	local notfull = Opt("ownTextWhen") == "notfull"
+	if (notfull or mode == "miss") and unit ~= nil then
+		local name = "full"
+		if notfull and role == "power" and Rage(unit) then
+			name = mode == "miss" and "both" or "empty"
+		end
+		local curve = Curve(name)
 		if curve ~= nil then
 			local ok, value
 			if role == "health" then
@@ -618,7 +637,7 @@ local function Fill(job)
 	end
 	own.blank = false
 	pcall(own.frame.Show, own.frame)
-	Shade(own, unit, entry.role)
+	Shade(own, unit, entry.role, mode)
 	Write(own.text, mode, unit, entry.role)
 end
 

@@ -11,6 +11,7 @@ local BARS = {
 }
 
 local SPARK_HEIGHT, SPARK_EXTRA = 20, 9
+local NAME_INSET, NAME_TIME, NAME_TOTAL = 4, 34, 56
 local MASK_WIDTH, MASK_HEIGHT = 256, 13
 local BAR_WIDTH, BAR_HEIGHT = 208, 11
 
@@ -56,6 +57,14 @@ local function Part(bar, key)
 	return nil
 end
 
+function ns.CastNameInset()
+	local align = ns.Enabled(KEY) and ns.Get(KEY .. ".textAlign")
+	if (align ~= "left" and align ~= "right") or ns.Get(KEY .. ".playerTime") ~= true then
+		return NAME_INSET
+	end
+	return ns.Get(KEY .. ".timeTotal") == true and NAME_TOTAL or NAME_TIME
+end
+
 local function PlaceText(bar, attached, custom)
 	local text = Part(bar, "Text")
 	if not text then
@@ -63,9 +72,11 @@ local function PlaceText(bar, attached, custom)
 	end
 	text:ClearAllPoints()
 	if custom == "inside" then
-		text:SetPoint("CENTER", bar, "CENTER", 0, 0)
+		text:SetPoint("LEFT", bar, "LEFT", NAME_INSET, 0)
+		text:SetPoint("RIGHT", bar, "RIGHT", -ns.CastNameInset(), 0)
 	elseif custom == "below" then
-		text:SetPoint("TOP", bar, "BOTTOM", 0, 1)
+		text:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", 0, 1)
+		text:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", 0, 1)
 	elseif attached then
 		text:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 3)
 		text:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 3)

@@ -444,6 +444,9 @@ local function PaintWindow(w)
 	for _, plate in ipairs(w.plates) do
 		PaintPlate(plate)
 	end
+	if w.gold and w.gold.hover then
+		w.gold.hover:SetColorTexture(ar, ag, ab, 0.2)
+	end
 	Grip.Paint(w)
 end
 
@@ -931,10 +934,27 @@ local function FootLabel(w, tip, onClick)
 	local text = ns.OwnText(holder, "OVERLAY", "GameFontHighlightSmall")
 	text:SetAllPoints(holder)
 	text:SetWordWrap(false)
+	local hover
+	if onClick then
+		hover = Own(holder:CreateTexture(nil, "ARTWORK"))
+		hover:SetAllPoints(holder)
+		local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
+		hover:SetColorTexture(ar, ag, ab, 0.2)
+		hover:Hide()
+		holder:SetScript("OnHide", function()
+			hover:Hide()
+		end)
+	end
 	holder:SetScript("OnEnter", function()
+		if hover then
+			hover:Show()
+		end
 		Run("window", tip, w, holder)
 	end)
 	holder:SetScript("OnLeave", function()
+		if hover then
+			hover:Hide()
+		end
 		Untip(holder)
 	end)
 	if onClick then
@@ -942,7 +962,7 @@ local function FootLabel(w, tip, onClick)
 			Run("window", onClick, w, holder, mouse)
 		end)
 	end
-	return { frame = holder, text = text }
+	return { frame = holder, text = text, hover = hover }
 end
 
 local function GoldTip(w, owner)
@@ -974,7 +994,13 @@ local function GoldTip(w, owner)
 			break
 		end
 		local r, g, b = ClassRGB(c.class)
-		tip:AddDoubleLine(Plain(Named(c.key, c)), Money(c.money), r or 1, g or 1, b or 1, 1, 1, 1)
+		local mark = ""
+		if c.me == true then
+			local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
+			mark = ("|TInterface\\Buttons\\WHITE8X8:6:6:0:0:8:8:0:8:0:8:%d:%d:%d|t "):format(math.floor(ar * 255 + 0.5), math.floor(ag * 255 + 0.5),
+				math.floor(ab * 255 + 0.5))
+		end
+		tip:AddDoubleLine(mark .. Plain(Named(c.key, c)), Money(c.money), r or 1, g or 1, b or 1, 1, 1, 1)
 	end
 	if #near > 1 then
 		tip:AddDoubleLine("Total", Money(total), DIM[1], DIM[2], DIM[3], 1, 1, 1)
@@ -991,6 +1017,10 @@ local function GoldTip(w, owner)
 		local hourly = ""
 		if Finite(seconds) and seconds >= HOURLY_AFTER then
 			hourly = (" (%s an hour)"):format(Money(math.abs(session) * 3600 / seconds))
+		end
+		local okSince, since = pcall(Call, ns, "SessionSince")
+		if okSince and type(since) == "string" and since ~= "" then
+			hourly = hourly .. DIM_HEX .. "  since " .. since .. "|r"
 		end
 		tip:AddLine(" ")
 		if session > 0 then
@@ -1128,8 +1158,12 @@ local function SellTip(w, owner)
 		worth = (w.sellUnknown and " for at least %s" or " for %s"):format(Money(value))
 	end
 	tip:SetText("Sell junk", 1, 1, 1)
-	tip:AddLine(("Sells %d %s%s, as Errands sells: grey items with a price and the items of your sell list, one at a time."):format(n,
-		Plural(n, "item", "items"), worth), DIM[1], DIM[2], DIM[3], true)
+	if Selling() then
+		tip:AddLine(("Selling: %d %s left."):format(n, Plural(n, "item", "items")), DIM[1], DIM[2], DIM[3], true)
+	else
+		tip:AddLine(("Sells %d %s%s, as Errands sells: grey items with a price and the items of your sell list, one at a time."):format(n,
+			Plural(n, "item", "items"), worth), DIM[1], DIM[2], DIM[3], true)
+	end
 	if waits > 0 then
 		tip:AddLine(("%d more of your sell list %s for the next click."):format(waits, Plural(waits, "waits", "wait")), DIM[1], DIM[2], DIM[3],
 			true)
@@ -1160,6 +1194,18 @@ local function SellClick(w)
 		print(("Flat UI: Sold nothing: %s."):format(why))
 	end
 	Request("footer", "bags")
+end
+
+function Tips.Again(owner, fn, ...)
+	local tip = GameTooltip
+	if type(owner) ~= "table" or type(tip) ~= "table" or ns.Forbidden(tip) then
+		return
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, owner)
+	local okShown, shown = pcall(owner.IsShown, owner)
+	if ok and owned == true and okShown and shown == true then
+		Run("window", fn, ...)
+	end
 end
 
 local function Busy()
@@ -1518,7 +1564,7 @@ function Footer(w)
 			w.sellCount, w.sellWaits, w.sellValue, w.sellUnknown = n, waits, value, unknown
 			w.sellOn = wanted and (n > 0 or selling)
 			if w.sellOn then
-				w.sell.SetLabel(selling and "Selling..." or ("Sell junk (%d)"):format(n))
+				w.sell.SetLabel(selling and (n > 0 and ("Selling... %d"):format(n) or "Selling...") or ("Sell junk (%d)"):format(n))
 				w.sell.SetUsable(not selling)
 				w.sell:Show()
 			else
@@ -1558,6 +1604,20 @@ function Footer(w)
 		end
 	end
 	ArrangeFoot(w)
+	if w.sell then
+		Tips.Again(w.sell, SellTip, w, w.sell)
+	end
+	for _, kind in ipairs({ "deposit", "takeout" }) do
+		if w[kind] then
+			Tips.Again(w[kind], MoveTip, w, w[kind], kind)
+		end
+	end
+	if w.gold then
+		Tips.Again(w.gold.frame, GoldTip, w, w.gold.frame)
+	end
+	if w.free then
+		Tips.Again(w.free.frame, FreeTip, w, w.free.frame)
+	end
 end
 
 local function StripHeight(w)
@@ -1698,12 +1758,31 @@ do
 		return Finite(value) and math.floor(value + 0.5) or nil
 	end
 
+	local function Fit()
+		local fit = Call(Layout, "Fit")
+		return Finite(fit) and fit or nil
+	end
+
 	local function Tell(w)
-		local grip, n = w.grip, w.sizing and w.sizing.now or Width(w)
+		local grip, n, fit = w.grip, w.sizing and w.sizing.now or Width(w), Fit()
 		if not (grip and n) then
 			return
 		end
-		Say(grip.button, w.which == "bank" and "Bank width in slots" or "Width in slots", ("Drag to change the width: %d slots."):format(n))
+		if fit and not w.sizing then
+			n = math.min(n, fit)
+		end
+		local path = GRIP.paths[w.which]
+		local def = type(ns.Def) == "function" and ns.Def(path) or nil
+		local most = type(def) == "table" and Finite(def.max) and def.max or nil
+		local screen, back
+		if fit and n >= fit and (not most or fit < most) then
+			screen = "As many as fit on your screen."
+		end
+		if type(def) == "table" and Finite(def.default) and ns.Get(path) ~= def.default then
+			back = ("Double-click: back to %d slots."):format(def.default)
+		end
+		Say(grip.button, w.which == "bank" and "Bank width in slots" or "Width in slots", ("Drag to change the width: %d slots."):format(n), screen,
+			back)
 	end
 
 	local function Down(w)
@@ -1712,9 +1791,12 @@ do
 		end
 		local path = GRIP.paths[w.which]
 		local def = type(ns.Def) == "function" and ns.Def(path) or nil
-		local start, x = Width(w), CursorX(w)
+		local start, x, fit = Width(w), CursorX(w), Fit()
 		if type(def) ~= "table" or not start or not x then
 			return
+		end
+		if fit then
+			start = math.min(start, fit)
 		end
 		Layout.CloseMenu(w.which)
 		w.sizing = { x = x, start = start, before = ns.Get(path), now = start, path = path, def = def }
@@ -1753,7 +1835,7 @@ do
 		end
 		local def = sizing.def
 		local low = Finite(def.min) and def.min or 1
-		local high = Finite(def.max) and def.max or sizing.start
+		local high = math.min(Finite(def.max) and def.max or sizing.start, Fit() or math.huge)
 		local delta = (x - sizing.x) * (w.which == "bags" and -1 or 1)
 		local n = math.max(low, math.min(high, sizing.start + math.floor(delta / RowHeight() + 0.5)))
 		if n == sizing.now then
@@ -1771,10 +1853,35 @@ do
 		end
 	end
 
+	function Grip.Reset(w)
+		local path = GRIP.paths[w.which]
+		local def = type(ns.Def) == "function" and ns.Def(path) or nil
+		if type(def) ~= "table" or not Finite(def.default) then
+			return
+		end
+		local before = ns.Get(path)
+		if before == def.default then
+			return
+		end
+		ns.Set(path, def.default)
+		local home = ns.PanelHome
+		if type(home) == "table" and type(home.Noted) == "function" then
+			pcall(home.Noted, def, before, ns.Get(path))
+		end
+		if type(ns.RefreshPanel) == "function" then
+			pcall(ns.RefreshPanel)
+		end
+		Request("layout", w.which)
+		if w.grip then
+			Tips.Again(w.grip.button, Tell, w)
+		end
+	end
+
 	function Grip.Make(w)
 		local frame = w.frame
 		local button = Own(CreateFrame("Button", nil, frame))
 		button:SetSize(GRIP.size, GRIP.size)
+		button:RegisterForClicks("LeftButtonUp")
 		local corner = GRIP.corners[w.which]
 		button:SetPoint(corner, frame, corner, 0, 0)
 		pcall(button.SetFrameLevel, button, w.foot:GetFrameLevel() + GRIP.level)
@@ -1800,6 +1907,9 @@ do
 		end)
 		button:SetScript("OnMouseUp", function()
 			Run("window", Up, w)
+		end)
+		button:SetScript("OnDoubleClick", function()
+			Run("window", Grip.Reset, w)
 		end)
 		button:SetScript("OnHide", function()
 			Run("window", Up, w)
@@ -1827,6 +1937,9 @@ local function Tick(w, elapsed)
 	elseif w.pulsing then
 		w.pulsing = nil
 		Run("window", PaintSort, w)
+		if w.icons.sort then
+			Tips.Again(w.icons.sort.button, Tips.sort, w, w.icons.sort.button)
+		end
 	end
 	w.wait = (w.wait or 0) - (Finite(elapsed) and elapsed or 0)
 	if w.wait > 0 then
@@ -2500,6 +2613,9 @@ function Clicks.sort(w)
 		end
 		if not watching and w.which == "bags" then
 			Sorted("bags")
+		end
+		if w.icons.sort then
+			Tips.Again(w.icons.sort.button, Tips.sort, w, w.icons.sort.button)
 		end
 	end
 end

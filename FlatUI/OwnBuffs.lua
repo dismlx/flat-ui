@@ -719,13 +719,19 @@ function B.SoundsWanted()
 	if not (file and trigger ~= nil and B.Capable() and ns.Enabled(KEY)) then
 		return wanted, trigger
 	end
-	local left = B.Left()
+	local left = {}
 	if ns.Enabled("trackers") and type(ns.TrackerSpellIDs) == "function" then
 		Merge(left, ns.TrackerSpellIDs())
 	end
-	for id in pairs(B.ClassMap()) do
-		if Whole(id) and not left[id] then
-			wanted[id] = file
+	local map, limit = B.ClassMap(), Opt("limit")
+	local list = type(ns.ClassShortBuffs) == "table" and Plain(B.class, "string") and ns.ClassShortBuffs[B.class] or nil
+	for _, entry in ipairs(list or {}) do
+		if not (Plain(entry.secs, "number") and Plain(limit, "number") and entry.secs > limit) then
+			for _, id in ipairs(entry.ids) do
+				if map[id] and Whole(id) and not left[id] then
+					wanted[id] = file
+				end
+			end
 		end
 	end
 	return wanted, trigger
@@ -1109,6 +1115,9 @@ function B.EndTest(token)
 	end
 	B.testing = nil
 	for _, icon in ipairs(test.list) do
+		if type(icon.look) == "table" then
+			icon.look.sound = nil
+		end
 		ns.IconClear(icon)
 		B.SampleTimeOff(icon)
 	end
@@ -1150,6 +1159,7 @@ function ns.OwnBuffsTest(quiet, path)
 		now = again.start
 	end
 	local flash = Opt("flash") ~= false and (not again or path == KEY .. ".flash")
+	local kit = not quiet and type(ns.PlayKit) == "function" and B.KITS[Opt("endSound")] or nil
 	B.sample = B.sample or {}
 	for index = 1, 3 do
 		local icon = B.sample[index] or ns.IconNew(holder)
@@ -1158,7 +1168,8 @@ function ns.OwnBuffsTest(quiet, path)
 		end
 		B.sample[index] = icon
 		list[index] = icon
-		ns.IconSet(icon, B.SamplePicture(index), now, 2 * index + 2, { numbers = Opt("time") == "on", border = Opt("iconBorder") })
+		ns.IconSet(icon, B.SamplePicture(index), now, 2 * index + 2, { numbers = Opt("time") == "on", border = Opt("iconBorder"),
+			sound = index == 1 and kit or nil, key = index == 1 and kit and KEY or nil })
 		ns.IconCountdownHeight(icon, Opt("size"), B.BASE)
 		B.SampleTime(icon, now, 2 * index + 2)
 		if flash then
@@ -1169,7 +1180,13 @@ function ns.OwnBuffsTest(quiet, path)
 	local test = { list = list, quiet = quiet, start = now }
 	B.testing = test
 	if not quiet then
-		print("Your buffs: three sample icons for 8 seconds.")
+		local heard = ""
+		for _, sound in ipairs(kit and ns.SOUNDS or {}) do
+			if sound[1] == kit then
+				heard = (" The first one ending plays %s."):format(sound[2])
+			end
+		end
+		print("Your buffs: three sample icons for 8 seconds." .. heard)
 	end
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
 		C_Timer.After(quiet and PREVIEW or TEST_TIME, function()

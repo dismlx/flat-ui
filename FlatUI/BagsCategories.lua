@@ -735,7 +735,7 @@ function Categories.Unput()
 			end
 		end
 	end
-	if back > 0 then
+	if back > 0 or last.key ~= nil then
 		Request("layout")
 	end
 	return back, last.count, last.key
@@ -1087,6 +1087,11 @@ function Categories.Of(record)
 end
 
 local levels = {}
+local SORT_MODES, sortMode = { kind = true, quality = true, name = true, level = true }, "kind"
+
+function Categories.SortMode(mode)
+	sortMode = SORT_MODES[mode] and mode or "kind"
+end
 
 local function Level(record)
 	local level = record.level
@@ -1162,6 +1167,22 @@ function Categories.Compare(a, b)
 	end
 	if a == b then
 		return false
+	end
+	if sortMode == "quality" then
+		local qualityA, qualityB = Quality(a), Quality(b)
+		if qualityA ~= qualityB then
+			return qualityA > qualityB
+		end
+	elseif sortMode == "name" then
+		local named = NameOrder(a, b)
+		if named ~= 0 then
+			return named < 0
+		end
+	elseif sortMode == "level" then
+		local levelA, levelB = Level(a) or 0, Level(b) or 0
+		if levelA ~= levelB then
+			return levelA > levelB
+		end
 	end
 	local classA, subA, slotA = Kind(a)
 	local classB, subB, slotB = Kind(b)
@@ -1271,7 +1292,10 @@ function ns.BagsPlacedPick(id)
 		Request("layout")
 		return true, "Flat UI: every item placed by hand goes back to its own section. The first line of Items placed by hand brings them back."
 	elseif id == "undo" then
-		local back, total = Categories.Unput()
+		local back, total, key = Categories.Unput()
+		if back > 0 and type(key) == "string" and type(Custom.Took) == "function" then
+			pcall(Custom.Took, "bags", key, nil, nil, "Back")
+		end
 		if back <= 0 then
 			return false, UNDO_SAY.none
 		elseif back < total then

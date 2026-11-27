@@ -6,7 +6,6 @@ ns.MoversSnap = Z
 local NEAR = 5
 Z.near = NEAR
 
-local picked = {}
 local ui = {}
 
 local function Kit()
@@ -118,7 +117,7 @@ local function Others(skip)
 	local xs, ys = {}, {}
 	for name, handle in pairs(kit.handles) do
 		local look = kit.looks[name]
-		if name ~= skip and look and look.shown and not look.placedByGame and not ns.MoversMode.Hidden(name) then
+		if name ~= skip and look and look.shown and not look.placedByGame and not ns.MoversMode.Hidden(name) and not ns.MoversMode.Carried(name) then
 			local left, bottom, width, height = kit.Rect(handle)
 			if left then
 				xs[#xs + 1] = { left, width }
@@ -161,84 +160,6 @@ function Z.Snap(name, left, bottom, width, height, onMiddle)
 	return left, bottom
 end
 
-function Z.Picked(name)
-	return picked[name] == true
-end
-
-function Z.List()
-	local kit, names = Kit(), {}
-	for name in pairs(picked) do
-		local look = kit.looks[name]
-		if look and look.shown and not look.placedByGame and kit.handles[name] and kit.Readable(name) then
-			names[#names + 1] = name
-		end
-	end
-	table.sort(names)
-	return names
-end
-
-function Z.Toggle(name, chosen)
-	if next(picked) == nil and chosen and chosen ~= name then
-		picked[chosen] = true
-		ns.MoversMode.Paint(chosen)
-	end
-	picked[name] = (not picked[name]) or nil
-	ns.MoversMode.Paint(name)
-end
-
-function Z.Clear()
-	local was = picked
-	picked = {}
-	for name in pairs(was) do
-		ns.MoversMode.Paint(name)
-	end
-end
-
-function Z.Space(axis)
-	if type(InCombatLockdown) == "function" and InCombatLockdown() then
-		return 0
-	end
-	local kit = Kit()
-	local names = Z.List()
-	if #names < 3 then
-		return 0
-	end
-	local boxes, spans = {}, {}
-	for index, name in ipairs(names) do
-		local left, bottom, width, height = kit.Rect(kit.handles[name])
-		if not left then
-			return 0
-		end
-		boxes[index] = { left, bottom, width, height }
-		spans[index] = axis == "y" and { bottom, height } or { left, width }
-	end
-	local starts = Z.Spread(spans)
-	if not starts then
-		return 0
-	end
-	local moved = 0
-	ns.MoversMode.Group(true)
-	for index, name in ipairs(names) do
-		local box, info = boxes[index], kit.Describe(name)
-		local now = axis == "y" and box[2] or box[1]
-		if info and math.abs(starts[index] - now) >= 0.5 then
-			local left, bottom = box[1], box[2]
-			if axis == "y" then
-				bottom = starts[index]
-			else
-				left = starts[index]
-			end
-			if kit.Commit(name, info, left, bottom, box[3], box[4]) then
-				moved = moved + 1
-			end
-			kit.ShowHandle(name)
-		end
-	end
-	ns.MoversMode.Group(false)
-	ns.MoversMode.Refresh(true)
-	return moved
-end
-
 function Z.State()
-	return picked, ui
+	return ui
 end

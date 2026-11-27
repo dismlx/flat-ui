@@ -65,8 +65,17 @@ local function Gradient(texture, orientation, from, to)
 	end
 end
 
-local function Fill(bar, most, value)
-	if pcall(bar.SetMinMaxValues, bar, 0, most) and pcall(bar.SetValue, bar, value) then
+local function Glide(bar, value, glide)
+	local list = glide and type(Enum) == "table" and Enum.StatusBarInterpolation or nil
+	local how = type(list) == "table" and list.ExponentialEaseOut or nil
+	if how ~= nil and pcall(bar.SetValue, bar, value, how) then
+		return true
+	end
+	return (pcall(bar.SetValue, bar, value))
+end
+
+local function Fill(bar, most, value, glide)
+	if pcall(bar.SetMinMaxValues, bar, 0, most) and Glide(bar, value, glide) then
 		return true
 	end
 	bar:SetMinMaxValues(0, 1)
@@ -410,10 +419,10 @@ function B.StopFade()
 	end
 end
 
-function B.Feed(amount, most, plain)
+function B.Feed(amount, most, plain, glide)
 	local d = B.d
-	local ok = Fill(d.after, most, amount)
-	Fill(d.fold, most, amount)
+	local ok = Fill(d.after, most, amount, glide)
+	Fill(d.fold, most, amount, glide)
 	local present = amount
 	if plain then
 		present = amount > 0 and 1 or 0
@@ -501,15 +510,28 @@ function B.Label()
 	for _, name in ipairs(TEXTS) do
 		local label = bar[name]
 		if type(label) == "table" and not IsSecret(label) and B.Showing(label) then
-			return label
+			return label, name
 		end
 	end
 	return nil
 end
 
+function B.Side(label, name)
+	local ok, point = pcall(label.GetPoint, label, 1)
+	if ok and not IsSecret(point) and type(point) == "string" then
+		if point:find("RIGHT", 1, true) then
+			return "right"
+		elseif point:find("LEFT", 1, true) then
+			return "left"
+		end
+	end
+	return name == "LeftText" and "left" or "right"
+end
+
 function B.PlaceText()
 	local d = B.d
-	local label = B.Label() or false
+	local label, name = B.Label()
+	label = label or false
 	if d.label == label then
 		return
 	end
@@ -518,9 +540,16 @@ function B.PlaceText()
 	text:ClearAllPoints()
 	if not label then
 		text:SetPoint("RIGHT", d.root, "RIGHT", -gap, 0)
+		text:SetJustifyH("RIGHT")
 		return
 	end
-	text:SetPoint("LEFT", label, "RIGHT", gap, 0)
+	if B.Side(label, name) == "right" then
+		text:SetPoint("RIGHT", label, "LEFT", -gap, 0)
+		text:SetJustifyH("RIGHT")
+	else
+		text:SetPoint("LEFT", label, "RIGHT", gap, 0)
+		text:SetJustifyH("LEFT")
+	end
 	local ok, file, size, flags = pcall(label.GetFont, label)
 	if ok and not (IsSecret(file) or IsSecret(size) or IsSecret(flags)) and type(file) == "string" and Finite(size) and size > 0 then
 		pcall(text.SetFont, text, file, size, type(flags) == "string" and flags or "")
@@ -555,13 +584,17 @@ function B.Write(amount, plain)
 	end
 end
 
-function B.Update()
+function B.Update(now)
 	local d = B.d
 	if not (B.on and d) then
 		return
 	end
 	local amount, plain, most = B.Read()
 	local was, wasPlain = B.last, B.plain
+	local glide = not now and not B.sample and B.up == true and was ~= nil and d.root:IsVisible()
+	if glide and plain and wasPlain and Finite(was) and amount > was then
+		glide = false
+	end
 	local barrier = B.Mode() == "barrier"
 	if plain and amount <= 0 and (B.fading or (barrier and d.fade and wasPlain and Finite(was) and was > 0 and d.root:IsVisible())) then
 		B.last, B.plain, B.up = 0, true, false
@@ -577,7 +610,7 @@ function B.Update()
 		return
 	end
 	B.StopFade()
-	if not B.Feed(amount, most, plain) and not plain then
+	if not B.Feed(amount, most, plain, glide) and not plain then
 		amount, plain = B.Tracked(), true
 		B.source = "tracked"
 		B.Feed(amount, most, plain)
@@ -595,7 +628,7 @@ end
 function B.Shown()
 	if B.on and B.d then
 		B.Layout()
-		B.Update()
+		B.Update(true)
 	end
 end
 
@@ -752,7 +785,7 @@ function B.Sync()
 	B.d.root:Show()
 	B.Paint()
 	B.Listen(true)
-	B.Update()
+	B.Update(true)
 end
 
 function B.Sample(on)

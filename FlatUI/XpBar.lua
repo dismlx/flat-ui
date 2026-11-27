@@ -11,14 +11,15 @@ local HOVER_LIGHT = 0.07
 local TEXT_IN, TEXT_OUT = 0.12, 0.15
 local SAMPLE_EVERY, SAMPLE_STRETCH = 4, 0.04
 local LATER_REP = "Flat UI: your reputations open when the fight ends."
+local LATER_SWITCH = "Flat UI: the experience bar changes when the fight ends."
 local MANAGER = "StatusTrackingBarManager"
 local CONTAINERS = { "MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer" }
 local RED, ORANGE, YELLOW, GREEN, BLUE = { 0.8, 0.3, 0.22 }, { 0.75, 0.27, 0 }, { 0.9, 0.7, 0 }, { 0, 0.6, 0.1 }, { 0, 0.39, 0.88 }
 local REACTION = { RED, RED, ORANGE, YELLOW, GREEN, GREEN, GREEN, GREEN }
 local EVENTS = { "PLAYER_ENTERING_WORLD", "PLAYER_XP_UPDATE", "UPDATE_EXHAUSTION", "PLAYER_LEVEL_UP", "PLAYER_UPDATE_RESTING", "ENABLE_XP_GAIN",
 	"DISABLE_XP_GAIN", "PLAYER_MAX_LEVEL_UPDATE", "UPDATE_EXPANSION_LEVEL", "UNIT_LEVEL", "UPDATE_FACTION", "MAJOR_FACTION_RENOWN_LEVEL_CHANGED",
-	"CVAR_UPDATE", "PLAYER_REGEN_ENABLED", "EDIT_MODE_LAYOUTS_UPDATED", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }
-local OF_PLAYER = { PLAYER_XP_UPDATE = true, UNIT_LEVEL = true }
+	"CVAR_UPDATE", "PLAYER_REGEN_ENABLED", "EDIT_MODE_LAYOUTS_UPDATED", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED", "UNIT_PET_EXPERIENCE" }
+local OF_PLAYER = { PLAYER_XP_UPDATE = true, UNIT_LEVEL = true, UNIT_PET_EXPERIENCE = true }
 local DIM = "|cffa9ae9f"
 local SAMPLE_XP = { value = 12150, total = 27000, rested = 8000, state = 1 }
 local SAMPLE_REP = { name = "Stormwind", standing = "Honored", reaction = 6, value = 4200, total = 12000 }
@@ -552,6 +553,26 @@ local function Fmt(text, fallback, ...)
 	return ok and line or ""
 end
 
+function F.PetLine()
+	local okThere, there = Ask(_G.UnitExists, "pet")
+	if okThere ~= "ok" or there ~= true then
+		return nil
+	end
+	local ok, have, need = Ask(_G.GetPetExperience)
+	if ok ~= "ok" or not (ns.Finite(have) and ns.Finite(need)) or need <= 0 or have < 0 then
+		return nil
+	end
+	local _, level = Ask(_G.UnitLevel, "pet")
+	local _, mine = Ask(_G.UnitLevel, "player")
+	level = ns.Finite(level) and level > 0 and math.floor(level) or nil
+	if level and ns.Finite(mine) and mine > 0 and level >= mine then
+		return nil
+	end
+	local share = math.max(0, math.min(100, math.floor(have * 100 / need)))
+	local amount = ("%s / %s (%d%%)"):format(Grouped(math.floor(have)), Grouped(math.floor(need)), share)
+	return DIM .. (level and ("Pet, level %d: %s"):format(level, amount) or ("Pet: %s"):format(amount)) .. "|r"
+end
+
 function F.TipLines(bar)
 	local lines = {}
 	local data, sample = F.Data(bar)
@@ -578,6 +599,10 @@ function F.TipLines(bar)
 			local share = RestedShare(xp)
 			lines[#lines + 1] = RestedCode() .. "Rested: " .. Grouped(math.floor(xp.rested))
 				.. (xp.total > 0 and (" (%d%% of the level)"):format(share) or "") .. "|r"
+		end
+		local pet = not sample and F.PetLine() or nil
+		if pet then
+			lines[#lines + 1] = pet
 		end
 		local more = not sample and ns.XpStatsLines ~= nil and ns.XpStatsLines(Opt("xpQuest") == true, Opt("xpStatsTip") == true) or nil
 		for _, line in ipairs(type(more) == "table" and more or {}) do
@@ -1190,7 +1215,7 @@ function F.Fill(bar, width)
 		stretch:Hide()
 	end
 	local quest = bar.quest
-	local ready, counted, count = 0, false, 0
+	local ready, counted, count, seeded = 0, false, 0, false
 	if bar.id == "xp" and Opt("xpQuest") == true and xp ~= nil and xp.total > 0 then
 		local state = not sample and ns.XpQuestState ~= nil and ns.XpQuestState() or nil
 		if sample then
@@ -1198,6 +1223,7 @@ function F.Fill(bar, width)
 		elseif type(state) == "table" then
 			ready, count = state.xp, state.count
 			counted = real and state.known == true and ns.Finite(ready) and ns.Finite(count)
+			seeded = state.seed == true
 		end
 	end
 	if ns.Finite(ready) and ready > 0 then
@@ -1212,8 +1238,8 @@ function F.Fill(bar, width)
 	else
 		quest:Hide()
 	end
-	local was = bar.readyKey == key and bar.readyWas or nil
-	local countWas = bar.readyKey == key and bar.readyCount or nil
+	local was = not seeded and bar.readyKey == key and bar.readyWas or nil
+	local countWas = not seeded and bar.readyKey == key and bar.readyCount or nil
 	bar.readyWas, bar.readyKey, bar.readyCount = counted and ready or nil, counted and key or nil, counted and count or nil
 	if was and countWas and ready > was and count > countWas and Opt("xpSmooth") == true then
 		local okSeen, seen = pcall(bar.frame.IsVisible, bar.frame)
@@ -1336,6 +1362,10 @@ function F.Refresh()
 			return
 		elseif S.mode ~= nil and InCombatLockdown() then
 			S.waiting = true
+			if not S.told and ns.PanelShown ~= nil and ns.PanelShown() then
+				S.told = true
+				print(LATER_SWITCH)
+			end
 			return
 		end
 		S.mode, S.waiting = want, nil
@@ -1372,6 +1402,9 @@ function F.Event(event, ...)
 		if ns.IsSecret(name) or name ~= "xpBarText" then
 			return
 		end
+	end
+	if event == "PLAYER_REGEN_ENABLED" then
+		S.told = nil
 	end
 	if S.waiting then
 		if event == "PLAYER_REGEN_ENABLED" then

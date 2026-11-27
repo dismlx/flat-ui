@@ -528,6 +528,18 @@ local function Tip(entry)
 	return { ("%d of %d lack it%s."):format(read.missing, read.total, Who(read)) }
 end
 
+function ns.TrackerGroupWho(entry, most, count)
+	local read = type(entry) == "table" and Grouped() and S.read[entry.id] or nil
+	if not read or #read.lacking == 0 or #read.lacking > most or (count and #read.lacking ~= count) then
+		return nil
+	end
+	local names = {}
+	for _, unit in ipairs(read.lacking) do
+		names[#names + 1] = ClassLabel(unit)
+	end
+	return table.concat(names, ", ")
+end
+
 local function Gone(id)
 	S.read[id] = nil
 	for _, entry in ipairs(type(ns.TrackerEntries) == "function" and ns.TrackerEntries() or {}) do

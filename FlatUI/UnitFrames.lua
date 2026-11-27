@@ -1485,6 +1485,25 @@ local function Colour(rec, on)
 	end
 end
 
+function FRAME.tapped(unit)
+	if unit == nil or type(UnitIsTapDenied) ~= "function" or type(UnitPlayerControlled) ~= "function" then
+		return false
+	end
+	local ok, denied = pcall(UnitIsTapDenied, unit)
+	if not ok or ns.IsSecret(denied) or denied ~= true then
+		return false
+	end
+	local okControl, controlled = pcall(UnitPlayerControlled, unit)
+	return okControl and not ns.IsSecret(controlled) and controlled == false
+end
+
+function FRAME.reaction(unit)
+	if FRAME.tapped(unit) then
+		return ns.Colour("general.reactionTapped")
+	end
+	return ns.ReactionColour(unit)
+end
+
 local function RowColour(rec)
 	local r, g, b
 	local kind, from = rec.kind, nil
@@ -1505,8 +1524,8 @@ local function RowColour(rec)
 			r, g, b = ns.ClassColourOf(unit)
 			from = "class"
 		elseif ok and not ns.IsSecret(player) and player == false then
-			r, g, b = ns.ReactionColour(unit)
-			from = "reaction"
+			r, g, b = FRAME.reaction(unit)
+			from = FRAME.tapped(unit) and "tapped" or "reaction"
 		end
 	end
 	if r == nil and rec.parts.strip ~= nil and IsLit(rec.parts.strip) then
@@ -2436,8 +2455,7 @@ local function HookGlobal(name, fn)
 	if hooked[name] or type(hooksecurefunc) ~= "function" or type(_G[name]) ~= "function" then
 		return
 	end
-	hooked[name] = true
-	hooksecurefunc(_G, name, fn)
+	hooked[name] = ns.FollowGlobal(name, fn) == true
 end
 
 local function FramesOf(kind)
@@ -2984,7 +3002,7 @@ local function InstallHooks()
 	end
 	if type(_G.AuraUtil) == "table" and not ns.IsSecret(_G.AuraUtil) and not hooked.AuraUtil and type(hooksecurefunc) == "function"
 		and type(_G.AuraUtil.SetAuraBorderColor) == "function" then
-		hooked.AuraUtil = pcall(hooksecurefunc, _G.AuraUtil, "SetAuraBorderColor", OnAuraBorder)
+		hooked.AuraUtil = ns.FollowTable(_G.AuraUtil, "SetAuraBorderColor", OnAuraBorder) == true
 	end
 	local manager = _G.EditModeManagerFrame
 	if manager ~= nil and not ns.Forbidden(manager) then
@@ -3391,6 +3409,8 @@ ns.UnitFrameExtra.outline = ShowOutline
 ns.UnitFrameExtra.colourOutline = ColourOutline
 ns.UnitFrameExtra.colour = Colour
 ns.UnitFrameExtra.joined = FRAME.joined
+ns.UnitFrameExtra.tapped = FRAME.tapped
+ns.UnitFrameExtra.reaction = FRAME.reaction
 ns.UnitFrameExtra.body = function(rec)
 	return rec.body and rec.body.frame
 end

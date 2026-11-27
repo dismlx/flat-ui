@@ -575,20 +575,42 @@ local function AuraOf(tooltip, data)
 end
 
 local function CasterName(src)
-	local name = Ask(UnitName, src)
-	if not Plain(name, "string") or name == "" or (Plain(UNKNOWNOBJECT, "string") and name == UNKNOWNOBJECT) then
-		name = nil
+	local function Known(unit)
+		local said = Ask(UnitName, unit)
+		if not Plain(said, "string") or said == "" or (Plain(UNKNOWNOBJECT, "string") and said == UNKNOWNOBJECT) then
+			return nil
+		end
+		return said
 	end
+	local function Coloured(unit, text)
+		local cr, cg, cb = ns.ClassColourOf(unit)
+		if Plain(cr, "number") and Plain(cg, "number") and Plain(cb, "number") then
+			return Hex(cr, cg, cb) .. text .. "|r"
+		end
+		return text
+	end
+	local name = Known(src)
 	local r, g, b
 	if Ask(UnitIsUnit, src, "player") == true then
 		name = "You"
 		r, g, b = ns.ClassColourOf("player")
 	elseif Ask(UnitIsUnit, src, "pet") == true then
-		return name and ("your pet (" .. name .. ")") or "your pet"
+		local mine = Coloured("player", "your pet")
+		return name and (mine .. " (" .. name .. ")") or mine
 	elseif not name then
 		return nil
-	elseif Ask(UnitIsPlayer, src) == true then
-		r, g, b = ns.ClassColourOf(src)
+	else
+		local group, number = src:match("^(party)pet(%d+)$")
+		if not group then
+			group, number = src:match("^(raid)pet(%d+)$")
+		end
+		local owner = group and group .. number
+		local ownerName = owner and not Hidden(owner) and Known(owner)
+		if ownerName then
+			return Coloured(owner, ownerName) .. "'s pet (" .. name .. ")"
+		elseif Ask(UnitIsPlayer, src) == true then
+			r, g, b = ns.ClassColourOf(src)
+		end
 	end
 	if not r and name ~= "You" then
 		r, g, b = ns.ReactionColour(src)

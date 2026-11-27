@@ -70,7 +70,7 @@ local function FrameColour(rec)
 	if player then
 		return ns.ClassColourOf(unit)
 	end
-	return ns.ReactionColour(unit)
+	return X.reaction(unit)
 end
 
 local function ByColour(rec, by)
@@ -79,7 +79,7 @@ local function ByColour(rec, by)
 		if unit == nil then
 			return nil
 		end
-		return ns.ReactionColour(unit)
+		return X.reaction(unit)
 	end
 	return FrameColour(rec)
 end
@@ -332,6 +332,31 @@ local function Under()
 	return nil
 end
 
+function X.hoverFades(region)
+	local ok, come, go = pcall(function()
+		local rise = region:CreateAnimationGroup()
+		local up = rise:CreateAnimation("Alpha")
+		up:SetFromAlpha(0)
+		up:SetToAlpha(1)
+		up:SetDuration(HOVER.fadeIn)
+		local fall = region:CreateAnimationGroup()
+		local down = fall:CreateAnimation("Alpha")
+		down:SetFromAlpha(1)
+		down:SetToAlpha(0)
+		down:SetDuration(HOVER.fadeOut)
+		pcall(fall.SetToFinalAlpha, fall, true)
+		fall:SetScript("OnFinished", function()
+			region:Hide()
+			region:SetAlpha(1)
+		end)
+		return rise, fall
+	end)
+	if ok then
+		return come, go
+	end
+	return nil, nil
+end
+
 local function Halt(group)
 	if group ~= nil and group:IsPlaying() then
 		pcall(group.Stop, group)
@@ -418,27 +443,7 @@ local function MakeHover(rec)
 	layer:SetVertexColor(1, 1, 1, HOVER.alpha)
 	layer:Show()
 	rec.hoverFrame, rec.hoverLayer = frame, layer
-	local ok, come, go = pcall(function()
-		local rise = frame:CreateAnimationGroup()
-		local up = rise:CreateAnimation("Alpha")
-		up:SetFromAlpha(0)
-		up:SetToAlpha(1)
-		up:SetDuration(HOVER.fadeIn)
-		local fall = frame:CreateAnimationGroup()
-		local down = fall:CreateAnimation("Alpha")
-		down:SetFromAlpha(1)
-		down:SetToAlpha(0)
-		down:SetDuration(HOVER.fadeOut)
-		pcall(fall.SetToFinalAlpha, fall, true)
-		fall:SetScript("OnFinished", function()
-			frame:Hide()
-			frame:SetAlpha(1)
-		end)
-		return rise, fall
-	end)
-	if ok then
-		rec.hoverIn, rec.hoverOut = come, go
-	end
+	rec.hoverIn, rec.hoverOut = X.hoverFades(frame)
 	hover.made[rec] = true
 end
 
