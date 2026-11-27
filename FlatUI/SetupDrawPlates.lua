@@ -15,7 +15,10 @@ local _, ns = ...
 -- PlateOverpower.lua (the Overpower icon of a sample with overpower, a hunter's Mongoose Bite or, for a rogue who knows it, Riposte, moved by its
 -- offsets, whose swipe drains over its 5 seconds and starts again), PlateCombo.lua (the row of combo points of a sample with combo, under the cast
 -- bar's room at Combo point size and moved by its vertical offset, in a rogue's or a druid's drawing) and PlateTarget.lua (the flash of a Target or
--- Focus sample's border as the drawing opens and as Flash as you change target turns on, P.TargetFlash) do to a plate with the same row. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a
+-- Focus sample's border as the drawing opens and as Flash as you change target turns on, P.TargetFlash) do to a plate with the same row. Show auras
+-- and Show health text at Only on the target or On the target and focus leave the auras (and their room) and the health number on a sample that is
+-- your target, or your focus, alone (P.AurasSeen, P.HealthSeen), as Nameplates.lua's AurasAlpha and PlateText.lua's HealthPart do; the auras
+-- drawing then adds a Your target and a Focus sample beside the plain enemy, and the plate drawing shows its Target and Focus samples for it. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a
 -- unit (UnitDocumentation.lua:1526-1529).
 -- A sample's threat (threatGood, threatTransition, threatBad, or threatTank for an enemy another tank holds) colours its health bar as PlateColours.lua orders it and, as PlateThreatLook.lua,
 -- PlateText.lua and PlateThreatText.lua draw it (P.Threat), gives it the threat ring at Threat ring thickness (flashing as it turns to threatBad), a

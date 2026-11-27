@@ -8,8 +8,11 @@ local _, ns = ...
 -- has a mark after its level number and a coloured border, and any plate can have a fading row behind its name.
 -- A size or place the game will not let addon code set on a protected plate in a fight waits for its end (QueueSizes); when it was a change of one
 -- of those rows in the options window (Restyle friendly nameplates, Health bar height, Nameplate cast bar height, Bar width, the level box, the raid
--- marker, the class icons), chat says once a fight, while the window shows, that the plates take it as the fight ends. A class icon that comes or goes places the row of
--- combo points again (PlateCombo.lua's ns.PlateComboPlace), which hangs under a Below icon.
+-- marker, the class icons), chat says once a fight, while the window shows, that the plates take it as the fight ends. A class icon that comes or
+-- goes places the row of combo points again (PlateCombo.lua's ns.PlateComboPlace), which hangs under a Below icon. With Show auras at Only on the
+-- target or On the target and focus, the aura rows of the plates a change of target or focus moves ease out and in over 0.15 seconds (EASE,
+-- AurasAlpha), on a frame of Flat UI's own whose OnUpdate runs only while one is on its way; a plate that shows, one that leaves and a refresh of
+-- the options set them at once.
 
 local KEY = "nameplates"
 local AURA_OVERLAY = "UI-HUD-CoolDownManager-IconOverlay"
@@ -80,6 +83,10 @@ local TELL = { rows = { "enabled", "friendly", "healthHeight", "castHeight", "ba
 -- layoutFresh: every request for the queued layout came after the game laid the plates out. optionsPending: the game's options changed since the last layout.
 local layoutFresh, optionsPending = true, false
 local QueueAuras
+-- The ease of the aura rows as Show auras at Only on the target or On the target and focus hides and shows them as the target or the focus changes:
+-- want (the plates MarkTargets queued for that change), plates (per unit frame, { frame: its AurasFrame, from, to, start, now: the alpha written
+-- last }), driver (a frame of Flat UI's own whose OnUpdate steps them, false when it cannot be made) and SECONDS (the whole way).
+local EASE = { want = setmetatable({}, { __mode = "k" }), plates = {}, driver = nil, SECONDS = 0.15 }
 -- True while the plates wait for the end of combat to get what a protected frame would not take.
 local kindsWaiting = false
 
@@ -374,6 +381,8 @@ local function MarkTargets()
 		if plates[unitFrame] and not ns.Forbidden(unitFrame) then
 			ns.Each(KEY, Apply, unitFrame)
 			if targetOnly then
+				-- The row of the old and the new target (or focus) eases out and in (AurasAlpha).
+				EASE.want[unitFrame] = true
 				QueueAuras(unitFrame)
 			end
 		end
@@ -490,11 +499,74 @@ local function StyleAura(item, on, look)
 	end
 end
 
+-- One step of every aura row on its way (EASE), each a SetAlpha toward its goal; the driver stops once none is left.
+local function EaseStep()
+	local now = type(GetTime) == "function" and GetTime() or nil
+	local left = false
+	for unitFrame, rec in pairs(EASE.plates) do
+		local share = ns.Finite(now) and math.min(1, math.max(0, (now - rec.start) / EASE.SECONDS)) or 1
+		local alpha = rec.from + (rec.to - rec.from) * share
+		rec.now = alpha
+		if ns.Forbidden(rec.frame) or not pcall(rec.frame.SetAlpha, rec.frame, alpha) or share >= 1 then
+			EASE.plates[unitFrame] = nil
+		else
+			left = true
+		end
+	end
+	if not left and EASE.driver then
+		EASE.driver:SetScript("OnUpdate", nil)
+	end
+end
+
+-- The aura row of a plate eases from `from` to `to` over EASE.SECONDS, from where a row already on its way is. False when it cannot (no driver or
+-- no clock), and the caller sets it at once.
+local function EaseAuras(unitFrame, aurasFrame, from, to)
+	if EASE.driver == nil then
+		local ok, frame = pcall(CreateFrame, "Frame")
+		EASE.driver = ok and type(frame) == "table" and frame or false
+		if EASE.driver then
+			ns.Own[frame] = true
+		end
+	end
+	local now = type(GetTime) == "function" and GetTime() or nil
+	if not EASE.driver or not ns.Finite(now) then
+		return false
+	end
+	local rec = EASE.plates[unitFrame]
+	if rec and rec.frame == aurasFrame and ns.Finite(rec.now) then
+		from = rec.now
+	end
+	EASE.plates[unitFrame] = { frame = aurasFrame, from = from, to = to, start = now, now = from }
+	EASE.driver:SetScript("OnUpdate", EaseStep)
+	return true
+end
+
+-- Every aura row on its way takes its goal at once: the options changed, or the plate left.
+local function EaseDone(unitFrame)
+	for frame, rec in pairs(EASE.plates) do
+		if unitFrame == nil or frame == unitFrame then
+			EASE.plates[frame] = nil
+			if not ns.Forbidden(rec.frame) then
+				pcall(rec.frame.SetAlpha, rec.frame, rec.to)
+			end
+		end
+	end
+	if unitFrame == nil then
+		EASE.want = setmetatable({}, { __mode = "k" })
+	else
+		EASE.want[unitFrame] = nil
+	end
+end
+
 -- The opacity of the icons of one plate: the row's, or none for a plate that is not the target while Show auras says only the target has them
 -- (Only on the target), or neither the target nor the focus (On the target and focus). The target's and the focus's plates are compared as frames,
--- as MarkTargets does, since the game's isTarget comes from a unit comparison the client can withhold.
+-- as MarkTargets does, since the game's isTarget comes from a unit comparison the client can withhold. A plate the change of target or focus moved
+-- (EASE.want, from MarkTargets) eases to its new opacity over EASE.SECONDS, as the threat rings and the combo points fade; a plate that shows, a
+-- refresh of the options and any other look set it at once.
 local function AurasAlpha(unitFrame, aurasFrame, styled)
 	local own = known[unitFrame]
+	local ease = EASE.want[unitFrame]
+	EASE.want[unitFrame] = nil
 	local alpha = 1
 	if styled then
 		alpha = Opt("auraOpacity") / 100
@@ -506,14 +578,19 @@ local function AurasAlpha(unitFrame, aurasFrame, styled)
 		end
 	end
 	if own and (own.aurasAlpha or 1) ~= alpha then
-		pcall(aurasFrame.SetAlpha, aurasFrame, alpha)
+		local from = own.aurasAlpha or 1
 		own.aurasAlpha = alpha ~= 1 and alpha or nil
+		if not (ease and styled and EaseAuras(unitFrame, aurasFrame, from, alpha)) then
+			EASE.plates[unitFrame] = nil
+			pcall(aurasFrame.SetAlpha, aurasFrame, alpha)
+		end
 	end
 end
 
 local function StyleAuras(unitFrame)
 	local aurasFrame = unitFrame.AurasFrame
 	if ns.Forbidden(aurasFrame) then
+		EASE.want[unitFrame] = nil
 		return
 	end
 	local styled = ns.Enabled(KEY) and On(unitFrame)
@@ -1646,6 +1723,7 @@ local function Leave(unitFrame)
 			ns.CastFill(KEY, castBar, false)
 		end
 		Reclassify(unitFrame)
+		EaseDone(unitFrame)
 		Extras(EXTRA.leave, unitFrame, known[unitFrame])
 	end
 end
@@ -1712,6 +1790,8 @@ local function Refresh()
 	local sizes = table.concat(values, "|")
 	TELL.refreshing = TELL.last ~= nil and sizes ~= TELL.last
 	TELL.last = sizes
+	-- The aura rows on their way take their opacity at once.
+	EaseDone()
 	LeaveAll()
 	for unitFrame in pairs(known) do
 		if not ns.Forbidden(unitFrame) then
