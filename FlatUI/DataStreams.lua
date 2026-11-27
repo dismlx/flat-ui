@@ -18,7 +18,10 @@ local ADDON_NAME, ns = ...
 --     bag window's gold tooltip says too), and from HOURLY_AFTER seconds into the session what that is an hour (its second answer, the seconds
 --     since the session began); nothing while it made and spent nothing. The slot itself keeps its width. Each change of the money (PLAYER_MONEY)
 --     floats from the slot as "+38s 2c" in green or "-1g 4s" in red, a quick run of them as one growing sum (P.Float, DataPanels.lua), never at
---     login, after a loading screen or in test mode.
+--     login, after a loading screen or in test mode. A Ctrl-click counts the session from now: it writes the two fields ns.SessionMoney reads,
+--     FlatUICharDB.sessionMoney (GetMoney) and sessionStartAt (time()), skipped while the client withholds either, so the tooltip and the bag
+--     window's gold count from that moment, and chat says "Flat UI: the gold count of this session starts again now."; its tooltip ends with
+--     "Ctrl-click: count this session from now.". It still lets clicks through with Tooltips off (through).
 --   Durability: of all the equipped items together (GetInventoryItemDurability), coloured by how worn it is, then in red how many items are
 --     broken (at 0%: "1 broken"), else how many are at 50% or less; the tooltip opens with a red line while any is broken ("1 item broken: no
 --     stats until repaired"), lists each item, the lowest first, and out of a fight the repair cost of the worn items under 100% (repairCost of
@@ -138,6 +141,10 @@ end
 
 local function Shift()
 	return Ask(_G.IsShiftKeyDown) == true
+end
+
+local function Ctrl()
+	return Ask(_G.IsControlKeyDown) == true
 end
 
 -- Runs one of the game's own toggles of a window by its global name (ToggleCharacter and the rest, as the game's keys and buttons open them) with
@@ -319,8 +326,22 @@ local function MoneyChanged()
 	lastMoney = money
 end
 
+-- Ctrl-click: the gold of this session counts from now, in the fields ns.SessionMoney reads (BagsData.lua), so the bag window's count follows.
+local function SessionFromNow()
+	local char = ns.Character()
+	local money, now = Count((Ask(GetMoney))), Count((Ask(_G.time)))
+	if type(char) ~= "table" or not (money and now) then
+		return
+	end
+	char.sessionMoney, char.sessionStartAt = money, now
+	print("Flat UI: the gold count of this session starts again now.")
+	P.Mark("gold")
+end
+
 P.Stream({
 	id = "gold", label = "Gold",
+	-- With Tooltips off the slot lets clicks through, as the Tooltips row says, though it has a click (P.Fill, DataPanels.lua).
+	through = true,
 	events = { PLAYER_MONEY = MoneyChanged },
 	Start = Record,
 	Text = function()
@@ -365,6 +386,14 @@ P.Stream({
 			lines[#lines + 1] = { "This session", (session > 0 and (GOOD .. "+") or (BAD .. "-")) .. P.Money(math.abs(session)) .. hourly .. "|r" }
 		end
 		return lines
+	end,
+	Hint = function()
+		return "Ctrl-click: count this session from now."
+	end,
+	Click = function(_, button)
+		if button == "LeftButton" and Ctrl() then
+			SessionFromNow()
+		end
 	end,
 })
 
