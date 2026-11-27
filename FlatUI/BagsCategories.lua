@@ -1310,14 +1310,13 @@ function ns.BagsPlacedPick(id)
 	if not id or not placed or placed[id] == nil then
 		return false, "That item is not placed by hand."
 	end
+	local saved = placed[id]
+	RememberBack(type(saved) == "string" and Fit(saved, { id = id }, true) or nil, placed, { id })
 	placed[id] = nil
-	if lastBack and lastBack.placed[id] ~= nil then
-		lastBack.placed[id] = nil
-		lastBack.count = lastBack.count - 1
-		if lastBack.count <= 0 then
-			lastBack = nil
-		end
-	end
 	Request("layout")
-	return true, ("Flat UI: %s goes back to its own section."):format(Named(id))
+	local said = ("Flat UI: %s goes back to its own section."):format(Named(id))
+	if lastBack then
+		said = said .. " The first line of Items placed by hand brings it back."
+	end
+	return true, said
 end

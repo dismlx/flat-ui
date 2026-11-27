@@ -2110,7 +2110,7 @@ function ns.BagsCustomLines()
 		lines[#lines + 1] = { "delete:" .. key, ("Delete %s%s"):format(name, count > 0 and (" (%d placed)"):format(count) or "") }
 		local rule = Custom.Rule(key)
 		if type(rule) == "string" then
-			lines[#lines + 1] = { "unrule:" .. key, ("Stop keeping what \"%s\" finds in %s"):format(Plain(Shorten(rule, RULE_SHOWN)), name) }
+			lines[#lines + 1] = { "unrule:" .. key, ("Stop keeping what \"%s\" finds in %s"):format(Shorten(rule, RULE_SHOWN), name) }
 		end
 	end
 	return lines
@@ -2143,7 +2143,7 @@ function ns.BagsCustomPick(id)
 		if type(rule) ~= "string" or not SetRule(key, nil) then
 			return false, "Flat UI: " .. SAY.gone
 		end
-		return true, ("Flat UI: %s no longer keeps what %s finds."):format(Plain(Custom.Name(key) or key), Plain(rule))
+		return true, ("Flat UI: %s no longer keeps what %s finds."):format(Plain(Custom.Name(key) or key), rule)
 	end
 	return false
 end

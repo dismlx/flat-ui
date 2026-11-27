@@ -1418,6 +1418,33 @@ function FULL.General()
 	return nil
 end
 
+function FULL.Junk()
+	local count = ns.ErrandsJunkCount
+	if type(count) ~= "function" then
+		return ""
+	end
+	local ok, n, waits, value, unknown = pcall(count)
+	if not ok then
+		return ""
+	end
+	n = ns.Finite(n) and math.max(0, math.floor(n)) or 0
+	waits = ns.Finite(waits) and math.max(0, math.floor(waits)) or 0
+	value = ns.Finite(value) and math.max(0, math.floor(value)) or 0
+	local slots = n + waits
+	if slots <= 0 then
+		return ""
+	end
+	local worth = ""
+	if value > 0 then
+		local money = type(ns.Errands) == "table" and type(ns.Errands.Money) == "function" and ns.Errands.Money(value)
+			or ("%dc"):format(value)
+		local least = (not ns.IsSecret(unknown) and unknown == true) or waits > 0
+		worth = (", worth %s%s"):format(least and "at least " or "", money)
+	end
+	local one = slots == 1
+	return (" Junk takes %d %s%s: Sell junk at a merchant frees %s."):format(slots, one and "slot" or "slots", worth, one and "it" or "them")
+end
+
 function FULL.Check()
 	if not B.On() or B.Opt("fullSay") == false or type(B.Data.Free) ~= "function" then
 		FULL.free = nil
@@ -1438,7 +1465,7 @@ function FULL.Check()
 		return
 	end
 	FULL.at = now > 0 and now or nil
-	print(("Flat UI: your bags are full (0 of %d free)."):format(total))
+	print(("Flat UI: your bags are full (0 of %d free).%s"):format(total, FULL.Junk()))
 	FULL.Sound(B.Opt("fullSound"))
 end
 

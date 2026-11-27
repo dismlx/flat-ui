@@ -2037,6 +2037,12 @@ end
 
 local function Gone()
 	pcall(menu.listener.UnregisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
+	for _, line in ipairs(menu.lines) do
+		Untip(line.frame)
+	end
+	if not InCombatLockdown() then
+		pcall(menu.frame.EnableKeyboard, menu.frame, false)
+	end
 	menu.anchor, menu.owner, menu.tick = nil, nil, nil
 end
 
@@ -2048,7 +2054,7 @@ local function Fit()
 	end
 	for index = 1, menu.count do
 		local line = menu.lines[index]
-		local need = TextWidth(line.text) + (line.item.tick ~= nil and (MENU_BOX + 6) or 0)
+		local need = TextWidth(line.text) + (line.item.tick ~= nil and (MENU_BOX + 6) or 0) + (line.iconed and 16 or 0)
 		local right = TextWidth(line.right)
 		if right > 0 then
 			need = need + MENU_GAP + right
@@ -2119,6 +2125,17 @@ local function MenuLine(index)
 	line.mark = Own(frame:CreateTexture(nil, "ARTWORK", nil, 3))
 	line.mark:SetPoint("TOPLEFT", line.edge, "TOPLEFT", 3, -3)
 	line.mark:SetPoint("BOTTOMRIGHT", line.edge, "BOTTOMRIGHT", -3, 3)
+	line.icon = Own(frame:CreateTexture(nil, "ARTWORK"))
+	line.icon:SetSize(12, 12)
+	line.icon:SetPoint("LEFT", frame, "LEFT", MENU_X, 0)
+	line.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+	line.icon:Hide()
+	line.rule = Own(frame:CreateTexture(nil, "ARTWORK"))
+	line.rule:SetPoint("TOPLEFT", frame, "TOPLEFT", MENU_X, 0)
+	line.rule:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -MENU_X, 0)
+	line.rule:SetHeight(1)
+	line.rule:SetColorTexture(1, 1, 1, 0.12)
+	line.rule:Hide()
 	line.text = ns.OwnText(frame, "OVERLAY", "GameFontHighlightSmall")
 	line.text:SetJustifyH("LEFT")
 	line.text:SetWordWrap(false)
@@ -2129,15 +2146,26 @@ local function MenuLine(index)
 	frame:SetScript("OnEnter", function()
 		local item = line.item
 		line.light:SetShown(item ~= nil and not item.header)
+		local tip = GameTooltip
+		if item and Finite(item.id) and item.id > 0 and type(tip) == "table" and not ns.Forbidden(tip) then
+			pcall(tip.SetOwner, tip, frame, "ANCHOR_RIGHT")
+			if pcall(tip.SetItemByID, tip, item.id) then
+				pcall(tip.Show, tip)
+			else
+				pcall(tip.Hide, tip)
+			end
+		end
 	end)
 	frame:SetScript("OnLeave", function()
 		line.light:Hide()
+		Untip(frame)
 	end)
 	frame:SetScript("OnClick", function()
 		local item = line.item
 		if not item or item.header then
 			return
 		end
+		Untip(frame)
 		Layout.CloseMenu()
 		if type(item.pick) == "function" then
 			Run(item.part or "window", item.pick)
@@ -2156,6 +2184,16 @@ local function MenuFrame()
 	frame:SetSize(1, 1)
 	frame:EnableMouse(true)
 	pcall(frame.SetClampedToScreen, frame, true)
+	pcall(frame.EnableKeyboard, frame, false)
+	frame:SetScript("OnKeyDown", function(self, key)
+		local escape = key == "ESCAPE" and menu.anchor ~= nil
+		if not InCombatLockdown() then
+			pcall(self.SetPropagateKeyboardInput, self, not escape)
+		end
+		if escape then
+			Run("window", Layout.CloseMenu)
+		end
+	end)
 	frame:Hide()
 	menu = { frame = frame, lines = {}, count = 0 }
 	menu.outline = ns.Outline(frame, frame)
@@ -2222,19 +2260,32 @@ function Layout.Menu(anchor, title, items, owner)
 	screen = okScreen and Finite(screen) and screen > 0 and screen or 768
 	local most = math.max(MENU_LEAST, math.floor((screen * MENU_MOST - top - MENU_Y) / MENU_LINE))
 	local column, row, rows = 1, 0, 0
+	local thin = ns.Pixels(menu.frame, 1)
 	for index, item in ipairs(items) do
 		local line = MenuLine(index)
 		line.item = item
 		line.text:SetText(item.text or "")
 		line.right:SetText(item.right or "")
 		line.text:ClearAllPoints()
+		local icon = item.tick == nil and item.icon or nil
+		line.iconed = Finite(icon) or (type(icon) == "string" and not IsSecret(icon) and icon ~= "")
+		if line.iconed then
+			line.icon:SetTexture(icon)
+			line.icon:Show()
+		else
+			line.icon:Hide()
+		end
 		if item.tick ~= nil then
 			line.text:SetPoint("LEFT", line.edge, "RIGHT", 6, 0)
 			line.edge:Show()
 			line.box:Show()
 			line.mark:SetShown(item.tick == true)
 		else
-			line.text:SetPoint("LEFT", line.frame, "LEFT", MENU_X, 0)
+			if line.iconed then
+				line.text:SetPoint("LEFT", line.icon, "RIGHT", 4, 0)
+			else
+				line.text:SetPoint("LEFT", line.frame, "LEFT", MENU_X, 0)
+			end
 			line.edge:Hide()
 			line.box:Hide()
 			line.mark:Hide()
@@ -2248,6 +2299,8 @@ function Layout.Menu(anchor, title, items, owner)
 		if row > 0 and (row >= most or (item.header and row >= most - 1)) then
 			column, row = column + 1, 0
 		end
+		line.rule:SetHeight(thin)
+		line.rule:SetShown(item.rule == true and row > 0)
 		line.column, line.y, line.left, line.width = column, top + row * MENU_LINE, nil, nil
 		line.frame:Show()
 		row = row + 1
@@ -2265,6 +2318,10 @@ function Layout.Menu(anchor, title, items, owner)
 	menu.frame:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
 	menu.anchor, menu.owner, menu.tick = anchor, owner, nil
 	menu.frame:Show()
+	if not InCombatLockdown() then
+		pcall(menu.frame.EnableKeyboard, menu.frame, true)
+		pcall(menu.frame.SetPropagateKeyboardInput, menu.frame, true)
+	end
 	pcall(menu.listener.RegisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
 	Untip(anchor)
 	return menu
