@@ -26,6 +26,7 @@ local recs = setmetatable({}, { __mode = "k" })
 local owns = setmetatable({}, { __mode = "k" })
 local boxed = setmetatable({}, { __mode = "k" })
 local moving = {}
+local S = { waited = 0 }
 local subscribed = false
 local driver
 local Draw
@@ -464,6 +465,7 @@ local function Wait(frame, rec)
 		return
 	end
 	rec.waiting = true
+	S.waited = S.waited + 1
 	ns.OutOfCombat(function()
 		rec.waiting = nil
 		if recs[frame] == rec and not ns.Forbidden(frame) then
@@ -644,6 +646,7 @@ local function Later(frame, rec)
 		return
 	end
 	rec.later = true
+	S.waited = S.waited + 1
 	ns.OutOfCombat(function()
 		rec.later = nil
 		if recs[frame] == rec and not ns.Forbidden(frame) then
@@ -1056,6 +1059,37 @@ end
 
 ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", Recheck)
 ns.AddEvent(KEY, "ADDON_RESTRICTION_STATE_CHANGED", Recheck)
+
+EXTRA.status[#EXTRA.status + 1] = function()
+	if not On() or Core() == nil then
+		return nil
+	end
+	if not Tank() then
+		return "Mark enemies you are losing: off while you do not count as a tank."
+	end
+	local lost, slipping, enlarged, instead = 0, 0, 0, 0
+	for _, rec in pairs(recs) do
+		local cue, grow = rec.cue, rec.grow
+		if cue and cue.on then
+			if cue.kind == "lost" then
+				lost = lost + 1
+			elseif cue.kind == "slipping" then
+				slipping = slipping + 1
+			end
+		end
+		if grow and grow.base and grow.plate.now > 1 then
+			enlarged = enlarged + 1
+		end
+		if grow and grow.cue.now > 1 then
+			instead = instead + 1
+		end
+	end
+	local line = ("Mark enemies you are losing: %d lost and %d slipping marked"):format(lost, slipping)
+	if Opt("threatSlipGrow") == true then
+		line = line .. (", %d plates enlarged, %d marked larger while the game kept their plate"):format(enlarged, instead)
+	end
+	return line .. (", %d plates waited for the end of a fight."):format(S.waited)
+end
 
 local function ApplySample(grow)
 	local p = grow.owner

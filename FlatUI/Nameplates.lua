@@ -1769,6 +1769,29 @@ do
 	end
 end
 
+do
+	local api = C_CVar
+	local info = type(api) == "table" and api.GetCVarInfo or nil
+	local fight = type(InCombatLockdown) == "function" and InCombatLockdown()
+	if type(info) == "function" and type(ns.PAGES) == "table" and type(ns.Def) == "function" then
+		for _, page in ipairs(ns.PAGES) do
+			if type(page) == "table" and (page.key == KEY or page.owner == KEY) then
+				for _, item in ipairs(page) do
+					local cvar = type(item) == "table" and item.cvar or nil
+					if type(cvar) == "string" and type(item.key) == "string" then
+						local ok, _, _, _, _, locked, _, readOnly = pcall(info, cvar)
+						local kept = ok and ((Plain(readOnly, "boolean") and readOnly) or (not fight and Plain(locked, "boolean") and locked))
+						local def = kept and ns.Def(KEY .. "." .. item.key) or nil
+						if type(def) == "table" then
+							def.hidden = true
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
 ns.Register(KEY, {
 	label = "Nameplates",
 	Start = Refresh,
