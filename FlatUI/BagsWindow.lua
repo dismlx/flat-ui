@@ -1728,12 +1728,31 @@ do
 		return Finite(value) and math.floor(value + 0.5) or nil
 	end
 
+	local function Fit()
+		local fit = Call(Layout, "Fit")
+		return Finite(fit) and fit or nil
+	end
+
 	local function Tell(w)
-		local grip, n = w.grip, w.sizing and w.sizing.now or Width(w)
+		local grip, n, fit = w.grip, w.sizing and w.sizing.now or Width(w), Fit()
 		if not (grip and n) then
 			return
 		end
-		Say(grip.button, w.which == "bank" and "Bank width in slots" or "Width in slots", ("Drag to change the width: %d slots."):format(n))
+		if fit and not w.sizing then
+			n = math.min(n, fit)
+		end
+		local path = GRIP.paths[w.which]
+		local def = type(ns.Def) == "function" and ns.Def(path) or nil
+		local most = type(def) == "table" and Finite(def.max) and def.max or nil
+		local screen, back
+		if fit and n >= fit and (not most or fit < most) then
+			screen = "As many as fit on your screen."
+		end
+		if type(def) == "table" and Finite(def.default) and ns.Get(path) ~= def.default then
+			back = ("Double-click: back to %d slots."):format(def.default)
+		end
+		Say(grip.button, w.which == "bank" and "Bank width in slots" or "Width in slots", ("Drag to change the width: %d slots."):format(n), screen,
+			back)
 	end
 
 	local function Down(w)
@@ -1742,9 +1761,12 @@ do
 		end
 		local path = GRIP.paths[w.which]
 		local def = type(ns.Def) == "function" and ns.Def(path) or nil
-		local start, x = Width(w), CursorX(w)
+		local start, x, fit = Width(w), CursorX(w), Fit()
 		if type(def) ~= "table" or not start or not x then
 			return
+		end
+		if fit then
+			start = math.min(start, fit)
 		end
 		Layout.CloseMenu(w.which)
 		w.sizing = { x = x, start = start, before = ns.Get(path), now = start, path = path, def = def }
@@ -1783,7 +1805,7 @@ do
 		end
 		local def = sizing.def
 		local low = Finite(def.min) and def.min or 1
-		local high = Finite(def.max) and def.max or sizing.start
+		local high = math.min(Finite(def.max) and def.max or sizing.start, Fit() or math.huge)
 		local delta = (x - sizing.x) * (w.which == "bags" and -1 or 1)
 		local n = math.max(low, math.min(high, sizing.start + math.floor(delta / RowHeight() + 0.5)))
 		if n == sizing.now then
@@ -1801,10 +1823,35 @@ do
 		end
 	end
 
+	function Grip.Reset(w)
+		local path = GRIP.paths[w.which]
+		local def = type(ns.Def) == "function" and ns.Def(path) or nil
+		if type(def) ~= "table" or not Finite(def.default) then
+			return
+		end
+		local before = ns.Get(path)
+		if before == def.default then
+			return
+		end
+		ns.Set(path, def.default)
+		local home = ns.PanelHome
+		if type(home) == "table" and type(home.Noted) == "function" then
+			pcall(home.Noted, def, before, ns.Get(path))
+		end
+		if type(ns.RefreshPanel) == "function" then
+			pcall(ns.RefreshPanel)
+		end
+		Request("layout", w.which)
+		if w.grip then
+			Tips.Again(w.grip.button, Tell, w)
+		end
+	end
+
 	function Grip.Make(w)
 		local frame = w.frame
 		local button = Own(CreateFrame("Button", nil, frame))
 		button:SetSize(GRIP.size, GRIP.size)
+		button:RegisterForClicks("LeftButtonUp")
 		local corner = GRIP.corners[w.which]
 		button:SetPoint(corner, frame, corner, 0, 0)
 		pcall(button.SetFrameLevel, button, w.foot:GetFrameLevel() + GRIP.level)
@@ -1830,6 +1877,9 @@ do
 		end)
 		button:SetScript("OnMouseUp", function()
 			Run("window", Up, w)
+		end)
+		button:SetScript("OnDoubleClick", function()
+			Run("window", Grip.Reset, w)
 		end)
 		button:SetScript("OnHide", function()
 			Run("window", Up, w)

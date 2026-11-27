@@ -207,16 +207,23 @@ local function Scale()
 	return size / SLOT
 end
 
+function Layout.Fit()
+	local ok, screen = pcall(UIParent.GetWidth, UIParent)
+	if ok and Finite(screen) and screen > 0 then
+		return math.max(1, math.floor(((screen * SCREEN_SHARE - 2 * WINDOW_PAD) / Scale() + SPACE) / PITCH))
+	end
+	return nil
+end
+
 local function Columns(which)
 	local value = which == "bank" and Opt("bankColumns") or Opt("columns")
 	if not Finite(value) then
 		value = which == "bank" and DEFAULTS.bankColumns or DEFAULTS.columns
 	end
 	local columns = math.max(1, math.floor(value + 0.5))
-	local ok, screen = pcall(UIParent.GetWidth, UIParent)
-	if ok and Finite(screen) and screen > 0 then
-		local fit = math.floor(((screen * SCREEN_SHARE - 2 * WINDOW_PAD) / Scale() + SPACE) / PITCH)
-		columns = math.min(columns, math.max(1, fit))
+	local fit = Layout.Fit()
+	if fit then
+		columns = math.min(columns, fit)
 	end
 	return columns
 end
@@ -227,8 +234,9 @@ end
 
 local function Sign()
 	local hidden = Call(Categories, "HiddenSign")
-	return ("%s:%s:%s:%s:%s:%s:%s"):format(tostring(Opt("freeSlots")), tostring(Opt("gear")), tostring(Opt("consumables")),
-		tostring(Opt("tradeGoods")), tostring(Opt("newItems")), tostring(Opt("addSlots")), type(hidden) == "string" and hidden or "")
+	return ("%s:%s:%s:%s:%s:%s:%s:%s"):format(tostring(Opt("freeSlots")), tostring(Opt("gear")), tostring(Opt("consumables")),
+		tostring(Opt("tradeGoods")), tostring(Opt("newItems")), tostring(Opt("addSlots")), type(hidden) == "string" and hidden or "",
+		tostring(Opt("itemOrder")))
 end
 
 local function Containers(which, key)
@@ -343,6 +351,9 @@ end
 
 local function SortEntries(st, entries, plain)
 	local compare = not plain and Fn(Categories, "Compare")
+	if compare then
+		pcall(Call, Categories, "SortMode", Opt("itemOrder"))
+	end
 	if compare and pcall(table.sort, entries, function(a, b)
 		return compare(a.record, b.record) == true
 	end) then

@@ -1835,6 +1835,7 @@ ns.SETUP_STEPS = {
 		{ "bags.addSlots", "o", "behaviour", "Ends each section of your bags with an empty slot marked +, to drop an item on and keep it there." },
 		{ "bags.consumables", "o", "behaviour", "Shows consumables in one section, splits food and drink and potions and elixirs from the rest, or gives each kind its own section, such as scrolls, bandages and explosives." },
 		{ "bags.tradeGoods", "o", "behaviour", "Shows trade goods in one section, or gives each kind its own section, such as cloth, herbs and metal and stone." },
+		{ "bags.itemOrder", "o", "behaviour", "Orders the items in each section by kind, by quality, by name or by item level." },
 		{ "bags.placed", "r", "behaviour", "Lists the items you placed in a section by hand, kept there until you place them elsewhere, and brings back the last ones you put back." },
 		{ "bags.order", "r", "behaviour", "Puts the sections back in Flat UI's order after you dragged their titles." },
 		{ "bags.folded", "r", "behaviour", "Lists the sections you folded with a click on their titles, and opens one or all." },
