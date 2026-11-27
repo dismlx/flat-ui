@@ -2455,8 +2455,7 @@ local function HookGlobal(name, fn)
 	if hooked[name] or type(hooksecurefunc) ~= "function" or type(_G[name]) ~= "function" then
 		return
 	end
-	hooked[name] = true
-	hooksecurefunc(_G, name, fn)
+	hooked[name] = ns.FollowGlobal(name, fn) == true
 end
 
 local function FramesOf(kind)
@@ -3003,7 +3002,7 @@ local function InstallHooks()
 	end
 	if type(_G.AuraUtil) == "table" and not ns.IsSecret(_G.AuraUtil) and not hooked.AuraUtil and type(hooksecurefunc) == "function"
 		and type(_G.AuraUtil.SetAuraBorderColor) == "function" then
-		hooked.AuraUtil = pcall(hooksecurefunc, _G.AuraUtil, "SetAuraBorderColor", OnAuraBorder)
+		hooked.AuraUtil = ns.FollowTable(_G.AuraUtil, "SetAuraBorderColor", OnAuraBorder) == true
 	end
 	local manager = _G.EditModeManagerFrame
 	if manager ~= nil and not ns.Forbidden(manager) then

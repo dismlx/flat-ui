@@ -304,7 +304,7 @@ local function FollowTimers()
 	if timerFollowed or type(hooksecurefunc) ~= "function" or type(mixin) ~= "table" or ns.IsSecret(mixin) or type(mixin.UpdateDuration) ~= "function" then
 		return
 	end
-	timerFollowed = pcall(hooksecurefunc, mixin, "UpdateDuration", KeepTimer)
+	timerFollowed = ns.FollowTable(mixin, "UpdateDuration", KeepTimer) == true
 end
 
 local function Totem(button, live)
