@@ -32,8 +32,9 @@ local ADDON_NAME, ns = ...
 -- Opacity in combat and out of combat are the alpha of the panel's frame (SetAlpha, which the game does not protect:
 -- SimpleFrameAPIDocumentation.lua:1133-1143), set at the start and the end of a fight (PLAYER_REGEN_DISABLED, PLAYER_REGEN_ENABLED), at each
 -- refresh, which asks InCombatLockdown, and when a stream drawn again makes a panel or shows it again. A panel under the mouse, or whose menu is
--- open, is at full opacity: the frame is asked IsMouseOver, which needs no mouse on it, on a ticker every HOVER seconds that runs only while a
--- shown panel rests below full opacity, so slots that let clicks through still do. A change eases, rising over RISE seconds and falling over
+-- open, is at full opacity, and so is every panel while /flatui move or Edit Mode is open (P.Lining), so a panel at 0% is not an empty box as it
+-- is lined up: the frame is asked IsMouseOver, which needs no mouse on it, and the movers and Edit Mode whether they are open, on a ticker every
+-- HOVER seconds that runs only while a shown panel rests below full opacity, so slots that let clicks through still do. A change eases, rising over RISE seconds and falling over
 -- FALL (each times the share of the way), by an OnUpdate of the panel's own frame that runs only while it eases; a panel just made or shown
 -- takes its alpha at once. The alpha is written only when it changes.
 -- While test mode is on (TestMode.lua), a slot whose stream has nothing to show shows the stream's sample, the widest text it shows (P.TextOf).
@@ -996,6 +997,16 @@ end
 -- stay usable at 0%, else the resting one. It eases there from where it is, up over RISE and down over FALL, each times the share of the way
 -- (P.Ease); a call while it eases only aims it again. A frame that is hidden, or that P.Layout has just shown, takes it at once, so a new panel
 -- never fades down from full on screen.
+-- True while /flatui move (Movers.lua) or the game's Edit Mode is open, so a faded panel is seen whole as its box is lined up, as Fade.lua
+-- keeps its frames (MoversOpen and Wanted there).
+function P.Lining()
+	local kit = ns.MoverKit
+	if type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true then
+		return true
+	end
+	return type(ns.EditModeOpen) == "function" and ns.EditModeOpen() == true
+end
+
 function P.Fade(panel)
 	local frame = panel.frame
 	if not frame then
@@ -1003,7 +1014,7 @@ function P.Fade(panel)
 	end
 	local alpha = P.Rest()
 	local menu = P.menu
-	if alpha < 1 and panel.shown and ((menu and menu.slot and menu.slot.panel == panel) or Under(frame)) then
+	if alpha < 1 and panel.shown and ((menu and menu.slot and menu.slot.panel == panel) or Under(frame) or P.Lining()) then
 		alpha = 1
 	end
 	local snap = panel.snap
@@ -2076,6 +2087,10 @@ function ns.DataPanelsMoved()
 		if panel.wanted and panel.frame then
 			ns.Try(KEY, P.Place, panel)
 		end
+	end
+	-- Their opacity follows the movers too (P.Lining).
+	if ns.Enabled(KEY) then
+		ns.Try(KEY, P.FadeAll)
 	end
 end
 
