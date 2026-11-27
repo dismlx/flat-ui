@@ -914,6 +914,8 @@ do
 	local KINDS = { "enter", "leave", "warn", "health", "mana" }
 	local FALLBACK = { enter = "+Combat", leave = "-Combat", health = "Low health", mana = "Low mana" }
 	local COLOUR = { enter = "combatEnterColour", leave = "combatLeaveColour", warn = "noTargetColour", health = "lowColour", mana = "lowManaColour" }
+	local GLOW_DEEP, GLOW_ALPHA = 14, 0.45
+	local GLOW_SIDES = { { "TOP", "VERTICAL", false }, { "BOTTOM", "VERTICAL", true }, { "LEFT", "HORIZONTAL", true }, { "RIGHT", "HORIZONTAL", false } }
 
 	local function AlertFile()
 		local ok, file = pcall(function()
@@ -968,7 +970,35 @@ do
 		S.caption = U.text(S.root)
 		S.caption:SetJustifyH("CENTER")
 		S.caption:SetText("On you")
+		S.glow = {}
+		for index, spec in ipairs(GLOW_SIDES) do
+			local side, point = U.tex(S.root, "BACKGROUND", 1), spec[1]
+			side:SetColorTexture(1, 1, 1, 1)
+			if spec[2] == "VERTICAL" then
+				side:SetPoint(point .. "LEFT", S.root, point .. "LEFT", 0, 0)
+				side:SetPoint(point .. "RIGHT", S.root, point .. "RIGHT", 0, 0)
+				side:SetHeight(GLOW_DEEP)
+			else
+				side:SetPoint("TOP" .. point, S.root, "TOP" .. point, 0, 0)
+				side:SetPoint("BOTTOM" .. point, S.root, "BOTTOM" .. point, 0, 0)
+				side:SetWidth(GLOW_DEEP)
+			end
+			side:Hide()
+			S.glow[index] = side
+		end
 		return S
+	end
+
+	local function PaintGlow(S, shown)
+		local r, g, b = ns.Colour("combattext.lowColour")
+		local tinted = shown and ns.Finite(r) and ns.Finite(g) and ns.Finite(b) and type(CreateColor) == "function"
+		local solid = tinted and CreateColor(r, g, b, GLOW_ALPHA)
+		local clear = tinted and CreateColor(r, g, b, 0)
+		for index, spec in ipairs(GLOW_SIDES) do
+			local side = S.glow[index]
+			local ok = tinted and pcall(side.SetGradient, side, spec[2], spec[3] and solid or clear, spec[3] and clear or solid)
+			side:SetShown(ok and true or false)
+		end
 	end
 
 	local function HasMana()
@@ -1098,6 +1128,7 @@ do
 		U.at(lines.warn, "TOP", S.root, "BOTTOMLEFT", cx, cy - GAP * k)
 		U.at(lines.health, "TOP", S.root, "BOTTOMLEFT", cx, cy - (GAP + step) * k)
 		U.at(lines.mana, "TOP", S.root, "BOTTOMLEFT", cx, cy - (GAP + 2 * step) * k)
+		PaintGlow(S, low and ns.Get("combattext.lowEdge") == true)
 	end
 
 	local drawing = { draw = Draw }
@@ -1114,6 +1145,7 @@ do
 		end
 		p["combattext.lowHealth"], p["combattext.lowColour"], p["combattext.lowManaColour"] = lines.health, lines.health, lines.mana
 		p["combattext.lowShare"] = lines.health
+		p["combattext.lowEdge"] = S.glow[1]
 		p["combattext.combatState"], p["combattext.combatEnterColour"], p["combattext.combatStateSize"] = lines.enter, lines.enter, lines.enter
 		p["combattext.combatLeaveColour"], p["combattext.combatLength"] = lines.leave, lines.leave
 		local you = S.you

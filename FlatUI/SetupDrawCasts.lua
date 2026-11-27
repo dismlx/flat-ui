@@ -742,6 +742,22 @@ function DC.PaintCast(row, opt, state, part, w, h, name, kick)
 	return w, h
 end
 
+function DC.CastKick(row, kick, left, state)
+	if not row.look then
+		return
+	end
+	row.kick = kick
+	local fs = row.kickTime
+	if fs then
+		local on = row.look.enabled and kick == "cooling" and G("castbars.kickTime") == true and G("castbars.interrupt") == true
+			and (state == "cast" or state == "channel") and ns.Finite(left) and left > 0
+		if on then
+			fs:SetText(("%d"):format(math.ceil(left)))
+		end
+		fs:SetShown(on)
+	end
+end
+
 function DC.CastProgress(row, state, part, left, name, total)
 	if not row.look then
 		return

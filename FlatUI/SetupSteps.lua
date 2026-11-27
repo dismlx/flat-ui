@@ -1400,6 +1400,7 @@ ns.SETUP_STEPS = {
 		{ "combattext.lowColour", "r", "mock-combat-alerts" },
 		{ "combattext.lowManaColour", "r", "mock-combat-alerts" },
 		{ "combattext.lowShare", "o", "mock-combat-alerts" },
+		{ "combattext.lowEdge", "o", "mock-combat-alerts" },
 		{ "combattext.combatState", "c", "mock-combat-alerts" },
 		{ "combattext.combatEnterColour", "r", "mock-combat-alerts" },
 		{ "combattext.combatLeaveColour", "r", "mock-combat-alerts" },

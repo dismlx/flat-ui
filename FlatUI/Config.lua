@@ -692,6 +692,8 @@ ns.PAGES = {
 		{ key = "lowManaColour", kind = "colour", default = "ff4d9cff", label = "Low mana colour", needs = "lowHealth" },
 		{ key = "lowShare", kind = "bool", default = true, label = "Share on Low health and Low mana", needs = "lowHealth",
 			tip = "As Low health  14%, read as your health or mana changes, in a fight too." },
+		{ key = "lowEdge", kind = "bool", default = false, label = "Glow at the screen's edges", needs = "lowHealth",
+			tip = "A soft glow in Low health colour along the four edges of the screen while your health is under Low health below, so you notice it while you watch the boss. It breathes and fades with the Low health line, in a fight too." },
 		{ key = "combatState", kind = "bool", default = true, label = "Entering and leaving combat",
 			tip = "+Combat and -Combat in the middle of the screen for a moment as a fight starts and ends." },
 		{ key = "combatEnterColour", kind = "colour", default = "ffff1a1a", label = "Entering combat colour", needs = "combatState" },

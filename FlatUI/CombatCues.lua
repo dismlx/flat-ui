@@ -15,6 +15,8 @@ local LOW_SAMPLE = { health = "  15%", mana = "  12%" }
 local LOW_KINDS = { "health", "mana" }
 local LOW_UNIT_EVENTS = { UNIT_HEALTH = "health", UNIT_MAXHEALTH = "health", UNIT_POWER_UPDATE = "mana", UNIT_MAXPOWER = "mana", UNIT_DISPLAYPOWER = "mana" }
 local LOW_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
+local EDGE_DEEP, EDGE_ALPHA = 90, 0.45
+local EDGE_SIDES = { { "TOP", "VERTICAL", false }, { "BOTTOM", "VERTICAL", true }, { "LEFT", "HORIZONTAL", true }, { "RIGHT", "HORIZONTAL", false } }
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 local AGAIN = 1
 local TARGET_EVENTS = { "UNIT_HEALTH", "UNIT_FLAGS", "UNIT_FACTION" }
@@ -469,6 +471,67 @@ local function LowCurve(kind)
 	return nil
 end
 
+local function MakeEdge()
+	local made, holder = pcall(CreateFrame, "Frame", nil, UIParent)
+	if not made or ns.IsSecret(holder) or type(holder) ~= "table" then
+		return nil
+	end
+	ns.Own[holder] = true
+	pcall(holder.Hide, holder)
+	local ok, glow = pcall(CreateFrame, "Frame", nil, holder)
+	if not ok or ns.IsSecret(glow) or type(glow) ~= "table" then
+		return nil
+	end
+	ns.Own[glow] = true
+	pcall(holder.SetAllPoints, holder, UIParent)
+	pcall(holder.SetFrameStrata, holder, "BACKGROUND")
+	pcall(holder.EnableMouse, holder, false)
+	pcall(glow.SetAllPoints, glow, holder)
+	pcall(glow.EnableMouse, glow, false)
+	local sides = {}
+	for index, spec in ipairs(EDGE_SIDES) do
+		local side, point = glow:CreateTexture(nil, "BACKGROUND"), spec[1]
+		ns.Own[side] = true
+		side:SetColorTexture(1, 1, 1, 1)
+		if spec[2] == "VERTICAL" then
+			side:SetPoint(point .. "LEFT", glow, point .. "LEFT", 0, 0)
+			side:SetPoint(point .. "RIGHT", glow, point .. "RIGHT", 0, 0)
+			side:SetHeight(EDGE_DEEP)
+		else
+			side:SetPoint("TOP" .. point, glow, "TOP" .. point, 0, 0)
+			side:SetPoint("BOTTOM" .. point, glow, "BOTTOM" .. point, 0, 0)
+			side:SetWidth(EDGE_DEEP)
+		end
+		sides[index] = side
+	end
+	return { holder = holder, glow = glow, sides = sides, breathe = Breathe(glow), on = false }
+end
+
+local function TintEdge(edge)
+	local hex = Opt("lowColour")
+	if edge.hex == hex then
+		return
+	end
+	local r, g, b = ns.Colour(KEY .. ".lowColour")
+	if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		r, g, b = 1, 0.4, 0.2
+	end
+	local solid, clear = CreateColor(r, g, b, EDGE_ALPHA), CreateColor(r, g, b, 0)
+	for index, spec in ipairs(EDGE_SIDES) do
+		local side = edge.sides[index]
+		if spec[3] then
+			side:SetGradient(spec[2], solid, clear)
+		else
+			side:SetGradient(spec[2], clear, solid)
+		end
+	end
+	edge.hex = hex
+end
+
+local function EdgeOn()
+	return Opt("lowEdge") == true
+end
+
 local function MakeLow()
 	if S.low then
 		return true
@@ -490,6 +553,8 @@ local function MakeLow()
 		pcall(line.SetJustifyH, line, "CENTER")
 		low[kind] = { holder = holder, line = line, breathe = Breathe(line) }
 	end
+	local made, edge = pcall(MakeEdge)
+	low.health.edge = made and edge or nil
 	S.low = low
 	return true
 end
@@ -506,6 +571,10 @@ local function LookLow()
 		Look(line, kind == "mana" and "mana" or "low")
 		line:ClearAllPoints()
 		line:SetPoint("TOP", S.frame, "CENTER", 0, -GAP - step * index)
+	end
+	local edge = S.low.health.edge
+	if edge and not pcall(TintEdge, edge) then
+		edge.hex = nil
 	end
 end
 
@@ -543,6 +612,69 @@ local function StopLowFade(rec, hide)
 	pcall(rec.line.SetAlpha, rec.line, 1)
 end
 
+local function EdgeFade(edge)
+	if edge.fade == nil then
+		local glow, holder = edge.glow, edge.holder
+		local ok, group = pcall(function()
+			local made = glow:CreateAnimationGroup()
+			local fade = made:CreateAnimation("Alpha")
+			fade:SetFromAlpha(1)
+			fade:SetToAlpha(0)
+			fade:SetDuration(WARN_FADE)
+			made:SetToFinalAlpha(true)
+			made:SetScript("OnFinished", function()
+				edge.fading = nil
+				pcall(holder.Hide, holder)
+				pcall(glow.SetAlpha, glow, 1)
+			end)
+			return made
+		end)
+		edge.fade = ok and not ns.IsSecret(group) and type(group) == "table" and group or false
+	end
+	return edge.fade or nil
+end
+
+local function StopEdgeFade(edge, hide)
+	if not edge.fading then
+		return
+	end
+	edge.fading = nil
+	Animate(edge.fade or nil, false)
+	if hide then
+		pcall(edge.holder.Hide, edge.holder)
+	end
+	pcall(edge.glow.SetAlpha, edge.glow, 1)
+end
+
+local function ShowEdge(rec, on, quick)
+	local edge = rec and rec.edge
+	if not edge then
+		return
+	end
+	quick = quick or S.lowQuick
+	if edge.on == on then
+		if quick and not on then
+			StopEdgeFade(edge, true)
+		end
+		return
+	end
+	edge.on = on
+	if on then
+		StopEdgeFade(edge, false)
+		pcall(edge.holder.Show, edge.holder)
+		Animate(edge.breathe, true)
+		return
+	end
+	Animate(edge.breathe, false)
+	pcall(edge.glow.SetAlpha, edge.glow, 1)
+	local fade = not quick and InterfaceShown() and EdgeFade(edge)
+	if fade and pcall(fade.Play, fade) then
+		edge.fading = true
+	else
+		pcall(edge.holder.Hide, edge.holder)
+	end
+end
+
 local function ShowLow(rec, on, quick)
 	quick = quick or S.lowQuick
 	if rec.on == on then
@@ -564,6 +696,10 @@ local function ShowLow(rec, on, quick)
 			if other and other ~= rec and other.on then
 				Animate(other.breathe, true)
 			end
+		end
+		local edge = S.low and S.low.health and S.low.health.edge
+		if edge and edge.on then
+			Animate(edge.breathe, true)
 		end
 		return
 	end
@@ -629,6 +765,8 @@ local function PaintLow(kind)
 		S.lowRefused = not on
 		if not on then
 			ShowLow(S.low.mana, false)
+		elseif rec.edge and EdgeOn() then
+			pcall(HealthAlpha, rec.edge.holder, curve)
 		end
 	elseif curve and not S.manaRefused and Ask(UnitPowerType, "player") == MANA then
 		on = pcall(ManaAlpha, rec.holder, curve)
@@ -638,6 +776,9 @@ local function PaintLow(kind)
 		PaintShare(rec, kind)
 	end
 	ShowLow(rec, on)
+	if kind == "health" then
+		ShowEdge(rec, on and EdgeOn())
+	end
 end
 
 local function PaintHealth()
@@ -701,6 +842,7 @@ local function HideLow()
 		for _, kind in ipairs(LOW_KINDS) do
 			ShowLow(S.low[kind], false, true)
 		end
+		ShowEdge(S.low.health, false, true)
 	end
 	Shown()
 end
@@ -1048,6 +1190,12 @@ local function TestStep(quiet)
 					ShowLow(rec, shown)
 					if shown then
 						pcall(rec.holder.SetAlpha, rec.holder, 1)
+					end
+					if kind == "health" then
+						ShowEdge(rec, shown and EdgeOn())
+						if rec.edge then
+							pcall(rec.edge.holder.SetAlpha, rec.edge.holder, 1)
+						end
 					end
 				end
 				S.lowSampled = true
