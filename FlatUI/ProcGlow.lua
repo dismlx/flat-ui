@@ -614,11 +614,11 @@ Refresh = function(button, carry)
 		Halt(made)
 		return
 	end
-	local textOnly = first ~= nil and first.textOnly == true and not ownGame[button]
+	local markOnly = first ~= nil and first.textOnly == true
 	if made then
-		made.textOnly = textOnly
+		made.textOnly = markOnly and not ownGame[button]
 	end
-	if first == nil or textOnly then
+	if first == nil or markOnly then
 		ns.SetButtonMark(button, "proc", nil)
 		drawn[button] = nil
 		if first == nil and not ownGame[button] then
@@ -636,7 +636,7 @@ Refresh = function(button, carry)
 		end
 	elseif made then
 		if made.soft then
-			local colour = first or GOLD
+			local colour = (not markOnly and first) or GOLD
 			ns.ProcGlowTint(made.soft, colour[1], colour[2], colour[3])
 		end
 		Play(made, carry)

@@ -1039,8 +1039,7 @@ function GAME.Paint(rec)
 			if texture then
 				pcall(texture.SetBlendMode, texture, "ADD")
 			end
-			full.bar:SetStatusBarColor(r, g, b, base)
-			full.bar:SetShown(flat and art.pulse)
+			full.bar:SetStatusBarColor(r, g, b, (flat and art.pulse) and base or 0)
 		end
 	end
 	local first = rec.parts[1] and rec.parts[1].fill

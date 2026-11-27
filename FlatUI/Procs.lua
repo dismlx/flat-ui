@@ -380,6 +380,9 @@ local function Read(entry)
 		end
 		P.since[id] = P.since[id] or now
 		if time > 0 then
+			if most and Plain(reading.expires, "number") and reading.expires > P.since[id] + time then
+				P.since[id] = reading.expires - time
+			end
 			local ends = P.since[id] + time
 			if now >= ends then
 				P.ended[id] = true
@@ -1236,10 +1239,9 @@ local function Word(text)
 			LookSet(true)[entry.name] = nil
 		else
 			local row = RowOf(entry)
+			local seconds = row and row.seconds
 			entry.colour, entry.sound = nil, nil
-			if row and Plain(row.seconds, "number") and row.seconds > 0 and row.seconds <= K.MAX_TIME then
-				entry.time = row.seconds
-			end
+			entry.time = (Plain(seconds, "number") and seconds > 0 and seconds <= K.MAX_TIME) and seconds or nil
 		end
 		Restyled(auto)
 		return ("%s: colour, sound and time are as the page has them."):format(label)
