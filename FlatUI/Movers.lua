@@ -1967,10 +1967,17 @@ local function ResetAll(was)
 		end
 	end
 	resettingAll, systemReset, barsLeft = true, false, false
+	if not was then
+		ns.MoversMode.Group(true)
+	end
 	for _, name in ipairs(names) do
 		ns.Each(KEY, ResetFrame, name, was and was[name])
 	end
 	resettingAll = false
+	if not was then
+		ns.MoversMode.Group(false)
+		ns.Try(KEY, ns.MoversMode.Refresh, true)
+	end
 	if barsLeft then
 		win.Say((was and "Bars " or "Moved frames are back where the game has them, but bars ") .. BARS_STAY)
 	elseif not was then
@@ -2144,13 +2151,16 @@ function centre.Everything()
 		return
 	end
 	local done = 0
+	ns.MoversMode.Group(true)
 	for _, name in ipairs(names) do
 		centre.ticked[name] = nil
-		if centre.Do(name) then
+		if ns.Try(KEY, centre.Do, name) == true then
 			done = done + 1
 		end
-		centre.Look(name)
+		ns.Try(KEY, centre.Look, name)
 	end
+	ns.MoversMode.Group(false)
+	ns.Try(KEY, ns.MoversMode.Refresh, true)
 	if done == 0 then
 		win.Say("Nothing was centred: the ticked handles are hidden or placed by the game.")
 	else

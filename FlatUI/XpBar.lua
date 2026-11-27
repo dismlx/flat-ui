@@ -8,6 +8,7 @@ local EASE_FILL, EASE_GLOW, GLOW_ALPHA, EASE_LEAST = 0.4, 0.8, 0.5, 0.0005
 local EASE_FLASH, FLASH_ALPHA, FLASH_GOLD = 1.0, 0.6, { 1, 0.82, 0 }
 local FLOAT_TIME, FLOAT_RISE, FLOAT_EDGE, FLOAT_WORD, LOSS = 1.2, 10, 16, 1.5, { 1, 0.3, 0.3 }
 local HOVER_LIGHT = 0.07
+local TEXT_IN, TEXT_OUT = 0.12, 0.15
 local SAMPLE_EVERY, SAMPLE_STRETCH = 4, 0.04
 local LATER_REP = "Flat UI: your reputations open when the fight ends."
 local MANAGER = "StatusTrackingBarManager"
@@ -22,6 +23,7 @@ local DIM = "|cffa9ae9f"
 local SAMPLE_XP = { value = 12150, total = 27000, rested = 8000, state = 1 }
 local SAMPLE_REP = { name = "Stormwind", standing = "Honored", reaction = 6, value = 4200, total = 12000 }
 local SAMPLE_QUEST = 2700
+local SAMPLE_LEVEL = 35
 local SAMPLE_STATS = { time = "1h 20m to level", rate = "9,800 an hour", both = "1h 20m to level, 9,800 an hour", kills = "42 kills to level" }
 local SAMPLE_REP_STATS = { time = "3h 10m to next standing", rate = "2,500 an hour", both = "3h 10m to next standing, 2,500 an hour" }
 
@@ -386,7 +388,7 @@ function F.Unpark()
 	end
 	for _, bar in pairs(S.bars) do
 		bar.ratio, bar.key, bar.raw, bar.rawAt, bar.rawId = nil, nil, nil, nil, nil
-		bar.level, bar.repId, bar.reaction, bar.readyWas, bar.readyKey = nil, nil, nil, nil, nil
+		bar.level, bar.repId, bar.reaction, bar.readyWas, bar.readyKey, bar.readyCount = nil, nil, nil, nil, nil, nil
 	end
 end
 
@@ -687,10 +689,67 @@ function F.TextShown(bar)
 	return false
 end
 
+function F.TextStop(bar)
+	if bar.textAnim then
+		bar.textAnim:Hide()
+	end
+	bar.textTo = nil
+end
+
+function F.TextStep(bar, anim, elapsed)
+	bar.textT = bar.textT + (ns.Finite(elapsed) and elapsed or 0)
+	local run = bar.textSpan > 0 and math.min(bar.textT / bar.textSpan, 1) or 1
+	bar.text:SetAlpha(bar.textFrom + (bar.textTo - bar.textFrom) * run)
+	if run >= 1 then
+		anim:Hide()
+		if bar.textTo == 0 then
+			bar.text:Hide()
+		end
+	end
+end
+
+function F.TextFade(bar, to)
+	local text, anim = bar.text, bar.textAnim
+	local running = F.Running(anim)
+	if running and bar.textTo == to then
+		return
+	end
+	local ok, alpha = pcall(text.GetAlpha, text)
+	alpha = ok and ns.Finite(alpha) and alpha or to
+	if math.abs(alpha - to) < 0.01 then
+		if running then
+			anim:Hide()
+		end
+		bar.textTo = to
+		text:SetAlpha(to)
+		if to == 0 then
+			text:Hide()
+		end
+		return
+	end
+	if not anim then
+		anim = CreateFrame("Frame", nil, bar.over)
+		ns.Own[anim] = true
+		anim:Hide()
+		anim:SetScript("OnUpdate", function(self, elapsed)
+			F.TextStep(bar, self, elapsed)
+		end)
+		bar.textAnim = anim
+	end
+	bar.textFrom, bar.textTo, bar.textT = alpha, to, 0
+	bar.textSpan = (to == 1 and TEXT_IN or TEXT_OUT) * math.abs(to - alpha)
+	anim:Show()
+end
+
 function F.Text(bar)
 	local text, line = bar.text, F.Line(bar)
 	if not (line and bar.shown and F.TextShown(bar)) then
-		text:Hide()
+		if bar.shown and text:IsShown() then
+			F.TextFade(bar, 0)
+		else
+			F.TextStop(bar)
+			text:Hide()
+		end
 		return
 	end
 	local size = Opt("xpTextSize")
@@ -711,7 +770,12 @@ function F.Text(bar)
 		end
 	end
 	text:SetText(line)
-	text:Show()
+	if not text:IsShown() then
+		F.TextStop(bar)
+		text:SetAlpha(0)
+		text:Show()
+	end
+	F.TextFade(bar, 1)
 end
 
 function F.Ticks(bar, width, height)
@@ -966,7 +1030,9 @@ function F.Float(bar, gained, ratio, width, word, rgb)
 	end
 	text:SetText(word or ("+" .. Grouped(gained)))
 	bar.floatSpan = (word and FLOAT_TIME * FLOAT_WORD) or FLOAT_TIME
-	bar.floatX = math.max(math.min(ratio * width, width - FLOAT_EDGE), math.min(FLOAT_EDGE, width / 2))
+	local okWide, wide = pcall(text.GetStringWidth, text)
+	local half = (okWide and ns.Finite(wide) and wide > 0) and wide / 2 + 2 or FLOAT_EDGE
+	bar.floatX = math.max(math.min(ratio * width, width - half), math.min(half, width / 2))
 	bar.floatY = 2
 	if Opt("xpTextPlace") == "above" and bar.text:IsShown() then
 		local okHeight, tall = pcall(bar.text.GetStringHeight, bar.text)
@@ -1015,9 +1081,10 @@ function F.SampleGain()
 		if bar.shown then
 			local ratio = ns.Finite(bar.ratio) and bar.ratio or 0
 			local _, level = Ask(_G.UnitLevel, "player")
-			local rise = bar.id == "xp" and S.sampleRound == 3 and ns.Finite(level)
+			local word = S.sampleXp and SAMPLE_LEVEL or (ns.Finite(level) and level + 1) or nil
+			local rise = bar.id == "xp" and S.sampleRound == 3 and word ~= nil
 			if float and rise then
-				F.Float(bar, 0, 0.5, width, ("Level %d"):format(level + 1), FLASH_GOLD)
+				F.Float(bar, 0, 0.5, width, ("Level %d"):format(word), FLASH_GOLD)
 			elseif float then
 				F.Float(bar, bar.id == "xp" and 1240 or 75, ratio, width)
 			end
@@ -1123,10 +1190,15 @@ function F.Fill(bar, width)
 		stretch:Hide()
 	end
 	local quest = bar.quest
-	local ready, counted = 0, false
+	local ready, counted, count = 0, false, 0
 	if bar.id == "xp" and Opt("xpQuest") == true and xp ~= nil and xp.total > 0 then
-		ready = sample and SAMPLE_QUEST or ns.XpQuestReady ~= nil and ns.XpQuestReady() or 0
-		counted = real and ns.Finite(ready)
+		local state = not sample and ns.XpQuestState ~= nil and ns.XpQuestState() or nil
+		if sample then
+			ready = SAMPLE_QUEST
+		elseif type(state) == "table" then
+			ready, count = state.xp, state.count
+			counted = real and state.known == true and ns.Finite(ready) and ns.Finite(count)
+		end
 	end
 	if ns.Finite(ready) and ready > 0 then
 		local reach = math.max(0, math.min((xp.value + ready) / xp.total, 1))
@@ -1141,8 +1213,9 @@ function F.Fill(bar, width)
 		quest:Hide()
 	end
 	local was = bar.readyKey == key and bar.readyWas or nil
-	bar.readyWas, bar.readyKey = counted and ready or nil, counted and key or nil
-	if was and ready > was and Opt("xpSmooth") == true then
+	local countWas = bar.readyKey == key and bar.readyCount or nil
+	bar.readyWas, bar.readyKey, bar.readyCount = counted and ready or nil, counted and key or nil, counted and count or nil
+	if was and countWas and ready > was and count > countWas and Opt("xpSmooth") == true then
 		local okSeen, seen = pcall(bar.frame.IsVisible, bar.frame)
 		local from = math.min((xp.value + was) / xp.total, 1)
 		local to = math.min((xp.value + ready) / xp.total, 1)
@@ -1220,7 +1293,7 @@ function F.Update(layout)
 			bar.hover, bar.pressed = false, nil
 			bar.lit:Hide()
 			bar.ratio, bar.key, bar.raw, bar.rawAt, bar.rawId = nil, nil, nil, nil, nil
-			bar.level, bar.repId, bar.reaction, bar.readyWas, bar.readyKey = nil, nil, nil, nil, nil
+			bar.level, bar.repId, bar.reaction, bar.readyWas, bar.readyKey, bar.readyCount = nil, nil, nil, nil, nil, nil
 		end
 		F.Text(bar)
 	end

@@ -6,11 +6,13 @@ local STEP, MAX_MARKS = 10, 400
 local RESUME_GAP = 300
 local KILLS, MIN_KILLS, QUESTS, MIN_QUESTS = 10, 3, 10, 2
 local MAX_ENTRIES = 100
+local LOAD_WAIT = 2
 local VERSION, SAVED = 1, "xpSession"
 
 local s
 local quest
 local queued = false
+local entered
 local pattern, numberAt, patternFrom
 
 local Finite, IsSecret = ns.Finite, ns.IsSecret
@@ -793,6 +795,17 @@ function ns.XpQuestReady()
 	end) or 0
 end
 
+function ns.XpQuestState()
+	return Safe(function()
+		local known = quest ~= nil and not quest.missing
+		local now = Now()
+		if known and quest.all == 0 and entered and now and now - entered < LOAD_WAIT then
+			known = false
+		end
+		return { xp = known and quest.readyXP or 0, count = known and quest.ready or 0, known = known }
+	end) or { xp = 0, count = 0, known = false }
+end
+
 function ns.XpStatsRefresh()
 	Safe(Queue)
 end
@@ -808,6 +821,7 @@ local function Listen(event, fn, filter)
 end
 
 Listen("PLAYER_ENTERING_WORLD", function()
+	entered = Now()
 	if Ask(UnitIsAFK, "player") ~= nil then
 		Away()
 	end
