@@ -1927,9 +1927,6 @@ function P.Columns(S, columns)
 		label:ClearAllPoints()
 		label:SetPoint("RIGHT", frame, "BOTTOMLEFT", -GAP_X + (entry.box.l), entry.plate.m and entry.plate.m.center or 6)
 		label:SetJustifyH("RIGHT")
-		if entry.plate.f and type(ns.PlateSlipPlaced) == "function" then
-			pcall(ns.PlateSlipPlaced, entry.plate, label, GAP_X)
-		end
 	end
 	return width, height
 end
