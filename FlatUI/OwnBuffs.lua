@@ -1210,6 +1210,13 @@ function ns.OwnBuffsLookChanged(path)
 	ns.Try(KEY, ns.OwnBuffsTest, true, path)
 end
 
+function ns.OwnBuffsBarUnused()
+	if Opt("time") == "bar" then
+		return false
+	end
+	return not (ns.Enabled("defensives") and ns.Get("defensives.time") == "bar")
+end
+
 function B.Holding()
 	return TM.IsOn() and B.on == true and not InCombatLockdown()
 end

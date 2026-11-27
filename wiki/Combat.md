@@ -392,7 +392,7 @@ The **Defensives on you** page (on by default) shows a row of icons for the shie
 ### Look
 
 - **Icon size** (32). The time left and the charges on an icon grow and shrink with it.
-- **Time left**: **On the icon** (the default), **Thin bar under the icon** or **Off**. The bar runs down with the time left, in the **Bar texture** of **Your buffs**, so the two rows can match, and the caster's name moves under it. The bars the game draws in a fight change once the game shows your buffs again.
+- **Time left**: **On the icon** (the default), **Thin bar under the icon** or **Off**. The bar runs down with the time left, in the **Bar texture** of **Your buffs**, so the two rows can match, and the caster's name moves under it. That row stays open while this one is the bar, even with the time of **Your buffs** on the icon, and a change reaches this bar at once. The bars the game draws in a fight change once the game shows your buffs again.
 - **Spacing** (3), **Caster's name** (on) and **Icon border** (on).
 - **Buff tooltips** shows the game's own tooltip over each icon: **On** (the default), **Out of combat only** or **Off**. A click still goes through to the world. Settings on the **Tooltips** page do not change this tooltip.
 - **Your own defensives** (on) also shows the ones you cast on yourself, such as Shield Wall or Ice Barrier.

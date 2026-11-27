@@ -339,24 +339,28 @@ function A.Stripes(parts, bar, h)
 		stripes:SetHorizTile(true)
 		stripes:SetVertTile(true)
 		stripes:SetAlpha(STRIPES_ALPHA)
-		local glow = Own(bar:CreateTexture(nil, "ARTWORK", nil, 4))
+		local box = Own(CreateFrame("Frame", nil, bar))
+		parts.clipped = pcall(box.SetClipsChildren, box, true)
+		local glow = Own(box:CreateTexture(nil, "ARTWORK", nil, 4))
 		glow:SetTexture(STRIPES_GLOW)
 		glow:SetBlendMode("ADD")
-		parts.stripes, parts.glow = stripes, glow
+		glow:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
+		glow:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
+		parts.stripes, parts.glow, parts.glowBox = stripes, glow, box
 	end
 	if parts.striped ~= fill then
 		parts.striped = fill
 		parts.stripes:ClearAllPoints()
 		parts.stripes:SetPoint("TOPLEFT", fill, "TOPLEFT", 0, 0)
 		parts.stripes:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", 0, 0)
-		parts.glow:ClearAllPoints()
-		parts.glow:SetPoint("TOPRIGHT", fill, "TOPRIGHT", 0, 0)
-		parts.glow:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", 0, 0)
+		parts.glowBox:ClearAllPoints()
+		parts.glowBox:SetPoint("TOPLEFT", fill, "TOPLEFT", 0, 0)
+		parts.glowBox:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", 0, 0)
 	end
 	parts.glow:SetWidth(math.max(4, math.floor(h / 2)))
 	local show = Opt("stripes") == true
 	parts.stripes:SetShown(show)
-	parts.glow:SetShown(show)
+	parts.glowBox:SetShown(show and parts.clipped == true)
 end
 
 function A.Holder()
