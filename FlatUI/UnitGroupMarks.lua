@@ -1042,13 +1042,14 @@ local AFK_EVENTS = { "PLAYER_FLAGS_CHANGED", "UNIT_CONNECTION", "UNIT_HEALTH" }
 local AFK_GREY = 0.8
 local AFK_IN, AFK_OUT, AFK_EVERY = 0.2, 0.3, 15
 
--- True when the member is plainly away, and neither plainly dead nor plainly offline; false when not; nil when the game withheld whether.
+-- Whether the member is plainly away (true or false; nil when the game withheld whether), and whether the word shows: away, and neither plainly dead
+-- nor plainly offline.
 local function Away(unit)
 	local away = Plain(_G.UnitIsAFK, unit)
 	if away ~= true then
-		return away
+		return away, away
 	end
-	return Plain(_G.UnitIsDeadOrGhost, unit) ~= true and Plain(_G.UnitIsConnected, unit) ~= false
+	return true, Plain(_G.UnitIsDeadOrGhost, unit) ~= true and Plain(_G.UnitIsConnected, unit) ~= false
 end
 
 local function Now()
@@ -1131,7 +1132,7 @@ local function AfkFades(text)
 	return nil, nil
 end
 
--- The member went away (the count starts and the word fades in) or is back (it fades out, or with fade false goes at once).
+-- The word shows (it fades in) or goes (it fades out, or with fade false at once).
 local function SetAway(a, away, fade)
 	if a.away == away then
 		return
@@ -1145,7 +1146,6 @@ local function SetAway(a, away, fade)
 		if fadeOut and fadeOut:IsPlaying() then
 			pcall(fadeOut.Stop, fadeOut)
 		end
-		a.since = Now()
 		AfkWord(a)
 		text:SetAlpha(1)
 		text:Show()
@@ -1153,7 +1153,6 @@ local function SetAway(a, away, fade)
 			pcall(fadeIn.Play, fadeIn)
 		end
 	else
-		a.since = nil
 		if not (fade and fadeOut and text:IsShown()) then
 			if fadeOut and fadeOut:IsPlaying() then
 				pcall(fadeOut.Stop, fadeOut)
@@ -1164,18 +1163,24 @@ local function SetAway(a, away, fade)
 			text:Hide()
 		end
 	end
-	Counting(a)
 end
 
+-- The count runs from the first plain answer that the member is away to the first that they are not, so a death or a disconnect while away does not
+-- start it again; a withheld answer keeps what shows and the count.
 local function ShowAfk(a)
 	if a.unit == nil then
+		a.since = nil
 		SetAway(a, false, false)
+		Counting(a)
 		return
 	end
-	local away = Away(a.unit)
-	if away ~= nil then
-		SetAway(a, away, true)
+	local flag, shows = Away(a.unit)
+	if flag == nil then
+		return
 	end
+	a.since = flag and (a.since or Now()) or nil
+	SetAway(a, shows, true)
+	Counting(a)
 end
 
 -- The frame of the addon's own that hears the member of one party frame, and nothing once it has no member. A new member starts with the word hidden
@@ -1186,7 +1191,9 @@ local function ListenAfk(a, unit)
 	end
 	pcall(a.ear.UnregisterAllEvents, a.ear)
 	a.unit = unit
+	a.since = nil
 	SetAway(a, false, false)
+	Counting(a)
 	if unit == nil then
 		return
 	end
