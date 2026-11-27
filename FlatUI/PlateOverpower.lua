@@ -1,10 +1,12 @@
 local _, ns = ...
 
 -- Overpower over the enemy that dodged you, a part of Nameplates.lua (ns.PlateExtra), for a warrior who knows Overpower, and Mongoose Bite for a
--- hunter who knows it: the game lets a hunter use Mongoose Bite for 5 seconds after an enemy dodges them, the rule of Overpower (ProcData.lua's
--- HUNTER row: reactive, lights 1495, 14269, 14270, 14271, 5 seconds, triggered by usable, the shape of the WARRIOR row of Overpower), so a
--- hunter's spell is read the same way; below, Overpower names the spell of your class (Ranks, from UnitClassBase of the player, plain). When an
--- enemy dodges an attack of yours, the spell's own icon (C_Spell.GetSpellTexture, SpellDocumentation.lua:595) shows above that enemy's name,
+-- hunter who knows it: the game lets a hunter use Mongoose Bite for 5 seconds after the hunter dodges (ProcData.lua's HUNTER row: reactive, lights
+-- 1495, 14269, 14270, 14271, 5 seconds, triggered by usable; Counterattack, its parry twin, is on the hunter's own parry too), and the bite can then
+-- hit any enemy in melee, so a hunter's icon follows the game turning the spell usable and shows over the hunter's target (K.ON_USABLE; see
+-- "A hunter's Mongoose Bite" below); below, Overpower names the spell of your class (Ranks, from UnitClassBase of the player, plain). When an
+-- enemy dodges an attack of a warrior's, or as a hunter's Mongoose Bite turns usable, the spell's own icon (C_Spell.GetSpellTexture,
+-- SpellDocumentation.lua:595) shows above that enemy's name (the hunter's target's),
 -- centred, with Flat UI's thin border (ns.Outline) at Overpower icon size, moved by Overpower icon horizontal and vertical offset: over the row of
 -- the enemy's debuffs while the game shows it (the icon stands on a guide frame of
 -- Flat UI's own whose top is the row's top, so it rises as the row wraps to a second line, in a fight too, and shows the debuffs under it), else
@@ -46,6 +48,13 @@ local _, ns = ...
 -- A dodge of an attack of someone else on your target while you are in melee with it also counts (the game does not say whose it was), and a dodge
 -- in a stance where Overpower cannot be used, or with too little rage for it, is known by the first rule alone, since Overpower does not turn
 -- usable then.
+-- A hunter's Mongoose Bite (K.ON_USABLE) takes none of those rules: an enemy's dodge neither lights it nor waits. As SPELL_UPDATE_USABLE or
+-- ACTION_USABLE_CHANGED turns the spell usable (from blocked, or from short of mana with no window open) its window starts (S.since) and the icon
+-- shows over the plate of your target, an enemy you can attack (C_NamePlate.GetNamePlateForUnit of "target"); it glows for Window() seconds, or
+-- until you cast it or the game turns it blocked (then it fades as a window run out), grey while only mana is short. A dodge of your own
+-- (UNIT_COMBAT for "player", DODGE) while the window is open renews it, as for Overpower. PLAYER_TARGET_CHANGED moves the icon to the new
+-- target's plate with the time its window has left, and hides it while your target is no enemy; targeting an enemy before the window ends
+-- shows it again.
 -- Combat: the icon is a frame of Flat UI's own, a child of the plate's unit frame so it moves, fades and hides with the plate, made, sized and
 -- anchored only out of combat on a plate the game may protect (ns.MaybeProtected, Movers.lua), as the threat ring is (PlateThreatLook.lua): its
 -- frame is made on each enemy plate as the plate shows while the row is on, so the first dodge of a fight has it. In a fight only its alpha, its
@@ -66,7 +75,8 @@ end
 -- icon. PULSE_LOW and PULSE_SECONDS: the pulse of this file's own, from full to PULSE_LOW and back, PULSE_SECONDS each way. CROP: the share of each
 -- edge of the icon cut off, as the aura icons of the plates have it. POP_FROM, POP_IN and POP_SCALE: the pop as the icon lights (a fade in over
 -- POP_IN seconds and a shrink from POP_FROM of its size over POP_SCALE); RENEW_FROM and RENEW_SECONDS: the smaller pop as a new dodge renews the
--- window (from RENEW_FROM of its size back to whole); FADE_OUT: the seconds it fades as its window runs out.
+-- window (from RENEW_FROM of its size back to whole); FADE_OUT: the seconds it fades as its window runs out. ON_USABLE: the classes whose spell
+-- lights over the target as the game turns it usable, not on an enemy's dodge (a hunter's Mongoose Bite, usable after the hunter dodges).
 local K = {
 	RANKS = { WARRIOR = { 7384, 7887, 11584, 11585 }, HUNTER = { 1495, 14269, 14270, 14271 } },
 	ICONS = { WARRIOR = "Interface\\Icons\\Ability_MeleeDamage", HUNTER = "Interface\\Icons\\Ability_Hunter_SwiftStrike" },
@@ -75,7 +85,8 @@ local K = {
 	AUTO_ATTACK = 6603, SIZE = 26, POP_FROM = 1.3, POP_IN = 0.12, POP_SCALE = 0.15, FADE_OUT = 0.25,
 	RENEW_FROM = 1.15, RENEW_SECONDS = 0.15,
 	ACTIVE = { "UNIT_COMBAT", "SPELL_UPDATE_USABLE", "ACTION_USABLE_CHANGED", "SPELL_UPDATE_COOLDOWN", "PLAYER_ENTER_COMBAT", "PLAYER_LEAVE_COMBAT",
-		"NAME_PLATE_UNIT_REMOVED" },
+		"NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED" },
+	ON_USABLE = { HUNTER = true },
 }
 -- RANK[spellID]: true for each rank of the spell of the player's class, filled once the game names the class (Ranks).
 local RANK = {}
@@ -96,9 +107,10 @@ local pending = {}
 -- S: frame (the file's own, false when it could not be made), on (the events are heard), class (the player's class token, false for a class with no
 -- such spell, nil before the game said), rank (the rank known, false for none, nil before it is asked), texture, state (the last usable state:
 -- usable, power or blocked), turned (when the spell last turned usable), ready (its cooldown is off or the global cooldown, nil when not known),
--- attacking (auto attack on), clock (since the last look), and the counts for /flatui status.
+-- attacking (auto attack on), clock (since the last look), since (for a class of ON_USABLE, when its window began: the turn to usable, or a dodge
+-- of yours that renewed it; nil while it has none), and the counts for /flatui status.
 local S = { frame = nil, on = false, class = nil, rank = nil, texture = nil, state = nil, turned = -math.huge, ready = nil, attacking = false,
-	clock = 0, dodges = 0, mine = 0, waited = 0 }
+	clock = 0, since = nil, dodges = 0, mine = 0, waited = 0 }
 local Sync, Draw, Prepare, Look
 
 local function Opt(key)
@@ -760,8 +772,17 @@ local function Melee(unit)
 	return S.attacking and Ask(Spell("IsSpellInRange"), S.rank, unit) ~= false
 end
 
+local OnOwnDodge
+
 local function OnCombat(unit, action)
 	if not Plain(unit, "string") or not Plain(action, "string") or action ~= "DODGE" then
+		return
+	end
+	-- A hunter's Mongoose Bite follows its own usable state and your dodges, not an enemy's (OnUsable, OnOwnDodge).
+	if K.ON_USABLE[S.class] then
+		if unit == "player" then
+			OnOwnDodge()
+		end
 		return
 	end
 	if unit ~= "target" and unit ~= "focus" and not unit:find("^nameplate") then
@@ -802,6 +823,53 @@ local function OnCombat(unit, action)
 	Match(now)
 end
 
+-- The plate of your target while it is an enemy you can attack, and its own token, for a class of ON_USABLE.
+local function TargetPlate()
+	local unitFrame = type(ns.PlateUnitFrame) == "function" and ns.PlateUnitFrame("target") or nil
+	if not unitFrame or ns.Forbidden(unitFrame) then
+		return nil
+	end
+	local token = unitFrame.unit
+	if not Plain(token, "string") then
+		token = "target"
+	end
+	if Ask(UnitCanAttack, "player", token) ~= true then
+		return nil
+	end
+	return unitFrame, token
+end
+
+-- A class of ON_USABLE: the icon shows over your target's plate for the window that began at S.since, while the spell is usable or short only of
+-- mana; with no enemy target it hides, and comes back over the next enemy you target within the window.
+local function LightTarget()
+	local since = S.since
+	if since == nil or not (S.state == "usable" or S.state == "power") or Now() >= since + Window() then
+		return
+	end
+	local unitFrame, token = TargetPlate()
+	if unitFrame then
+		Light(unitFrame, token, since)
+	elseif lit then
+		Unlight()
+	end
+end
+
+-- A dodge of yours while the window is open renews it, as the game renews the spell (a turn to usable that follows starts it otherwise).
+function OnOwnDodge()
+	S.dodges = S.dodges + 1
+	if S.since ~= nil and (S.state == "usable" or S.state == "power") then
+		S.since = Now()
+		LightTarget()
+	end
+end
+
+-- Your target changed: for a class of ON_USABLE the icon moves to the new target's plate with the time its window has left.
+local function OnTarget()
+	if K.ON_USABLE[S.class] and S.since ~= nil then
+		LightTarget()
+	end
+end
+
 local function OnUsable()
 	local state = UsableState()
 	if state == nil then
@@ -809,6 +877,21 @@ local function OnUsable()
 	end
 	local before = S.state
 	S.state = state
+	if K.ON_USABLE[S.class] then
+		-- The game turned the spell usable: its window starts now, over your target (a turn from short of mana starts one only when none is open).
+		-- A turn to blocked ends it (cast, or its time ran out), with the fade of a window run out; short of mana, the icon stays, grey.
+		if state == "usable" and before ~= nil and before ~= "usable" and (before ~= "power" or S.since == nil) then
+			S.since = Now()
+			LightTarget()
+		elseif state == "blocked" and before ~= nil and before ~= "blocked" then
+			S.since = nil
+			if lit then
+				Unlight(true)
+			end
+		end
+		Draw()
+		return
+	end
 	if state == "usable" and before ~= nil and before ~= "usable" then
 		-- A turn just after a dodge already shown is that dodge's; any other may name a dodge waiting.
 		local now = Now()
@@ -828,16 +911,19 @@ local function OnCooldown()
 	local before = S.ready
 	local fresh, own = Fresh()
 	S.ready = fresh
-	if lit and before == true and own == true then
-		Unlight()
-		return
+	if before == true and own == true then
+		S.since = nil
+		if lit then
+			Unlight()
+			return
+		end
 	end
 	Draw()
 end
 
 local function OnCast(unit, _, spellID)
 	if Plain(unit, "string") and unit == "player" and Plain(spellID, "number") and RANK[spellID] then
-		pending, S.turned = {}, -math.huge
+		pending, S.turned, S.since = {}, -math.huge, nil
 		Unlight()
 	end
 end
@@ -873,6 +959,8 @@ local function Heard(event, ...)
 		S.attacking = false
 	elseif event == "NAME_PLATE_UNIT_REMOVED" then
 		OnRemoved(...)
+	elseif event == "PLAYER_TARGET_CHANGED" then
+		OnTarget()
 	elseif event == "SPELLS_CHANGED" then
 		S.rank, S.texture = nil, nil
 		Sync()
@@ -881,7 +969,7 @@ end
 
 -- Everything hidden and forgotten: the row, the page or the part went off, or Overpower is not known.
 local function StandDown()
-	lit, pending = nil, {}
+	lit, pending, S.since = nil, {}, nil
 	Ticking(false)
 	for _, rec in pairs(recs) do
 		pcall(Hide, rec)
@@ -1055,6 +1143,10 @@ EXTRA.status[#EXTRA.status + 1] = function()
 	local name = K.NAMES[S.class]
 	if not KnownRank() then
 		return ("%s on enemy nameplates: you do not know %s yet."):format(name, name)
+	end
+	if K.ON_USABLE[S.class] then
+		return ("%s on enemy nameplates: %d of your dodges heard, shown over your target %d times, %d plates waited for the end of a fight for their icon.")
+			:format(name, S.dodges, S.mine, S.waited)
 	end
 	return ("%s on enemy nameplates: %d dodges heard, %d yours, %d plates waited for the end of a fight for their icon."):format(name, S.dodges,
 		S.mine, S.waited)

@@ -19,7 +19,9 @@ local _, ns = ...
 -- A sample's threat (threatGood, threatTransition or threatBad) colours its health bar as PlateColours.lua orders it and, as PlateThreatLook.lua,
 -- PlateText.lua and PlateThreatText.lua draw it (P.Threat), gives it the threat ring at Threat ring thickness (flashing as it turns to threatBad), a
 -- sample threat value (under the combo points at Below), the threat colour on its name, health text, border and background as their rows ask, the
--- name of the enemy's target and the fade of an enemy held for you or changing hands. Setup's step of nameplate colours and threat draws
+-- name of the enemy's target and the fade of an enemy held for you or changing hands. Its colours and its fade are the rows of the player's role, as
+-- a live plate's (PlateThreat.lua's PT.Colour, PlateThreatLook.lua's FadeRow): with Same colours for both roles or Same opacity for both roles off,
+-- a player whom Your role, or at Automatic nameplate threat, reads as damage or healer gets the damage rows (P.ThreatRow, P.FadeRow). Setup's step of nameplate colours and threat draws
 -- mock-nameplate-threat: an enemy, an enemy player, the mouseover and low health, and with Threat on nameplates four samples: threat you want
 -- (faded), changing hands, threat you do not want (its ring flashes as the drawing opens and as Flash the ring when threat goes wrong turns on) and
 -- your target changing hands, which never fades and carries the name of the enemy's target with Only on your target.
@@ -304,6 +306,47 @@ function P.Reaction(friend)
 	return friend and P.FRIENDLY or P.HOSTILE
 end
 
+-- True while threat reads the player as damage or healer: Your role as the draft has it, and at Automatic the role nameplate threat works out
+-- (ns.PlateThreat.Role, PlateThreat.lua), so the samples take the rows of the player's role as a live plate does (PT.Colour).
+function P.Damage()
+	local choice = Get("threatRole")
+	if choice == "tank" or choice == "damage" then
+		return choice == "damage"
+	end
+	local threat = ns.PlateThreat
+	if type(threat) == "table" and type(threat.Role) == "function" then
+		local ok, kind = pcall(threat.Role)
+		return not (ok and kind == "tank")
+	end
+	return true
+end
+
+-- The colour row of a sample's threat state (threatGood, threatTransition or threatBad): the damage and healer's row while Same colours for both
+-- roles is off and the player counts as damage or healer, else the row both roles share. The samples' threat stays named by the shared rows.
+P.DAMAGE_ROWS = { threatGood = "threatDamageGood", threatTransition = "threatDamageTransition", threatBad = "threatDamageBad" }
+function P.ThreatRow(threat)
+	local row = P.DAMAGE_ROWS[threat]
+	if row and Get("threatSameColours") == false and P.Damage() then
+		return row
+	end
+	return threat
+end
+
+-- The opacity row of a sample's threat state, as PlateThreatLook.lua's FadeRow: Opacity as damage or healer for threat you want while Same opacity
+-- for both roles is off and the player counts as damage or healer, else Opacity of enemies held for you; Opacity of enemies changing hands for threat
+-- changing hands; none for threat you do not want.
+function P.FadeRow(threat)
+	if threat == "threatGood" then
+		if Get("threatFadeSame") == false and P.Damage() then
+			return "threatFadeDamage"
+		end
+		return "threatFadeAlpha"
+	elseif threat == "threatTransition" then
+		return "threatFadeChanging"
+	end
+	return nil
+end
+
 -- The colour of a plate's health bar, in the order PlateColours.lua answers: the target's colour, a reaction colour, the colour by health left, the game's.
 function P.BarColour(spec, o)
 	local gameColour = spec.friendly and P.FRIENDLY or P.HOSTILE
@@ -322,7 +365,7 @@ function P.BarColour(spec, o)
 	-- A sample in a threat state (spec.threat: threatGood, threatTransition or threatBad) takes its colour while Threat on nameplates and Colour
 	-- health bars by threat are on, after the target's colour and before a reaction colour, as PlateColours.lua orders them.
 	if spec.threat and Get("threat") == true and Get("threatBar") == true then
-		return Rgb(KEY .. "." .. spec.threat)
+		return Rgb(KEY .. "." .. P.ThreatRow(spec.threat))
 	end
 	if Get("colours") == true and not (spec.player and Get("colourPlayers") ~= "reaction") then
 		return P.Reaction(spec.friendly)
@@ -686,7 +729,7 @@ function P.Border(p, spec, o)
 	-- A sample in a threat state (test mode's) takes the threat colour with Threat colour on the health bar border, after the target, the focus and
 	-- the mouseover and before the kind of unit, KIND_PX thick, as Nameplates.lua's Mark orders ns.PlateThreatBorder.
 	if r == nil and spec.threat and P.THREAT_VALUES[spec.threat] and o.styled and Get("threat") == true and Get("threatBorder") == true then
-		r, g, b = ns.Colour(KEY .. "." .. spec.threat)
+		r, g, b = ns.Colour(KEY .. "." .. P.ThreatRow(spec.threat))
 		px = P.KIND_PX
 	end
 	if r == nil and o.kindBorder and spec.kind then
@@ -1099,7 +1142,7 @@ function P.Threat(p, spec, o, m)
 		p.ring:SetPoint("TOP", p.bar, "TOP", 0, d)
 		p.ring:SetPoint("BOTTOM", p.bar, "BOTTOM", 0, -d)
 		p.ring:SetPoint("RIGHT", right, "RIGHT", d, 0)
-		local r, g, b = ns.Colour(KEY .. "." .. threat)
+		local r, g, b = ns.Colour(KEY .. "." .. P.ThreatRow(threat))
 		-- Threat ring thickness, as the live ring has it; its edges lie outside the ring's frame, so it grows outward.
 		local px = Get("threatRingPx")
 		ns.SetOutlineThickness(p.ringOutline, ns.Finite(px) and px >= 1 and math.floor(px + 0.5) or P.RING_PX)
@@ -1143,7 +1186,7 @@ function P.Threat(p, spec, o, m)
 	if mode == "off" or mode == nil then
 		text:Hide()
 	else
-		local colour = Get("threatValueColour") == true and Rgb(KEY .. "." .. threat) or Rgb(KEY .. ".threatValueCustom")
+		local colour = Get("threatValueColour") == true and Rgb(KEY .. "." .. P.ThreatRow(threat)) or Rgb(KEY .. ".threatValueCustom")
 		local percent = Get("threatValueSize")
 		P.Text(text, P.FONT * m.v, percent, Get("threatValueOutline"), colour, o.face)
 		text:SetText(P.THREAT_VALUES[threat])
@@ -1178,7 +1221,7 @@ function P.Threat(p, spec, o, m)
 	P.ThreatTarget(p, spec, o, m, on)
 	local alpha = spec.alpha or 1
 	if on and Get("threatFade") == true and not (spec.target or spec.focus) then
-		local row = threat == "threatGood" and "threatFadeAlpha" or threat == "threatTransition" and "threatFadeChanging" or nil
+		local row = P.FadeRow(threat)
 		local share = row and Get(row)
 		if ns.Finite(share) and share < 100 then
 			alpha = alpha * math.max(share, 0) / 100
@@ -1273,7 +1316,7 @@ end
 function P.ThreatLooks(p, spec, o, on)
 	local r, g, b
 	if on then
-		r, g, b = ns.Colour(KEY .. "." .. spec.threat)
+		r, g, b = ns.Colour(KEY .. "." .. P.ThreatRow(spec.threat))
 	end
 	-- Through ns.TextStyle at the size P.Text gave them, which keeps the colour it last set.
 	local named = on and Get("threatName") == true
@@ -1855,7 +1898,7 @@ function P.Chips(chips)
 		chip.f:ClearAllPoints()
 		chip.f:SetPoint("BOTTOMLEFT", chips.f, "BOTTOMLEFT", x, 0)
 		chip.f:SetSize(width, height)
-		local r, g, b = ns.Colour(KEY .. "." .. rows[index][1])
+		local r, g, b = ns.Colour(KEY .. "." .. P.ThreatRow(rows[index][1]))
 		chip.fill:SetColorTexture(r, g, b, 1)
 		ns.SetOutline(chip.outline, true, true)
 		chip.text:ClearAllPoints()
@@ -2086,9 +2129,9 @@ function P.Cells(kind)
 				{ id = "elite", label = "Elite", col = 2, spec = Enemy({ name = names.elite, level = 20, kind = "elite" }) },
 				{ id = "rare", label = "Rare", col = 2, spec = Enemy({ name = "Old Blanchy", level = 20, kind = "rare" }) },
 				{ id = "boss", label = "Boss", col = 2, spec = Enemy({ name = "Edwin VanCleef", level = 20, kind = "boss" }) },
-				-- A warrior's Overpower, or a hunter's Mongoose Bite, over an enemy that dodged them.
+				-- A warrior's Overpower over an enemy that dodged them, or a hunter's Mongoose Bite over their target.
 				{ id = "overpower", label = P.OP_NAMES[class] or P.OP_NAMES.WARRIOR, col = 2, show = P.OP_SPELLS[class] ~= nil,
-					spec = Enemy({ overpower = true }) },
+					spec = Enemy({ overpower = true, target = class == "HUNTER" or nil }) },
 				-- A rogue's or a druid's combo points under their target, 3 of 5, below the room the game keeps for the cast bar.
 				{ id = "combo", label = "Combo points", col = 2, show = class == "ROGUE" or class == "DRUID",
 					spec = Enemy({ target = true, combo = 3, reserve = true }) },
@@ -2213,7 +2256,8 @@ function P.Parts(S)
 	Set({ "colourPlayers" }, (plates.player or plate).bar)
 	Set({ "targetBar", "targetBarColour", "target", "targetColour", "targetThickness" }, (Live("target") or plate).bar)
 	Set({ "focusColour" }, (Live("focus") or Live("target") or plate).bar)
-	Set({ "threat", "threatRole", "threatGood", "threatTransition", "threatBad" }, plates.threat and plates.threat.chips.f or plate.bar)
+	Set({ "threat", "threatRole", "threatGood", "threatTransition", "threatBad", "threatSameColours", "threatDamageGood", "threatDamageTransition",
+		"threatDamageBad" }, plates.threat and plates.threat.chips.f or plate.bar)
 	Set({ "hover", "hoverColour" }, (Live("hover") or plate).bar)
 	Set({ "lowHealth", "lowHealthAt", "lowHealthColour" }, (Live("low") or plate).bar)
 	Set({ "cast", "castBackdrop", "castFlat", "castTexture", "castHeight" }, plate.cbar)
@@ -2242,9 +2286,9 @@ function P.Parts(S)
 	local good, changing, bad = Live("good"), Live("changing"), Live("bad")
 	if good and changing and bad then
 		local target = Live("target") or changing
-		Set({ "threatGood" }, good.bar)
-		Set({ "threatTransition" }, changing.bar)
-		Set({ "threatBad" }, bad.bar)
+		Set({ "threatGood", "threatDamageGood", "threatSameColours", "threatRole" }, good.bar)
+		Set({ "threatTransition", "threatDamageTransition" }, changing.bar)
+		Set({ "threatBad", "threatDamageBad" }, bad.bar)
 		Set({ "threatGlow", "threatFlash", "threatRingPx" }, bad.ring:IsShown() and bad.ring or bad.bar)
 		Set({ "threatBar", "threatBorder", "threatBackground" }, bad.bar)
 		Set({ "threatName" }, bad.name)
@@ -2253,7 +2297,7 @@ function P.Parts(S)
 			"threatValueOutline" }, changing.tvalue:IsShown() and changing.tvalue or changing.bar)
 		Set({ "aggroTarget", "aggroTargetOnly" }, target.ttarget:IsShown() and target.ttarget or target.bar)
 		Set({ "aggroTargetNotMe" }, bad.ttarget:IsShown() and bad.ttarget or bad.bar)
-		Set({ "threatFade", "threatFadeAlpha" }, good.f)
+		Set({ "threatFade", "threatFadeAlpha", "threatFadeSame", "threatFadeDamage" }, good.f)
 		Set({ "threatFadeChanging" }, changing.f)
 	end
 	Set({ "overlapH", "overlapV", "selectedScale" }, (Live("target") or plate).f)

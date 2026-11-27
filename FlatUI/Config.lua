@@ -485,7 +485,7 @@ ns.PAGES = {
 		{ key = "offscreenIcon", kind = "bool", default = true, label = "Arrow for nameplates behind you" },
 		{ section = "Overpower" },
 		{ key = "overpower", kind = "bool", default = true, label = "Overpower or Mongoose Bite on enemy nameplates",
-			tip = "Warriors and hunters: when an enemy dodges you, the icon of Overpower (a warrior's) or Mongoose Bite (a hunter's) shows over its nameplate for 5 seconds and glows while you can use it." },
+			tip = "Warriors: when an enemy dodges you, Overpower shows over its nameplate for 5 seconds. Hunters: when Mongoose Bite becomes usable after you dodge, its icon shows over your target. It glows while you can use it." },
 		{ key = "overpowerSize", kind = "number", default = 34, min = 16, max = 48, step = 1, label = "Overpower icon size", needs = "overpower" },
 		{ key = "overpowerX", kind = "number", default = 0, min = -40, max = 40, step = 1, label = "Overpower icon horizontal offset", needs = "overpower",
 			tip = "Moves the icon left or right, and an Above quest mark with it." },
