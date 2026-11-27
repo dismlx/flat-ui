@@ -12,19 +12,26 @@ local _, ns = ...
 -- (Blizzard_NamePlates/Camelot/Blizzard_NamePlateConstants.lua:33-60, 62-68), the anchors those of NamePlateUnitFrameMixin:UpdateAnchors
 -- (Blizzard_NamePlates/Blizzard_NamePlateUnitFrame.lua:678-890) and of the cast bar (Blizzard_NamePlateCastingBar.lua:26-130). What each row changes is what
 -- Nameplates.lua, PlateText.lua, PlateColours.lua, HealthColour.lua, PlateQuest.lua (the quest mark and its kill count of a sample with quest),
--- PlateOverpower.lua (the Overpower icon of a sample with overpower, a hunter's Mongoose Bite, moved by its offsets, whose swipe drains over its 5
--- seconds and starts again) and PlateCombo.lua (the row of combo points of a sample with combo, under the cast bar's room at Combo point size and
--- moved by its vertical offset, in a rogue's or a druid's drawing) do to a plate with the same row. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a
+-- PlateOverpower.lua (the Overpower icon of a sample with overpower, a hunter's Mongoose Bite or, for a rogue who knows it, Riposte, moved by its
+-- offsets, whose swipe drains over its 5 seconds and starts again), PlateCombo.lua (the row of combo points of a sample with combo, under the cast
+-- bar's room at Combo point size and moved by its vertical offset, in a rogue's or a druid's drawing) and PlateTarget.lua (the flash of a Target or
+-- Focus sample's border as the drawing opens and as Flash as you change target turns on, P.TargetFlash) do to a plate with the same row. Show auras
+-- and Show health text at Only on the target or On the target and focus leave the auras (and their room) and the health number on a sample that is
+-- your target, or your focus, alone (P.AurasSeen, P.HealthSeen), as Nameplates.lua's AurasAlpha and PlateText.lua's HealthPart do; the auras
+-- drawing then adds a Your target and a Focus sample beside the plain enemy, and the plate drawing shows its Target and Focus samples for it. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a
 -- unit (UnitDocumentation.lua:1526-1529).
--- A sample's threat (threatGood, threatTransition or threatBad) colours its health bar as PlateColours.lua orders it and, as PlateThreatLook.lua,
+-- A sample's threat (threatGood, threatTransition, threatBad, or threatTank for an enemy another tank holds) colours its health bar as PlateColours.lua orders it and, as PlateThreatLook.lua,
 -- PlateText.lua and PlateThreatText.lua draw it (P.Threat), gives it the threat ring at Threat ring thickness (flashing as it turns to threatBad), a
 -- sample threat value (under the combo points at Below), the threat colour on its name, health text, border and background as their rows ask, the
 -- name of the enemy's target and the fade of an enemy held for you or changing hands. Its colours and its fade are the rows of the player's role, as
 -- a live plate's (PlateThreat.lua's PT.Colour, PlateThreatLook.lua's FadeRow): with Same colours for both roles or Same opacity for both roles off,
--- a player whom Your role, or at Automatic nameplate threat, reads as damage or healer gets the damage rows (P.ThreatRow, P.FadeRow). Setup's step of nameplate colours and threat draws
+-- a player whom Your role, or at From your role, stance or form the role that choice works out afresh (P.Damage), reads as damage or healer gets
+-- the damage rows (P.ThreatRow, P.FadeRow). Setup's step of nameplate colours and threat draws
 -- mock-nameplate-threat: an enemy, an enemy player, the mouseover and low health, and with Threat on nameplates four samples: threat you want
 -- (faded), changing hands, threat you do not want (its ring flashes as the drawing opens and as Flash the ring when threat goes wrong turns on) and
--- your target changing hands, which never fades and carries the name of the enemy's target with Only on your target.
+-- your target changing hands, which never fades and carries the name of the enemy's target with Only on your target; while you count as a tank
+-- with Enemies held by another tank on, a fifth, held by another tank, in Another tank's colour, faded as one held for you and ringless at When the
+-- enemy needs you.
 -- Test mode's sample plate (TestHud.lua) is P.NewPlate and P.Plate on a frame of its own, which takes the threat states in turn; P.CastProgress,
 -- P.Health, P.Combo and P.Threat change only its fills, time, ring, colours, texts, squares and alpha. A stage whose state has still (test mode's,
 -- true while Moving is off) pauses the sample's Overpower swipe with it (P.SwipeStill), and a sample with questHave counts that many of 8 kills,
@@ -69,21 +76,23 @@ P.QUEST_POP, P.QUEST_POP_SECONDS = 1.6, 0.3
 -- The count's colour once the objective is done, and the seconds the mark and its count fade in as they come and out once done (after the pop), as
 -- PlateQuest.lua's K.GREEN, K.FADE_IN and K.FADE_OUT.
 P.QUEST_GREEN, P.QUEST_FADE_IN, P.QUEST_FADE_OUT = { 0.3, 0.9, 0.35 }, 0.15, 0.3
--- The threat of test mode's sample plate: the sample value of each state, the units between the value and what it sits beside (PlateThreatText.lua's
+-- The threat of test mode's sample plate: the sample value of each state (threatTank: an enemy another tank holds, setup's alone), the units between the value and what it sits beside (PlateThreatText.lua's
 -- GAP), and the ring's thickness when Threat ring thickness cannot be read and its gap past the border in pixels (PlateThreatLook.lua's RING_PX and
 -- GAP_PX).
-P.THREAT_VALUES = { threatGood = "40%", threatTransition = "92%", threatBad = "110%" }
+P.THREAT_VALUES = { threatGood = "40%", threatTransition = "92%", threatBad = "110%", threatTank = "60%" }
 P.THREAT_GAP, P.RING_PX, P.RING_GAP = 4, 2, 2
 -- The name of the enemy's target on the sample (PlateThreatText.lua's TargetPart): a warrior who holds it, and you while it attacks you; the share of
 -- the threat colour the background takes (PlateThreatLook.lua's BACK_SHARE).
 P.THREAT_HOLDER, P.THREAT_HOLDER_CLASS, P.BACK_SHARE = "Gorvak", "WARRIOR", 0.3
--- The Overpower icon of PlateOverpower.lua: the spell of each class that has one (Overpower for a warrior, Mongoose Bite for a hunter), its file
--- when the client gives none and its name, the crop of each edge, the units over the name and its window in seconds; its pop as a round starts (a
+-- The Overpower icon of PlateOverpower.lua: the spell of each class that has one (Overpower for a warrior, Mongoose Bite for a hunter, Riposte for a
+-- rogue), its file when the client gives none and its name, the classes whose icon stands over their target (P.OP_TARGET), the crop of each edge, the units over the name and its window in seconds; its pop as a round starts (a
 -- fade in over P.OP_POP_IN seconds and a shrink from P.OP_POP_FROM of its size over P.OP_POP_SCALE) and its fade over the round's last P.OP_FADE
 -- seconds, as PlateOverpower.lua's.
-P.OP_SPELLS = { WARRIOR = 7384, HUNTER = 1495 }
-P.OP_FILES = { WARRIOR = "Interface\\Icons\\Ability_MeleeDamage", HUNTER = "Interface\\Icons\\Ability_Hunter_SwiftStrike" }
-P.OP_NAMES = { WARRIOR = "Overpower", HUNTER = "Mongoose Bite" }
+P.OP_SPELLS = { WARRIOR = 7384, HUNTER = 1495, ROGUE = 14251 }
+P.OP_FILES = { WARRIOR = "Interface\\Icons\\Ability_MeleeDamage", HUNTER = "Interface\\Icons\\Ability_Hunter_SwiftStrike",
+	ROGUE = "Interface\\Icons\\Ability_Warrior_Challange" }
+P.OP_NAMES = { WARRIOR = "Overpower", HUNTER = "Mongoose Bite", ROGUE = "Riposte" }
+P.OP_TARGET = { HUNTER = true, ROGUE = true }
 P.OP_CROP, P.OP_GAP, P.OP_WINDOW = 0.08, 2, 5
 P.OP_POP_FROM, P.OP_POP_IN, P.OP_POP_SCALE, P.OP_FADE = 1.3, 0.12, 0.15, 0.25
 -- Test mode's sample eases to a new opacity over P.EASE_SECONDS, as a live plate's fade (PlateThreatLook.lua's EASE_SECONDS).
@@ -96,6 +105,8 @@ P.COMBO_POP_FROM, P.COMBO_POP_SECONDS = 1.4, 0.15
 P.SPACING = 2
 -- The gap between a class icon and the row, and the border of an elite, a rare and a boss in screen pixels (Nameplates.lua:30, 46).
 P.GAP, P.KIND_PX = 3, 2
+-- The screen pixels the flash of Flash as you change target is thicker than Target and focus border thickness (PlateTarget.lua's GROW).
+P.FLASH_GROW = 2
 -- The colours the game gives a hostile and a friendly unit when no row changes them, the level number, the dimming of a plate that is not the target.
 P.HOSTILE, P.FRIENDLY, P.LEVEL_COLOUR = { 0.77, 0.23, 0.23 }, { 0.24, 0.77, 0.35 }, { 1, 0.82, 0 }
 P.SHARE, P.DIM = 0.7, 0.5
@@ -308,25 +319,32 @@ function P.Reaction(friend)
 	return friend and P.FRIENDLY or P.HOSTILE
 end
 
--- True while threat reads the player as damage or healer: Your role as the draft has it, and at Automatic the role nameplate threat works out
--- (ns.PlateThreat.Role, PlateThreat.lua), so the samples take the rows of the player's role as a live plate does (PT.Colour).
+-- True while threat reads the player as damage or healer: Your role as the draft has it, and at From your role, stance or form the role that
+-- choice works out afresh (ns.PlateThreat.AutoRole, PlateThreat.lua: the group role, Main Tank, the tank aura, Defensive Stance, Bear Form,
+-- Righteous Fury), not the role the live plates keep from the live Your role, so the samples take the rows the plates will take (PT.Colour). A
+-- client without AutoRole asks PT.Role.
 function P.Damage()
 	local choice = Get("threatRole")
 	if choice == "tank" or choice == "damage" then
 		return choice == "damage"
 	end
 	local threat = ns.PlateThreat
-	if type(threat) == "table" and type(threat.Role) == "function" then
-		local ok, kind = pcall(threat.Role)
+	local ask = type(threat) == "table" and (type(threat.AutoRole) == "function" and threat.AutoRole or threat.Role) or nil
+	if type(ask) == "function" then
+		local ok, kind = pcall(ask)
 		return not (ok and kind == "tank")
 	end
 	return true
 end
 
 -- The colour row of a sample's threat state (threatGood, threatTransition or threatBad): the damage and healer's row while Same colours for both
--- roles is off and the player counts as damage or healer, else the row both roles share. The samples' threat stays named by the shared rows.
+-- roles is off and the player counts as damage or healer, else the row both roles share. The samples' threat stays named by the shared rows. An
+-- enemy held by another tank (threatTank) takes Another tank's colour, a tank's alone, as PlateThreat.lua's PT.Colour has it.
 P.DAMAGE_ROWS = { threatGood = "threatDamageGood", threatTransition = "threatDamageTransition", threatBad = "threatDamageBad" }
 function P.ThreatRow(threat)
+	if threat == "threatTank" then
+		return "threatTankColour"
+	end
 	local row = P.DAMAGE_ROWS[threat]
 	if row and Get("threatSameColours") == false and P.Damage() then
 		return row
@@ -335,10 +353,10 @@ function P.ThreatRow(threat)
 end
 
 -- The opacity row of a sample's threat state, as PlateThreatLook.lua's FadeRow: Opacity as damage or healer for threat you want while Same opacity
--- for both roles is off and the player counts as damage or healer, else Opacity of enemies held for you; Opacity of enemies changing hands for threat
--- changing hands; none for threat you do not want.
+-- for both roles is off and the player counts as damage or healer, else Opacity of enemies held for you, which an enemy held by another tank takes
+-- too; Opacity of enemies changing hands for threat changing hands; none for threat you do not want.
 function P.FadeRow(threat)
-	if threat == "threatGood" then
+	if threat == "threatGood" or threat == "threatTank" then
 		if Get("threatFadeSame") == false and P.Damage() then
 			return "threatFadeDamage"
 		end
@@ -590,6 +608,29 @@ function P.Put(p, region, point, x, y, w, h)
 	end
 end
 
+-- True while a sample's auras show by Show auras, as Nameplates.lua's AurasAlpha has it: on every plate at On every nameplate and on a plate the
+-- module leaves as the game draws it, else only on your target (Only on the target) or on your target and your focus (On the target and focus).
+function P.AurasSeen(spec, o)
+	local when = Get("aurasWhen")
+	if not o.styled or (when ~= "target" and when ~= "focus") then
+		return true
+	end
+	return spec.target == true or (when == "focus" and spec.focus == true)
+end
+
+-- True while a sample shows its health text: Health text on, and by Show health text on every plate, only on your target or on your target and
+-- your focus, as PlateText.lua's HealthPart fades it; a plate the module leaves as the game draws it keeps the game's.
+function P.HealthSeen(spec, o)
+	if not o.textShow then
+		return false
+	end
+	local when = Get("healthTextWhen")
+	if not o.styled or (when ~= "target" and when ~= "focus") then
+		return true
+	end
+	return spec.target == true or (when == "focus" and spec.focus == true)
+end
+
 -- The sizes of the parts of a plate, from the style and size chosen and the rows that change a size.
 function P.Measure(o, spec, sets)
 	local scale = P.SCALES[sets.size]
@@ -621,7 +662,9 @@ function P.Measure(o, spec, sets)
 	m.center = m.healthY + m.HH / 2
 	m.nameAbove = not style.inside
 	m.top = m.healthY + m.HH + (m.nameAbove and (m.sp + m.NH) or 0)
-	if spec.auras then
+	-- A sample whose auras Show auras hides keeps no room for them, so what stands over the debuff row (an Above threat value, the Overpower icon,
+	-- an Above quest mark) stands over the name, as on a live plate (ns.PlateAurasSeen).
+	if spec.auras and P.AurasSeen(spec, o) then
 		m.AS = P.AURA * h
 		m.auraY = m.top + m.sp
 		m.top = m.auraY + m.AS
@@ -766,6 +809,43 @@ function P.Border(p, spec, o)
 		end
 		edge:SetColorTexture(colour[1], colour[2], colour[3], 1)
 		edge:SetShown(game and true or false)
+	end
+end
+
+-- The flash of Flash as you change target on a Target or Focus sample, as PlateTarget.lua's: a thicker outline over the border in Target colour or
+-- Focus colour, P.FLASH_GROW screen pixels past Target and focus border thickness, that fades out once (ns.PlateTargetFlash). It plays as the drawing
+-- opens and as the row turns on, so the row shows what it does; any other sample has none.
+function P.TargetFlash(p, spec, o)
+	local mark = o.targetOn and (spec.target and "targetColour" or spec.focus and "focusColour") or nil
+	local on = mark ~= nil and Get("targetFlash") == true
+	local was = p.tflashWas
+	p.tflashWas = on
+	if not on then
+		if p.tflashFrame then
+			if p.tflash then
+				pcall(p.tflash.Stop, p.tflash)
+			end
+			p.tflashFrame:SetAlpha(0)
+		end
+		return
+	end
+	if p.tflashFrame == nil then
+		p.tflashFrame = Frame(p.bar)
+		p.tflashFrame:SetAllPoints(p.bar)
+		p.tflashFrame:SetFrameLevel(p.bar:GetFrameLevel() + 8)
+		p.tflashFrame:SetAlpha(0)
+		p.tflashOutline = P.Outline(p.S, p.tflashFrame, p.tflashFrame)
+		ns.KeepOutline(p.tflashOutline)
+		ns.SetOutline(p.tflashOutline, true, false)
+		p.tflash = type(ns.PlateTargetFlash) == "function" and ns.PlateTargetFlash(p.tflashFrame) or nil
+	end
+	local px = Get("targetThickness")
+	px = ns.Finite(px) and px >= 1 and math.floor(px + 0.5) or 1
+	ns.SetOutlineThickness(p.tflashOutline, px + P.FLASH_GROW)
+	ns.SetOutlineColour(p.tflashOutline, ns.Colour(KEY .. "." .. mark))
+	if was ~= true and p.tflash then
+		pcall(p.tflash.Stop, p.tflash)
+		pcall(p.tflash.Play, p.tflash)
 	end
 end
 
@@ -1026,7 +1106,8 @@ end
 -- moved by Combo points vertical offset, squares at Combo point size, lit squares in Combo point colour and the rest in it at P.COMBO_DIM, each in
 -- its thin border; at P.COMBO_MAX with Full points stand out every square takes Full points colour. p.comboB is the row's bottom, which a threat
 -- value at Below hangs under. Test mode's sample pops the newest point as its count goes up, and every lit one as it reaches P.COMBO_MAX with Full
--- points stand out; setup's drawings and a still stage do not.
+-- points stand out; setup's drawings and a still stage do not, but a full row (setup's Full points sample) pops together as Full points stand out
+-- turns on.
 function P.Combo(p, spec, o, m)
 	local count = spec.combo
 	p.comboB = nil
@@ -1057,7 +1138,12 @@ function P.Combo(p, spec, o, m)
 	end
 	p.combo:SetFrameLevel(p.f:GetFrameLevel() + 5)
 	p.combo:Show()
-	if ns.Finite(p.comboHave) and count > p.comboHave and not P.Snaps(p) then
+	-- A full row pops together as Full points stand out turns on, also on setup's drawing (its Full points sample), so the row shows the pop.
+	local fullWas = p.comboFullWas
+	if count >= P.COMBO_MAX then
+		p.comboFullWas = Get("comboFull") == true
+	end
+	if ns.Finite(p.comboHave) and count > p.comboHave and not P.Snaps(p) or (full and fullWas == false) then
 		for index, square in ipairs(p.comboSquares) do
 			if square.pop and (index == count or (full and index < count)) then
 				pcall(square.pop.Stop, square.pop)
@@ -1151,7 +1237,9 @@ function P.Threat(p, spec, o, m)
 	local threat = spec.threat
 	local on = threat ~= nil and P.THREAT_VALUES[threat] ~= nil and o.styled and Get("threat") == true
 	local glow = on and Get("threatGlow") or "off"
-	if glow == "all" or (glow == "needs" and threat ~= "threatGood") then
+	-- When the enemy needs you rings threat changing hands and threat you do not want alone, as PlateThreatLook.lua's Rings: not threat you want
+	-- nor an enemy another tank holds.
+	if glow == "all" or (glow == "needs" and (threat == "threatTransition" or threat == "threatBad")) then
 		-- The general border thickness and RING_GAP more, in screen pixels as the live ring has it (PlateThreatLook.lua's Gap).
 		local thickness = ns.Get("general.thickness")
 		local d = ns.Pixels(p.ring, (ns.Finite(thickness) and thickness or 1) + P.RING_GAP)
@@ -1389,7 +1477,23 @@ function P.ThreatTarget(p, spec, o, m, on)
 	text:Show()
 end
 
--- The class whose spell the Overpower icon shows: the player's when it has one (a hunter's Mongoose Bite), else the warrior's Overpower.
+-- True while the player knows a spell (C_SpellBook.IsSpellKnownOrInSpellBook, else IsSpellKnown), as PlateOverpower.lua's KnownRank asks; false
+-- when no call gives a plain answer.
+function P.Knows(id)
+	local book = type(C_SpellBook) == "table" and C_SpellBook or {}
+	for _, call in ipairs({ book.IsSpellKnownOrInSpellBook, book.IsSpellKnown, IsSpellKnown }) do
+		if type(call) == "function" then
+			local ok, known = pcall(call, id)
+			if ok and not ns.IsSecret(known) and type(known) == "boolean" then
+				return known
+			end
+		end
+	end
+	return false
+end
+
+-- The class whose spell the Overpower icon shows: the player's when it has one (a hunter's Mongoose Bite, a rogue's Riposte), else the warrior's
+-- Overpower.
 function P.OverpowerClass()
 	local _, class = P.Player()
 	return P.OP_SPELLS[class] and class or "WARRIOR"
@@ -1580,7 +1684,8 @@ function P.OverpowerClock(p)
 	end
 end
 
--- The Overpower icon of a sample that dodged a warrior (spec.overpower; Mongoose Bite's for a hunter), where PlateOverpower.lua puts it: centred over
+-- The Overpower icon of a sample that dodged a warrior (spec.overpower; Mongoose Bite's for a hunter, Riposte's for a rogue), where
+-- PlateOverpower.lua puts it: centred over
 -- the sample's auras, else over the name (over the bar while the name is inside it), moved by Overpower icon horizontal and vertical offset, at
 -- Overpower icon size, in Flat UI's thin border, with its swipe.
 function P.Overpower(p, spec, o, m)
@@ -1720,9 +1825,9 @@ function P.Health(p, spec)
 	end
 end
 
--- The row of aura icons above the name.
+-- The row of aura icons above the name; none on a sample whose auras Show auras hides (P.AurasSeen).
 function P.Auras(p, spec, o, m)
-	local count = spec.auras and spec.auras.count or 0
+	local count = spec.auras and m.AS and spec.auras.count or 0
 	local sizes = spec.auras and m.AS or 0
 	p.auras:SetAlpha(o.auraAlpha)
 	if count == 0 then
@@ -1827,6 +1932,7 @@ function P.Plate(p, spec, sets)
 	p.lowFrame:SetAlpha((low and share * 100 < Get("lowHealthAt")) and 1 or 0)
 	p.lowFrame:SetShown(low and true or false)
 	P.Border(p, spec, o)
+	P.TargetFlash(p, spec, o)
 	-- The name and the health text.
 	p.name:ClearAllPoints()
 	if m.nameAbove then
@@ -1843,14 +1949,14 @@ function P.Plate(p, spec, sets)
 		p.name:SetWidth(math.max(1, m.BW))
 	else
 		local used = #P.HealthText(o, share) * P.FONT * m.v * o.textSize / 100 * 0.5
-		p.name:SetWidth(math.max(1, m.HW - 12 - (o.textShow and used or 0)))
+		p.name:SetWidth(math.max(1, m.HW - 12 - (P.HealthSeen(spec, o) and used or 0)))
 		p.name:SetJustifyH("LEFT")
 	end
 	p.htext:ClearAllPoints()
 	p.htext:SetPoint("RIGHT", p.bar, "RIGHT", -4, 0)
 	P.Text(p.htext, P.FONT * m.v, o.textSize, o.textOutline, o.textColour, o.face)
 	p.htext:SetText(P.HealthText(o, share))
-	p.htext:SetShown(o.textShow and true or false)
+	p.htext:SetShown(P.HealthSeen(spec, o))
 	-- The row behind the name, in the colour of the bar, fading upward.
 	local nameBottom = m.nameAbove and (m.healthY + m.HH + m.sp) or (m.center - m.NH / 2)
 	p.row:ClearAllPoints()
@@ -2121,7 +2227,11 @@ function P.Cells(kind)
 				{ id = "elite", label = "Elite", col = 1, spec = Enemy({ name = names.elite, level = 20, kind = "elite" }) },
 				{ id = "player", label = "Enemy player", col = 1, spec = Enemy({ name = names.player, player = true }) },
 				{ id = "friend", label = "Friendly", col = 1, spec = { name = names.friend, level = 18, friendly = true, player = true, health = P.SHARE } },
-				{ id = "target", label = "Target", col = 2, show = Get("targetBar") == true, spec = Enemy({ target = true }) },
+				-- The target shows for Colour the target's health bar, and for Show health text at Only on the target or On the target and focus,
+				-- which keep the health number on it alone (and on the focus).
+				{ id = "target", label = "Target", col = 2, show = Get("targetBar") == true or Get("healthTextWhen") ~= "always",
+					spec = Enemy({ target = true }) },
+				{ id = "focus", label = "Focus", col = 2, show = Get("healthTextWhen") == "focus", spec = Enemy({ focus = true }) },
 				{ id = "hover", label = "Mouseover", col = 2, show = Get("hover") == true, spec = Enemy({ hover = true }) },
 				{ id = "low", label = "Low health", col = 2, show = Get("lowHealth") == true, spec = Enemy({ health = 0.18 }) },
 				{ id = "threat", label = "Threat", col = 2, show = Get("threat") == true, chips = true },
@@ -2133,8 +2243,13 @@ function P.Cells(kind)
 					spec = Enemy({ cast = { name = "Stoneskin", share = 0.6, left = 1.2, shield = true } }) },
 			}
 		elseif kind == "auras" then
+			-- At Show auras Only on the target the plain enemy goes bare beside your target, and On the target and focus adds the focus, which keeps
+			-- them too (P.AurasSeen).
+			local when = Get("aurasWhen")
 			return {
-				{ id = "auras", label = "Auras", col = 1, spec = Enemy({ auras = { count = 5 } }) },
+				{ id = "auras", label = when ~= "always" and "Other enemy" or "Auras", col = 1, spec = Enemy({ auras = { count = 5 } }) },
+				{ id = "auraTarget", label = "Your target", col = 1, show = when ~= "always", spec = Enemy({ target = true, auras = { count = 5 } }) },
+				{ id = "auraFocus", label = "Focus", col = 1, show = when == "focus", spec = Enemy({ focus = true, auras = { count = 3 } }) },
 			}
 		elseif kind == "marks" then
 			local _, class = P.Player()
@@ -2148,18 +2263,24 @@ function P.Cells(kind)
 				{ id = "elite", label = "Elite", col = 2, spec = Enemy({ name = names.elite, level = 20, kind = "elite" }) },
 				{ id = "rare", label = "Rare", col = 2, spec = Enemy({ name = "Old Blanchy", level = 20, kind = "rare" }) },
 				{ id = "boss", label = "Boss", col = 2, spec = Enemy({ name = "Edwin VanCleef", level = 20, kind = "boss" }) },
-				-- A warrior's Overpower over an enemy that dodged them, or a hunter's Mongoose Bite over their target.
-				{ id = "overpower", label = P.OP_NAMES[class] or P.OP_NAMES.WARRIOR, col = 2, show = P.OP_SPELLS[class] ~= nil,
-					spec = Enemy({ overpower = true, target = class == "HUNTER" or nil }) },
-				-- A rogue's or a druid's combo points under their target, 3 of 5, below the room the game keeps for the cast bar.
+				-- A warrior's Overpower over an enemy that dodged them, or a hunter's Mongoose Bite or a rogue's Riposte over their target; a rogue's
+				-- only while they know Riposte, a talent.
+				{ id = "overpower", label = P.OP_NAMES[class] or P.OP_NAMES.WARRIOR, col = 2,
+					show = P.OP_SPELLS[class] ~= nil and (class ~= "ROGUE" or P.Knows(P.OP_SPELLS.ROGUE)),
+					spec = Enemy({ overpower = true, target = P.OP_TARGET[class] }) },
+				-- A rogue's or a druid's combo points under their target, 3 of 5, below the room the game keeps for the cast bar, and a full row of 5,
+				-- in Full points colour while Full points stand out is on.
 				{ id = "combo", label = "Combo points", col = 2, show = class == "ROGUE" or class == "DRUID",
 					spec = Enemy({ target = true, combo = 3, reserve = true }) },
+				{ id = "comboFull", label = "Full points", col = 2, show = (class == "ROGUE" or class == "DRUID") and Get("comboPoints") == true,
+					spec = Enemy({ target = true, combo = P.COMBO_MAX, reserve = true }) },
 			}
 		elseif kind == "threat" then
 			-- Setup's colours and threat: an enemy, an enemy player, the mouseover and low health as the plate drawing has them, and with Threat on
 			-- nameplates the threat rows on a sample of each state, as test mode's sample takes them in turn: threat you want (faded), changing hands
 			-- (faded by its own opacity), threat you do not want (with the ring, which flashes as the drawing opens), and your target changing hands,
-			-- which never fades, takes Colour the target's health bar and shows the name of the enemy's target with Only on your target too.
+			-- which never fades, takes Colour the target's health bar and shows the name of the enemy's target with Only on your target too; and
+			-- while you count as a tank, an enemy another tank holds.
 			local threat = Get("threat") == true
 			return {
 				{ id = "enemy", label = "Enemy", col = 1, spec = Enemy() },
@@ -2169,6 +2290,10 @@ function P.Cells(kind)
 				{ id = "good", label = "You want", col = 2, show = threat, spec = Enemy({ threat = "threatGood" }) },
 				{ id = "changing", label = "Changing hands", col = 2, show = threat, spec = Enemy({ threat = "threatTransition" }) },
 				{ id = "bad", label = "You do not want", col = 2, show = threat, spec = Enemy({ threat = "threatBad" }) },
+				-- While you count as a tank, with Enemies held by another tank: an enemy another tank holds, in Another tank's colour, faded as one
+				-- held for you and with no ring at When the enemy needs you.
+				{ id = "offtank", label = "Held by another tank", col = 2, show = threat and Get("threatTanks") == true and not P.Damage(),
+					spec = Enemy({ threat = "threatTank" }) },
 				{ id = "target", label = threat and "Your target" or "Target", col = 2, spec = Enemy({ target = true, threat = "threatTransition" }) },
 			}
 		elseif kind == "walk" then
@@ -2269,11 +2394,13 @@ function P.Parts(S)
 	Set({ "healAbsorbs" }, plate.healAbsorb)
 	Set({ "textFace", "nameShow", "nameSize", "nameOutline", "nameColour", "nameCustomColour" }, plate.name)
 	Set({ "nameRow" }, plate.row)
-	Set({ "healthText", "healthTextSize", "healthTextOutline", "healthTextColour", "healthTextWhen", "healthFormat" }, plate.htext)
+	-- The health text rows on the number a sample shows: your target's while Show health text keeps it there (and on the focus) alone.
+	Set({ "healthText", "healthTextSize", "healthTextOutline", "healthTextColour", "healthTextWhen", "healthFormat" },
+		(Get("healthTextWhen") ~= "always" and Live("target") or plate).htext)
 	Set({ "level", "levelSize", "levelShape", "levelGap" }, plate.lvl)
 	Set({ "kindMark" }, (plates.elite or plate).mark)
 	Set({ "colourPlayers" }, (plates.player or plate).bar)
-	Set({ "targetBar", "targetBarColour", "target", "targetColour", "targetThickness" }, (Live("target") or plate).bar)
+	Set({ "targetBar", "targetBarColour", "target", "targetColour", "targetThickness", "targetFlash" }, (Live("target") or plate).bar)
 	Set({ "focusColour" }, (Live("focus") or Live("target") or plate).bar)
 	Set({ "threat", "threatRole", "threatGood", "threatTransition", "threatBad", "threatSameColours", "threatDamageGood", "threatDamageTransition",
 		"threatDamageBad" }, plates.threat and plates.threat.chips.f or plate.bar)
@@ -2285,7 +2412,8 @@ function P.Parts(S)
 	Set({ "castSpark" }, plate.spark)
 	Set({ "castShield" }, (plates.locked or plate).shield)
 	Set({ "castTime" }, plate.ctime)
-	Set({ "auras", "auraCrop", "auraBorderOwn", "auraBorderColour", "auraTimers", "auraStacks", "auraOpacity", "aurasWhen" }, plate.auras)
+	-- The aura rows on the auras a sample shows: your target's while Show auras keeps them on it alone.
+	Set({ "auras", "auraCrop", "auraBorderOwn", "auraBorderColour", "auraTimers", "auraStacks", "auraOpacity", "aurasWhen" }, (Live("auraTarget") or plate).auras)
 	local player = plates.player or plate
 	Set({ "classEnemy", "classPosition", "classFit", "classSize", "classGap", "classX", "classY", "classBorder", "classShape" }, player.iconFrame)
 	Set({ "classFriendly" }, (plates.friend or plate).iconFrame)
@@ -2295,12 +2423,15 @@ function P.Parts(S)
 	Set({ "raidMarker", "raidMarkerSize", "raidMarkerX", "raidMarkerY" }, (plates.marked or plate).marker)
 	Set({ "questMark", "questMarkSize", "questMarkPlace", "questMarkX", "questMarkY" }, (Live("quest") or plate).quest)
 	Set({ "questMarkCount" }, (Live("quest") or plate).questCount)
-	-- Only a warrior's and a hunter's drawing has the Overpower plate, and a rogue's and a druid's the combo points; for anyone else the rows mark
-	-- nothing.
+	-- Only a warrior's, a hunter's and a Riposte rogue's drawing has the Overpower plate, and a rogue's and a druid's the combo points; for anyone
+	-- else the rows mark nothing.
 	local overpower = Live("overpower")
 	Set({ "overpower", "overpowerSize", "overpowerX", "overpowerY", "overpowerSwipe" }, overpower and overpower.opFrame or nil)
 	local combo = Live("combo")
 	Set({ "comboPoints", "comboColour", "comboFull", "comboFullColour", "comboSize", "comboY" }, combo and combo.combo or nil)
+	-- Full points stand out and its colour on the full row, which shows them.
+	local full = Live("comboFull")
+	Set({ "comboFull", "comboFullColour" }, full and full.combo or (combo and combo.combo) or nil)
 	-- The threat drawing: each threat row on the sample it changes.
 	local good, changing, bad = Live("good"), Live("changing"), Live("bad")
 	if good and changing and bad then
@@ -2318,6 +2449,8 @@ function P.Parts(S)
 		Set({ "aggroTargetNotMe" }, bad.ttarget:IsShown() and bad.ttarget or bad.bar)
 		Set({ "threatFade", "threatFadeAlpha", "threatFadeSame", "threatFadeDamage" }, good.f)
 		Set({ "threatFadeChanging" }, changing.f)
+		local offtank = Live("offtank")
+		Set({ "threatTanks", "threatTankColour" }, offtank and offtank.bar or good.bar)
 	end
 	Set({ "overlapH", "overlapV", "selectedScale" }, (Live("target") or plate).f)
 	Set({ "minScale", "minAlpha" }, (plates.far or plate).f)
