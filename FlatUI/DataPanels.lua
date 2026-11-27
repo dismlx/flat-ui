@@ -1574,8 +1574,12 @@ end
 -- with a thin line in the border colour between two, so every line can be clicked with many feeds or a large Text size. The title is over the
 -- first column. A line is { text, pick = function, inert = true for a line that does nothing }. A click on a line closes the menu and runs its pick
 -- as a part of the stream. A press anywhere else (GLOBAL_MOUSE_DOWN, heard on a frame of Flat UI's own only while the menu is shown), a second
--- click on the slot, the start of a fight, the slot hiding or showing another stream and the module going off close it; a refresh keeps the
--- slot's menu, drawn again. Nothing of the game's is used for it: neither the game's menus nor its list of the windows that Escape closes.
+-- click on the slot, Escape, the start of a fight, the slot hiding or showing another stream and the module going off close it; a refresh keeps
+-- the slot's menu, drawn again. For Escape the menu's own frame takes the keyboard while it is open out of a fight (EnableKeyboard), and its
+-- OnKeyDown keeps Escape from going on (SetPropagateKeyboardInput false) and lets every other key go on to the game, as the movers' keys and the
+-- options window's do (MoversMode.lua, Panel.lua); the menu is at DIALOG, over the options window (HIGH), so it hears the key first. The keyboard
+-- goes as the menu closes, which the start of a fight does before the lockdown begins, and a menu opened in a fight takes no keyboard. Nothing
+-- of the game's is used for it: neither the game's menus nor its list of the windows that Escape closes.
 local EDGE = 4
 -- The light behind the line under the cursor.
 local LIGHT = { 1, 1, 1, 0.08 }
@@ -1602,6 +1606,7 @@ function P.CloseMenu()
 		slot.hover:Hide()
 	end
 	pcall(menu.listener.UnregisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
+	pcall(menu.frame.EnableKeyboard, menu.frame, false)
 	menu.frame:Hide()
 	-- The panel held at full opacity for its menu rests again once the mouse is off it.
 	if panel then
@@ -1628,6 +1633,17 @@ local function MenuFrame()
 	-- A click on the edge of the menu stays on it.
 	frame:EnableMouse(true)
 	pcall(frame.SetClampedToScreen, frame, true)
+	pcall(frame.EnableKeyboard, frame, false)
+	-- Escape closes the menu and goes no further; every other key goes on to the game.
+	frame:SetScript("OnKeyDown", function(self, key)
+		local escape = key == "ESCAPE" and P.MenuOpen()
+		if not InCombatLockdown() then
+			pcall(self.SetPropagateKeyboardInput, self, not escape)
+		end
+		if escape then
+			ns.Try(KEY, P.CloseMenu)
+		end
+	end)
 	frame:Hide()
 	local menu = { frame = frame, outline = ns.Outline(frame, frame, true), lines = {}, dividers = {} }
 	menu.title = ns.OwnText(frame, "OVERLAY", "GameFontHighlightSmall")
@@ -1780,6 +1796,11 @@ function P.OpenMenu(slot, stream, title, items)
 	ns.SetOutline(menu.outline, true, true)
 	menu.slot, menu.stream = slot, stream
 	menu.frame:Show()
+	-- Escape closes it, out of a fight only; every other key still goes to the game.
+	if not InCombatLockdown() then
+		pcall(menu.frame.EnableKeyboard, menu.frame, true)
+		pcall(menu.frame.SetPropagateKeyboardInput, menu.frame, true)
+	end
 	-- The panel stays at full opacity while its menu is open, wherever the mouse goes.
 	P.Fade(slot.panel)
 	pcall(menu.listener.RegisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
