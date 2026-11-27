@@ -300,7 +300,7 @@ local function Words(mode, numbers)
 	elseif mode == "curpct" then
 		return formats.curpct:format(Num(numbers.cur), numbers.pct)
 	elseif mode == "miss" then
-		return Num(numbers.miss)
+		return numbers.miss >= 1 and (formats.miss or "-%s"):format(Num(numbers.miss)) or nil
 	end
 	return nil
 end
@@ -1292,7 +1292,11 @@ function E.bars(o, g, L)
 		if mode == "game" and k.bare then
 			words = nil
 		end
-		if mode ~= "game" and (g.ownTextWhen == "hover" or (g.ownTextWhen == "notfull" and numbers.cur >= numbers.max)) then
+		local brim = numbers.cur >= numbers.max
+		if role == "power" and token == "RAGE" then
+			brim = numbers.cur <= 0
+		end
+		if mode ~= "game" and (g.ownTextWhen == "hover" or (g.ownTextWhen == "notfull" and brim)) then
 			words = nil
 		end
 		if s.dead or s.offline or (L.on and role == "power" and Get("lookNoPowerText") == true) or not (role == "health" or L.power) then
