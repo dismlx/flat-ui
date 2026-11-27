@@ -31,7 +31,7 @@ local tinted = { main = {}, light = {} }
 local anchor, anchorUnit
 local listener, hearing, probe
 local cursorIDs
-local seen, broken
+local seen, broken, toldSize
 local Stop
 
 local function Wanted()
@@ -388,6 +388,10 @@ local function OnEvent(_, event, unit)
 		end
 	else
 		Evaluate()
+		if event == "PLAYER_REGEN_ENABLED" then
+			toldSize = false
+			Grow()
+		end
 	end
 end
 
@@ -456,10 +460,16 @@ local function Apply()
 	Grow()
 end
 
-function ns.SparkleGlowChanged()
+function ns.SparkleGlowChanged(path)
 	local ok, err = pcall(Apply)
 	if not ok then
 		Stop(err)
+	end
+	if not InCombatLockdown() then
+		toldSize = false
+	elseif path == "general.sparkleGlowSize" and not toldSize and not broken and Wanted() and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+		toldSize = true
+		print("Flat UI: the glow takes its new size when the fight ends.")
 	end
 end
 

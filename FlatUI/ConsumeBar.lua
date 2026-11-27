@@ -937,8 +937,20 @@ function C.Lining()
 	return type(ns.EditModeOpen) == "function" and ns.EditModeOpen() == true
 end
 
+function C.Hovered()
+	if C.hover then
+		return true
+	end
+	local panel = C.panel
+	if not (panel and panel:IsShown()) then
+		return false
+	end
+	local ok, over = pcall(panel.IsMouseOver, panel)
+	return ok and (IsSecret(over) or over == true)
+end
+
 function C.Rest()
-	if Opt("fade") == true and not C.fighting and not C.hover and not C.Lining() then
+	if Opt("fade") == true and not C.fighting and not C.Hovered() and not C.Lining() then
 		return math.max(0, math.min(100, Number("fadeAlpha", 40))) / 100
 	end
 	return 1
@@ -1165,7 +1177,8 @@ function C.PostClick(entry, button, down)
 		return
 	end
 	if C.CursorItem() then
-		if not down then
+		local ok, over = pcall(entry.cover.IsMouseOver, entry.cover)
+		if not down and ok and (IsSecret(over) or over == true) then
 			C.Drop(entry)
 		end
 	elseif not C.Recent(entry) and entry.id and not entry.sample and entry.empty then

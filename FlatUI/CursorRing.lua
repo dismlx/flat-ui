@@ -15,7 +15,8 @@ local FADE_IN, FADE_OUT = 0.15, 0.3
 local SHAKE_STEP, SHAKE_TURNS, SHAKE_WINDOW, SHAKE_HOLD = 8, 4, 0.5, 0.6
 local GROW, GROW_UP, GROW_END = 1.5, 0.15, 0.6
 local PREVIEW = 1.2
-local PREVIEW_ROWS = { ["general.cursorRing"] = true, ["general.cursorRingSize"] = true, ["general.cursorRingColour"] = true }
+local PREVIEW_ROWS = { ["general.cursorRing"] = true, ["general.cursorRingSize"] = true, ["general.cursorRingColour"] = true,
+	["general.cursorRingClass"] = true }
 local SWIPE_ROWS = { ["general.cursorRingCast"] = true, ["general.cursorRingCastColour"] = true, ["general.cursorRingGcd"] = true,
 	["general.cursorRingGcdColour"] = true }
 local SWIPE_PREVIEW = 2.6
@@ -282,7 +283,13 @@ local function Look()
 	if ns.Finite(size) and size > 0 then
 		ring:SetSize(size, size)
 	end
-	local r, g, b = ns.Colour("general.cursorRingColour")
+	local r, g, b
+	if ns.Get("general.cursorRingClass") == true then
+		r, g, b = ns.ClassColour()
+	end
+	if not r then
+		r, g, b = ns.Colour("general.cursorRingColour")
+	end
 	art:SetVertexColor(r, g, b, 1)
 end
 

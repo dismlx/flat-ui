@@ -492,6 +492,7 @@ function P.MakeSlot(panel, slot)
 	slot.hover:SetColorTexture(HOVER_LIGHT[1], HOVER_LIGHT[2], HOVER_LIGHT[3], HOVER_LIGHT[4])
 	slot.hover:Hide()
 	frame:SetScript("OnEnter", Guard(function()
+		P.Secure(panel)
 		P.Enter(slot)
 	end))
 	frame:SetScript("OnLeave", Guard(function()
@@ -656,6 +657,7 @@ function P.Layout(panel)
 	else
 		frame:Hide()
 	end
+	P.Secure(panel)
 end
 
 local function TopWidgets()
@@ -691,6 +693,7 @@ function P.Place(panel)
 		frame:ClearAllPoints()
 		frame:SetPoint(spec.point, UIParent, spec.relative, spec.x, spec.y)
 	end
+	P.Secure(panel)
 end
 
 function P.Fill(panel, wanted)
@@ -702,6 +705,7 @@ function P.Fill(panel, wanted)
 		if panel.frame then
 			panel.frame:Hide()
 		end
+		P.Secure(panel)
 		return
 	end
 	local texts, any = {}, false
@@ -983,10 +987,12 @@ function P.Flush()
 				end
 			end
 		elseif panel.wanted then
-			local moved = false
+			local moved, secure = false, false
 			for _, slot in ipairs(panel.slots) do
 				if slot.id and dirty[slot.id] then
 					moved = P.Draw(slot, P.TextOf(slot)) or moved
+					local stream = P.StreamOf(slot.id)
+					secure = secure or (stream ~= nil and stream.secure ~= nil)
 					if slot.over then
 						P.Retip(slot)
 					end
@@ -994,6 +1000,8 @@ function P.Flush()
 			end
 			if moved then
 				P.Layout(panel)
+			elseif secure then
+				P.Secure(panel)
 			end
 		end
 	end
@@ -1372,6 +1380,130 @@ function P.Click(slot, button)
 	local click = object and P.Field(object, "OnClick")
 	if type(click) == "function" then
 		P.Call(slot.feed, click, slot.frame, button)
+	end
+end
+
+local function Number(frame, method)
+	local ok, value = pcall(frame[method], frame)
+	return ok and ns.Finite(value) and value or nil
+end
+
+local function SecureItem(slot)
+	local stream = P.StreamOf(slot.id)
+	if not (stream and type(stream.secure) == "function" and slot.width and slot.panel.wanted and slot.panel.shown and ns.Enabled(KEY))
+		or ns.PartStopped(KEY, stream.label) then
+		return nil
+	end
+	local ok, item = P.Run(stream, stream.secure)
+	return ok and type(item) == "string" and item ~= "" and item or nil
+end
+
+local function SecureHolder()
+	if not P.secureHolder then
+		local holder = Own(CreateFrame("Frame", nil, UIParent))
+		if type(RegisterStateDriver) == "function" then
+			pcall(RegisterStateDriver, holder, "visibility", "[combat] hide; show")
+		end
+		P.secureHolder = holder
+	end
+	return P.secureHolder
+end
+
+local function Overlay(slot)
+	if slot.secure ~= nil then
+		return slot.secure or nil
+	end
+	slot.secure = false
+	local made, button = pcall(CreateFrame, "Button", nil, SecureHolder(), "SecureActionButtonTemplate")
+	if not made or type(button) ~= "table" then
+		return nil
+	end
+	Own(button)
+	local done = pcall(function()
+		button:Hide()
+		button:EnableMouse(true)
+		button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+		button:SetScript("OnEnter", Guard(function()
+			P.Secure(slot.panel)
+			P.Enter(slot)
+		end))
+		button:SetScript("OnLeave", Guard(function()
+			P.Leave(slot)
+		end))
+		button:SetScript("PreClick", function(self, mouse)
+			if mouse == "LeftButton" and not InCombatLockdown() and not Under(slot.frame) and pcall(self.SetAttribute, self, "*type1", nil) then
+				slot.armed = nil
+			end
+		end)
+		button:SetScript("PostClick", Guard(function(_, mouse)
+			if mouse == "RightButton" then
+				P.Click(slot, mouse)
+			end
+			if not slot.armed then
+				slot.secureKey = nil
+				P.Secure(slot.panel)
+			end
+		end))
+	end)
+	if not done then
+		pcall(button.Hide, button)
+		return nil
+	end
+	slot.secure = button
+	return button
+end
+
+function P.Cover(slot, button, item)
+	local frame, panel = slot.frame, slot.panel
+	local scale, base = Number(frame, "GetEffectiveScale"), Number(UIParent, "GetEffectiveScale")
+	local left, bottom = Number(frame, "GetLeft"), Number(frame, "GetBottom")
+	local width, height = Number(frame, "GetWidth"), Number(frame, "GetHeight")
+	if not (item and frame:IsShown() and panel.frame and panel.frame:IsShown() and scale and base and left and bottom and width and height)
+		or scale <= 0 or base <= 0 or width <= 0 or height <= 0 then
+		slot.secureKey = nil
+		pcall(button.Hide, button)
+		return
+	end
+	local share = scale / base
+	local x, y, w, h = left * share, bottom * share, width * share, height * share
+	local strata, level = panel.strata or "LOW", math.floor(Number(frame, "GetFrameLevel") or 1) + 2
+	local key = ("%s:%.2f:%.2f:%.2f:%.2f:%s:%d"):format(item, x, y, w, h, strata, level)
+	if slot.secureKey == key and slot.armed == item then
+		return
+	end
+	local ok = pcall(function()
+		button:ClearAllPoints()
+		button:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
+		button:SetSize(w, h)
+		button:SetFrameStrata(strata)
+		button:SetFrameLevel(level)
+		if slot.armed ~= item then
+			slot.armed = nil
+			button:SetAttribute("item", item)
+			button:SetAttribute("*type1", "item")
+			slot.armed = item
+		end
+		button:Show()
+	end)
+	slot.secureKey = ok and key or nil
+end
+
+function P.Secure(panel)
+	if not panel or P.InCombat() then
+		return
+	end
+	for _, slot in ipairs(panel.slots) do
+		local item = slot.frame and SecureItem(slot) or nil
+		local button = item and Overlay(slot) or slot.secure or nil
+		if button then
+			P.Cover(slot, button, item)
+		end
+	end
+end
+
+function P.SecureAll()
+	for _, panel in pairs(P.panels) do
+		P.Secure(panel)
 	end
 end
 
@@ -1907,6 +2039,7 @@ ns.Register(KEY, {
 		end,
 		PLAYER_REGEN_ENABLED = function()
 			P.Combat(false)
+			P.SecureAll()
 		end,
 	},
 })
