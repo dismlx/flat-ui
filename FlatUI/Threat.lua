@@ -642,11 +642,12 @@ function T.Layout(n)
 	T.title:SetTextHeight(text)
 	T.marker:SetSize(text + 2, text + 2)
 	local key = ("%s:%s:%s"):format(n, width, height)
+	local top = PAD + text + 2 + GAP
+	T.bottom = top + n * height + (n - 1) * GAP
 	if T.laid == key then
 		return
 	end
 	T.laid = key
-	local top = PAD + text + 2 + GAP
 	for index = 1, n do
 		local bar = T.rows[index].bar
 		bar:ClearAllPoints()
@@ -654,7 +655,7 @@ function T.Layout(n)
 		bar:SetSize(width, height)
 	end
 	Look("Laid", T.rows, n, PAD, top, height + GAP, width)
-	T.frame:SetSize(width + 2 * PAD, top + n * height + (n - 1) * GAP + PAD)
+	T.frame:SetSize(width + 2 * PAD, T.bottom + PAD)
 end
 
 function T.Bar(row, value, jump)
@@ -718,7 +719,11 @@ end
 
 function T.Draw(mob, entries)
 	local n = math.min(entries and #entries or 0, Number("rows", 5), MOST_ROWS)
+	local mobs = type(ns.ThreatMobs) == "table" and ns.ThreatMobs or nil
 	if n < 1 then
+		if mobs then
+			mobs.BelowOff()
+		end
 		T.Showing(false)
 		T.Alarm(nil, nil)
 		T.Lost(nil, nil)
@@ -757,6 +762,9 @@ function T.Draw(mob, entries)
 		SetName(T.title, mob)
 	else
 		T.title:SetText("Sample")
+	end
+	if mobs then
+		mobs.Below(mob)
 	end
 	T.Marker(mob)
 	T.Place()

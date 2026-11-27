@@ -1676,7 +1676,7 @@ ns.SETUP_STEPS = {
 	{ id = "threat", area = "Threat list", title = "Threat list", draw = "mock-screen", built = false, rows = {
 		{ "threat.enabled", "c", "behaviour", "Shows your group by threat on the enemy you fight, in a window placed with the movers." },
 		{ "threat.show", "o", "behaviour", "Chooses whether the threat list shows in a group, in a dungeon or raid, or also when you are alone." },
-		{ "threat.view", "o", "behaviour", "Chooses whether the list shows the enemies you fight, the ones you are losing first, while you tank, always, or only your group on your target." },
+		{ "threat.view", "o", "behaviour", "Chooses whether the list shows your group on your target with the other enemies you are losing under it while you tank, only the enemies you fight, the ones you are losing first, or only your group on your target." },
 		{ "threat.pets", "o", "behaviour", "Gives each pet a bar of its own on the threat list." },
 		{ "threat.rows", "o", "behaviour", "Sets how many bars the threat list shows at most." },
 		{ "threat.grow", "o", "behaviour", "Chooses whether more bars of the threat list grow down from the top of its spot or up from the bottom." },
@@ -1692,8 +1692,8 @@ ns.SETUP_STEPS = {
 		{ "threat.others", "o", "behaviour", "As a tank, turns amber the bar of a member who is about to pull aggro from you." },
 		{ "threat.otherTanks", "o", "behaviour", "As a tank, stays quiet when another tank of the group takes an enemy from you." },
 		{ "threat.warnSound", "r", "behaviour", "Chooses the sound that plays once for either warning." },
-		{ "threat.slipAt", "r", "behaviour", "Sets the share of your threat past which another member makes an enemy you hold turn amber in Enemies." },
-		{ "threat.lostSound", "r", "behaviour", "Chooses the sound that plays once as an enemy of Enemies that you held turns to someone else." },
+		{ "threat.slipAt", "r", "behaviour", "Sets the share of your threat past which another member makes an enemy you hold turn amber, under your target or in Enemies you fight." },
+		{ "threat.lostSound", "r", "behaviour", "Chooses the sound that plays once as an enemy you held, other than your target, turns to someone else." },
 	} },
 	{ id = "healermana", area = "Healer mana", title = "Healer mana", draw = "mock-screen", built = false, rows = {
 		{ "healermana.enabled", "c", "behaviour", "Shows the mana of the healers in your group, in a window placed with the movers." },

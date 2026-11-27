@@ -20,6 +20,7 @@ local EVEN, EDGE = { 1, 1, 1, 0.35 }, { 1, 1, 1, 0.16 }
 local WASH, PULSE_LOW, PET, LIGHT = 0.45, 0.12, 0.7, 0.35
 local PULSES = { lost = 0.4, slipping = 0.95 }
 local REARM, BUCKET = 5, 5
+local BELOW, SMALL, RULE = 4, 0.8, 0.3
 local RANK = { lost = 1, slipping = 2, held = 3, theirs = 4, withheld = 5 }
 local ROWS = { lost = "threatBad", slipping = "threatTransition", held = "threatGood", theirs = "threatTankColour" }
 local ALPHA = { lost = 1, slipping = 1, held = 0.72, theirs = 0.55, withheld = 0.72 }
@@ -170,13 +171,12 @@ local function Hex(r, g, b)
 end
 
 function M.View()
+	return Opt("view") == "mobs"
+end
+
+function M.Both()
 	local view = Opt("view")
-	if view == "mobs" then
-		return true
-	elseif view == "group" then
-		return false
-	end
-	return T.tank == true
+	return view ~= "mobs" and view ~= "group"
 end
 
 local function Tanking(read)
@@ -392,6 +392,31 @@ function M.Samples()
 			held = held + 1
 			mob.state, mob.share = "held", math.max(5, math.min(edge - 8, 30 + index * 6 + wiggle * 3))
 			mob.who = SampleWho(SAMPLE_HELD[(held - 1) % #SAMPLE_HELD + 1])
+		end
+		mob.bar = Bar(mob.share, 0)
+		list[#list + 1] = mob
+	end
+	return list
+end
+
+function M.Spares()
+	local step = T.step or 0
+	local turn, wiggle = math.floor(step / TURN), step % TURN
+	local edge = Number("slipAt", 80)
+	local spares, list = #SAMPLE_MOBS - 1, {}
+	for index = 2, #SAMPLE_MOBS do
+		local spec = SAMPLE_MOBS[index]
+		local at = (index - 2 - turn) % spares
+		local mob = { key = "sample" .. index, name = spec[1], marker = spec[2], target = false }
+		if at == 0 then
+			mob.state, mob.share = "lost", 104 + wiggle * 4
+			mob.who = SampleWho(SAMPLE_LOST[turn % #SAMPLE_LOST + 1])
+		elseif at == 1 then
+			mob.state, mob.share = "slipping", math.min(99, edge + 2 + wiggle * 4)
+			mob.who = SampleWho(SAMPLE_SLIP)
+		else
+			mob.state, mob.share = "held", math.max(5, edge - 20)
+			mob.who = SampleWho(SAMPLE_HELD[1])
 		end
 		mob.bar = Bar(mob.share, 0)
 		list[#list + 1] = mob
@@ -843,6 +868,10 @@ function M.Claim()
 	end
 	Look("Forget", T.rows)
 	T.drawnOn = nil
+	M.below, M.belowLaid, M.last, M.readAt = nil, nil, nil, nil
+	if M.line then
+		M.line:Hide()
+	end
 end
 
 function M.Draw(list, sample)
@@ -929,12 +958,164 @@ function M.Update()
 end
 
 function M.Take(on)
-	if not on or not M.View() then
+	if on and M.View() then
+		M.Update()
+		return true
+	end
+	if M.active or M.mode == "live" or M.mode == "sample" then
 		M.Stop()
+	end
+	return false
+end
+
+function M.Divider()
+	if not M.line then
+		local line = Own(T.Frame():CreateTexture(nil, "ARTWORK"))
+		line:SetColorTexture(DIM[1], DIM[2], DIM[3], RULE)
+		line:Hide()
+		M.line = line
+	end
+	return M.line
+end
+
+function M.LayBelow(k)
+	local width, height = Number("barWidth", 180), Number("barHeight", 16)
+	local small = math.max(10, math.floor(height * SMALL + 0.5))
+	local file = ns.BarTexture(Opt("barTexture")) or WHITE
+	for index = 1, k do
+		Paint(M.Row(index), file, TextHeight(small), small)
+	end
+	local bottom = ns.Finite(T.bottom) and T.bottom or 0
+	local start = bottom + 2 * GAP + 1
+	T.frame:SetSize(width + 2 * PAD, k > 0 and start + k * small + (k - 1) * GAP + PAD or bottom + PAD)
+	if k < 1 then
+		if M.line then
+			M.line:Hide()
+		end
+		M.belowLaid = nil
+		return
+	end
+	local slip = Number("slipAt", 80)
+	local key = ("%s:%s:%s:%s"):format(tostring(T.laid), bottom, k, slip)
+	if M.belowLaid == key then
+		return
+	end
+	M.belowLaid = key
+	local line = M.Divider()
+	line:ClearAllPoints()
+	line:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD, -(bottom + GAP))
+	line:SetSize(width, 1)
+	line:Show()
+	for index = 1, k do
+		local row = M.rows[index]
+		local bar = row.bar
+		bar:ClearAllPoints()
+		bar:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD, -(start + (index - 1) * (small + GAP)))
+		bar:SetSize(width, small)
+		Tick(row.even, bar, width / 2)
+		Tick(row.edge, bar, width * (100 - slip / 2) / 100)
+	end
+	Look("Laid", M.rows, k, PAD, start, small + GAP, width)
+end
+
+function M.Due()
+	local now = Ask(GetTime)
+	if not ns.Finite(now) then
+		return true
+	end
+	local last = M.readAt
+	if ns.Finite(last) and now >= last and now - last < STEP * 0.9 then
 		return false
 	end
-	M.Update()
+	M.readAt = now
 	return true
+end
+
+local function Spare(mob, unit, key)
+	if mob.state ~= "lost" and mob.state ~= "slipping" then
+		return false
+	elseif unit == nil then
+		return mob.target ~= true
+	elseif key ~= nil and mob.key == key then
+		return false
+	end
+	return Ask(UnitIsUnit, mob.unit, unit) ~= true
+end
+
+function M.Suffix(unit, lost)
+	if lost < 1 or not T.title then
+		return
+	end
+	local tail = (" |cff%s· %d lost|r"):format(Hex(Lighter(StateColour("lost"))), lost)
+	if unit == nil then
+		T.title:SetText("Sample" .. tail)
+		return
+	end
+	local ok, name = pcall(UnitName, unit)
+	if ok and Named(name) then
+		pcall(T.title.SetFormattedText, T.title, "%s" .. tail, name)
+	end
+end
+
+function M.Below(unit)
+	local sample = unit == nil
+	if not M.Both() or not (sample or (T.fighting and T.tank == true)) then
+		M.BelowOff()
+		return
+	end
+	local mode = sample and "both:sample" or "both:live"
+	if mode ~= M.mode then
+		M.mode, M.known, M.last, M.readAt = mode, {}, nil, nil
+	end
+	M.Tick(not sample)
+	local fresh = sample or M.Due() or M.last == nil
+	if fresh then
+		M.last = sample and M.Spares() or M.Read()
+		M.Rank(M.last)
+	end
+	local key = unit and Ask(UnitGUID, unit) or nil
+	local shown, lost = {}, 0
+	for _, mob in ipairs(M.last) do
+		if Spare(mob, unit, key) then
+			shown[#shown + 1] = mob
+			if mob.state == "lost" then
+				lost = lost + 1
+			end
+		end
+	end
+	local k = math.min(#shown, BELOW)
+	M.LayBelow(k)
+	local keys = {}
+	for index = 1, k do
+		M.Fill(M.rows[index], shown[index])
+		keys[index] = shown[index].key
+	end
+	M.Clear(k + 1)
+	M.below, M.shown = k > 0 or nil, #shown
+	Look("Order", M.rows, k, mode, T.frame, keys, true)
+	if fresh then
+		M.Turned(shown, k, sample)
+	end
+	M.Suffix(unit, lost)
+end
+
+function M.BelowOff()
+	if M.mode == "both:live" or M.mode == "both:sample" then
+		M.Tick(false)
+		M.mode, M.known, M.last, M.readAt = nil, {}, nil, nil
+	end
+	if not M.below then
+		return
+	end
+	M.below, M.belowLaid, M.shown = nil, nil, 0
+	M.Clear(1)
+	Look("Forget", M.rows)
+	if M.line then
+		M.line:Hide()
+	end
+	if T.frame and ns.Finite(T.bottom) then
+		T.frame:SetSize(Number("barWidth", 180) + 2 * PAD, T.bottom + PAD)
+	end
 end
 
 function M.Stop()
@@ -942,11 +1123,14 @@ function M.Stop()
 	if M.mode ~= nil or next(M.known) ~= nil then
 		M.known, M.mode = {}, nil
 	end
-	M.count = 0
-	if not M.active then
+	M.count, M.shown, M.last, M.readAt, M.belowLaid = 0, 0, nil, nil, nil
+	if M.line then
+		M.line:Hide()
+	end
+	if not M.active and not M.below then
 		return
 	end
-	M.active = false
+	M.active, M.below = false, nil
 	M.Clear(1)
 	if M.more then
 		M.more:Hide()
@@ -959,9 +1143,12 @@ function M.Stop()
 end
 
 function M.Status(lines)
-	if not ns.Enabled(KEY) or not M.View() then
+	if not ns.Enabled(KEY) then
 		return
 	end
-	local why = Opt("view") == "mobs" and "your choice" or "you count as a tank"
-	lines[#lines + 1] = ("Threat list: Enemies (%s), %d in the last look."):format(why, M.count or 0)
+	if M.View() then
+		lines[#lines + 1] = ("Threat list: Enemies you fight, %d in the last look."):format(M.count or 0)
+	elseif M.Both() and T.tank == true then
+		lines[#lines + 1] = ("Threat list: you count as a tank, so the enemies you are losing show under your target, %d in the last look."):format(M.shown or 0)
+	end
 end
