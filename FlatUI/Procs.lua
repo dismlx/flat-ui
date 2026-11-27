@@ -184,19 +184,24 @@ local function KitOf(entry)
 	return K.KITS[ns.Get(KEY .. ".procSound")]
 end
 
+local function Most(row)
+	local most = row and row.most
+	return Whole(most) and most > 1 and most or nil
+end
+
 local function ArtData(entry)
 	local signal = P.signalled[entry.id]
-	if signal then
-		return { file = signal.file, location = signal.location, scale = signal.scale or 1, r = signal.r, g = signal.g, b = signal.b }
-	end
 	local row = RowOf(entry)
+	if signal then
+		return { file = signal.file, location = signal.location, scale = signal.scale or 1, r = signal.r, g = signal.g, b = signal.b, most = Most(row) }
+	end
 	if row and row.noArt == true then
 		return false
 	end
 	local art = row and row.art
 	if type(art) == "table" then
 		return { file = art.file, location = art.location, scale = art.scale or 1, alpha = art.alpha, r = art.r, g = art.g, b = art.b,
-			turn = art.turn, pulse = art.pulse, seconds = art.seconds }
+			turn = art.turn, pulse = art.pulse, seconds = art.seconds, most = Most(row) }
 	end
 	return nil
 end
@@ -263,6 +268,7 @@ local function Gone(id)
 		Stop(entry)
 	end
 	P.since[id], P.signalled[id], P.glow[id], P.ended[id], P.stopped[id] = nil, nil, nil, nil, nil
+	Call(ns.ProcArtDrop, id)
 	for _, def in pairs(P.triggers) do
 		if type(def.Forget) == "function" then
 			pcall(def.Forget, id)
@@ -333,13 +339,25 @@ end
 
 local function Read(entry)
 	local id, now = entry.id, Now()
+	local most = Most(RowOf(entry))
 	if Off(entry) then
 		P.ended[id], P.since[id] = nil, nil
+		if most then
+			Call(ns.ProcArtStacks, entry, 0, most, false)
+		end
 		return { state = "missing", hidden = false }
 	end
 	local reading = Raw(entry)
 	if reading.state == "low" then
 		reading.state = "fine"
+	end
+	if most then
+		local count = reading.state == "fine" and math.max(1, Number(reading.count)) or 0
+		Call(ns.ProcArtStacks, entry, count, most, reading.state == "unknown")
+		if count > 0 and count < most then
+			P.ended[id], P.since[id] = nil, nil
+			return { state = "missing", hidden = false, icon = reading.icon, count = count }
+		end
 	end
 	if reading.state == "fine" then
 		local time = Number(entry.time)
@@ -838,8 +856,13 @@ local function Level(entry)
 end
 
 local function UpNow(entry)
-	local state = Raw(entry).state
+	local reading = Raw(entry)
+	local state = reading.state
 	if state == "fine" or state == "low" then
+		local most, count = Most(RowOf(entry)), math.max(1, Number(reading.count))
+		if most and count < most then
+			return ("no, %d of %d stacks"):format(count, most)
+		end
 		return P.ended[entry.id] and "no" or "yes"
 	elseif state == "missing" then
 		return "no"
@@ -1061,6 +1084,20 @@ function ns.ProcEnds(entry)
 	local start = (preview ~= nil and preview.entry == entry and preview.since) or (P.held == entry and P.heldSince) or nil
 	if Plain(start, "number") then
 		return now + time - (now - start) % time
+	end
+	return nil
+end
+
+function ns.ProcSampleSince(entry)
+	if type(entry) ~= "table" then
+		return nil
+	end
+	local preview = P.preview
+	if preview ~= nil and preview.entry == entry and Plain(preview.since, "number") then
+		return preview.since, false
+	end
+	if P.held == entry and Plain(P.heldSince, "number") and not ns.ProcReal(entry) then
+		return P.heldSince, true
 	end
 	return nil
 end

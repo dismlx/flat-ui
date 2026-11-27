@@ -21,7 +21,9 @@ local K = {
 		LeftRightOutside = "Left and Right outside",
 	},
 	BY_NUMBER = { [0] = "Center", "Left", "Right", "Top", "Bottom", "TopLeft", "TopRight", "LeftOutside", "RightOutside", "LeftRight", "TopBottom", "LeftRightOutside" },
-	MAX_SCALE = 5, MAX_SECONDS = 120,
+	MAX_SCALE = 5, MAX_SECONDS = 120, MAX_MOST = 20,
+	GHOST = 0.25, STEP = 0.6, LOOP = 3, TICK = 0.1, COUNT = 28, TIME = 26, TIME_LAST = 2, TIME_GROW = 1.15,
+	FONT = "NumberFontNormal", FULL_LOW = 0.35,
 }
 
 local G = {
@@ -38,6 +40,8 @@ local G = {
 
 local holder, PlaceHolder
 local pool, ups, fading, last = {}, {}, {}, {}
+local T = { clock = 0, ticking = false }
+local GAME = { recs = {} }
 
 local function Plain(value, kind)
 	return not IsSecret(value) and type(value) == kind
@@ -57,6 +61,35 @@ end
 
 local function Look()
 	return ns.Get(KEY .. ".glowStyle") == "game" and "game" or "soft"
+end
+
+local function StacksOn()
+	return ns.Get(KEY .. ".artStacks") ~= false
+end
+
+local function TimeOn()
+	return ns.Get(KEY .. ".artTime") ~= false
+end
+
+local function Opacity()
+	return Setting("artAlpha", K.ALPHA) / 100
+end
+
+local function TextAlpha()
+	return math.min(1, 2 * Opacity())
+end
+
+local function Now()
+	local ok, now = pcall(GetTime)
+	return ok and Plain(now, "number") and now or 0
+end
+
+local function Big(text, size)
+	local ok, file = pcall(text.GetFont, text)
+	if not (ok and Plain(file, "string")) then
+		file = STANDARD_TEXT_FONT
+	end
+	pcall(text.SetFont, text, file, math.max(8, math.floor(size + 0.5)), "OUTLINE")
 end
 
 function ns.ProcArtOn()
@@ -109,8 +142,10 @@ local function Normalise(data)
 	if arc then
 		alpha, turn = 1, nil
 	end
+	local most = data.most
+	most = Plain(most, "number") and most >= 2 and math.min(math.floor(most), K.MAX_MOST) or nil
 	return { file = file, location = location, scale = scale, colour = colour, arc = arc, alpha = alpha, turn = turn, pulse = data.pulse ~= false,
-		seconds = seconds }
+		seconds = seconds, most = most }
 end
 
 local function ProcRgb(entry)
@@ -137,6 +172,18 @@ local function ColourOf(entry, art)
 	return 1, 1, 1
 end
 
+local function TextColour(entry, art)
+	local own = type(entry) == "table" and entry.colour
+	if not Plain(own, "string") and not art.arc and art.colour then
+		return art.colour[1], art.colour[2], art.colour[3]
+	end
+	local r, g, b = ProcRgb(entry)
+	if r then
+		return r, g, b
+	end
+	return K.FALLBACK[1], K.FALLBACK[2], K.FALLBACK[3]
+end
+
 local function Corners(texture, g, turn)
 	local left, right = g.flipH and 1 or 0, g.flipH and 0 or 1
 	local top, bottom = g.flipV and 1 or 0, g.flipV and 0 or 1
@@ -152,6 +199,9 @@ end
 local function Release(piece)
 	piece.live = false
 	piece.byGame = false
+	piece.fill:Hide()
+	piece.count:Hide()
+	piece.time:Hide()
 	for _, set in pairs(piece.looks) do
 		set.fadeIn:Stop()
 		set.pulse:Stop()
@@ -212,6 +262,19 @@ local function MakePiece()
 	piece.tex = piece:CreateTexture(nil, "ARTWORK", nil, 0)
 	ns.Own[piece.tex] = true
 	piece.tex:SetAllPoints(piece)
+	piece.fill = piece:CreateTexture(nil, "ARTWORK", nil, 1)
+	ns.Own[piece.fill] = true
+	piece.fill:Hide()
+	for _, name in ipairs({ "count", "time" }) do
+		local text = ns.OwnText(piece, "OVERLAY", K.FONT)
+		if not text then
+			error("no text for the art", 0)
+		end
+		text:SetWordWrap(false)
+		text:SetJustifyH("CENTER")
+		text:Hide()
+		piece[name] = text
+	end
 	piece.looks = {}
 	for look, steps in pairs({ game = { K.FADE_IN, K.PULSE_UP, K.PULSE_DOWN, K.PULSE_TIME },
 		soft = { K.SOFT_FADE_IN, K.SOFT_UP, K.SOFT_DOWN, K.SOFT_TIME } }) do
@@ -264,8 +327,96 @@ local function Place(piece, name, art, slot)
 	piece:ClearAllPoints()
 	piece:SetPoint(g.point, holder, g.rel, x, y)
 	piece:SetSize(w, h)
+	piece.g, piece.w, piece.h = g, w, h
 	Corners(piece.tex, g, art.turn)
-	piece.tex:SetAlpha(art.alpha)
+	piece.tex:SetAlpha(art.alpha * Opacity())
+end
+
+local function Crop(piece, f)
+	local g, fill, w, h = piece.g, piece.fill, piece.w, piece.h
+	local left, right = g.flipH and 1 or 0, g.flipH and 0 or 1
+	local top, bottom = g.flipV and 1 or 0, g.flipV and 0 or 1
+	fill:ClearAllPoints()
+	if g.dx == 0 and g.dy < 0 then
+		fill:SetPoint("TOPLEFT", piece, "TOPLEFT", 0, 0)
+		fill:SetPoint("TOPRIGHT", piece, "TOPRIGHT", 0, 0)
+		fill:SetHeight(math.max(0.5, h * f))
+		fill:SetTexCoord(left, right, top, top + (bottom - top) * f)
+	elseif g.dx == 0 then
+		fill:SetPoint("BOTTOMLEFT", piece, "BOTTOMLEFT", 0, 0)
+		fill:SetPoint("BOTTOMRIGHT", piece, "BOTTOMRIGHT", 0, 0)
+		fill:SetHeight(math.max(0.5, h * f))
+		fill:SetTexCoord(left, right, bottom - (bottom - top) * f, bottom)
+	elseif g.dx < 0 then
+		fill:SetPoint("TOPRIGHT", piece, "TOPRIGHT", 0, 0)
+		fill:SetPoint("BOTTOMRIGHT", piece, "BOTTOMRIGHT", 0, 0)
+		fill:SetWidth(math.max(0.5, w * f))
+		fill:SetTexCoord(right - (right - left) * f, right, top, bottom)
+	else
+		fill:SetPoint("TOPLEFT", piece, "TOPLEFT", 0, 0)
+		fill:SetPoint("BOTTOMLEFT", piece, "BOTTOMLEFT", 0, 0)
+		fill:SetWidth(math.max(0.5, w * f))
+		fill:SetTexCoord(left, left + (right - left) * f, top, bottom)
+	end
+end
+
+local function Most(rec)
+	return StacksOn() and rec.art.most or nil
+end
+
+local function Building(rec)
+	local most = Most(rec)
+	return most ~= nil and rec.stacks ~= nil and rec.stacks < most
+end
+
+local function Scale()
+	return Setting("artSize", K.SIZE) / K.SIZE
+end
+
+local function Dress(rec, piece, first)
+	local art, most = rec.art, Most(rec)
+	local base = art.alpha * Opacity()
+	local n = most and (rec.stacks or most) or nil
+	local building = n ~= nil and n < most
+	if building and not art.turn then
+		piece.tex:SetAlpha(base * K.GHOST)
+		piece.fill:SetTexture(art.file)
+		local r, g, b = ColourOf(rec.entry, art)
+		piece.fill:SetVertexColor(r, g, b)
+		piece.fill:SetAlpha(base)
+		Crop(piece, n / most)
+		piece.fill:Show()
+	else
+		piece.fill:Hide()
+		piece.tex:SetAlpha(building and base * (K.GHOST + (1 - K.GHOST) * n / most) or base)
+	end
+	local count, time = piece.count, piece.time
+	if first and n then
+		Big(count, K.COUNT * Scale())
+		count:ClearAllPoints()
+		count:SetPoint("CENTER", piece, "CENTER", 0, 0)
+		if building then
+			count:SetTextColor(TextColour(rec.entry, art))
+		else
+			count:SetTextColor(1, 1, 1)
+		end
+		count:SetText(("%d"):format(n))
+		count:SetAlpha(TextAlpha())
+		count:Show()
+	else
+		count:Hide()
+	end
+	time:ClearAllPoints()
+	if first and n then
+		time:SetPoint("TOP", count, "BOTTOM", 0, -2)
+	else
+		time:SetPoint("CENTER", piece, "CENTER", 0, 0)
+	end
+	time:SetAlpha(TextAlpha())
+	if not first then
+		time:Hide()
+	end
+	rec.timeLeft = nil
 end
 
 local function GameIcon(entry)
@@ -274,11 +425,14 @@ local function GameIcon(entry)
 	return type(call) == "function" and call(entry) == true
 end
 
+local Wake
+
 local function Layout(rec, again)
 	local r, g, b = ColourOf(rec.entry, rec.art)
 	local game = GameIcon(rec.entry)
 	rec.drew = true
 	local wanted = Locations(rec.art.location)
+	local building = Building(rec)
 	for name, piece in pairs(rec.pieces) do
 		if name ~= wanted[1] and name ~= wanted[2] then
 			rec.pieces[name] = nil
@@ -307,7 +461,8 @@ local function Layout(rec, again)
 			local ok = pcall(piece.tex.SetTexture, piece.tex, rec.art.file)
 			rec.drew = rec.drew and ok
 			piece.tex:SetVertexColor(r, g, b)
-			piece.pulses = rec.art.pulse
+			piece.pulses = rec.art.pulse and not building
+			Dress(rec, piece, name == wanted[1])
 			local look = Look()
 			if piece.look ~= look then
 				local moving = piece.animIn:IsPlaying() or piece.pulse:IsPlaying()
@@ -321,6 +476,8 @@ local function Layout(rec, again)
 			end
 			if not piece.pulses and piece.pulse:IsPlaying() then
 				piece.pulse:Stop()
+			elseif piece.pulses and not piece.fresh and piece:IsShown() and not piece.animIn:IsPlaying() and not piece.pulse:IsPlaying() then
+				piece.pulse:Play()
 			end
 			if piece.fresh then
 				piece.fresh = false
@@ -343,6 +500,98 @@ local function Layout(rec, again)
 			end
 		end
 	end
+	rec.first = rec.pieces[wanted[1]]
+	Wake()
+end
+
+local function SampleCount(rec)
+	local most = rec.art.most
+	if not (most and StacksOn() and Plain(rec.sample, "number")) then
+		return nil
+	end
+	local step = math.floor(math.max(0, Now() - rec.sample) / K.STEP)
+	if rec.loops then
+		step = step % (most + K.LOOP)
+	end
+	return math.min(most, step + 1)
+end
+
+local function Sample(rec)
+	local n = SampleCount(rec)
+	if not n then
+		return false
+	end
+	if rec.stacks ~= n then
+		rec.stacks = n
+		Layout(rec)
+	end
+	return rec.loops == true or n < rec.art.most
+end
+
+local function Clock(rec)
+	local text = rec.first and rec.first.time
+	if not text then
+		return false
+	end
+	local left
+	if TimeOn() and not Building(rec) and type(ns.ProcEnds) == "function" then
+		local ok, ends = pcall(ns.ProcEnds, rec.entry)
+		if ok and Plain(ends, "number") then
+			left = ends - Now()
+		end
+	end
+	if not (left and left > 0) then
+		rec.timeLeft = nil
+		text:Hide()
+		return false
+	end
+	local n = math.ceil(left)
+	if rec.timeLeft ~= n then
+		rec.timeLeft = n
+		local final = n <= K.TIME_LAST
+		Big(text, K.TIME * Scale() * (final and K.TIME_GROW or 1))
+		if final then
+			text:SetTextColor(1, 1, 1)
+		else
+			text:SetTextColor(TextColour(rec.entry, rec.art))
+		end
+		text:SetText(("%d"):format(n))
+		text:Show()
+	end
+	return true
+end
+
+local function Step()
+	local busy = false
+	for _, rec in ipairs(ups) do
+		local sampled = Sample(rec)
+		local timed = Clock(rec)
+		busy = busy or sampled or timed
+	end
+	return busy
+end
+
+local function Tick(_, elapsed)
+	T.clock = T.clock - (Plain(elapsed, "number") and elapsed or 0)
+	if T.clock > 0 then
+		return
+	end
+	T.clock = K.TICK
+	local ok, busy = pcall(Step)
+	if not ok or not busy then
+		T.ticking = false
+		holder:SetScript("OnUpdate", nil)
+	end
+	if not ok then
+		geterrorhandler()(busy)
+	end
+end
+
+Wake = function()
+	if holder and not T.ticking then
+		T.ticking, T.clock = true, 0
+		holder:SetScript("OnUpdate", Tick)
+	end
 end
 
 function PlaceHolder()
@@ -356,7 +605,7 @@ function PlaceHolder()
 	else
 		holder:SetPoint("CENTER", UIParent, "CENTER", 0, Setting("artY", 0))
 	end
-	holder:SetAlpha(Setting("artAlpha", K.ALPHA) / 100)
+	holder:SetAlpha(1)
 end
 
 local function Build()
@@ -439,6 +688,17 @@ function ns.ProcArtShow(entry, data, again)
 		ups[#ups + 1] = rec
 		rec.slot = SlotFor(rec)
 	end
+	rec.up, rec.keep = true, nil
+	local since, loops
+	if type(ns.ProcSampleSince) == "function" then
+		since, loops = ns.ProcSampleSince(entry)
+	end
+	rec.sample, rec.loops = since, loops == true
+	if Plain(since, "number") then
+		rec.stacks = SampleCount(rec)
+	elseif art.most and rec.stacks and rec.stacks < art.most then
+		rec.stacks = nil
+	end
 	last[rec.id or entry] = { file = art.file, location = art.location, arc = art.arc }
 	if holder then
 		Layout(rec, again == true)
@@ -469,6 +729,13 @@ function ns.ProcArtHide(entry, now)
 	local rec, index = Find(entry)
 	if not rec then
 		return false
+	end
+	if not now and rec.up and rec.keep and On() and StacksOn() then
+		rec.up, rec.stacks, rec.keep, rec.sample = nil, rec.keep, nil, nil
+		if holder then
+			Layout(rec)
+		end
+		return true
 	end
 	table.remove(ups, index)
 	for _, piece in pairs(rec.pieces) do
@@ -503,6 +770,11 @@ function ns.ProcArtReset()
 	for piece in pairs(fading) do
 		Release(piece)
 	end
+	for _, rec in pairs(GAME.recs) do
+		if rec then
+			pcall(rec.container.SetAlpha, rec.container, 0)
+		end
+	end
 end
 
 function ns.ProcArtChanged()
@@ -511,10 +783,19 @@ function ns.ProcArtChanged()
 			ns.ProcArtReset()
 		else
 			PlaceHolder()
+			for index = #ups, 1, -1 do
+				local rec = ups[index]
+				if not rec.up and not StacksOn() then
+					ns.ProcArtHide(rec.entry)
+				end
+			end
 			for _, rec in ipairs(ups) do
 				Layout(rec)
 			end
 		end
+	end
+	if type(GAME.PaintAll) == "function" then
+		GAME.PaintAll()
 	end
 	local slots = ns.TrackerSlots
 	if type(slots) == "table" and type(slots.Flush) == "function" then
@@ -581,10 +862,320 @@ local function Ratio(button)
 	return 1
 end
 
+local function Taken(entry, art)
+	return art.most ~= nil and GAME.Ready(entry)
+end
+
 local function Key(entry, art, slot)
 	local r, g, b = ColourOf(entry, art)
 	return table.concat({ On() and "on" or "off", Setting("artSize", K.SIZE), Setting("artAlpha", K.ALPHA), Setting("artY", 0), r, g, b, slot,
-		tostring(art.file), art.location }, "|")
+		tostring(art.file), art.location, Taken(entry, art) and "taken" or "own" }, "|")
+end
+
+function GAME.Formatter(r, g, b, most)
+	local call = type(C_StringUtil) == "table" and C_StringUtil.CreateNumericRuleFormatter or nil
+	local ok, formatter = pcall(call)
+	if not ok or formatter == nil or IsSecret(formatter) then
+		return nil
+	end
+	local hex = ("|cff%02x%02x%02x%%d|r"):format(math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
+	ok = pcall(formatter.AddBreakpoint, formatter, { threshold = 0, format = " " })
+	ok = ok and pcall(formatter.AddBreakpoint, formatter, { threshold = 1, format = hex })
+	ok = ok and pcall(formatter.AddBreakpoint, formatter, { threshold = most, format = "|cffffffff%d|r" })
+	return ok and formatter or nil
+end
+
+function GAME.Init(rec, index, kind, button)
+	local most = rec.art.most
+	pcall(button.SetAllPoints, button)
+	pcall(button.EnableMouse, button, false)
+	pcall(button.SetHideTooltipInCombat, button, true)
+	local part = rec.parts[index] or {}
+	rec.parts[index] = part
+	local bar = CreateFrame("StatusBar", nil, button)
+	ns.Own[bar] = true
+	local low = kind == "full" and most - 1 or 0
+	bar:SetMinMaxValues(low, most)
+	bar:SetValue(low)
+	local made = { button = button, bar = bar }
+	part[kind] = made
+	if kind == "fill" then
+		made.ghost = button:CreateTexture(nil, "BACKGROUND", nil, 0)
+		ns.Own[made.ghost] = true
+		if index == 1 then
+			local top = CreateFrame("Frame", nil, button)
+			ns.Own[top] = true
+			top:SetAllPoints(button)
+			top:SetFrameLevel(bar:GetFrameLevel() + 4)
+			made.text = ns.OwnText(top, "OVERLAY", K.FONT)
+			if made.text then
+				made.text:SetWordWrap(false)
+				made.text:SetJustifyH("CENTER")
+			end
+		end
+	else
+		local group = bar:CreateAnimationGroup()
+		local breathe = group:CreateAnimation("Alpha")
+		breathe:SetFromAlpha(K.FULL_LOW)
+		breathe:SetToAlpha(1)
+		breathe:SetDuration(K.PULSE_TIME)
+		breathe:SetSmoothing("IN_OUT")
+		group:SetLooping("BOUNCE")
+		made.pulse = group
+		bar:SetScript("OnShow", function()
+			group:Play()
+		end)
+		group:Play()
+	end
+	made.ok = pcall(button.SetApplicationBar, button, bar, { minApplications = low, maxApplications = most })
+end
+
+function GAME.Enable(rec, on)
+	if rec.on == on or InCombatLockdown() then
+		return
+	end
+	for _, key in ipairs(rec.slots) do
+		pcall(rec.container.SetAuraSlotEnabled, rec.container, key, on)
+	end
+	rec.on = on
+	if not on then
+		pcall(rec.container.SetAlpha, rec.container, 0)
+	end
+end
+
+function GAME.Build(entry)
+	local data = type(ns.ProcArtData) == "function" and ns.ProcArtData(entry)
+	if type(data) ~= "table" or type(entry.spells) ~= "table" or #entry.spells == 0 then
+		return nil
+	end
+	local art = Normalise(data)
+	if not art.most then
+		return nil
+	end
+	local ok, container = pcall(CreateFrame, "AuraContainer", nil, holder, "CustomAuraContainerTemplate")
+	if not ok or type(container) ~= "table" then
+		return nil
+	end
+	ns.Own[container] = true
+	local rec = { entry = entry, art = art, container = container, parts = {}, slots = {}, on = true }
+	local set = {}
+	for _, id in ipairs(entry.spells) do
+		set[id] = true
+	end
+	local made = pcall(function()
+		container:SetEditModePreviewEnabled(false)
+		container:SetUnit("player")
+		container:SetAllPoints(holder)
+		container:SetAlpha(0)
+		for index in ipairs(Locations(art.location)) do
+			for _, kind in ipairs({ "fill", "full" }) do
+				local key = kind .. index
+				rec.slots[#rec.slots + 1] = key
+				container:AddAuraSlot(key, "HELPFUL", { candidateFilters = { includeSpellIDs = set }, initializeFrame = function(button)
+					local fine, err = pcall(GAME.Init, rec, index, kind, button)
+					if not fine then
+						rec.err = rec.err or err
+					end
+				end })
+			end
+		end
+	end)
+	local first = rec.parts[1] and rec.parts[1].fill
+	if not (made and rec.err == nil and first and first.ok) then
+		rec.on = nil
+		GAME.Enable(rec, false)
+		return false
+	end
+	GAME.Paint(rec)
+	return rec
+end
+
+function GAME.Bar(bar, geometry, w, h, x, y, file)
+	bar:ClearAllPoints()
+	bar:SetPoint(geometry.point, holder, geometry.rel, x, y)
+	bar:SetSize(w, h)
+	bar:SetStatusBarTexture(file)
+	bar:SetOrientation(geometry.dx == 0 and "VERTICAL" or "HORIZONTAL")
+	bar:SetReverseFill(geometry.dy < 0 or geometry.dx < 0)
+end
+
+function GAME.Key(rec)
+	local r, g, b = TextColour(rec.entry, rec.art)
+	local tr, tg, tb = ColourOf(rec.entry, rec.art)
+	return table.concat({ Setting("artSize", K.SIZE), Setting("artAlpha", K.ALPHA), Setting("artY", 0), r, g, b, tr, tg, tb,
+		FixedSlot(rec.entry, rec.art) }, "|")
+end
+
+function GAME.Paint(rec)
+	if InCombatLockdown() then
+		rec.dirty = true
+		return
+	end
+	rec.dirty = nil
+	local entry, art = rec.entry, rec.art
+	local slot = FixedSlot(entry, art)
+	local base = art.alpha * Opacity()
+	local r, g, b = ColourOf(entry, art)
+	for index, name in ipairs(Locations(art.location)) do
+		local part = rec.parts[index]
+		local geometry, w, h, x, y = Spot(name, art, slot)
+		local flat = not (geometry.flipH or geometry.flipV or art.turn)
+		local fill, full = part and part.fill, part and part.full
+		if fill then
+			local ghost = fill.ghost
+			ghost:ClearAllPoints()
+			ghost:SetPoint(geometry.point, holder, geometry.rel, x, y)
+			ghost:SetSize(w, h)
+			ghost:SetTexture(art.file)
+			Corners(ghost, geometry, art.turn)
+			ghost:SetVertexColor(r, g, b, flat and base * K.GHOST or base)
+			GAME.Bar(fill.bar, geometry, w, h, x, y, art.file)
+			fill.bar:SetStatusBarColor(r, g, b, base)
+			fill.bar:SetAlpha(flat and 1 or 0)
+		end
+		if full then
+			GAME.Bar(full.bar, geometry, w, h, x, y, art.file)
+			local texture = full.bar:GetStatusBarTexture()
+			if texture then
+				pcall(texture.SetBlendMode, texture, "ADD")
+			end
+			full.bar:SetStatusBarColor(r, g, b, base)
+			full.bar:SetShown(flat and art.pulse)
+		end
+	end
+	local first = rec.parts[1] and rec.parts[1].fill
+	if first and first.text then
+		local text = first.text
+		Big(text, K.COUNT * Scale())
+		text:ClearAllPoints()
+		text:SetPoint("CENTER", first.bar, "CENTER", 0, 0)
+		text:SetAlpha(TextAlpha())
+		local tr, tg, tb = TextColour(entry, art)
+		local formatter = GAME.Formatter(tr, tg, tb, art.most)
+		first.counted = formatter ~= nil and pcall(first.button.SetApplicationCount, first.button, text, { formatter = formatter })
+		if not first.counted then
+			text:Hide()
+		end
+	end
+	rec.key = GAME.Key(rec)
+end
+
+function GAME.Ready(entry)
+	local rec = type(entry) == "table" and GAME.recs[entry.id]
+	return type(rec) == "table" and rec.on == true and On() and StacksOn() and ns.Enabled(KEY)
+end
+
+function GAME.Show(entry, hidden)
+	local id = entry.id
+	local rec = GAME.recs[id]
+	local wanted = On() and StacksOn() and ns.Enabled(KEY)
+	if rec == nil and wanted and holder and not InCombatLockdown() then
+		GAME.recs[id] = GAME.Build(entry) or false
+		rec = GAME.recs[id]
+		local slots = ns.TrackerSlots
+		if rec and type(slots) == "table" and type(slots.Flush) == "function" then
+			slots.Flush()
+		end
+	end
+	if type(rec) ~= "table" then
+		return
+	end
+	if not InCombatLockdown() then
+		GAME.Enable(rec, wanted)
+		if rec.on and (rec.dirty or rec.key ~= GAME.Key(rec)) then
+			GAME.Paint(rec)
+		end
+	end
+	pcall(rec.container.SetAlpha, rec.container, (wanted and rec.on and hidden) and 1 or 0)
+end
+
+function GAME.PaintAll()
+	for _, rec in pairs(GAME.recs) do
+		if rec then
+			if not InCombatLockdown() then
+				GAME.Enable(rec, On() and StacksOn() and ns.Enabled(KEY))
+			end
+			if rec.on then
+				GAME.Paint(rec)
+			else
+				pcall(rec.container.SetAlpha, rec.container, 0)
+			end
+		end
+	end
+end
+
+function ns.ProcArtStacks(entry, count, most, hidden)
+	if type(entry) ~= "table" or entry.id == nil then
+		return
+	end
+	GAME.Show(entry, hidden == true)
+	count = Plain(count, "number") and count or 0
+	local rec = Find(entry)
+	if not (On() and StacksOn()) or hidden == true or count < 1 then
+		if rec then
+			rec.keep = nil
+			if not rec.up then
+				ns.ProcArtHide(entry)
+			end
+		end
+		return
+	end
+	if rec then
+		if rec.up then
+			rec.keep = count < most and count or nil
+			if count >= most and not rec.sample and rec.stacks ~= count then
+				rec.stacks = count
+				if holder then
+					Layout(rec)
+				end
+			end
+		elseif rec.stacks ~= count then
+			rec.stacks = count
+			if holder then
+				Layout(rec)
+			end
+		end
+		return
+	end
+	if count >= most or #ups >= K.MAX then
+		return
+	end
+	local data = type(ns.ProcArtData) == "function" and ns.ProcArtData(entry)
+	if type(data) ~= "table" then
+		return
+	end
+	local art = Normalise(data)
+	if not art.most then
+		return
+	end
+	rec = { entry = entry, id = entry.id, art = art, pieces = {}, stacks = count }
+	ups[#ups + 1] = rec
+	rec.slot = SlotFor(rec)
+	if holder then
+		Layout(rec)
+	else
+		ns.OutOfCombat(Flush)
+	end
+end
+
+function ns.ProcArtDrop(id)
+	local rec = GAME.recs[id]
+	if type(rec) == "table" then
+		pcall(rec.container.SetAlpha, rec.container, 0)
+		if InCombatLockdown() then
+			ns.OutOfCombat(function()
+				GAME.Enable(rec, false)
+			end)
+		else
+			GAME.Enable(rec, false)
+		end
+	end
+	for _, found in ipairs(ups) do
+		if found.id == id and not found.up then
+			ns.ProcArtHide(found.entry, true)
+			break
+		end
+	end
 end
 
 function ns.ProcArtParts(rec, button, entry)
@@ -625,7 +1216,7 @@ function ns.ProcArtParts(rec, button, entry)
 		local key = Key(entry, art, slot)
 		local r, g, b = ColourOf(entry, art)
 		local ratio = Ratio(button)
-		local alpha = On() and Setting("artAlpha", K.ALPHA) / 100 or 0
+		local alpha = (On() and not Taken(entry, art)) and Setting("artAlpha", K.ALPHA) / 100 or 0
 		local height = Setting("artY", 0)
 		for name, texture in pairs(pieces) do
 			local geometry, w, h, x, y = Spot(name, art, slot)
@@ -668,12 +1259,20 @@ function ns.ProcArtLine(entry)
 			return "Art: none, the glow on the button alone"
 		end
 	end
+	local stacks = ""
+	local data = given and type(entry) == "table" and select(2, pcall(given, entry))
+	local most = type(data) == "table" and Normalise(data).most
+	if most and StacksOn() then
+		local rec = GAME.recs[entry.id]
+		stacks = (" Stacks: builds to %d; in fights the game draws them: %s."):format(most,
+			rec == nil and "not made yet" or (rec and rec.on and (rec.parts[1].fill.counted and "fill and number" or "fill")) or "refused")
+	end
 	local seen = type(entry) == "table" and (last[entry.id or entry] or last[entry])
 	if not seen then
-		return "Art: not drawn yet"
+		return stacks == "" and "Art: not drawn yet" or ("Art: not drawn yet." .. stacks)
 	end
-	return ("Art: file %s, %s, drew %s. A file that does not draw is a green block: look at /flatui tracker test."):format(
-		tostring(seen.arc and "arc" or seen.file), K.NAMES[seen.location] or seen.location, seen.drew and "yes" or "no")
+	return ("Art: file %s, %s, drew %s. A file that does not draw is a green block: look at /flatui tracker test.%s"):format(
+		tostring(seen.arc and "arc" or seen.file), K.NAMES[seen.location] or seen.location, seen.drew and "yes" or "no", stacks)
 end
 
 local boot = CreateFrame("Frame")
