@@ -1118,10 +1118,126 @@ do
 		rec.byUnit = on and byUnit
 	end
 
+	local LAND_ROW, LAND_LOOK, LAND_FOR, LAND_FRESH = "castbars.landSound", 0.05, 0.4, 0.3
+	local LAND_BARS = { "TargetFrameSpellBar", "FocusFrameSpellBar" }
+	local L = { on = false, played = 0, at = nil, frame = nil, ticker = nil }
+	K.land = L
+
+	local function LandOn()
+		return ns.Enabled("castbars") and KITS[Get(LAND_ROW)] ~= nil
+	end
+
+	local function Fresh(bar)
+		local anim = bar.HoldFadeOutAnim
+		if ns.IsSecret(anim) or type(anim) ~= "table" then
+			return false
+		end
+		local ok, playing = pcall(anim.IsPlaying, anim)
+		if not (ok and Flag(playing)) then
+			return false
+		end
+		local read, elapsed = pcall(anim.GetElapsed, anim)
+		return read and ns.Finite(elapsed) and elapsed <= LAND_FRESH
+	end
+
+	local function LandPlay()
+		local now = GetTime()
+		if L.at and now >= L.at and now - L.at < KICK_GAP then
+			return
+		end
+		local kit = KITS[Get(LAND_ROW)]
+		local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
+		if sound and type(ns.PlayKit) == "function" then
+			L.at = now
+			if ns.PlayKit(sound[1], "castbars") then
+				L.played = L.played + 1
+			end
+		end
+	end
+
+	local function LandLook(snap)
+		if not L.on or type(ns.CastBarInterrupted) ~= "function" then
+			return true
+		end
+		for index, name in ipairs(LAND_BARS) do
+			local bar = PlayerBar(name)
+			if bar and ns.CastBarInterrupted(bar) and (snap[index] or Fresh(bar)) then
+				LandPlay()
+				return true
+			end
+		end
+		return false
+	end
+
+	local function LandStop()
+		local ticker = L.ticker
+		L.ticker = nil
+		if ticker then
+			pcall(ticker.Cancel, ticker)
+		end
+	end
+
+	local function LandHeard(spell)
+		if not (type(ns.InterruptSpell) == "function" and ns.InterruptSpell(spell)) then
+			return
+		end
+		local snap = {}
+		for index, name in ipairs(LAND_BARS) do
+			local bar = PlayerBar(name)
+			snap[index] = bar ~= nil and (Flag(bar.casting) or Flag(bar.channeling))
+		end
+		LandStop()
+		if LandLook(snap) or type(C_Timer) ~= "table" or type(C_Timer.NewTicker) ~= "function" then
+			return
+		end
+		local left = math.floor(LAND_FOR / LAND_LOOK + 0.5)
+		local ok, ticker = pcall(C_Timer.NewTicker, LAND_LOOK, function()
+			left = left - 1
+			local looked, done = pcall(LandLook, snap)
+			if not looked or done or left <= 0 then
+				LandStop()
+			end
+		end, left)
+		L.ticker = ok and ticker or nil
+	end
+
+	local function LandEvent(_, _, unit, _, spell)
+		if L.on and not ns.IsSecret(unit) and (unit == "player" or unit == "pet") then
+			pcall(LandHeard, spell)
+		end
+	end
+
+	local function LandListen()
+		local on = LandOn()
+		if on == L.on then
+			return
+		end
+		if L.frame == nil then
+			local ok, frame = pcall(CreateFrame, "Frame")
+			L.frame = ok and not ns.IsSecret(frame) and type(frame) == "table" and frame or false
+			if L.frame then
+				ns.Own[frame] = true
+				frame:SetScript("OnEvent", LandEvent)
+			end
+		end
+		local frame = L.frame
+		if not frame then
+			return
+		end
+		L.on = on
+		if not on then
+			LandStop()
+			pcall(frame.UnregisterEvent, frame, "UNIT_SPELLCAST_SUCCEEDED")
+		elseif not (frame.RegisterUnitEvent and pcall(frame.RegisterUnitEvent, frame, "UNIT_SPELLCAST_SUCCEEDED", "player", "pet")) then
+			pcall(frame.RegisterEvent, frame, "UNIT_SPELLCAST_SUCCEEDED")
+		end
+	end
+
 	function KickListen()
 		for _, rec in ipairs(WATCH) do
 			pcall(WatchListen, rec)
 		end
+		pcall(LandListen)
 		local on = KickOn()
 		if on == K.on then
 			return
@@ -1276,6 +1392,9 @@ function ns.StatusLines()
 		if rec.on then
 			lines[#lines + 1] = ("%s: %d played."):format(rec.label, rec.played)
 		end
+	end
+	if K.land and K.land.on then
+		lines[#lines + 1] = ("Sound when your interrupt lands: %d played."):format(K.land.played)
 	end
 	return lines
 end

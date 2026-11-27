@@ -2,8 +2,8 @@ local _, ns = ...
 
 local KEY, ROW, PART, COLOUR_ROW = "castbars", "castbars.ticks", "channel ticks", "castbars.ticksColour"
 local BARS = { "PlayerCastingBarFrame", "OverlayPlayerCastingBarFrame" }
-local POOL, ALPHA, SUBLEVEL, PASSED, EVERY = 15, 0.6, 1, 0.25, 0.05
-local EVENTS = { "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_CHANNEL_STOP" }
+local POOL, ALPHA, SUBLEVEL, PASSED, EVERY, HOLD = 15, 0.6, 1, 0.25, 0.05, 1.5
+local EVENTS = { "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_CHANNEL_UPDATE", "UNIT_SPELLCAST_CHANNEL_STOP", "UNIT_SPELLCAST_START" }
 
 local sets = setmetatable({}, { __mode = "k" })
 local S = { frame = nil, on = false, spell = nil, ticks = nil, step = nil, startMs = nil, since = 0, last = nil, missed = 0, counted = nil }
@@ -119,10 +119,35 @@ local function Watching(on)
 end
 
 local function HideAll()
-	S.spell, S.ticks, S.step, S.startMs = nil, nil, nil, nil
+	S.spell, S.ticks, S.step, S.startMs, S.hold = nil, nil, nil, nil, nil
 	Watching(nil)
 	for bar in pairs(sets) do
 		pcall(HideBar, bar)
+	end
+end
+
+local function HoldAll()
+	S.spell, S.ticks, S.step, S.startMs = nil, nil, nil, nil
+	Watching(nil)
+	for _, set in pairs(sets) do
+		if set and set.used > 0 then
+			for k = 1, set.used do
+				if set.alpha[k] ~= PASSED then
+					set.marks[k]:SetAlpha(PASSED)
+					set.alpha[k] = PASSED
+				end
+			end
+		end
+	end
+	local token = {}
+	S.hold = token
+	local ok = type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, HOLD, function()
+		if S.hold == token then
+			pcall(HideAll)
+		end
+	end)
+	if not ok then
+		HideAll()
 	end
 end
 
@@ -200,6 +225,7 @@ local function Draw(fresh)
 		HideAll()
 		return
 	end
+	S.hold = nil
 	if fresh or S.spell ~= spellID or not S.step then
 		local ticks = TicksOf(spellID)
 		if not ticks or ticks < 2 then
@@ -236,6 +262,8 @@ end
 
 local function Heard(event)
 	if event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+		HoldAll()
+	elseif event == "UNIT_SPELLCAST_START" then
 		HideAll()
 	elseif event == "PLAYER_REGEN_ENABLED" then
 		MakeAll()

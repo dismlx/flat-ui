@@ -1300,6 +1300,18 @@ local CAST_STATES = {
 	["ui-castingbar-filling-applyingcrafting"] = "craft",
 	["ui-castingbar-full-applyingcrafting"] = "craft",
 }
+function ns.CastBarInterrupted(bar)
+	if ns.IsSecret(bar) or ns.Forbidden(bar) then
+		return false
+	end
+	local fill = ns.FillRegion(bar)
+	if not fill then
+		return false
+	end
+	local ok, atlas = pcall(fill.GetAtlas, fill)
+	return ok and not ns.IsSecret(atlas) and type(atlas) == "string" and CAST_STATES[atlas:lower()] == "interrupted"
+end
+
 local CAST_COLOURS = {
 	cast = "castbars.castColour",
 	channel = "castbars.channelColour",
