@@ -11,6 +11,8 @@ ns.WhatsNewData = {
 			"Charges: \001Add a spell\002 and /flatui charges add put any buff on you with more than one charge on the page, by name or spell ID. \001Take a spell off\002 and /flatui charges remove take one off.",
 			"Charges: in a fight, while the game hides your buffs, the game itself lights the orbs and writes the time left. The bursts, pops and pulse come back once it shows your buffs again.",
 			"Charges: /flatui move places it (\001Charges\002). Test mode, a change of its look out of combat and /flatui charges show a sample: Lightning Shield with 3 charges, one used every 2 seconds, then cast again.",
+			"The welcome screen now says it opens again with /flatui welcome, the command that does, and the help for /flatui new reads /flatui new <version>, as the old example named a version What's new no longer holds.",
+			"Flat UI has a wiki: a guide to each group of the options window, and every setting with its default, at https://github.com/dismlx/flat-ui/wiki.",
 		},
 	},
 	{

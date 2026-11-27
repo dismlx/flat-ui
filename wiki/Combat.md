@@ -1,4 +1,4 @@
-The **Combat** group holds what you watch in a fight: your own cooldowns, the buffs and items you must keep up, your procs, the shields and defensives on you, and the cooldowns of enemy players. Its pages are **Cooldowns**, **Trackers**, **Defensives on you**, **Absorb shields**, **Enemy cooldowns** and **Combat text**.
+The **Combat** group holds what you watch in a fight: your own cooldowns, the buffs and items you must keep up, your procs, the shields and defensives on you, and the cooldowns of enemy players. Its pages are **Cooldowns**, **Trackers**, **Defensives on you**, **Absorb shields**, **Charges**, **Enemy cooldowns** and **Combat text**.
 
 Every page has a switch at the top. Out of combat, most changes to a look show samples on screen for a few seconds, so you see the result as you set it. Test mode shows samples of every frame on these pages at once; see [Test mode](Test-mode). To move any of these frames, type `/flatui move` and drag its box; see [Layout](Layout).
 
@@ -481,6 +481,52 @@ The **Personal resource display** page can also lay your shields over its health
 | `/flatui absorbs add 17` | Adds a shield, by spell ID or shift-clicked spell |
 | `/flatui absorbs remove 17` | Removes one, by spell ID or name |
 | `/flatui absorbs list` | Lists the listed shields with their spell IDs |
+
+## Charges
+
+The **Charges** page (on by default) shows your own buffs that have charges as a round spell icon with a ring of glowing orbs round it, one for each charge. Lit orbs are the charges left, each a soft sphere in the spell's colour with a faint glow. The display stays on screen while the buff is up and fades out as it leaves you.
+
+It covers Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, and any buff with more than one charge that you add yourself.
+
+### How the orbs move
+
+- With **Show used charges** (on), each charge you use stays as a faint ring in its place, so you see how many are gone.
+- With **Burst as a charge goes** (on), the orb of a charge that goes flashes white, swells and fades in about a third of a second.
+- As you cast the buff again, or it gains charges, the orbs light in turn, each with a small pop.
+- On the last charge, the last orb pulses amber, and red in the buff's last 10 seconds.
+- There are as many orbs as the most charges the buff has had since you cast it, at most 10. With more, the number shows on the icon.
+- Two buffs at once, such as a priest's Inner Fire and Shadowguard, sit side by side in one row, centred.
+
+### Look
+
+- **Orb style**: a **Ring round the icon** (the default), an **Arc over the icon** or a **Row under the icon**.
+- **Spin** (**Slow** by default, or **Still** or **Fast**) turns the ring, or sways the orbs of an arc or a row.
+- **Icon size** (40 px) and **Orb size** (12 px) set the sizes.
+- **Colour**: the **Spell's own colour** (the default: Lightning Shield electric blue, Water Shield sea green, Earth Shield earthy green, Inner Fire gold, Shadowguard violet, Holy Shield warm white gold, and your class colour for a spell you added), your **Class colour**, or **One colour**, set with **Orb colour**.
+- **Time left** (on) writes the time under the icon, amber in its last 10 seconds.
+
+### When it shows
+
+**Only in combat** and **Hide while mounted** (both off) hide it at those times. **Sound when the last charge goes** (**None** by default) plays as such a buff leaves you on its last charge before its time is up.
+
+In a fight, while the game hides your buffs, the game itself lights the orbs and writes the time left. The bursts, pops and pulse come back once it shows your buffs again.
+
+### Which spells
+
+**Add a spell** offers the buffs on you now with more than one charge, and the class spells you took off. **Take a spell off** removes one. You can also type `/flatui charges add` and a name, spell ID or shift-clicked spell.
+
+### Seeing it
+
+`/flatui move` places it (the **Charges** box, under the middle of the screen). Test mode, a change of its look out of combat, and `/flatui charges` show a sample: Lightning Shield with 3 charges, one used every 2 seconds, then cast again.
+
+### Charges commands
+
+| Command | What it does |
+| --- | --- |
+| `/flatui charges` | A sample for 8 seconds, out of combat and while none of its buffs is on you |
+| `/flatui charges add Lightning Shield` | Adds a buff with charges, by name, spell ID or shift-clicked spell |
+| `/flatui charges remove Lightning Shield` | Takes one off |
+| `/flatui charges list` | Lists the buffs it shows |
 
 ## Enemy cooldowns
 

@@ -1,1 +1,1 @@
-Flat UI 0.5.47 for WoW: Forever · [Download](https://github.com/dismlx/flat-ui/releases/latest) · [Changelog](https://github.com/dismlx/flat-ui/blob/main/CHANGELOG.md) · [Source and licence](https://github.com/dismlx/flat-ui)
+Flat UI 0.5.48 for WoW: Forever · [Download](https://github.com/dismlx/flat-ui/releases/latest) · [Changelog](https://github.com/dismlx/flat-ui/blob/main/CHANGELOG.md) · [Source and licence](https://github.com/dismlx/flat-ui)

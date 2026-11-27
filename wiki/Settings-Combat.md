@@ -1,8 +1,8 @@
-Every setting of the **Combat** group of the options window, 327 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Combat](Combat) and [Combat text](Combat-text).
+Every setting of the **Combat** group of the options window, 342 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Combat](Combat) and [Combat text](Combat-text).
 
-Pages: [Cooldowns](#cooldowns) · [Trackers](#trackers) · [Defensives on you](#defensives-on-you) · [Absorb shields](#absorb-shields) · [Enemy cooldowns](#enemy-cooldowns) · [Combat text](#combat-text)
+Pages: [Cooldowns](#cooldowns) · [Trackers](#trackers) · [Defensives on you](#defensives-on-you) · [Absorb shields](#absorb-shields) · [Charges](#charges) · [Enemy cooldowns](#enemy-cooldowns) · [Combat text](#combat-text)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.47.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 
 ## Cooldowns
 
@@ -461,6 +461,46 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.47.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | **Your target's total** | Off | A bar with the total of every absorb on your target. /flatui move places it. Out of combat, turning it on shows sample bars for a few seconds. |
+
+## Charges
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| **Charges** | On | Your buffs with charges, such as Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, as glowing orbs round their icon: lit orbs are the charges left, faint rings the ones used. It shows while the buff is up. /flatui move places it, /flatui charges shows a sample. |
+
+**Spells**
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| **Add a spell** |  | Spells of your class you took off, and the buffs on you now with more than one charge. For another, type /flatui charges add and its name or spell ID while it is on you. |
+| **Take a spell off** |  | /flatui charges remove and its name or spell ID does the same. |
+
+**Look**
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| **Orb style** | Ring round the icon | Out of combat with no buff with charges on you, a change of this or another row of the look shows a sample for a few seconds. Choices: Ring round the icon, Arc over the icon, Row under the icon. |
+| **Spin** | Slow | The ring of orbs turns round the icon. On an arc or a row the orbs sway gently instead. Choices: Still, Slow, Fast. |
+| **Icon size** | 40 px | The round spell icon in the middle. The time left and the number on the icon grow and shrink with it. |
+| **Orb size** | 12 px | Each orb, without its soft glow. |
+| **Colour** | Spell's own colour | Spell's own colour: Lightning Shield electric blue, Water Shield sea green, Earth Shield earthy green, Inner Fire gold, Shadowguard violet and Holy Shield warm white gold; a spell you added has your class colour. Choices: Spell's own colour, Class colour, One colour. |
+| **Orb colour** | #59B8FF | Needs **Colour** at One colour. |
+| **Show used charges** | On | Each charge used stays as a faint ring in its place, so you see how many are gone. |
+| **Burst as a charge goes** | On | The orb flashes white, swells and fades as its charge goes. Only while the game shows your buffs: in a fight it may hide them, and the orbs then go out without it. |
+| **Time left** | On | Under the icon, amber in its last 10 seconds. |
+
+**When shown**
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| **Only in combat** | Off | Out of a fight the orbs stay hidden; test mode and the samples still show them. |
+| **Hide while mounted** | Off | Hidden while you ride, and back as you get off. |
+
+**Sound**
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| **Sound when the last charge goes** | None | Plays as a buff leaves you on its last charge before its time is up. Only while the game shows your buffs: in a fight it may hide them. Out of combat, a pick plays it once. Choices: None, Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. |
 
 ## Enemy cooldowns
 

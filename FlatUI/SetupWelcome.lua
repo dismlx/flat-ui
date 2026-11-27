@@ -487,7 +487,7 @@ function W.Build()
 		action()
 	end)
 	W.foot = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", 220))
-	W.foot:SetText("Open it again with /flatui setup.")
+	W.foot:SetText("Open it again with /flatui welcome.")
 	W.foot:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PAD, PAD + 2)
 	W.tickBox, W.tickMark, W.tickLabel = Tick(frame, "Do not show on new characters", function()
 		W.tick = not W.tick
