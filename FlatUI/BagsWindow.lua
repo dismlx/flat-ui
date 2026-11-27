@@ -447,6 +447,9 @@ local function PaintWindow(w)
 	if w.gold and w.gold.hover then
 		w.gold.hover:SetColorTexture(ar, ag, ab, 0.2)
 	end
+	if w.free and w.free.hover then
+		w.free.hover:SetColorTexture(ar, ag, ab, 0.2)
+	end
 	Grip.Paint(w)
 end
 
@@ -935,7 +938,7 @@ local function FootLabel(w, tip, onClick)
 	text:SetAllPoints(holder)
 	text:SetWordWrap(false)
 	local hover
-	if onClick then
+	if tip or onClick then
 		hover = Own(holder:CreateTexture(nil, "ARTWORK"))
 		hover:SetAllPoints(holder)
 		local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
@@ -1098,7 +1101,29 @@ local function FreeTip(w, owner)
 			tip:AddDoubleLine(Plain(kind.label), ("%d of %d"):format(kind.free, kind.total), DIM[1], DIM[2], DIM[3], 1, 1, 1)
 		end
 	end
+	if Opt("view") ~= "bags" then
+		tip:AddLine(Opt("freeSlots") == "all" and "Click: show one per kind of bag." or "Click: show every free slot.", DIM[1], DIM[2], DIM[3],
+			true)
+	end
 	tip:Show()
+end
+
+function Clicks.free(w, owner, mouse)
+	if mouse ~= "LeftButton" or Opt("view") == "bags" then
+		return
+	end
+	local before = ns.Get("bags.freeSlots")
+	ns.Set("bags.freeSlots", before == "all" and "kinds" or "all")
+	local home = ns.PanelHome
+	local def = type(ns.Def) == "function" and ns.Def("bags.freeSlots") or nil
+	if type(home) == "table" and type(home.Noted) == "function" and type(def) == "table" then
+		pcall(home.Noted, def, before, ns.Get("bags.freeSlots"))
+	end
+	if type(ns.RefreshPanel) == "function" then
+		pcall(ns.RefreshPanel)
+	end
+	Request("layout", nil)
+	Tips.Again(owner, FreeTip, w, owner)
 end
 
 local function FreeTexts(w)
@@ -1336,7 +1361,7 @@ local function MakeFoot(w)
 	rule:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -PAD, FOOT)
 	w.rules[#w.rules + 1] = rule
 	w.footRule = rule
-	w.free = FootLabel(w, FreeTip)
+	w.free = FootLabel(w, FreeTip, Clicks.free)
 	w.free.text:SetJustifyH(w.which == "bags" and "RIGHT" or "LEFT")
 	local strip = Own(CreateFrame("Frame", nil, frame))
 	strip:SetPoint("BOTTOMLEFT", foot, "TOPLEFT", 0, INNER)
@@ -1593,7 +1618,7 @@ function Footer(w)
 				if running and perClick then
 					button.SetLabel(("%s (%d)"):format(kind == "deposit" and "Deposit" or "Take out", left))
 				elseif running then
-					button.SetLabel("Stop")
+					button.SetLabel(left > 0 and ("Stop (%d)"):format(left) or "Stop")
 				else
 					button.SetLabel(("%s (%d)"):format(kind == "deposit" and "Deposit" or "Take out", count))
 				end
@@ -1858,6 +1883,10 @@ do
 		local def = type(ns.Def) == "function" and ns.Def(path) or nil
 		if type(def) ~= "table" or not Finite(def.default) then
 			return
+		end
+		if w.sizing then
+			w.sizing = nil
+			Grip.Paint(w)
 		end
 		local before = ns.Get(path)
 		if before == def.default then

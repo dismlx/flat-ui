@@ -638,6 +638,33 @@ local function GroupLines(key, items)
 	end
 end
 
+local function OrderLine(st, key, items, anchor)
+	if key == "keep" then
+		return
+	end
+	local path = "bags.itemOrder"
+	local def = type(ns.Def) == "function" and ns.Def(path) or nil
+	local choices = def and type(ns.Choices) == "function" and ns.Choices(def) or {}
+	if #choices < 2 then
+		return
+	end
+	local value, shown = ns.Get(path), nil
+	local sub = {}
+	for _, choice in ipairs(choices) do
+		local id, text = choice[1], tostring(choice[2])
+		if value == id then
+			shown = text
+		end
+		sub[#sub + 1] = { text = text, tick = value == id, part = "order", pick = function()
+			SetRow(path, id)
+		end }
+	end
+	local title = type(def.label) == "string" and def.label or "Order in a section"
+	items[#items + 1] = { text = "Order: " .. (shown or tostring(choices[1][2])), part = "order", pick = function()
+		Call(B.Layout, "Menu", anchor, title, sub, st.which)
+	end }
+end
+
 local function Banking(st, sec)
 	if not (st.mine and st.live) or sec.key == "keep" then
 		return false
@@ -776,32 +803,83 @@ local function PlaceLines(st, key, items, label)
 	end }
 end
 
+local function ListLook(id, name)
+	local text = type(name) == "string" and not ns.IsSecret(name) and name:gsub(" %(%d+%)$", "") or tostring(id)
+	text = text:gsub("|", "||")
+	local item, icon = type(C_Item) == "table" and C_Item or nil, nil
+	if item and type(item.GetItemIconByID) == "function" then
+		local ok, file = pcall(item.GetItemIconByID, id)
+		if ok and (ns.Finite(file) or (type(file) == "string" and not ns.IsSecret(file) and file ~= "")) then
+			icon = file
+		end
+	end
+	if item and type(item.GetItemQualityByID) == "function" and type(item.GetItemQualityColor) == "function" then
+		local ok, quality = pcall(item.GetItemQualityByID, id)
+		local okColour, r, g, b = false, nil, nil, nil
+		if ok and ns.Finite(quality) then
+			okColour, r, g, b = pcall(item.GetItemQualityColor, quality)
+		end
+		if okColour and ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
+			local function Hex(v)
+				return math.max(0, math.min(255, math.floor(v * 255 + 0.5)))
+			end
+			text = ("|cff%02x%02x%02x%s|r"):format(Hex(r), Hex(g), Hex(b), text)
+		end
+	end
+	return text, icon
+end
+
+local function ListRows(list)
+	local ok, rows = pcall(Call, ns, list.fn)
+	local out = {}
+	for _, row in ipairs(ok and type(rows) == "table" and rows or {}) do
+		local id = type(row) == "table" and row[1] or nil
+		if type(id) == "number" then
+			out[#out + 1] = row
+		end
+	end
+	return out
+end
+
+local function ListMenu(st, list, anchor)
+	local sub = {}
+	for _, row in ipairs(ListRows(list)) do
+		local id = row[1]
+		local text, icon = ListLook(id, row[2])
+		sub[#sub + 1] = { text = text, icon = icon, id = id, part = "order", pick = function()
+			local okPick, done, said = pcall(Call, ns, list.pick, id)
+			if okPick and done == true and type(said) == "string" then
+				print(said)
+			end
+			if okPick and done == true and anchor and anchor:IsVisible() then
+				ListMenu(st, list, anchor)
+			end
+		end }
+	end
+	if #sub > 0 then
+		Call(B.Layout, "Menu", anchor, list.title, sub, st.which)
+	end
+end
+
 local function ListLines(st, items, anchor)
 	local any = false
 	for _, list in ipairs(LISTS) do
-		local ok, rows = pcall(Call, ns, list.fn)
-		if ok and type(rows) == "table" and #rows > 0 then
+		local count = #ListRows(list)
+		if count > 0 then
 			any = true
-			local sub = {}
-			for _, row in ipairs(rows) do
-				local id, name = type(row) == "table" and row[1], type(row) == "table" and row[2]
-				if type(id) == "number" then
-					local text = type(name) == "string" and name:gsub(" %(%d+%)$", "") or tostring(id)
-					sub[#sub + 1] = { text = text:gsub("|", "||"), part = "order", pick = function()
-						local okPick, done, said = pcall(Call, ns, list.pick, id)
-						if okPick and done == true and type(said) == "string" then
-							print(said)
-						end
-					end }
-				end
-			end
-			items[#items + 1] = { text = list.line:format(#sub), part = "order", pick = function()
-				Call(B.Layout, "Menu", anchor, list.title, sub, st.which)
+			items[#items + 1] = { text = list.line:format(count), part = "order", pick = function()
+				ListMenu(st, list, anchor)
 			end }
 		end
 	end
 	if not any and Fn(ns, LISTS[1].fn) then
 		items[#items + 1] = { text = LISTS.none, header = true }
+	end
+end
+
+local function Rule(items, mark)
+	if mark > 1 and items[mark] then
+		items[mark].rule = true
 	end
 end
 
@@ -837,6 +915,7 @@ function Order.Menu(st, sec, anchor)
 		Line("Move down", shown[at + 1], true)
 		Line("Move to the bottom", shown[#shown], true)
 	end
+	local mark = #items + 1
 	local placed = PlacedHere(key)
 	if placed > 0 then
 		items[#items + 1] = { text = PutBackText(key, placed), part = "order", pick = function()
@@ -860,6 +939,7 @@ function Order.Menu(st, sec, anchor)
 		end }
 	end
 	GroupLines(key, items)
+	OrderLine(st, key, items, anchor)
 	if Banking(st, sec) then
 		local function Mine(record)
 			return Call(B.Categories, "Of", record) == key
@@ -876,6 +956,8 @@ function Order.Menu(st, sec, anchor)
 			end }
 		end
 	end
+	Rule(items, mark)
+	mark = #items + 1
 	if Saved() then
 		items[#items + 1] = { text = RESET_LINE, part = "order", pick = Order.Reset }
 	end
@@ -895,6 +977,8 @@ function Order.Menu(st, sec, anchor)
 			Order.HiddenMenu(st, anchor)
 		end }
 	end
+	Rule(items, mark)
+	mark = #items + 1
 	if key == "junk" then
 		ListLines(st, items, anchor)
 	end
@@ -904,10 +988,13 @@ function Order.Menu(st, sec, anchor)
 			items[#items + 1] = item
 		end
 	end
+	Rule(items, mark)
+	mark = #items + 1
 	local okOwn, own = pcall(Call, B.Custom, "MenuLines", st, sec, anchor)
 	for _, item in ipairs(okOwn and type(own) == "table" and own or {}) do
 		items[#items + 1] = item
 	end
+	Rule(items, mark)
 	Call(B.Layout, "Menu", anchor, label, items, st.which)
 end
 
