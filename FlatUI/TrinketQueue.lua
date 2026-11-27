@@ -13,7 +13,7 @@ local BACKOFF = { 5, 20, 60 }
 local MAX_ID = 2147483647
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 local UNITS = { s = 1, m = 60, h = 3600, d = 86400 }
-local TRINKET, ON_USE, LINES = "INVTYPE_TRINKET", 44, 40
+local TRINKET, ON_USE, LINES, RIDING = "INVTYPE_TRINKET", 44, 40, 11122
 local T = {
 	NO_CALL = "Trinket queue: this client cannot put on items (no C_Item.EquipItemByName), so nothing is swapped.",
 	FALLBACK = "Trinket queue: the game did not give trinket cooldowns, so the queue reads them from the tooltips.",
@@ -23,6 +23,7 @@ local T = {
 	WEAR_REFUSED = "Flat UI: the game would not put on %s.",
 	SWAP = "Flat UI: %s trinket: %s in place of %s (%s).",
 	NOTHING = "nothing", COOLING = "on cooldown, %s", HIGHER = "ready again", EMPTY_SLOT = "the slot was empty",
+	RIDE = "riding", OFF_MOUNT = "off the mount",
 	REPORT = "Flat UI, Trinket queue, %s: %s",
 	WEAR_FIGHT = "Flat UI: trinkets change after the fight.",
 	WEAR_WAIT = "Flat UI: %s cannot go on now (%s).",
@@ -77,6 +78,8 @@ local WHY = {
 	higher = { "on", "Putting it on" },
 	cooling = { "on", "Putting it on" },
 	refused = { "halt", "The game refused it: Queue now tries it again" },
+	riding = { "on", "Riding: Carrot on a Stick until you get off" },
+	dismounted = { "on", "Off the mount: your trinket goes back on" },
 }
 
 local PLAIN = { delay = "Kept on for its delay", wait = "On cooldown" }
@@ -87,7 +90,7 @@ local Q, R, D = {}, {}, {}
 local S = { pending = nil, fails = {}, nextTry = {}, refused = {}, said = {}, noted = {}, equippedAt = {}, heldAt = {}, heard = {}, uses = {},
 	tipLen = {}, kinds = {}, levels = {}, loading = {}, autoWas = {}, once = {}, why = {}, untilAt = {}, nextAt = {}, next = {}, token = 0,
 	soon = false, quietUntil = 0, version = 0, runs = 0, faults = {}, bags = nil, order = nil, fightTries = 0, normalised = false,
-	fallback = false, listening = false, ear = nil, pattern = nil, late = nil }
+	fallback = false, listening = false, ear = nil, pattern = nil, late = nil, ridingBack = {}, ridingOff = {}, rode = {} }
 ns.TrinketQueue = Q
 
 local function IsSecret(value)
@@ -883,29 +886,108 @@ function D.Signature()
 	return ("%s/%s/%s/%s"):format(tostring(S.why.top), tostring(S.why.bottom), tostring(S.next.top), tostring(S.next.bottom))
 end
 
+function D.RidingSlot()
+	local n = ns.Get("trinkets.riding")
+	return SLOTS[n] and n or nil
+end
+
+function D.Mounted()
+	return Ask(IsMounted) == true and not R.Yes(UnitOnTaxi, "player")
+end
+
+function D.Riding(n, now, threshold, blocked, blockedAt, quiet)
+	local slot = SLOTS[n]
+	local worn, otherWorn = R.Worn(slot), R.Worn(SLOTS[OTHER[n]])
+	local ride, back
+	local pending = S.pending
+	if pending and pending.name == n and (pending.why == "riding" or pending.why == "dismounted") then
+		return "pending"
+	end
+	if D.Mounted() then
+		if worn ~= RIDING then
+			if S.ridingOff[n] or otherWorn == RIDING then
+				return nil
+			end
+			ride = D.Usable(RIDING, otherWorn, now)
+			if not ride then
+				return nil
+			end
+		end
+	else
+		S.ridingOff[n] = nil
+		back = S.ridingBack[n]
+		if back == nil then
+			return nil
+		elseif worn ~= RIDING or back == 0 then
+			S.ridingBack[n] = nil
+			return nil
+		end
+	end
+	S.next[n], S.nextAt[n], S.untilAt[n] = nil, nil, nil
+	if not ride and not back then
+		return "riding"
+	elseif blocked then
+		return blocked, blockedAt
+	elseif quiet then
+		return "quiet", S.quietUntil
+	elseif R.Locked(slot) then
+		return "locked"
+	elseif ride then
+		S.ridingBack[n] = S.ridingBack[n] or worn or 0
+		return "riding", nil, RIDING, ride
+	end
+	local why, at, entry, copy
+	if Q.Auto(n) and #Q.List(n) > 0 then
+		why, at, entry, copy = D.Slot(n, now, threshold)
+		if entry and copy then
+			return "dismounted", nil, entry.item, copy
+		end
+	end
+	local home, retry = D.Usable(back, otherWorn, now)
+	if home then
+		return "dismounted", nil, back, home
+	elseif not retry then
+		S.ridingBack[n] = nil
+	end
+	if why then
+		return why, Earliest(at, retry)
+	end
+	return retry and "dismounted" or nil, retry
+end
+
 function D.Pass()
 	local now = Now()
 	local threshold = D.Threshold()
 	local blocked, blockedAt = D.Blocked(now)
 	local quiet = now < S.quietUntil
 	local wake, before = nil, D.Signature()
+	local riding = Q.Running() and not Q.Paused() and D.RidingSlot()
 	for _, n in ipairs(ORDER) do
-		local why, at, entry, copy = D.Static(n), nil, nil, nil
-		if why then
-			S.next[n], S.nextAt[n], S.untilAt[n] = nil, nil, nil
-		elseif blocked then
-			why, at = blocked, blockedAt
-		elseif quiet then
-			why, at = "quiet", S.quietUntil
-		elseif R.Locked(SLOTS[n]) then
-			why = "locked"
-		else
-			why, at, entry, copy = D.Slot(n, now, threshold)
+		local why, at, item, copy = nil, nil, nil, nil
+		if riding == n then
+			why, at, item, copy = D.Riding(n, now, threshold, blocked, blockedAt, quiet)
+		end
+		S.rode[n] = why and true or nil
+		if not why then
+			why = D.Static(n)
+			if why then
+				S.next[n], S.nextAt[n], S.untilAt[n] = nil, nil, nil
+			elseif blocked then
+				why, at = blocked, blockedAt
+			elseif quiet then
+				why, at = "quiet", S.quietUntil
+			elseif R.Locked(SLOTS[n]) then
+				why = "locked"
+			else
+				local entry
+				why, at, entry, copy = D.Slot(n, now, threshold)
+				item = entry and entry.item
+			end
 		end
 		S.why[n] = why
 		wake = Earliest(wake, at)
-		if entry and copy then
-			Q.Swap(n, entry.item, copy, why, false)
+		if item and copy then
+			Q.Swap(n, item, copy, why, false)
 			blocked, blockedAt = "pending", nil
 		end
 	end
@@ -942,6 +1024,7 @@ function D.Idle()
 	R.Ear(false)
 	for _, n in ipairs(ORDER) do
 		local why = D.Static(n) or "auto"
+		S.rode[n] = nil
 		if S.why[n] ~= why then
 			S.why[n] = why
 			S.version = S.version + 1
@@ -1038,9 +1121,16 @@ function Q.Confirmed(pending)
 	if pending.wear then
 		R.Hold(pending.name, pending.item)
 	else
+		if pending.why == "dismounted" then
+			S.ridingBack[pending.name] = nil
+		end
 		if ns.Get("trinkets.say") == true then
 			local why = T.EMPTY_SLOT
-			if pending.from and pending.why == "cooling" then
+			if pending.why == "riding" then
+				why = T.RIDE
+			elseif pending.why == "dismounted" then
+				why = T.OFF_MOUNT
+			elseif pending.from and pending.why == "cooling" then
 				why = pending.left and T.COOLING:format(Q.Clock(pending.left)) or R.Lower(PLAIN.wait)
 			elseif pending.from then
 				why = T.HIGHER
@@ -1106,6 +1196,10 @@ function Q.Equipped(slot)
 	elseif not pending and now >= S.quietUntil and Q.Running() and Q.Auto(n) and not Q.Paused() and #Q.List(n) > 0 then
 		R.Hold(n, worn or 0)
 	end
+	if not pending and now >= S.quietUntil and D.RidingSlot() == n then
+		S.ridingBack[n] = nil
+		S.ridingOff[n] = D.Mounted() or nil
+	end
 	S.version = S.version + 1
 	Q.Soon()
 end
@@ -1159,7 +1253,7 @@ function Q.Loaded(id)
 end
 
 function Q.Active()
-	return Q.Running() and not Q.Paused() and (Q.Auto("top") or Q.Auto("bottom"))
+	return Q.Running() and not Q.Paused() and (Q.Auto("top") or Q.Auto("bottom") or D.RidingSlot() ~= nil)
 end
 
 function Q.Soon(force)
@@ -1401,9 +1495,12 @@ function Q.State(n)
 	local slot = SLOTS[n]
 	local worn = slot and R.Worn(slot) or nil
 	local why = D.Static(n)
+	if (why == "auto" or why == "empty") and S.rode[n] and D.RidingSlot() == n then
+		why = nil
+	end
 	if not why then
 		why = S.why[n] or "keep"
-		if D.Fighting() then
+		if D.Fighting() and why ~= "riding" then
 			why = "fight"
 		end
 	end
@@ -1427,7 +1524,7 @@ end
 
 function Q.Tone(n, state)
 	state = state or Q.State(n)
-	if state.why == "fight" or (D.Fighting() and not D.Static(n)) then
+	if state.why == "fight" or (D.Fighting() and not D.Static(n) and state.why ~= "riding") then
 		return "wait"
 	end
 	if state.refused and RESTING[state.why] then
@@ -1698,6 +1795,9 @@ ns.Register(KEY, {
 			Q.Run(Q.Soon)
 		end,
 		PLAYER_UNGHOST = function()
+			Q.Run(Q.Soon)
+		end,
+		PLAYER_MOUNT_DISPLAY_CHANGED = function()
 			Q.Run(Q.Soon)
 		end,
 		GET_ITEM_INFO_RECEIVED = function(id)

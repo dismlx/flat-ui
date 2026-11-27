@@ -221,7 +221,14 @@ local function AuraTime(seconds)
 		return ("%d"):format(seconds)
 	end
 	local cooldown = _G.COOLDOWN_DURATION_MIN
-	if ns.Get("hud.enabled") == true and ns.Get("hud.durationFormat") == "tight" and type(cooldown) == "string" and not cooldown:find("%%d%s") then
+	local format = ns.Get("hud.enabled") == true and ns.Get("hud.durationFormat")
+	if format == "clock" and seconds < 3600 then
+		if seconds >= 60 then
+			return ("%d:%02d"):format(math.floor(seconds / 60), math.floor(seconds % 60))
+		end
+		return ("%d"):format(math.max(0, seconds))
+	end
+	if (format == "tight" or format == "clock") and type(cooldown) == "string" and not cooldown:find("%%d%s") then
 		form = form:gsub("(%%d)%s+", "%1")
 	end
 	local done, text = pcall(string.format, form, number)

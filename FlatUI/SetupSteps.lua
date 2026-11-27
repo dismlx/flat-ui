@@ -754,7 +754,7 @@ ns.SETUP_STEPS = {
 		{ "hud.colourPoison", "r", "mock-buff-row" },
 		{ "hud.colourOther", "r", "mock-buff-row" },
 		{ "hud.durationSize", "c", "mock-buff-row" },
-		{ "hud.durationFormat", "o", "behaviour", "Chooses whether the time on a buff, debuff or totem shows 8m with no space, or 8 m as the game has it." },
+		{ "hud.durationFormat", "o", "behaviour", "Chooses whether the time on a buff, debuff or totem shows 8m with no space, 8 m as the game has it, or 28:41." },
 		{ "hud.durationColour", "o", "behaviour", "Chooses whether the time on a buff, debuff or totem is white, white turning red near its end, or gold as the game has it." },
 		{ "hud.durationWarn", "o", "behaviour", "Sets how many seconds are left when the time on a buff, debuff or totem turns red." },
 		{ "hud.durationTenths", "o", "behaviour", "Shows tenths of a second on a buff or debuff in its last seconds." },
@@ -1072,6 +1072,7 @@ ns.SETUP_STEPS = {
 		{ "trinkets.window", "o", "behaviour", "Opens the trinket queue window on the top or bottom slot's list." },
 		{ "trinkets.say", "o", "behaviour", "Says each trinket swap in chat." },
 		{ "trinkets.sound", "r", "behaviour", "Plays a sound on each trinket swap." },
+		{ "trinkets.riding", "o", "behaviour", "Puts Carrot on a Stick in a trinket slot while you ride, and your trinket back when you get off." },
 		{ "trinkets.slotButtons", "o", "behaviour", "Puts a small square beside each trinket slot on the Character window that shows the queue's state and opens its window." },
 	} },
 	{ id = "hud-hittable", area = "Character and gear", title = "Hit table", draw = "mock-player", built = true, rows = {
