@@ -1475,3 +1475,19 @@ function ns.TrinketWindowSync()
 		Run(Z.PaintLook)
 	end
 end
+
+do
+	local name = "FlatUITrinketKey"
+	_G["BINDING_NAME_CLICK " .. name .. ":LeftButton"] = "Trinket queue window"
+	local ok, button = pcall(CreateFrame, "Button", name, UIParent)
+	if ok and type(button) == "table" then
+		ns.Own[button] = true
+		pcall(button.RegisterForClicks, button, "LeftButtonUp")
+		button:SetScript("OnClick", function()
+			local okRun, err = pcall(ns.TrinketWindowToggle)
+			if not okRun then
+				geterrorhandler()(err)
+			end
+		end)
+	end
+end

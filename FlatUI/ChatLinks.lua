@@ -32,7 +32,7 @@ local WORDS = { SHORT = 2, LONG = 24, MOST = 20,
 	TYPE = "Type a word and press Enter. Escape closes this.",
 	FIGHT = "Flat UI: words are added out of a fight.",
 	LINK_FIGHT = "Flat UI: web addresses open their copy box out of a fight. Click it again then.",
-	COPIED = "Copied. Enter or Escape closes this.",
+	COPIED = "Copied.",
 }
 
 local S = { filtering = false, made = 0, waited = 0, mentioned = 0 }
@@ -608,6 +608,7 @@ function ns.ChatWordPick(id)
 end
 
 local HELP_COLOUR = { 1, 0.82, 0 }
+local COPIED_CLOSE = 0.6
 local WordEntered
 
 local function CloseBox()
@@ -707,6 +708,15 @@ local function BuildBox()
 		if box.mode == "copy" and box.address ~= nil and box.address ~= "" and help and ns.ChatCopyKey(key) then
 			help:SetText(WORDS.COPIED)
 			help:SetTextColor(HELP_COLOUR[1], HELP_COLOUR[2], HELP_COLOUR[3])
+			local opened = box.opened
+			if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+				pcall(C_Timer.After, COPIED_CLOSE, function()
+					local ok, shown = pcall(box.frame.IsShown, box.frame)
+					if ok and not ns.IsSecret(shown) and shown == true and box.mode == "copy" and box.opened == opened then
+						CloseBox()
+					end
+				end)
+			end
 		end
 	end)
 	pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_DISABLED")
@@ -758,6 +768,7 @@ local function OpenBox(_, address)
 	end
 	local box = S.box
 	box.mode, box.address = "copy", address
+	box.opened = (box.opened or 0) + 1
 	SayInBox(box, Help())
 	box.edit:SetText(address)
 	Place(box.frame)

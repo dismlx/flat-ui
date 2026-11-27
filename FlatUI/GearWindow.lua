@@ -3118,3 +3118,19 @@ if type(ns.AddStatus) == "function" then
 		return { T.STATUS:format(name) }
 	end)
 end
+
+do
+	local name = "FlatUIGearKey"
+	_G["BINDING_NAME_CLICK " .. name .. ":LeftButton"] = "Gear comparison window"
+	local ok, button = pcall(CreateFrame, "Button", name, UIParent)
+	if ok and type(button) == "table" then
+		ns.Own[button] = true
+		pcall(button.RegisterForClicks, button, "LeftButtonUp")
+		button:SetScript("OnClick", function()
+			local okRun, err = pcall(ns.GearWindowToggle)
+			if not okRun then
+				geterrorhandler()(err)
+			end
+		end)
+	end
+end
