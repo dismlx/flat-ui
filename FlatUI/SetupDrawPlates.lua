@@ -30,6 +30,7 @@ P.OP_NAMES = { WARRIOR = "Overpower", HUNTER = "Mongoose Bite", ROGUE = "Riposte
 P.OP_TARGET = { HUNTER = true, ROGUE = true }
 P.OP_CROP, P.OP_GAP, P.OP_WINDOW = 0.08, 2, 5
 P.OP_POP_FROM, P.OP_POP_IN, P.OP_POP_SCALE, P.OP_FADE = 1.3, 0.12, 0.15, 0.25
+P.OP_WHITE, P.OP_AMBER, P.OP_RED = { 1, 1, 1 }, { 1, 0.75, 0.2 }, { 1, 0.3, 0.25 }
 P.EASE_SECONDS = 0.2
 P.COMBO_MAX, P.COMBO_SIZE, P.COMBO_SPACE, P.COMBO_DROP, P.COMBO_DIM = 5, 7, 3, 2, 0.25
 P.COMBO_POP_FROM, P.COMBO_POP_SECONDS = 1.4, 0.15
@@ -1494,13 +1495,19 @@ function P.OverpowerSeconds(p)
 	if not text then
 		return
 	end
-	local shown = ""
+	local shown, tint = "", P.OP_WHITE
 	if p.opFrame:IsShown() and Get("overpowerSeconds") == true then
 		shown = "3"
 		if p.S and type(p.S.still) == "function" and ns.Finite(p.opEnds) then
 			local now = P.Still(p) and ns.Finite(p.opHeld) and p.opHeld or (type(GetTime) == "function" and GetTime() or 0)
-			shown = tostring(math.max(1, math.ceil(p.opEnds - now)))
+			local whole = math.max(1, math.ceil(p.opEnds - now))
+			shown = tostring(whole)
+			tint = (whole <= 1 and P.OP_RED) or (whole <= 2 and P.OP_AMBER) or P.OP_WHITE
 		end
+	end
+	if p.opSecsTint ~= tint then
+		p.opSecsTint = tint
+		text:SetTextColor(tint[1], tint[2], tint[3], 1)
 	end
 	if p.opSecsShown ~= shown then
 		p.opSecsShown = shown
@@ -1531,6 +1538,7 @@ function P.Overpower(p, spec, o, m)
 	p.opFrame:SetFrameLevel(p.f:GetFrameLevel() + 10)
 	p.opSecsFrame:SetFrameLevel(p.opFrame:GetFrameLevel() + 3)
 	P.Text(p.opSecs, math.max(6, math.floor(size * 0.45 + 0.5)), 100, "game", { 1, 1, 1 })
+	p.opSecsTint = nil
 	p.opFrame:Show()
 	P.OverpowerSwipe(p)
 	P.OverpowerSeconds(p)

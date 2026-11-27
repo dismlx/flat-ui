@@ -126,6 +126,7 @@ ns.SETUP_STEPS = {
 		{ "nameplates.threatSlipping", "o", "mock-nameplate-threat" },
 		{ "nameplates.threatSlipGrow", "o", "mock-nameplate-threat" },
 		{ "nameplates.threatSlipScale", "r", "mock-nameplate-threat" },
+		{ "nameplates.threatSlipBack", "r", "behaviour", "As a tank, flashes the glow of an enemy once in Threat you want as you take it back." },
 		{ "nameplates.threatBorder", "r", "mock-nameplate-threat" },
 		{ "nameplates.threatBackground", "r", "mock-nameplate-threat" },
 		{ "nameplates.threatFade", "o", "mock-nameplate-threat" },

@@ -339,6 +339,9 @@ local function OverpowerPlace(unitFrame)
 	if type(ns.PlateOverpowerPlace) == "function" then
 		pcall(ns.PlateOverpowerPlace, unitFrame)
 	end
+	if type(ns.PlateSlipPlace) == "function" then
+		pcall(ns.PlateSlipPlace, unitFrame)
+	end
 end
 
 local function DebuffTop(unitFrame)

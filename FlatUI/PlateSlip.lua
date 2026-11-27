@@ -12,7 +12,7 @@ local GAP_PX, RING_PX = 2, 2
 local PULSE = { slipping = 0.75, lost = 0.3 }
 local BOB = { slipping = 0.6, lost = 0.3 }
 local PULSE_LOW, BOB_PX = 0.25, 3
-local FADE_IN, FADE_OUT = 0.15, 0.2
+local FADE_IN, FADE_OUT, FADE_BACK = 0.15, 0.2, 0.45
 local ARROW, ARROW_ROW, ARROW_GAP, LEVEL = { 14, 11, 8, 5, 2 }, 2, 3, 22
 local SHADE = { 0, 0, 0, 0.8 }
 local KINDS = { bad = "lost", changing = "slipping" }
@@ -209,6 +209,26 @@ local function Animate(cue)
 		end
 		holder:SetAlpha(1)
 	end)
+	local back = Group(holder)
+	local dim = Own(back:CreateAnimation("Alpha"))
+	dim:SetFromAlpha(1)
+	dim:SetToAlpha(0)
+	dim:SetDuration(FADE_BACK)
+	pcall(dim.SetSmoothing, dim, "OUT")
+	pcall(back.SetToFinalAlpha, back, true)
+	back:SetScript("OnFinished", function()
+		if not cue.on then
+			holder:Hide()
+			if cue.pulse then
+				pcall(cue.pulse.Stop, cue.pulse)
+			end
+			if cue.bob then
+				pcall(cue.bob.Stop, cue.bob)
+			end
+		end
+		holder:SetAlpha(1)
+		arrow:SetAlpha(1)
+	end)
 	local pulse = Group(glow, "BOUNCE")
 	local fade = Own(pulse:CreateAnimation("Alpha"))
 	fade:SetFromAlpha(1)
@@ -220,7 +240,7 @@ local function Animate(cue)
 	move:SetOffset(0, -BOB_PX)
 	move:SetDuration(BOB.slipping)
 	pcall(move.SetSmoothing, move, "IN_OUT")
-	cue.come, cue.go, cue.pulse, cue.fade, cue.bob, cue.move = come, go, pulse, fade, bob, move
+	cue.come, cue.go, cue.back, cue.pulse, cue.fade, cue.bob, cue.move = come, go, back, pulse, fade, bob, move
 end
 
 local function Build(parent)
@@ -341,10 +361,21 @@ local function Moving(cue, on)
 	end
 end
 
+local function Calm(cue)
+	local back = cue.back
+	local playing = back ~= nil and back:IsPlaying()
+	if playing then
+		pcall(back.Stop, back)
+	end
+	cue.arrow:SetAlpha(1)
+	return playing
+end
+
 local function Show(cue, snap, still)
 	cue.still = still
 	if not cue.on then
 		cue.on = true
+		Calm(cue)
 		if cue.go then
 			pcall(cue.go.Stop, cue.go)
 		end
@@ -360,8 +391,11 @@ end
 
 local function Hide(cue, snap)
 	if not cue.on then
-		if snap and cue.go and cue.go:IsPlaying() then
-			pcall(cue.go.Stop, cue.go)
+		local going = cue.go and cue.go:IsPlaying()
+		if snap and (Calm(cue) or going) then
+			if cue.go then
+				pcall(cue.go.Stop, cue.go)
+			end
 			cue.holder:Hide()
 			cue.holder:SetAlpha(1)
 			Moving(cue, false)
@@ -391,6 +425,12 @@ local function Record(frame)
 end
 
 local function Above(frame)
+	if type(ns.PlateQuestAbove) == "function" then
+		local ok, mark = pcall(ns.PlateQuestAbove, frame)
+		if ok and type(mark) == "table" then
+			return mark
+		end
+	end
 	local icon = type(ns.PlateOverpowerIcon) == "function" and select(2, pcall(ns.PlateOverpowerIcon, frame)) or nil
 	if type(icon) == "table" then
 		return icon
@@ -883,14 +923,53 @@ function Draw(frame, state, snap)
 	end
 end
 
-local function OnChange(frame, state)
+local function Taken(state, previous)
+	return type(previous) == "table" and previous.tank == true and previous.want == "bad" and previous.pet ~= true and previous.tapped ~= true
+		and type(state) == "table" and state.tank == true and state.want == "good"
+end
+
+local function Back(frame, state)
+	local rec = recs[frame]
+	local cue = rec and rec.cue
+	if cue == nil or cue.on or cue.back == nil or cue.bar == nil then
+		return
+	end
+	local r, g, b = Colour(state)
+	if r == nil then
+		return
+	end
+	if cue.go then
+		pcall(cue.go.Stop, cue.go)
+	end
+	Paint(cue, "back", r, g, b)
+	Moving(cue, false)
+	cue.arrow:SetAlpha(0)
+	cue.holder:SetAlpha(1)
+	cue.holder:Show()
+	pcall(cue.back.Stop, cue.back)
+	pcall(cue.back.Play, cue.back)
+end
+
+local function OnChange(frame, state, previous)
 	if type(state) ~= "table" then
 		state = nil
 	end
-	if state == nil and recs[frame] == nil then
+	local rec = recs[frame]
+	if state == nil and rec == nil then
 		return
 	end
+	local was = rec ~= nil and rec.cue ~= nil and rec.cue.on == true
 	Draw(frame, state)
+	if was and Opt("threatSlipBack") == true and Taken(state, previous) and Wanted(frame) then
+		ns.EachPart(KEY, PART, Back, frame, state)
+	end
+end
+
+function ns.PlateSlipPlace(frame)
+	local rec = frame ~= nil and not ns.IsSecret(frame) and recs[frame] or nil
+	if rec and rec.cue and rec.cue.on and not ns.Forbidden(frame) then
+		ns.EachPart(KEY, PART, Place, frame, rec, rec.cue)
+	end
 end
 
 local function Subscribe()

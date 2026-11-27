@@ -14,7 +14,7 @@ local K = {
 	NAMES = { WARRIOR = "Overpower", HUNTER = "Mongoose Bite", ROGUE = "Riposte" },
 	WINDOW = 5, MATCH = 0.5, LOOK = 0.1, GAP = 2, LEVEL = 20, DIM = 0.45, PULSE_LOW = 0.55, PULSE_SECONDS = 1.2, CROP = 0.08,
 	AUTO_ATTACK = 6603, SIZE = 26, POP_FROM = 1.3, POP_IN = 0.12, POP_SCALE = 0.15, FADE_OUT = 0.25,
-	RENEW_FROM = 1.15, RENEW_SECONDS = 0.15, SECONDS = 0.45,
+	RENEW_FROM = 1.15, RENEW_SECONDS = 0.15, SECONDS = 0.45, SECONDS_DIM = 0.7, WHITE = { 1, 1, 1 }, AMBER = { 1, 0.75, 0.2 }, RED = { 1, 0.3, 0.25 },
 	ACTIVE = { "UNIT_COMBAT", "SPELL_UPDATE_USABLE", "ACTION_USABLE_CHANGED", "SPELL_UPDATE_COOLDOWN", "PLAYER_ENTER_COMBAT", "PLAYER_LEAVE_COMBAT",
 		"NAME_PLATE_UNIT_REMOVED", "PLAYER_TARGET_CHANGED" },
 	ON_USABLE = { HUNTER = true, ROGUE = true },
@@ -288,6 +288,16 @@ local function QuestPlace(unitFrame)
 	if unitFrame ~= nil and type(ns.PlateQuestPlace) == "function" then
 		pcall(ns.PlateQuestPlace, unitFrame)
 	end
+	if unitFrame ~= nil and type(ns.PlateSlipPlace) == "function" then
+		pcall(ns.PlateSlipPlace, unitFrame)
+	end
+end
+
+local function ClearSeconds(rec)
+	if rec.secs and rec.secsShown ~= "" then
+		rec.secsShown = ""
+		rec.secs:SetText("")
+	end
 end
 
 local function MakeMotion(rec)
@@ -318,6 +328,7 @@ local function MakeMotion(rec)
 		fadeGroup:SetScript("OnFinished", function()
 			if not rec.shown then
 				holder:SetAlpha(0)
+				ClearSeconds(rec)
 				QuestPlace(rec.owner)
 			end
 		end)
@@ -394,9 +405,9 @@ local function MakeSeconds(rec)
 	local got, file = pcall(text.GetFont, text)
 	rec.secsBase = got and Plain(file, "string") and file or nil
 	text:SetPoint("CENTER", frame, "CENTER", 0, 0)
-	text:SetTextColor(1, 1, 1, 1)
+	text:SetTextColor(K.WHITE[1], K.WHITE[2], K.WHITE[3], 1)
 	text:SetText("")
-	rec.secs, rec.secsShown = text, ""
+	rec.secs, rec.secsShown, rec.secsTint = text, "", K.WHITE
 end
 
 local function Seconds(rec)
@@ -404,12 +415,18 @@ local function Seconds(rec)
 	if not text then
 		return
 	end
-	local shown = ""
+	local shown, tint = "", nil
 	if lit and Opt("overpowerSeconds") == true then
 		local left = lit.expires - Now()
 		if left > 0 then
-			shown = tostring(math.ceil(left))
+			local whole = math.ceil(left)
+			shown = tostring(whole)
+			tint = (whole <= 1 and K.RED) or (whole <= 2 and K.AMBER) or K.WHITE
 		end
+	end
+	if tint and tint ~= rec.secsTint then
+		rec.secsTint = tint
+		text:SetTextColor(tint[1], tint[2], tint[3], 1)
 	end
 	if shown ~= rec.secsShown then
 		rec.secsShown = shown
@@ -557,9 +574,8 @@ local function Hide(rec, fade)
 		holder:SetAlpha(0)
 	end
 	ClearSwipe(rec)
-	if rec.secs and rec.secsShown ~= "" then
-		rec.secsShown = ""
-		rec.secs:SetText("")
+	if not Playing(rec.fadeOut) then
+		ClearSeconds(rec)
 	end
 	if gone then
 		QuestPlace(rec.owner)
@@ -601,6 +617,9 @@ function Draw()
 	rec.shown, rec.usable = true, usable
 	rec.icon:SetDesaturated(not usable)
 	rec.icon:SetAlpha(usable and 1 or K.DIM)
+	if rec.secs then
+		rec.secs:SetAlpha(usable and 1 or K.SECONDS_DIM)
+	end
 	if first then
 		Pop(rec)
 		QuestPlace(unitFrame)

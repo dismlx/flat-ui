@@ -410,6 +410,12 @@ local function Fade(rec, show, now, late)
 	end
 end
 
+local function Slip(unitFrame)
+	if Opt("questMarkPlace") == "above" and type(ns.PlateSlipPlace) == "function" then
+		pcall(ns.PlateSlipPlace, unitFrame)
+	end
+end
+
 local function Hide(rec, now, late)
 	if not rec.holder then
 		return
@@ -517,14 +523,19 @@ function Draw(unitFrame)
 		if not rec.shown then
 			rec.shown = true
 			Fade(rec, true)
+			Slip(unitFrame)
 		end
 	else
-		local entry = rec.shown and rec.count and Objective(unit, rec.objective) or nil
+		local was = rec.shown
+		local entry = was and rec.count and Objective(unit, rec.objective) or nil
 		if entry and entry.done then
 			Count(rec, entry)
 			Hide(rec, false, true)
 		else
 			Hide(rec)
+		end
+		if was and not rec.shown then
+			Slip(unitFrame)
 		end
 	end
 end
@@ -584,8 +595,12 @@ local function Queue()
 end
 
 local function StandDown()
-	for _, rec in pairs(recs) do
+	for unitFrame, rec in pairs(recs) do
+		local was = rec.shown
 		pcall(Hide, rec, true)
+		if was then
+			Slip(unitFrame)
+		end
 	end
 end
 
@@ -652,6 +667,14 @@ local function Sync()
 	if want then
 		LookAll()
 	end
+end
+
+function ns.PlateQuestAbove(unitFrame)
+	local rec = unitFrame ~= nil and recs[unitFrame]
+	if S.on and rec and rec.holder and rec.shown and rec.to ~= nil and Opt("questMarkPlace") == "above" then
+		return rec.holder
+	end
+	return nil
 end
 
 function ns.PlateQuestPlace(unitFrame)
