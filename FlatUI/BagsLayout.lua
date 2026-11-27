@@ -23,7 +23,9 @@ local _, ns = ...
 -- Sections go left to right on a shelf while they fit, and one that does not fit starts the next shelf, 12 units below. The player's own bag
 -- window always has a Junk title, a title with no cell while nothing is junk, so there is always somewhere to drop an item for the sell list. The
 -- top shelf is as wide as the window, titled New items in the bag window while New items at the top is on and everything on it is new, else
--- Added, as in the bank window; New items is told of everything the shelf shows (B.Categories.New.Shown), so it leaves when the window closes.
+-- Added, as in the bank window; New items is told of everything the shelf shows (B.Categories.New.Shown), so it leaves when the window closes. An
+-- item placed by hand never goes to the top shelf: B.Categories.Of files it in its section ahead of New items, and New items is told of it there
+-- too (ShownPlaced), so a new one leaves New items at the close with the rest while its slot keeps the game's glow.
 -- Free slots is the last, and its title counts the free slots of the general bags alone (the backpack, normal bags and the bank's own slots,
 -- family 0), the only room for any item: with One per kind of bag one counted slot for the general bags (the live button of their first free
 -- slot, so a drop on it puts the item there), and, in the player's own live bags or bank only, where a drop puts an item in, one counted slot
@@ -41,10 +43,13 @@ local _, ns = ...
 -- red with none left (the footer's colours, BagsWindow.lua:145-146, 1212), and it stays, as its title alone, while the bags are full.
 -- While the window is open nothing moves but what arrives. A slot that keeps an item is drawn again where it is, whatever it holds now. A slot that
 -- empties keeps its cell as a blank slot (B.Buttons.Draw with hold), Free slots is drawn again below everything, and an item in a slot that had no
--- cell goes to the end of the top shelf, which moves what is below it only when it needs a new row (the first time, a row and its title). While a
--- sort still moves items nothing goes to the top shelf: the window keeps every place, and each live button is drawn again in its cell. Everything
--- is laid out afresh when the window opens, and when the window asks for it after a change of view, row or character, and after a sort once the
--- items have stopped moving (Bags.lua).
+-- cell goes to the end of the top shelf, which moves what is below it only when it needs a new row (the first time, a row and its title). An item
+-- placed by hand that comes to a slot with no cell (looted, taken out of the bank, moved to an empty slot) goes to the end of its own section
+-- instead (Arrive), which is made where the order puts it when the layout has none, and the sections are packed again, so what follows it on its
+-- shelf moves only when the section needs a cell more; a slot that keeps its cell keeps it whatever comes to it, as before, until the next layout.
+-- While a sort still moves items nothing goes to the top shelf: the window keeps every place, and each live button is drawn again in its cell.
+-- Everything is laid out afresh when the window opens, and when the window asks for it after a change of view, row or character, and after a sort
+-- once the items have stopped moving (Bags.lua).
 -- Placing the buttons works in a fight: they are the game's item buttons, which are not protected (ContainerFrame.xml:77), or Flat UI's own.
 -- Bag by bag lays out each bag in turn under a label, every slot in its place, so nothing ever moves. The keyring shows as many slots as the game's
 -- own keyring window would (GetKeyRingSize, Blizzard_MainMenuBarBagButtons/Camelot/MainMenuBarBagButtons.lua:64-92: the last filled slot rounded
@@ -520,6 +525,15 @@ end
 -- New items is told which of its items this opening showed, so they leave when the window closes (B.Categories.New).
 local function ShownNew(record)
 	if Call(Categories.New, "Is", record) == true then
+		Call(Categories.New, "Shown", record)
+	end
+end
+
+-- A new item placed by hand shows in its section, not on the top shelf (B.Categories.Of files it there ahead of New items): New items is told of it
+-- there too, so it leaves with the rest when the window closes. A new item that is not placed and only fills a cell another section kept is not
+-- told, so it is in New items at the next opening, as before.
+local function ShownPlaced(record)
+	if record and Call(Categories.New, "Is", record) == true and SectionOf(record) ~= NEW then
 		Call(Categories.New, "Shown", record)
 	end
 end
@@ -1335,7 +1349,8 @@ end
 
 -- The title of the top shelf: New items in the bag window while New items at the top is on and every item on the shelf is new
 -- (B.Categories.New.Is), else Added, as the bank window's always is. What fills a slot that had no cell while the window is open goes there, new or
--- not: an item taken out of the bank, gear taken off, an item put in a free slot, and with the row off everything.
+-- not: an item taken out of the bank, gear taken off, an item put in a free slot, and with the row off everything; but never an item placed by
+-- hand, which goes to its own section (Arrive).
 local function StripLabel(st, sec)
 	local new = st.which == "bags" and Opt("newItems") ~= false
 	if new then
@@ -1379,6 +1394,10 @@ local function BuildSections(st)
 				if key == NEW then
 					sec = strip
 				else
+					-- Outside New items a new item is one placed by hand (B.Categories.Of), which leaves New items at the close too.
+					if record then
+						ShownNew(record)
+					end
 					sec = byKey[key]
 					if not sec then
 						sec = { key = key, label = Label(key), entries = {} }
@@ -1898,26 +1917,72 @@ local function Current(st)
 		and st.sign == Sign()
 end
 
+-- An item placed by hand came to a slot with no cell while the window is open: its cell goes to the end of its own section (B.Categories.PlacedKey,
+-- while B.Categories.Of files it there, so not one Junk or Keep in place shows), not to the top shelf. A section the layout does not have (it held
+-- nothing) is made where the order puts it (B.Order.Ranks), before + New section and Deleted (3), folded when its fold says so. True when the
+-- cell went there; the caller packs the sections again.
+local function Arrive(st, entry)
+	local record = entry.record
+	local ok, key = pcall(Call, Categories, "PlacedKey", record)
+	if not ok or type(key) ~= "string" or IsSecret(key) or key == NEW or SectionOf(record) ~= key then
+		return false
+	end
+	local sec
+	for _, other in ipairs(st.sections) do
+		if other.key == key and not (other.block or other.add or other.unhide) then
+			sec = other
+			break
+		end
+	end
+	if not sec then
+		sec = { key = key, label = Label(key), entries = {} }
+		local okFold, folded = pcall(Call, B.Order, "Folded", key)
+		sec.folded = okFold and folded == true or nil
+		local orders = Orders()
+		local rank, at = orders[key] or LATE, #st.sections + 1
+		for index, other in ipairs(st.sections) do
+			local was = orders[other.key] or LATE
+			if other.add or other.unhide or was > rank or (was == rank and other.key > key) then
+				at = index
+				break
+			end
+		end
+		table.insert(st.sections, at, sec)
+	end
+	sec.entries[#sec.entries + 1] = entry
+	sec.plus = Plus(st, sec) or nil
+	Recount(st, sec)
+	sec.titleWidth = Measure(st, TitleText(sec, true))
+	return true
+end
+
 -- One slot of the sections while the window is open: a cell keeps its slot whatever it holds now; an item in a slot that has no cell arrives at the
--- end of the top shelf, except while a sort still moves items (held), when it waits for the layout after the sort.
+-- end of its own section when it is placed by hand (Arrive), else at the end of the top shelf, except while a sort still moves items (held), when
+-- it waits for the layout after the sort. True when a section took a cell, so the sections are packed again.
 local function Visit(st, bag, slot, held)
 	local sk = SlotKey(bag, slot)
 	local record = Item(st.key, bag, slot)
 	local entry = st.cells[sk]
 	if entry then
 		entry.record, entry.dirty = record, true
-		return
+		-- Its new flag may come after it arrived (BAG_NEW_ITEMS_UPDATED, BagsData.lua).
+		ShownPlaced(record)
+		return false
 	end
 	if not record or held then
-		return
+		return false
+	end
+	entry = Entry(bag, slot, record)
+	st.cells[sk] = entry
+	ShownNew(record)
+	if Arrive(st, entry) then
+		return true
 	end
 	if not st.strip then
 		st.strip = NewStrip(st)
 	end
-	entry = Entry(bag, slot, record)
 	st.strip.entries[#st.strip.entries + 1] = entry
-	st.cells[sk] = entry
-	ShownNew(record)
+	return false
 end
 
 -- The slots of changed in the order of the bags: { { bag, slot } ... }.
@@ -1982,20 +2047,24 @@ function Layout.Update(which, changed, held)
 		if okArrived and arrived == true then
 			return Layout.Build(which)
 		end
-		local hadStrip = st.strip ~= nil
+		local hadStrip, grew = st.strip ~= nil, false
 		if all then
 			for _, bag in ipairs(st.containers) do
 				for slot = 1, st.sizes[bag] do
-					Visit(st, bag, slot, held)
+					grew = Visit(st, bag, slot, held) or grew
 				end
 			end
 		else
 			for _, spot in ipairs(InOrder(st, changed)) do
-				Visit(st, spot[1], spot[2], held)
+				grew = Visit(st, spot[1], spot[2], held) or grew
 			end
 		end
 		if st.strip and not hadStrip then
 			st.strip.titleWidth = Measure(st, TitleText(st.strip))
+		end
+		-- A placed item went to the end of its section (Arrive): the sections are packed again around it.
+		if grew then
+			Pack(st)
 		end
 		MakeFree(st)
 	end

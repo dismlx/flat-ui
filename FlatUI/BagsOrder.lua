@@ -44,9 +44,10 @@ local _, ns = ...
 -- Unput), which puts back each placement not changed since, says how many came back (3 of 4 when one is placed elsewhere now) and flashes the
 -- section Back (B.Custom.Took). While a search is typed (B.Search.Active), a section that holds items placed by hand has "Place the 7 items that
 -- match the search here": every item the window shows (st.cells, folded sections too) that the search finds (B.Search.Match) and that is in
--- another section, not in New items, Junk (so the sell list stays as it is) or Keep in place, is placed there at once (B.Categories.PlaceAll,
--- refused in a fight as a drop is), with one line in chat, the section flashing Placed 7, in both windows and for any character, since placements
--- are by item ID for the account. On Keep in place it also has BagsPins.lua's lines; on every section the Colour lines, and on a section the
+-- another section, New items and the top shelf included (a placement shows ahead of them, B.Categories.Of), but not Junk (so the sell list keeps
+-- what Junk shows) or Keep in place, is placed there at once (B.Categories.PlaceAll, refused in a fight as a drop is), with one line in chat, the
+-- section flashing Placed 7, in both windows and for any character, since placements are by item ID for the account. On Keep in place it also has
+-- BagsPins.lua's lines; on every section the Colour lines, and on a section the
 -- player made Rename and Delete this section; and in the player's own bag window, New section
 -- (B.Custom.MenuLines, BagsCustom.lua). + New section, the title after the last section that makes one, never
 -- moves, folds or opens this menu. The row Section order on the Bags page does the same reset. Moving
@@ -143,8 +144,9 @@ local PLACE_ALL = {
 	say = "Flat UI: %d items are placed in %s.",
 	flash = "Placed %d",
 }
--- The sections an item the search finds is not placed from: the top shelf, Junk (so the sell list stays as it is) and Keep in place (its pins).
-local PLACE_SKIP = { new = true, junk = true, keep = true }
+-- The sections an item the search finds is not placed from: Junk (so the sell list keeps what Junk shows) and Keep in place (its pins). The top
+-- shelf's items are placed too, since a placement shows ahead of New items (B.Categories.Of).
+local PLACE_SKIP = { junk = true, keep = true }
 -- After a title's tip, while items are placed in its section by hand.
 local PLACED_TIP = { one = "1 item is placed here by hand.", many = "%d items are placed here by hand." }
 -- After the tip of a click: what a Shift-click does, on a section among others open and on the one open alone.
@@ -930,10 +932,10 @@ local function BackLines(st, key, items, label)
 end
 
 -- While a search is typed (B.Search.Active), the line of a title's menu that places in its section every item the window shows that the search
--- finds (B.Search.Match) and that is in another section, but not in New items, Junk or Keep in place (PLACE_SKIP), by B.Categories.PlaceAll: on a
--- section that holds items placed by hand (B.Categories.Placeable: not Keep in place or Junk). The cells of the layout (st.cells) hold every item
--- the window shows, the items of a folded section too. Placements are by item ID for the account, so it works in the bank window and for another
--- character as well. One line in chat, and the section flashes Placed 7.
+-- finds (B.Search.Match) and that is in another section, New items too, but not in Junk or Keep in place (PLACE_SKIP), by B.Categories.PlaceAll:
+-- on a section that holds items placed by hand (B.Categories.Placeable: not Keep in place, Junk or the top shelf). The cells of the layout
+-- (st.cells) hold every item the window shows, the items of a folded section too. Placements are by item ID for the account, so it works in the
+-- bank window and for another character as well. One line in chat, and the section flashes Placed 7.
 local function PlaceLines(st, key, items, label)
 	if Call(B.Search, "Active") ~= true or PLACE_SKIP[key] then
 		return

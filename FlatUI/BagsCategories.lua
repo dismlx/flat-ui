@@ -8,9 +8,10 @@ local _, ns = ...
 -- menu, the Deleted button after the last section and the rows Delete a section and Deleted sections, and Placeable, PlacedCount, PutBack,
 -- LastPutBack, Unput and PlaceAll for the lines of a title's menu that put back, bring back and place items.
 --
--- An item lands in the first section whose rule it meets: New items, then Junk, then Keep in place, then the section the player placed it in by
--- hand, then Equipment sets, Quest items, Equipment, Consumables, Trade goods, Reagents, Recipes, Ammunition, Bags and quivers, Keys and Other.
--- Free slots holds the empty slots. The rules read the class, subclass and equip slot the game gives at once (C_Item.GetItemInfoInstant,
+-- An item the player placed in a section by hand lands in that section, ahead of New items, unless Junk or Keep in place shows it (Of); every
+-- other item lands in the first section whose rule it meets: New items, then Junk, then Keep in place, then Equipment sets, Quest items,
+-- Equipment, Consumables, Trade goods, Reagents, Recipes, Ammunition, Bags and quivers, Keys and Other. Free slots holds the empty slots.
+-- The rules read the class, subclass and equip slot the game gives at once (C_Item.GetItemInfoInstant,
 -- ItemDocumentation.lua:659-679, which never waits for the server), as BagsData keeps them on each record or through B.Data.Info, and compare
 -- them with the numbers of Forever's Enum.ItemClass and Enum.ItemMiscellaneousSubclass (wowless, data/products/wowf/enums.yaml:4630-4651 and
 -- 5009-5016). An item in an equipment set (the record's set, from C_Container.GetContainerItemEquipmentSetInfo) and a quest item (class 12, or the
@@ -32,7 +33,9 @@ local _, ns = ...
 -- client's own numbers for class 7: Parts 1, Explosives 2, Devices 3, Cloth 5, Leather 6, Metal & Stone 7, Meat 8, Herb 9, Elemental 10, Other 11,
 -- Enchanting 12. Fit gives the section a key of a group stands for under its row's choice, so a placement by hand in a section the choice does not
 -- show goes to the one that holds its kind there (Rings to Jewellery, Jewellery at Each kind to the ring's own section, and every one to the group's
--- base at One section), and Of files an item in the sections the rows show.
+-- base at One section), and Of files an item in the sections the rows show. Fit only reads: the saved key stays, so a potion placed in Potions
+-- shows in Consumables at One section and in Potions again once the row shows it, and a drop on the section its placement shows in writes
+-- nothing (Writes).
 --
 -- Hidden sections: the player may hide any section of Flat UI's own but New items, Free slots and Other, which the player's words call deleting
 -- (Delete this section in a title's right-click menu and the row Delete a section, which also deletes every section of a split group at once,
@@ -56,7 +59,9 @@ local _, ns = ...
 -- Keep in place holds the items of this character's bags (a live record of bags 0 to 5) that sit in the slot the player pinned for them
 -- (B.Pins.Of, BagsPins.lua). It comes after Junk, so the Junk section and Sell junk always agree; pinning takes an item off the sell list and puts a
 -- grey one on the keep list, so a pinned item is not junk. It takes no placement by hand: pins are per character and per slot, in
--- FlatUICharDB.bagPins, and a drop on its title pins the slot the item came from (BagsLayout.lua hands that drop to BagsPins.lua).
+-- FlatUICharDB.bagPins, and a drop on its title pins the slot the item came from (BagsLayout.lua hands that drop to BagsPins.lua). A pin is not a
+-- placement: it comes before one, and an item placed by hand in a pinned slot shows in Keep in place, its placement kept for its other stacks and
+-- for when the slot is unpinned.
 --
 -- New items: an item is new when the game's own flag is set (C_NewItems.IsNewItem, NewItemsDocumentation.lua:15-28) at the scan in which its
 -- slot changed, or when BagsData hears that the game set new flags (BAG_NEW_ITEMS_UPDATED), which it may do after that scan. It is then kept by
@@ -66,7 +71,9 @@ local _, ns = ...
 -- flagged then is noted and stays out of New items until the flags come off. When the bag window closes, every item New items showed during that
 -- opening leaves; a click on its title and a clean up take every one out at once. The close takes the game's flags off, and so does putting New
 -- items away by its title or by a clean up (Bags.ClearNew, Bags.lua), so the next change of a slot does not bring its item back. With New items
--- at the top off, nothing is kept as new.
+-- at the top off, nothing is kept as new. A new item placed by hand shows in its section instead, keeping the glow of its slot (the game's flag,
+-- BagsItems.lua); New.Is still says it is new (the search's #new), and the layout tells New.Shown of it wherever it shows, so it leaves with the
+-- others when the window closes and never turns up in New items later, if its placement is taken off.
 --
 -- Junk is Errands' own test, so the Junk section, the junk coin and Sell junk agree on what is junk. A live slot of the bags is junk when Errands
 -- would sell it (ns.ErrandsJunk: the sale test of ErrandsMerchant.lua:178-203, with the bags the game's menu leaves out of junk selling,
@@ -75,20 +82,27 @@ local _, ns = ...
 -- bags 0 to NUM_TOTAL_EQUIPPED_BAG_SLOTS only (:113-120). The bank and every item of another character, which nothing can sell from where they
 -- are, take the list part of that test (ns.ErrandsJunkRule, :189-192): on the sell list, or grey and not on the keep list, and never an item with
 -- no value or a quest item. Junk is tried right after New items, so a new junk item stays in New items with its coin until the bags close, and
--- nothing Sell junk sells is filed anywhere else.
+-- nothing Sell junk sells is filed anywhere else: Junk comes before a placement by hand too. An item placed by hand that is junk now (put on the
+-- sell list with /flatui sell, or grey, not on the keep list and in a bag Errands sells from) shows in Junk and is sold with Sell junk; its
+-- placement is kept, not taken off, and shows again once it is off the sell list or on the keep list (/flatui keep, or a drop on any section).
 --
 -- Placement by hand: an item dropped on the title of a section stays in that section, by item ID, for the whole account, in FlatUIDB.bags.placed
--- (at most MOST_PLACED items). A drop reads the cursor (GetCursorInfo, and C_Cursor.GetCursorItem for the slot the item came from,
+-- (at most MOST_PLACED items): every stack of it, in the bag and bank windows and for every character, ahead of New items and the top shelf
+-- (BagsLayout.lua), until the player places it elsewhere, puts it back (a title's menu, Empty this section, the row Items placed by hand) or
+-- deletes a section of their own that holds it. A drop reads the cursor (GetCursorInfo, and C_Cursor.GetCursorItem for the slot the item came from,
 -- CursorDocumentation.lua:11-19, read from the fields of its ItemLocation, Blizzard_ObjectAPI/Mainline/ItemLocation.lua:35-44) and gives the
--- item back to its slot with ClearCursor. Dropped on Junk, the item goes on Errands' sell list; an item of Junk dropped on another section comes
--- off the sell list, and a grey one goes on the keep list (ns.ErrandsJunkMark), as /flatui sell and /flatui keep put them there and take them off
--- (ErrandsMerchant.lua:824-848): a placement of Flat UI's own in or out of Junk would make the section and the selling disagree. While Junk is
--- hidden no drop changes the lists, since its items show in other sections then (DropOn). Whether a dropped item is of Junk is the test of its
--- slot for a slot of the bags (Categories.IsJunk), so a grey item of a bag left out of junk selling, which is not in Junk, goes on no list; for
--- the bank, and an item whose slot the game does not say, it is the two lists (ns.ErrandsJunkRule). An item the game gives no value, or no sell
--- price (C_Item.GetItemInfo, ItemDocumentation.lua:626-657), and a quest item cannot go in Junk, since Errands never sells them. Dropped on the
--- section it reaches by itself, an item loses its placement. An item whose slot the game does not say is judged by its ID alone, with its quality
--- from C_Item.GetItemQualityByID. New items and Free slots take no drop, and no drop is taken in a fight (InCombatLockdown and
+-- item back to its slot with ClearCursor. Dropped on Junk, the item goes on Errands' sell list and its placement goes (Junk is the other section
+-- it is put in); an item that is junk dropped on another section comes off the sell list, and a grey one goes on the keep list
+-- (ns.ErrandsJunkMark), as /flatui sell and /flatui keep put them there and take them off (ErrandsMerchant.lua:824-848): a placement of Flat UI's
+-- own in or out of Junk would make the section and the selling disagree. While Junk is hidden no drop changes the lists, since its items show in
+-- other sections then (Unlist). Whether a dropped item is junk is the test of its slot for a slot of the bags (Categories.IsJunk) and, for every
+-- item, the two lists (ns.ErrandsJunkRule), so a grey item placed from a bag left out of junk selling, which is not in Junk there, goes on the keep
+-- list too, and none of its stacks shows in Junk in another bag, the bank or another character's bags (DroppedJunk). An item the game gives no
+-- value, or no sell price (C_Item.GetItemInfo, ItemDocumentation.lua:626-657), and a quest item cannot go in Junk, since Errands never sells them.
+-- Dropped on the section it reaches by itself, an item is placed there too, so a change of a group's row, a section deleted and brought back or a
+-- rule of a new kind never moves it; dropped on the section its placement shows in now, nothing is written (Writes), so a placement in a kind of a
+-- group the row does not show (Potions at One section) keeps its key. An item whose slot the game does not say is judged by its ID alone, with its
+-- quality from C_Item.GetItemQualityByID. New items and Free slots take no drop, and no drop is taken in a fight (InCombatLockdown and
 -- UnitAffectingCombat, through Errands.Fighting): the item only goes back. The lines said in chat name an item as Errands does, by
 -- C_Item.GetItemNameByID and its ID. The row Items placed by hand lists the placements and takes one off, or, from its first line while two or
 -- more are placed, every one; with none it says how to place an item.
@@ -104,8 +118,10 @@ local _, ns = ...
 -- the first line of the row while two or more are placed) are kept in this file (lastBack, never saved) until the next put back or a reload:
 -- Categories.Unput brings each back in the section it was saved in, but not one placed elsewhere since and none past MOST_PLACED, from the line
 -- of that section title's menu and the first line of the row; an item the row puts back on its own leaves that record. Categories.PlaceAll places
--- many items at once, as many drops on a title would, with no cursor and no change to the sell or keep list: the line of a section title's menu
--- that places there every item the search finds; it is refused in a fight, as a drop is, and stops at MOST_PLACED with one line.
+-- many items at once, as many drops on a title would, with no cursor: the line of a section title's menu that places there every item the search
+-- finds, but none of Junk or Keep in place; it is refused in a fight, as a drop is, and stops at MOST_PLACED with one line. Nothing else writes a
+-- placement or takes one away: not a change of the rows, a hidden section, a sort, the bank, another character's view or a reset of BagsData's
+-- record, which keeps FlatUIDB.bags.placed (BagsData.lua).
 --
 -- Inside a section, equipment sorts by the place of its slot in the Character window (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:779-873),
 -- then by item level (ns.Items.LevelOf, Items.lua:425-438), quality and name; everything else by class, subclass, quality, name and count. An item
@@ -125,8 +141,9 @@ local MISC_REAGENT = 1
 -- The containers of the bags (Enum.BagIndex, enums.yaml:544-572): the backpack, the four bags, the reagent bag and the keyring.
 local KEYRING = -1
 local BAGS = { [0] = true, [1] = true, [2] = true, [3] = true, [4] = true, [5] = true, [KEYRING] = true }
--- The most items kept in a section by hand.
-local MOST_PLACED = 500
+-- The most items kept in a section by hand: 2000 entries of { [itemID] = key } are a few dozen kilobytes of saved variables, and every lookup of a
+-- placement is by item ID, so only a new placement counts them (Full), and stops at the limit.
+local MOST_PLACED = 2000
 -- Where a class, subclass or slot nobody gave sorts, and where the keyring and an unknown bag sort among the containers.
 local LAST, KEYRING_PLACE, NO_BAG = 1000, 100, 200
 
@@ -969,6 +986,22 @@ function Categories.Unput()
 	return back, last.count, last.key
 end
 
+-- True when item id has no placement yet and MOST_PLACED items are placed already, so a placement of it would pass the limit. The count stops at
+-- the limit.
+local function Full(placed, id)
+	if type(placed) ~= "table" or placed[id] ~= nil then
+		return false
+	end
+	local count = 0
+	for _ in pairs(placed) do
+		count = count + 1
+		if count >= MOST_PLACED then
+			return true
+		end
+	end
+	return false
+end
+
 -- Keeps an item in a section, or takes its placement away with no key. Returns true, or false and why: "id", "key", "saved" (the saved
 -- variables are not loaded) or "full" (MOST_PLACED items are placed already).
 function Categories.Place(id, key)
@@ -987,14 +1020,8 @@ function Categories.Place(id, key)
 		placed[id] = nil
 		return true
 	end
-	if placed[id] == nil then
-		local count = 0
-		for _ in pairs(placed) do
-			count = count + 1
-		end
-		if count >= MOST_PLACED then
-			return false, "full"
-		end
+	if Full(placed, id) then
+		return false, "full"
 	end
 	placed[id] = key
 	return true
@@ -1102,13 +1129,15 @@ local function DropOnJunk(id, record, link)
 	return true
 end
 
--- Whether a dropped item is an item of Junk, which a drop on another section takes off the lists: for a slot of the bags (not the keyring) the
--- slot's own test (Categories.IsJunk, whatever its lock, so the item held on the cursor is judged as it lies), which leaves a grey item of a bag the
--- game's menu leaves out of junk selling outside Junk; for the bank, or an item whose slot the game does not say, the two lists (ns.ErrandsJunkRule).
+-- Whether a dropped item is junk somewhere, which a placement on another section takes off the lists: for a slot of the bags (not the keyring) the
+-- slot's own test (Categories.IsJunk, whatever its lock, so the item held on the cursor is judged as it lies), and for every item the two lists
+-- (ns.ErrandsJunkRule: on the sell list, or grey and not on the keep list). The lists count for an item of the bags too, so a grey item placed from
+-- a bag the game's menu leaves out of junk selling goes on the keep list as well, and none of its stacks shows in Junk later: not in another bag,
+-- the bank or another character's bags, where the lists alone say what is junk.
 local function DroppedJunk(id, record)
 	local bag = Whole(record.bag)
-	if record.live == true and bag ~= nil and bag ~= KEYRING and BAGS[bag] then
-		return Categories.IsJunk(record) == true
+	if record.live == true and bag ~= nil and bag ~= KEYRING and BAGS[bag] and Categories.IsJunk(record) == true then
+		return true
 	end
 	local rule = ns.ErrandsJunkRule
 	if type(rule) ~= "function" then
@@ -1118,17 +1147,37 @@ local function DroppedJunk(id, record)
 	return rule(id, quality, Unsellable(record, Text(record.link)), Quest(record)) == true
 end
 
--- A drop on another section: an item of Junk leaves the lists first, then the item is kept there, or loses its placement when that is the
--- section it reaches by itself. True when either changed what the window shows. While Junk is hidden its items show in other sections, so a drop
--- between them leaves the lists as they are: hiding Junk changes no selling.
-local function DropOn(key, id, record)
-	local mark = ns.ErrandsJunkMark
-	local unlisted = false
-	if type(mark) == "function" and not Hidden("junk") and DroppedJunk(id, record) then
-		mark(id, false)
-		unlisted = true
+-- What placing item id (its record) in section key writes: key, or nil when the item's placement shows in that section already (PlacedIn), so the
+-- saved key stays as it is: a potion placed in Potions and dropped on Consumables while the Consumables row shows one section stays placed in
+-- Potions, and shows there again once the row shows it. Every other placement is written, the section the item reaches by itself too, so a
+-- later change of the rows, a section deleted and brought back, or a rule of a new kind never moves it.
+local function Writes(key, id, record)
+	local here = PlacedIn(Whole(record.id) == id and record or { id = id })
+	if here ~= nil and here == key then
+		return nil
 	end
-	local done, why = Categories.Place(id, key ~= Rules(record) and key or nil)
+	return key
+end
+
+-- Takes a dropped item off the lists when it is junk somewhere (DroppedJunk), so it shows in the section it is placed in and is never sold: true
+-- when it was. While Junk is hidden its items show in other sections, so a placement leaves the lists as they are: hiding Junk changes no selling.
+local function Unlist(id, record)
+	local mark = ns.ErrandsJunkMark
+	if type(mark) == "function" and not Hidden("junk") and DroppedJunk(id, record) then
+		return mark(id, false) == true
+	end
+	return false
+end
+
+-- A drop on another section: an item that is junk somewhere leaves the lists first (Unlist), then the item is placed there (Writes), the section
+-- it reaches by itself too. True when it is placed there now or the lists changed.
+local function DropOn(key, id, record)
+	local unlisted = Unlist(id, record)
+	local write = Writes(key, id, record)
+	if not write then
+		return true
+	end
+	local done, why = Categories.Place(id, write)
 	if not done and why == "full" then
 		Say(("%d items are placed by hand already. Take one off with Items placed by hand on the Bags page first."):format(MOST_PLACED))
 	end
@@ -1174,8 +1223,9 @@ local REFUSALS = {
 }
 
 -- Whether section key would take item id, changing nothing: the tests Categories.File makes before it writes (Junk takes no quest item and none
--- that cannot be sold; another section no new placement past MOST_PLACED, unless it is the section the item reaches by itself), saying the same
--- line on a refusal. BagsCustom.lua asks it before it moves an item from the bank, worn gear or a merchant into the bags, so a drop refused moves
+-- that cannot be sold; another section no new placement past MOST_PLACED, the section the item reaches by itself too, while one its placement
+-- shows in already writes nothing and always takes it, Writes), saying the same line on a refusal. BagsCustom.lua asks it before it moves an item
+-- from the bank, worn gear or a merchant into the bags, so a drop refused moves
 -- nothing. True when the section would take it. With quiet nothing is said: a refusal gives false and the sentence a tooltip shows (REFUSALS),
 -- which BagsCustom.lua asks while the cursor holds an item, so a + slot, a catcher or a title that would refuse it stays unlit.
 function Categories.Takes(id, key, link, bag, slot, quiet)
@@ -1205,15 +1255,8 @@ function Categories.Takes(id, key, link, bag, slot, quiet)
 		end
 		return true
 	end
-	local placed = Store(false)
-	if key ~= Rules(record) and not (placed and placed[id] ~= nil) then
-		local count = 0
-		for _ in pairs(placed or {}) do
-			count = count + 1
-		end
-		if count >= MOST_PLACED then
-			return Refuse("full", MOST_PLACED)
-		end
+	if Writes(key, id, record) and Full(Store(false), id) then
+		return Refuse("full", MOST_PLACED)
 	end
 	return true
 end
@@ -1230,11 +1273,12 @@ function Categories.Drop(id, key)
 	return taken
 end
 
--- Places every item of records in section key at once, each as a drop on its title places one (a section an item reaches by itself takes its
--- placement away instead), with no cursor and no change to the sell or keep list: the line of a title's menu that places there the items the search
--- finds (BagsOrder.lua), which leaves out the items of New items, Junk and Keep in place. records: the records the window shows, or bare item IDs;
--- each item ID counts once. Refused in a fight, as a drop is, and stops at MOST_PLACED, each with one line in chat. Asks for the layout once.
--- Returns how many were placed.
+-- Places every item of records in section key at once, each as a drop on its title places one (Writes: the section an item reaches by itself
+-- too), with no cursor: the line of a title's menu that places there the items the search finds (BagsOrder.lua), which leaves out the items of
+-- Junk and Keep in place, so the sell list keeps what Junk shows. An item it places that is junk somewhere else (a grey one of a bag left out of
+-- junk selling) goes on the keep list, as a drop puts it there (Unlist), so its stacks never show in Junk. records: the records the window shows,
+-- or bare item IDs; each item ID counts once. Refused in a fight, as a drop is, and stops at MOST_PLACED, each with one line in chat. Asks for the
+-- layout once. Returns how many are placed there now.
 function Categories.PlaceAll(key, records)
 	if not Placeable(key) or type(records) ~= "table" then
 		return 0
@@ -1251,8 +1295,13 @@ function Categories.PlaceAll(key, records)
 		local id = type(record) == "table" and Whole(record.id) or nil
 		if id and id > 0 and not seen[id] then
 			seen[id] = true
-			local done, why = Categories.Place(id, key ~= Rules(record) and key or nil)
+			local write = Writes(key, id, record)
+			local done, why = true, nil
+			if write then
+				done, why = Categories.Place(id, write)
+			end
 			if done then
+				Unlist(id, record)
 				count = count + 1
 			elseif why == "full" then
 				Say(REFUSALS.full[1]:format(MOST_PLACED))
@@ -1270,29 +1319,58 @@ end
 
 -- Filing and order -----------------------------------------------------------------------------------------------------------------------
 
--- The section a record is shown in: New items, then Junk, then Keep in place (a record in the slot pinned for it, B.Pins.Of), then its placement,
--- then the built-in rules. No record is a free slot. Junk and Keep in place hidden only change where their items show: the junk test, the sell
--- list and the pins stay as they are.
+-- True for a record Junk shows: junk (Categories.IsJunk) while Junk is not hidden.
+local function JunkShown(record)
+	return not Hidden("junk") and Categories.IsJunk(record) == true
+end
+
+-- True for a record Keep in place shows: a live record in the slot pinned for it (B.Pins.Of) while Keep in place is not hidden.
+local function PinShown(record)
+	if record.live ~= true or Hidden("keep") then
+		return false
+	end
+	local of = B.Pins and B.Pins.Of
+	if type(of) ~= "function" then
+		return false
+	end
+	local ok, pinned = pcall(of, record)
+	return ok and pinned == true
+end
+
+-- The section a record is shown in: the section it is placed in by hand (PlacedIn), ahead of New items, unless Junk or Keep in place shows it;
+-- else New items, then Junk, then Keep in place (a record in the slot pinned for it, B.Pins.Of), then the built-in rules. So a placed item that is
+-- new shows in its section, and one that is junk or pinned goes where it did before: a new one in New items, else Junk or Keep in place, its
+-- placement kept for when it leaves them. No record is a free slot. Junk and Keep in place hidden only change where their items show: the junk
+-- test, the sell list and the pins stay as they are.
 function Categories.Of(record)
 	if type(record) ~= "table" then
 		return "free"
 	end
+	local placed = PlacedIn(record)
+	local junk, pinned
+	if placed then
+		junk = JunkShown(record)
+		pinned = not junk and PinShown(record)
+		if not junk and not pinned then
+			return placed
+		end
+	end
 	if New.Is(record) then
 		return "new"
 	end
-	if not Hidden("junk") and Categories.IsJunk(record) then
+	if junk == nil then
+		junk = JunkShown(record)
+	end
+	if junk then
 		return "junk"
 	end
-	if record.live == true and not Hidden("keep") then
-		local of = B.Pins and B.Pins.Of
-		if type(of) == "function" then
-			local ok, pinned = pcall(of, record)
-			if ok and pinned == true then
-				return "keep"
-			end
-		end
+	if pinned == nil then
+		pinned = PinShown(record)
 	end
-	return PlacedIn(record) or Rules(record)
+	if pinned then
+		return "keep"
+	end
+	return Rules(record)
 end
 
 -- The item level of a gear record (the record's own, else ns.Items.LevelOf by link, kept on the record and per link), or nil.
