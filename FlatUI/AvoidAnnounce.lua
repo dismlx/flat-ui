@@ -122,13 +122,13 @@ local function Channel(to)
 		end
 		return nil, "you are in an instance raid and Send to is Party chat only"
 	elseif to == "raid" then
-		if homeRaid then
-			return "RAID"
-		elseif instanceRaid and not inHome then
+		if instanceRaid then
 			return "INSTANCE_CHAT"
+		elseif homeRaid then
+			return "RAID"
 		end
 		return nil, "you are not in a raid and Send to is Raid chat only"
-	elseif inInstance and not inHome then
+	elseif inInstance then
 		return "INSTANCE_CHAT"
 	end
 	return homeRaid and "RAID" or "PARTY"
@@ -325,14 +325,13 @@ Flush = function()
 				Out(Text(batch, every), now)
 				S.batch, S.windowEnd = Empty(), nil
 			end
-		elseif not InFight() then
-			S.overAt = S.overAt or now
+		elseif S.overAt and not InFight() then
 			if Out(Text(batch, every), now, now - S.overAt < HOLD) then
 				S.batch, S.overAt = Empty(), nil
 			end
 		end
 	end
-	Wake(S.batch.n > 0)
+	Wake(S.batch.n > 0 and (every ~= "fight" or S.overAt ~= nil))
 end
 
 Run = function(fn, ...)
@@ -383,6 +382,9 @@ end
 
 local function Finish()
 	ReadBlock()
+	if Every() == "fight" and S.batch.n > 0 then
+		S.overAt = S.overAt or Now()
+	end
 	Flush()
 end
 
@@ -407,9 +409,7 @@ local function Reason()
 	if to == nil then
 		return nil, why
 	end
-	if S.roleStale then
-		ReadRole()
-	end
+	ReadRole()
 	if not S.tank then
 		return nil, S.by and ("you do not count as a tank (%s)"):format(S.by) or "you do not count as a tank"
 	end
@@ -418,8 +418,8 @@ end
 
 local function Summary()
 	local to, why = Reason()
-	local line = ("Announce to your group: %s, %s; %s. %d lines sent"):format(EVERY[Every()], TO[Target()],
-		to and ("now to " .. PLACES[to]) or ("nothing sent now, as " .. why), S.sent)
+	local line = ("Announce to your group: %s, %s; %s. %d %s sent"):format(EVERY[Every()], TO[Target()],
+		to and ("now to " .. PLACES[to]) or ("nothing sent now, as " .. why), S.sent, S.sent == 1 and "line" or "lines")
 	if S.own > 0 then
 		line = ("%s, %d shown only to you"):format(line, S.own)
 	end
@@ -448,11 +448,11 @@ local function Report()
 	else
 		print(Summary())
 	end
-	if S.roleStale then
-		ReadRole()
-	end
+	ReadRole()
 	if S.tank then
 		print(("You count as a tank (%s)."):format(S.by or "your role"))
+	else
+		print(S.by and ("You do not count as a tank (%s)."):format(S.by) or "You do not count as a tank.")
 	end
 	local kinds = Wanted()
 	print(("Kinds sent: %s."):format(#kinds > 0 and table.concat(kinds, ", ") or "none, as every kind is off"))
