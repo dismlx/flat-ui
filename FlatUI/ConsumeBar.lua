@@ -21,7 +21,9 @@ local _, ns = ...
 -- button of the list it goes in that place (an item of the list dropped there moves), else at the end, and while the cursor holds an item a + slot
 -- of the addon's own (a plain button) ends the bar out of a fight in the modes that show the list. Add an item offers the consumables in the bags.
 -- Shift+right-click on a button takes it off the list, or puts a bag button on it; Take an item off, Move an item left and Move an item right do
--- the same from the page, also in a fight and with the page off (the bar follows when it can). A drop takes any item with a use that cannot be worn.
+-- the same from the page, also in a fight and with the page off (the bar follows when it can). A drop takes only a consumable of the kinds above
+-- (C.KindOf: the Consumable class, or the Explosives and Devices of Trade goods) with a use that cannot be worn, and a drop on the + slot of an item
+-- of the list moves it to the end.
 -- An item of the list stays on the bar when the bags hold none: its icon grey (SetDesaturated) and dim, its count a red 0, or, with An item of your
 -- list with none left at Leave a gap, its icon hidden in its place. A click on such a button says "Flat UI: no <item> in your bags." in chat, at
 -- most once in NONE_GAP seconds for an item. A button of the bag part whose item runs out in a fight is drawn so until the fight ends, and goes at
@@ -415,13 +417,15 @@ function C.Listed(id)
 	return nil
 end
 
--- Why an item cannot go on the list, or nil when it can.
+-- Why an item cannot go on the list, or nil when it can: it must be a consumable of a kind the bar knows (C.KindOf), with a use, that cannot be worn.
 function C.Refused(id)
 	local name = C.Called(id)
 	if not C.Instant(id) then
 		return ('No item found for "%s".'):format(tostring(id))
 	elseif C.Worn(id) then
 		return ("%s is worn, not used up: it belongs on your action bars."):format(name)
+	elseif not C.KindOf(id) then
+		return ("%s is not a consumable: the consumables bar holds consumables only."):format(name)
 	elseif C.HasUse(id) == false then
 		return ("%s has no use."):format(name)
 	end
@@ -1082,7 +1086,7 @@ end
 function C.Lines(entry)
 	local lines, warm = {}, {}
 	if entry.plus then
-		return "Drop an item here", { "It goes at the end of your list of the consumables bar." }, warm
+		return "Drop a consumable here", { "It goes at the end of your list of the consumables bar." }, warm
 	end
 	if entry.sample then
 		lines[1] = "Sample: your consumables show here while test mode is on."
@@ -1094,7 +1098,7 @@ function C.Lines(entry)
 	end
 	if entry.list then
 		lines[#lines + 1] = ("Number %d of your list. Shift+right-click: off your list."):format(entry.place or 0)
-		lines[#lines + 1] = "Drop an item here to put it in this place."
+		lines[#lines + 1] = "Drop a consumable here to put it in this place."
 	else
 		lines[#lines + 1] = "Shift+right-click: onto your list."
 	end
@@ -1227,7 +1231,9 @@ function C.Drop(entry)
 		return
 	end
 	C.recent = { entry = entry, at = Now() }
-	local ok, line = C.Insert(id, entry.list and entry.place or nil)
+	-- The + slot is the end of the list, so an item of the list dropped there moves to the end.
+	local at = entry.list and entry.place or (entry.plus and #C.List() + 1) or nil
+	local ok, line = C.Insert(id, at)
 	if ok then
 		pcall(ClearCursor)
 	end
@@ -1321,8 +1327,11 @@ end
 -- The rows of the page ------------------------------------------------------------------------------------------------------------------------
 
 -- Add an item: the consumables in the bags that are not on the list, in the bar's order, with how many you carry. Every kind, whatever Kinds in
--- your bags says.
+-- your bags says. While the module does not run, no bag event reaches it, so the bags are read again for each opening of the list.
 function ns.ConsumeBarCandidates()
+	if not ns.ModuleOn(KEY) then
+		C.scanned = nil
+	end
 	local rows = {}
 	for _, id in ipairs(C.Scan()) do
 		if not C.Listed(id) then

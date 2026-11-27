@@ -3008,7 +3008,7 @@ ns.PAGES = {
 			tip = "How many you carry across your bags. A stack of one shows no number, but on a button of your list; none shows a red 0." },
 		{ section = "Your list" },
 		{ key = "add", kind = "list", default = 0, label = "Add an item", none = "Choose a consumable", items = "ConsumeBarCandidates", pick = "ConsumeBarAdd",
-			tip = "The consumables in your bags that are not on your list. Or drop an item on the bar out of a fight: on a button of your list it goes in that place, and while you hold an item a + at the end of the bar takes it. At most 24, kept for this character." },
+			tip = "The consumables in your bags that are not on your list. Or drop a consumable on the bar out of a fight: on a button of your list it goes in that place, and while Buttons shows your list, a + at the end of the bar takes the item you hold. At most 24, kept for this character." },
 		{ key = "remove", kind = "list", default = 0, label = "Take an item off", none = "Choose an item", items = "ConsumeBarListed", pick = "ConsumeBarRemove",
 			tip = "Shift+right-click on its button does the same. Shift+right-click on another button puts it on your list." },
 		{ key = "left", kind = "list", default = 0, label = "Move an item left", none = "Choose an item", items = "ConsumeBarListed", pick = "ConsumeBarLeft",

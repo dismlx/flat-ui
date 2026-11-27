@@ -1704,7 +1704,7 @@ ns.SETUP_STEPS = {
 		{ "consumebar.which", "c", "behaviour", "Chooses every consumable in your bags, only your own list, or your list and then the rest." },
 		{ "consumebar.empty", "o", "behaviour", "Keeps an item of your list that you have none of greyed with a red 0, or leaves a gap in its place." },
 		{ "consumebar.count", "o", "behaviour", "Shows how many of each you carry across your bags." },
-		{ "consumebar.add", "o", "behaviour", "Puts a consumable of your bags on your list; dropping an item on the bar does the same." },
+		{ "consumebar.add", "o", "behaviour", "Puts a consumable of your bags on your list; dropping a consumable on the bar does the same." },
 		{ "consumebar.remove", "r", "behaviour", "Takes an item off your list, as Shift+right-click on its button does." },
 		{ "consumebar.left", "r", "behaviour", "Moves an item of your list one place earlier on the bar." },
 		{ "consumebar.right", "r", "behaviour", "Moves an item of your list one place later on the bar." },
