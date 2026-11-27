@@ -863,11 +863,18 @@ function M.Claim()
 		T.Pulse(row, false)
 		row.near:Hide()
 		row.mine:Hide()
+		if type(T.Untip) == "function" then
+			pcall(T.Untip, row)
+		end
 		row.bar:Hide()
 		row.who = nil
 	end
 	Look("Forget", T.rows)
 	T.drawnOn = nil
+	if T.lift ~= 0 then
+		T.lift = 0
+		T.Anchor()
+	end
 	M.below, M.belowLaid, M.last, M.readAt = nil, nil, nil, nil
 	if M.line then
 		M.line:Hide()
@@ -978,32 +985,48 @@ function M.Divider()
 	return M.line
 end
 
-function M.LayBelow(k)
+function M.LayBelow(k, extra)
 	local width, height = Number("barWidth", 180), Number("barHeight", 16)
 	local small = math.max(10, math.floor(height * SMALL + 0.5))
 	local file = ns.BarTexture(Opt("barTexture")) or WHITE
 	for index = 1, k do
 		Paint(M.Row(index), file, TextHeight(small), small)
 	end
+	local up = Opt("grow") == "up" and k > 0
+	local section = k * small + (k - 1) * GAP + (extra and GAP + TextHeight(small) or 0)
+	if T.Lift(up and section + 2 * GAP + 1 or 0) then
+		M.belowLaid = nil
+	end
 	local bottom = ns.Finite(T.bottom) and T.bottom or 0
-	local start = bottom + 2 * GAP + 1
-	T.frame:SetSize(width + 2 * PAD, k > 0 and start + k * small + (k - 1) * GAP + PAD or bottom + PAD)
+	local start = up and PAD or bottom + 2 * GAP + 1
+	T.frame:SetSize(width + 2 * PAD, (k > 0 and not up) and start + section + PAD or bottom + PAD)
 	if k < 1 then
 		if M.line then
 			M.line:Hide()
+		end
+		if M.more then
+			M.more:Hide()
 		end
 		M.belowLaid = nil
 		return
 	end
 	local slip = Number("slipAt", 80)
-	local key = ("%s:%s:%s:%s"):format(tostring(T.laid), bottom, k, slip)
+	local key = ("%s:%s:%s:%s:%s:%s"):format(tostring(T.laid), bottom, k, slip, extra and 1 or 0, up and 1 or 0)
 	if M.belowLaid == key then
 		return
 	end
 	M.belowLaid = key
+	if extra then
+		local more = M.Line()
+		local below = start + k * (small + GAP)
+		more:SetTextHeight(TextHeight(small))
+		more:ClearAllPoints()
+		more:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD + INSET, -below)
+		more:SetPoint("TOPRIGHT", T.frame, "TOPRIGHT", -(PAD + INSET), -below)
+	end
 	local line = M.Divider()
 	line:ClearAllPoints()
-	line:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD, -(bottom + GAP))
+	line:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD, -(up and PAD + section + GAP or bottom + GAP))
 	line:SetSize(width, 1)
 	line:Show()
 	for index = 1, k do
@@ -1051,10 +1074,38 @@ function M.Suffix(unit, lost)
 		T.title:SetText("Sample" .. tail)
 		return
 	end
+	local form = T.titleForm
+	if type(form) == "table" and pcall(T.title.SetFormattedText, T.title, form[1] .. tail, form[2], form[3], form[4]) then
+		return
+	end
 	local ok, name = pcall(UnitName, unit)
 	if ok and Named(name) then
 		pcall(T.title.SetFormattedText, T.title, "%s" .. tail, name)
 	end
+end
+
+function M.Worst()
+	if not M.Both() or not T.fighting or T.tank ~= true then
+		return nil
+	end
+	if M.mode ~= "both:live" then
+		M.mode, M.known, M.last, M.readAt, M.unranked = "both:live", {}, nil, nil, nil
+	end
+	if M.Due() or M.last == nil then
+		M.last, M.unranked = M.Read(), true
+	end
+	local best, rank, share
+	for _, mob in ipairs(M.last) do
+		local at = mob.state == "lost" and 1 or mob.state == "slipping" and 2 or nil
+		local value = ns.Finite(mob.share) and mob.share or 0
+		if at and (mob.key == M.worst and (rank == nil or at <= rank)) then
+			best, rank, share = mob, at, math.huge
+		elseif at and (rank == nil or at < rank or (at == rank and value > share)) then
+			best, rank, share = mob, at, value
+		end
+	end
+	M.worst = best and best.key or nil
+	return best and best.unit or nil
 end
 
 function M.Below(unit)
@@ -1068,9 +1119,12 @@ function M.Below(unit)
 		M.mode, M.known, M.last, M.readAt = mode, {}, nil, nil
 	end
 	M.Tick(not sample)
-	local fresh = sample or M.Due() or M.last == nil
+	local fresh = sample or M.unranked or M.Due() or M.last == nil
 	if fresh then
-		M.last = sample and M.Spares() or M.Read()
+		if sample or not M.unranked then
+			M.last = sample and M.Spares() or M.Read()
+		end
+		M.unranked = nil
 		M.Rank(M.last)
 	end
 	local key = unit and Ask(UnitGUID, unit) or nil
@@ -1084,13 +1138,15 @@ function M.Below(unit)
 		end
 	end
 	local k = math.min(#shown, BELOW)
-	M.LayBelow(k)
+	local hidden = #shown - k
+	M.LayBelow(k, hidden > 0)
 	local keys = {}
 	for index = 1, k do
 		M.Fill(M.rows[index], shown[index])
 		keys[index] = shown[index].key
 	end
 	M.Clear(k + 1)
+	M.More(shown, k, hidden)
 	M.below, M.shown = k > 0 or nil, #shown
 	Look("Order", M.rows, k, mode, T.frame, keys, true)
 	if fresh then
@@ -1105,7 +1161,7 @@ function M.BelowOff(keep)
 		if not (keep and M.mode == "both:live") then
 			M.mode, M.known = nil, {}
 		end
-		M.last, M.readAt = nil, nil
+		M.last, M.readAt, M.unranked = nil, nil, nil
 	end
 	if not M.below then
 		return
@@ -1116,6 +1172,10 @@ function M.BelowOff(keep)
 	if M.line then
 		M.line:Hide()
 	end
+	if M.more then
+		M.more:Hide()
+	end
+	T.Lift(0)
 	if T.frame and ns.Finite(T.bottom) then
 		T.frame:SetSize(Number("barWidth", 180) + 2 * PAD, T.bottom + PAD)
 	end
@@ -1126,7 +1186,7 @@ function M.Stop()
 	if M.mode ~= nil or next(M.known) ~= nil then
 		M.known, M.mode = {}, nil
 	end
-	M.count, M.shown, M.last, M.readAt, M.belowLaid = 0, 0, nil, nil, nil
+	M.count, M.shown, M.last, M.readAt, M.belowLaid, M.unranked, M.worst = 0, 0, nil, nil, nil, nil, nil
 	if M.line then
 		M.line:Hide()
 	end
@@ -1140,6 +1200,10 @@ function M.Stop()
 	end
 	Look("Forget", M.rows)
 	T.laid = nil
+	if T.lift ~= 0 then
+		T.lift = 0
+		T.Anchor()
+	end
 	if T.title then
 		T.title:SetTextColor(DIM[1], DIM[2], DIM[3], 1)
 	end

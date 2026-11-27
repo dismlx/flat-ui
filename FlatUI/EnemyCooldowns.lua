@@ -812,6 +812,9 @@ function E.Tip(row, icon)
 			if a then
 				tip:AddLine(E.Name(a), ns.KindColour(a.kind))
 			end
+			if icon.unknown and row.testing == E.HELD then
+				tip:AddLine("Ready or used: the game hides its use here.", DIM[1], DIM[2], DIM[3], true)
+			end
 			tip:AddLine("A sample of test mode.", DIM[1], DIM[2], DIM[3])
 			tip:Show()
 			return
@@ -1875,7 +1878,7 @@ function E.Unhold(row)
 	row.testing = nil
 	for slot, icon in ipairs(row.icons) do
 		row.drawn[slot] = nil
-		icon.held = nil
+		icon.held, icon.unknown = nil, nil
 	end
 end
 
@@ -1905,7 +1908,7 @@ function E.Hold(rec)
 	local count = E.Fit(row, 3)
 	local look = { numbers = Opt("seconds") == true, font = Opt("numbersFont"), kind = Opt("kindBorder") == true or nil, border = Opt("iconBorder"),
 		flash = Opt("flash") == true, sound = bar and E.Kit() or false }
-	local level = Opt("show") == "always" and DARK or 1
+	local always = Opt("show") == "always"
 	for slot, icon in ipairs(row.icons) do
 		row.drawn[slot] = nil
 		if slot <= count then
@@ -1919,8 +1922,19 @@ function E.Hold(rec)
 				end
 				shown.kind = a.kind
 			end
-			E.Mark(icon, false)
-			ns.IconSampleHeld(icon, slot, KEY, shown, a and E.Texture(a) or nil)
+			local level = always and DARK or 1
+			if always and (slot == 1 or slot == 3) then
+				icon.held = nil
+				pcall(icon.cooldown.Clear, icon.cooldown)
+				ns.IconSet(icon, a and E.Texture(a) or ns.IconSamplePicture(slot), nil, nil,
+					{ numbers = shown.numbers, font = shown.font, kind = shown.kind ~= true and shown.kind or nil, border = shown.border })
+				level = slot == 3 and UNKNOWN or 1
+				icon.unknown = slot == 3 or nil
+				E.Mark(icon, slot == 3)
+			else
+				E.Mark(icon, false)
+				ns.IconSampleHeld(icon, slot, KEY, shown, a and E.Texture(a) or nil)
+			end
 			icon.texture:SetDesaturated(level < 1)
 			icon.texture:SetVertexColor(level, level, level)
 		else

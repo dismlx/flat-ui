@@ -339,6 +339,11 @@ function H.Frame()
 	title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -(PAD + INSET), -PAD)
 	title:SetText(TITLE)
 	H.title = title
+	local more = ns.OwnText(frame, "OVERLAY", FONT)
+	more:SetJustifyH("LEFT")
+	more:SetWordWrap(false)
+	more:Hide()
+	H.more = more
 	H.fadeIn, H.fadeOut = Fades(frame)
 	H.pulse = H.Pulse(title)
 	return frame
@@ -464,7 +469,7 @@ local function Paint(row, file, text)
 	row.drink:SetSize(text, text)
 end
 
-function H.Layout(n)
+function H.Layout(n, extra)
 	local width, height = Number("barWidth", 150), Number("barHeight", 16)
 	local text = math.max(7, math.min(14, height - 4))
 	local file = ns.BarTexture(Opt("barTexture")) or WHITE
@@ -472,7 +477,8 @@ function H.Layout(n)
 		Paint(H.Row(index), file, text)
 	end
 	H.title:SetTextHeight(text)
-	local key = ("%s:%s:%s"):format(n, width, height)
+	H.more:SetTextHeight(text)
+	local key = ("%s:%s:%s:%s"):format(n, width, height, extra and 1 or 0)
 	if H.laid == key then
 		return
 	end
@@ -485,7 +491,66 @@ function H.Layout(n)
 		bar:SetPoint("TOPLEFT", H.frame, "TOPLEFT", PAD, -(top + (index - 1) * (height + GAP)))
 		bar:SetSize(width, height)
 	end
-	H.frame:SetSize(width + 2 * PAD, top + n * height + (n - 1) * GAP + PAD)
+	local tall = top + n * height + (n - 1) * GAP + PAD
+	local more = H.more
+	more:ClearAllPoints()
+	if extra then
+		more:SetPoint("TOPLEFT", H.frame, "TOPLEFT", PAD + INSET, -(top + n * (height + GAP)))
+		more:SetPoint("TOPRIGHT", H.frame, "TOPRIGHT", -(PAD + INSET), -(top + n * (height + GAP)))
+		tall = tall + GAP + text
+	else
+		more:Hide()
+	end
+	H.frame:SetSize(width + 2 * PAD, tall)
+end
+
+function H.Rest(list, n, samples)
+	local hidden, least = 0, nil
+	for index = n + 1, #list do
+		hidden = hidden + 1
+		local share
+		if samples then
+			share = H.SampleShare(list[index], H.SamplePhase())
+		elseif Ask(UnitIsConnected, list[index]) == false or Ask(UnitIsDeadOrGhost, list[index]) == true then
+			H.away = true
+		else
+			local ok, value = pcall(UnitPowerPercent, list[index], MANA, false, Hundred())
+			if ok and not IsSecret(value) and ns.Finite(value) then
+				share = value
+			else
+				H.hidden = true
+			end
+		end
+		if share then
+			H.sum, H.count = (H.sum or 0) + share, (H.count or 0) + 1
+			H.least = math.min(H.least or share, share)
+			least = math.min(least or share, share)
+		end
+	end
+	return hidden, least
+end
+
+function H.More(hidden, least)
+	local more = H.more
+	if not more then
+		return
+	elseif hidden < 1 then
+		more:Hide()
+		return
+	end
+	local at = Number("lowAt", 30)
+	if least then
+		local value = math.floor(least + 0.5)
+		more:SetText(("+%d more, lowest %d%%"):format(hidden, value))
+	else
+		more:SetText(("+%d more"):format(hidden))
+	end
+	if least and at > 0 and least < at then
+		more:SetTextColor(LOW[1] + (1 - LOW[1]) * 0.35, LOW[2] + (1 - LOW[2]) * 0.35, LOW[3] + (1 - LOW[3]) * 0.35, 1)
+	else
+		more:SetTextColor(DIM[1], DIM[2], DIM[3], 1)
+	end
+	more:Show()
 end
 
 function H.SamplePhase()
@@ -712,7 +777,7 @@ function H.Draw()
 		return
 	end
 	H.Frame()
-	H.Layout(n)
+	H.Layout(n, #list > n)
 	Average()
 	for index = 1, n do
 		if samples then
@@ -721,6 +786,7 @@ function H.Draw()
 			H.Fill(H.rows[index], list[index])
 		end
 	end
+	H.More(H.Rest(list, n, samples ~= nil))
 	H.Title()
 	for index = n + 1, #H.rows do
 		H.rows[index].bar:Hide()
@@ -767,6 +833,7 @@ local function Step()
 		for index = 1, math.min(n, #H.rows) do
 			H.Fill(H.rows[index], H.healers[index])
 		end
+		H.More(H.Rest(H.healers, n, false))
 		H.Title()
 	end
 end

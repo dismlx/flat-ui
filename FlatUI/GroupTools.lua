@@ -794,6 +794,9 @@ function G.PullLine()
 		if G.sampleCount then
 			return ("Sample: %s."):format(words)
 		end
+		if G.by then
+			return ("%s counts down: %s. Right-click stops it."):format(G.by, words)
+		end
 		return ("Counting down: %s. Right-click stops it."):format(words)
 	end
 	return "Right-click stops the countdown."
@@ -1043,7 +1046,7 @@ local function PlayerCountdown(kind)
 end
 
 function G.CountdownOver()
-	G.ends, G.sampleCount, G.goUntil = nil, nil, nil
+	G.ends, G.sampleCount, G.goUntil, G.by = nil, nil, nil, nil
 	local ticker = G.ticker
 	G.ticker = nil
 	if ticker and type(ticker.Cancel) == "function" then
@@ -1107,13 +1110,19 @@ function G.StartTicker()
 end
 
 function G.TimerStarted(kind, remaining)
-	if not PlayerCountdown(kind) then
-		return
+	if PlayerCountdown(kind) then
+		G.CountFrom(remaining)
 	end
+end
+
+function G.CountFrom(remaining, by)
 	local now = Ask(GetTime)
 	if IsSecret(remaining) or not ns.Finite(remaining) or remaining <= 0 or not now then
 		G.CountdownOver()
 		return
+	end
+	if type(by) == "string" and not IsSecret(by) and by ~= "" then
+		G.by = by
 	end
 	G.ends, G.sampleCount, G.goUntil = now + remaining, nil, nil
 	G.Wake()
@@ -1131,9 +1140,22 @@ function G.TimerStarted(kind, remaining)
 end
 
 function G.TimerStopped(kind)
-	if PlayerCountdown(kind) and not (G.goUntil and not G.ends) then
+	if PlayerCountdown(kind) then
+		G.CountCancelled()
+	end
+end
+
+function G.CountCancelled()
+	if not (G.goUntil and not G.ends) then
 		G.CountdownOver()
 	end
+end
+
+function G.PlayerCountdown(_, remaining, _, _, by)
+	if IsSecret(remaining) and G.ends and not G.sampleCount then
+		return
+	end
+	G.CountFrom(remaining, by)
 end
 
 function G.SampleOn()
@@ -1277,6 +1299,8 @@ ns.Register(KEY, {
 		READY_CHECK_FINISHED = G.Checked,
 		START_TIMER = G.TimerStarted,
 		STOP_TIMER_OF_TYPE = G.TimerStopped,
+		START_PLAYER_COUNTDOWN = G.PlayerCountdown,
+		CANCEL_PLAYER_COUNTDOWN = G.CountCancelled,
 		UPDATE_BINDINGS = G.Paint,
 	},
 })
