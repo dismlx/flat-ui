@@ -6,6 +6,10 @@ local _, ns = ...
 -- Text sizes, the health bar fill and the bar heights are set again on the next frame after the game lays a plate out
 -- (UpdateAnchors puts them back): when the plate gets its unit, and after the game's nameplate options change. Class icons are frames of the addon's own beside the health bar. An elite, a rare or a boss
 -- has a mark after its level number and a coloured border, and any plate can have a fading row behind its name.
+-- A size or place the game will not let addon code set on a protected plate in a fight waits for its end (QueueSizes); when it was a change of one
+-- of those rows in the options window (Health bar height, Nameplate cast bar height, Bar width, the level box, the raid marker, the class icons),
+-- chat says once a fight, while the window shows, that the plates take it as the fight ends. A class icon that comes or goes places the row of
+-- combo points again (PlateCombo.lua's ns.PlateComboPlace), which hangs under a Below icon.
 
 local KEY = "nameplates"
 local AURA_OVERLAY = "UI-HUD-CoolDownManager-IconOverlay"
@@ -68,6 +72,11 @@ local driverFollowed
 local classAtlas = {}
 local classQueue, classAll, classQueued = {}, false, false
 local layoutQueued, sizesQueued = false, false
+-- The chat line of a size change that waits for the end of a fight: rows (the rows that size or place what the game may protect), last (their values
+-- at the last refresh, as one string), refreshing (true while a refresh that changed one of them styles the plates) and told (said this fight).
+local TELL = { rows = { "enabled", "healthHeight", "castHeight", "barWidth", "level", "levelShape", "levelGap", "levelSize", "raidMarker", "raidMarkerSize",
+	"raidMarkerX", "raidMarkerY", "classEnemy", "classFriendly", "classPosition", "classFit", "classSize", "classGap" }, last = nil, refreshing = false,
+	told = false }
 -- layoutFresh: every request for the queued layout came after the game laid the plates out. optionsPending: the game's options changed since the last layout.
 local layoutFresh, optionsPending = true, false
 local QueueAuras
@@ -580,10 +589,16 @@ local function QueueSizes(what)
 		return
 	end
 	ns.Note(KEY, height and "Bar height: nameplates that appear in combat get their height when combat ends." or (what .. ": nameplates that appear in combat get it when combat ends."))
+	-- A size row changed in the options window in a fight: one chat line a fight says the plates take it as the fight ends. A plate that merely
+	-- shows in a fight comes through Show, not Refresh, and says nothing.
+	if TELL.refreshing and not TELL.told and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+		TELL.told = true
+		print("Flat UI: nameplates take their new size when the fight ends.")
+	end
 	if not sizesQueued then
 		sizesQueued = true
 		ns.OutOfCombat(function()
-			sizesQueued = false
+			sizesQueued, TELL.told = false, false
 			for unitFrame, own in pairs(plates) do
 				if not ns.Forbidden(unitFrame) then
 					pcall(Layout, unitFrame, own, false)
@@ -1689,6 +1704,14 @@ local function QueueScan()
 end
 
 local function Refresh()
+	-- A refresh that changed a size row says so in chat once a fight, while its plates wait for the fight's end (QueueSizes).
+	local values = {}
+	for index, row in ipairs(TELL.rows) do
+		values[index] = tostring(Opt(row))
+	end
+	local sizes = table.concat(values, "|")
+	TELL.refreshing = TELL.last ~= nil and sizes ~= TELL.last
+	TELL.last = sizes
 	LeaveAll()
 	for unitFrame in pairs(known) do
 		if not ns.Forbidden(unitFrame) then
@@ -1706,6 +1729,7 @@ local function Refresh()
 	if ns.Enabled(KEY) then
 		StyleShown()
 	end
+	TELL.refreshing = false
 	QueueMark(nil, true)
 	Extras(EXTRA.refresh)
 end
