@@ -27,6 +27,23 @@ local function Wanted()
 	return ns.Enabled(KEY) and ns.Get(KEY .. ".glow") == true
 end
 
+local function TextWanted()
+	return ns.Enabled(KEY) and ns.Get(KEY .. ".glowTime") == true
+end
+
+local function Timed(entry)
+	local time = type(entry) == "table" and entry.time
+	return Plain(time, "number") and time > 0
+end
+
+local function SetOf(rec)
+	local entry = rec.entry
+	if entry.glow == false or not (Wanted() or (TextWanted() and Timed(entry))) then
+		return {}
+	end
+	return rec.up
+end
+
 local function Style()
 	return ns.Get(KEY .. ".glowStyle") == "game" and "game" or "soft"
 end
@@ -484,6 +501,14 @@ end
 local function SetLook(made, look, carry)
 	made.look, made.bursting = look, nil
 	local soft = made.soft
+	if look == "text" then
+		if made.texture then
+			made.texture:SetAlpha(0)
+		end
+		if made.start then
+			made.start:SetAlpha(0)
+		end
+	end
 	if look == "soft" then
 		if made.texture then
 			made.texture:SetAlpha(0)
@@ -503,7 +528,7 @@ local function SetLook(made, look, carry)
 end
 
 local function Play(made, carry)
-	local look = LookOf(made)
+	local look = made.textOnly and "text" or LookOf(made)
 	if made.playing then
 		if look and look ~= made.look and not pcall(SetLook, made, look, true) then
 			Refused()
@@ -589,10 +614,14 @@ Refresh = function(button, carry)
 		Halt(made)
 		return
 	end
-	if first == nil then
+	local markOnly = first ~= nil and first.textOnly == true
+	if made then
+		made.textOnly = markOnly and not ownGame[button]
+	end
+	if first == nil or markOnly then
 		ns.SetButtonMark(button, "proc", nil)
 		drawn[button] = nil
-		if not ownGame[button] then
+		if first == nil and not ownGame[button] then
 			if made then
 				Halt(made)
 			end
@@ -607,7 +636,7 @@ Refresh = function(button, carry)
 		end
 	elseif made then
 		if made.soft then
-			local colour = first or GOLD
+			local colour = (not markOnly and first) or GOLD
 			ns.ProcGlowTint(made.soft, colour[1], colour[2], colour[3])
 		end
 		Play(made, carry)
@@ -644,7 +673,7 @@ local function Apply(rec, set, carry)
 			list = {}
 			users[button] = list
 		end
-		list[id] = { r, g, b, rec.order, rec.entry }
+		list[id] = { r, g, b, rec.order, rec.entry, textOnly = not Wanted() }
 		Refresh(button, carry)
 	end
 	rec.set = set
@@ -726,11 +755,12 @@ function ns.ProcGlowPrepare(entries)
 	if type(entries) == "table" then
 		prepared = entries
 	end
-	if not Wanted() or InCombatLockdown() then
+	local glow, text = Wanted(), TextWanted()
+	if not (glow or text) or InCombatLockdown() then
 		return
 	end
 	for _, entry in ipairs(prepared) do
-		if type(entry) == "table" and entry.glow ~= false then
+		if type(entry) == "table" and entry.glow ~= false and (glow or Timed(entry)) then
 			for button in pairs(Holders(entry)) do
 				if glows[button] == nil then
 					Want(button)
@@ -756,7 +786,7 @@ function ns.ProcGlowStart(entry, again)
 	end
 	rec.entry = entry
 	rec.up = Holders(entry, true)
-	local set = Wanted() and entry.glow ~= false and rec.up or {}
+	local set = SetOf(rec)
 	for button in pairs(set) do
 		Sync(button)
 	end
@@ -791,7 +821,7 @@ end
 function ns.ProcGlowChanged(path)
 	for _, rec in pairs(active) do
 		rec.up = Holders(rec.entry, true)
-		Apply(rec, Wanted() and rec.entry.glow ~= false and rec.up or {})
+		Apply(rec, SetOf(rec))
 	end
 	for _, made in pairs(glows) do
 		if made and made.playing then
@@ -864,7 +894,7 @@ end
 
 function ns.ProcGlowLine(entry)
 	if ns.Get(KEY .. ".glow") ~= true then
-		return "Glow: off"
+		return TextWanted() and Timed(entry) and entry.glow ~= false and "Glow: off, the seconds left show alone on the button" or "Glow: off"
 	end
 	if entry.glow == false then
 		return "Glow: none, any spell uses this proc"
@@ -892,7 +922,7 @@ if type(ns.OnButtonsChanged) == "function" then
 	ns.OnButtonsChanged(function()
 		for _, rec in pairs(active) do
 			rec.up = Holders(rec.entry, true)
-			Apply(rec, Wanted() and rec.entry.glow ~= false and rec.up or {})
+			Apply(rec, SetOf(rec))
 		end
 	end)
 end

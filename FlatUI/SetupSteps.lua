@@ -1185,9 +1185,11 @@ ns.SETUP_STEPS = {
 		{ "trackers.artSize", "o", "mock-proc" },
 		{ "trackers.artAlpha", "r", "mock-proc" },
 		{ "trackers.artY", "r", "mock-proc" },
+		{ "trackers.artStacks", "o", "behaviour", "Fills the art of Maelstrom Weapon a fifth per stack, with the count on it, and shows the proc at 5 stacks." },
+		{ "trackers.artTime", "o", "behaviour", "Counts down the seconds left of a proc as a large number on its art." },
 		{ "trackers.glow", "c", "mock-proc" },
 		{ "trackers.glowStyle", "o", "mock-proc" },
-		{ "trackers.glowTime", "o", "behaviour", "Counts down the seconds left of a proc on its glowing button." },
+		{ "trackers.glowTime", "o", "behaviour", "Counts down the seconds left of a proc on its button, with or without the glow." },
 	} },
 	{ id = "tr-def", area = "Trackers", title = "Defensives on you", draw = "mock-tracker", built = true, rows = {
 		{ "defensives.enabled", "c", "mock-tracker" },

@@ -364,6 +364,8 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | **Art size** | 150% | 100% is the game's size. Needs **Art beside the character** on. |
 | **Art opacity** | 40% | 65% is the game's. The game's Spell Alert Opacity has no effect here. Needs **Art beside the character** on. |
 | **Art height** | 0 | Positive moves the art up from its Proc art box in /flatui move. Needs **Art beside the character** on. |
+| **Stacks build the art** | On | Maelstrom Weapon fills its art a fifth per stack from a faint outline, with the count on it. At 5 stacks it is full and pulses, the proc sound plays and, with Glow on the action button, Lightning Bolt glows. In a fight the game draws the fill and the number. Off, the art shows at 5 stacks alone. Needs **Art beside the character** on. |
+| **Seconds left on the art** | On | The seconds a proc with a time has left, such as Overpower or Revenge, as a large number on its art in its colour, white and a little larger for the last 2 seconds. It fades out with the art. Execute and other procs with no time show none. Needs **Art beside the character** on. |
 
 **Glow**
 
@@ -371,7 +373,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | --- | --- | --- |
 | **Glow on the action button** | Off | A glow on the button that casts the spell the proc is for, and a border in the proc's colour, which needs Restyle action bars. With Glow style Soft the glow takes the proc's colour too. |
 | **Glow style** | Soft | Soft: a faint glow that hugs the button's edge and breathes slowly, and a slow, gentle pulse of the art. As the game has it: the game's burst and loop, which lie over the buttons beside it, and the game's own pulse and fade-in of the art; with Art size 100% and Art opacity 65% it is the game's whole look. The art, Glow on procs of the cooldown icons and Game glow on Flat UI's own buttons follow it too, with or without Glow on the action button. Choices: Soft, As the game has it. |
-| **Seconds left on the button** | On | While a proc with a time, such as Overpower or Revenge, is up, its glowing button counts down the seconds left in the proc's colour, at Hotkey size and Button text outline, in a corner clear of the hotkey, macro name and count. It turns white and grows a little for the last 2 seconds. Execute and other procs with no time show none. Needs **Glow on the action button** on. |
+| **Seconds left on the button** | On | While a proc with a time, such as Overpower or Revenge, is up, its button counts down the seconds left in the proc's colour, at Hotkey size and Button text outline, in a corner clear of the hotkey, macro name and count. It turns white and grows a little for the last 2 seconds. Execute and other procs with no time show none. With Glow on the action button off, the number shows alone, with no glow and no border. |
 
 ## Defensives on you
 

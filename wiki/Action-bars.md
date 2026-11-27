@@ -49,7 +49,7 @@ This holds while Edit Mode's **Always show buttons** is on, as it is at first. W
 
 An empty button shows no key, so a bar that is half full is not a row of key names. **Hotkeys on empty buttons**, on the **Button text** tab, shows them again.
 
-While a spell or item is on the cursor, every empty button is at full and shows its key. You can see where the spell can go and which key that slot has.
+While a spell or item is on the cursor, every empty button is at full and shows its key. You can see where the spell can go and which key that slot has. Faint empty buttons rise to full over about a tenth of a second as you pick a spell up, and settle back over a fifth of a second as you drop it, so the bars do not flicker.
 
 **Hide empty bars** (on, under **Buttons**) hides bars 2 to 8 while none of their buttons holds anything. They show again:
 
@@ -58,6 +58,10 @@ While a spell or item is on the cursor, every empty button is at full and shows 
 - in Edit Mode.
 
 The main bar always shows. A bar hides or shows out of combat only: a bar that empties in a fight, or a drag in a fight, waits for the end. Turning the row on or off in a fight with the options window open says so in chat.
+
+The first time bars hide for being empty, chat says so once for the character, as "Flat UI: action bar 3 holds nothing, so it hides until a spell or item is on the cursor. Turn off Hide empty bars on the Action bars page to keep empty bars." Bars that hide together are named in one line. `/flatui status` lists them while they hide, as "Hidden for being empty: action bars 3 and 4."
+
+With the **Bar block** page on, a block closes up round a bar hidden for being empty. It stacks only the bars that show, and its background panel, Flat UI's experience bar and the stance and pet bars sit tight round them, so a half-filled character sees no blank rows. The empty space no longer brings a faded block back under the mouse. As a spell or item is picked up, the empty bars come back in their places.
 
 ### Page arrows on the main bar
 
@@ -220,6 +224,7 @@ The block comes back to full:
 - as you cast, with **Full opacity as you cast** (off): while you cast, for a moment after each instant spell or item, and for **Wait before fading** after,
 - while a proc is up, with **Full opacity while a proc is up** (on), for a block that holds the spell of a proc alert of the **Trackers** page, such as Overpower, Revenge, Execute or Clearcasting,
 - until your health and mana are full, with **Full opacity until health and mana are full** (off), so the bars are there while you eat and drink. Not while you are dead.
+- while you hold the key of **While a key is held** on the **Fading** page, its panel and Flat UI's experience bar under it included. Once you let go, it fades again after **Wait before fading**.
 
 The block is also at full while something is on the cursor or a spell flyout is open, in Edit Mode, and while `/flatui move` is open, so you can see the bars you line up. After **Done**, it waits **Wait before fading** and fades again.
 

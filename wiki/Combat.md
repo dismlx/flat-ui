@@ -300,7 +300,7 @@ Proc alerts show the moment a proc of yours is up, such as Overpower after a dod
 - **Procs of your class** (on) shows every proc of your class whose spell you know, without adding it.
 - **Add a proc** adds another one. For a spell that is not listed, type `/flatui tracker add proc`, the buff, `for` and the spell it is for, as `/flatui tracker add proc Shadow Trance for Shadow Bolt`. A proc you add keeps its own colour, time and sound.
 - **Remove a proc** also lists the procs of your class. One you remove stays off for this character. **Bring back a proc** shows it again.
-- **Colour** (gold) is the border of a proc alert, and the plain arc of a proc with no art of its own. `/flatui tracker proc colour 1 ffd100` gives a proc you added, here number 1 in `/flatui tracker list`, its own colour, which also tints its art.
+- **Colour** (gold) is the border of a proc alert, and the plain arc of a proc with no art of its own. `/flatui tracker proc colour 1 ffd100` gives a proc you added, here number 1 in `/flatui tracker list`, its own colour, which also tints its art. It works on the procs of your class too, by name or by the number **Remove a proc** shows, as `/flatui tracker proc colour Execute ff3030`, and a name may hold spaces, as Mongoose Bite. `proc sound Overpower bell` gives a proc its own sound (`none` silences it, as `proc sound Clearcasting none`), `proc time Revenge 5` its own time, and `proc reset Execute` puts all three back. The art, the border and the button glow take a new colour at once.
 - **Sound** (**Spell alert** by default) plays as a proc comes up.
 
 **Art beside the character**
@@ -309,15 +309,17 @@ Proc alerts show the moment a proc of yours is up, such as Overpower after a dod
 - **Art size** (150%) sets its size; 100% is the game's size.
 - **Art opacity** (40%) sets how solid it is; 65% is the game's. The game's Spell Alert Opacity has no effect here.
 - **Art height** (0) raises or lowers it.
+- **Stacks build the art** (on) is for Maelstrom Weapon, which is one of the procs of a shaman's class. Its art over your character starts as a faint outline and fills a fifth with each stack, with a large outlined count on it in the proc's colour. At 5 stacks the art is full and pulses, the count turns white, the proc sound plays and, with **Glow on the action button**, Lightning Bolt, Chain Lightning and the heals glow. In a fight, while the game hides your buffs, the game itself fills the art and writes the number. Off, the art shows at 5 stacks alone.
+- **Seconds left on the art** (on) writes the seconds a proc with a time has left, such as Overpower, Revenge, Riposte or Nature's Grace, as a large, thin, outlined number on its art in its colour. For its last 2 seconds it turns white and grows a little, and it fades out with the art. Execute and other procs with no time show none.
 - The **Proc art** box in `/flatui move` puts the art anywhere. It sits in the middle of the screen until you move it.
 
 **Glow**
 
 - **Glow on the action button** (off) puts a glow on the button that casts the spell the proc is for, and a border in the proc's colour, which needs **Restyle action bars**. The glow eases out over about 0.2 seconds as the proc is used or runs out.
 - **Glow style**: **Soft** (the default) is a faint glow that hugs the button's edge and breathes slowly, with a slow, gentle pulse of the art. **As the game has it** is the game's burst and loop, which lie over the buttons beside it, and the game's own pulse and fade-in of the art. With **Art size** at 100% and **Art opacity** at 65%, it is the game's whole look. The art and **Glow on procs** of the cooldown icons follow this row, with or without **Glow on the action button**.
-- **Seconds left on the button** (on, with **Glow on the action button**) counts down the seconds left of a proc with a time, such as Overpower, Revenge, Riposte or Mongoose Bite, in a small number on its glowing button in the proc's colour. It takes the **Hotkey size** and **Button text outline** of the **Button text** page, and sits in a corner the hotkey, macro name and count leave free. For its last 2 seconds the number turns white and grows a little. Execute and other procs with no time show none.
+- **Seconds left on the button** (on) counts down the seconds left of a proc with a time, such as Overpower, Revenge, Riposte or Mongoose Bite, in a small number on its button in the proc's colour. With **Glow on the action button** off, the number shows alone, with no glow and no border, and fades as the proc is used or ends. It takes the **Hotkey size** and **Button text outline** of the **Button text** page, and sits in a corner the hotkey, macro name and count leave free. For its last 2 seconds the number turns white and grows a little. Execute and other procs with no time show none.
 
-With the options window open, out of a fight and test mode off, a change of **Art beside the character**, **Art size**, **Art opacity**, **Art height**, **Glow on the action button**, **Glow style**, **Seconds left on the button** or **Colour** shows your class's first proc for 4 seconds in the new look, with no sound.
+With the options window open, out of a fight and test mode off, a change of **Art beside the character**, **Art size**, **Art opacity**, **Art height**, **Stacks build the art**, **Seconds left on the art**, **Glow on the action button**, **Glow style**, **Seconds left on the button** or **Colour** shows your class's first proc for 4 seconds in the new look, with no sound. A proc that stacks, such as Maelstrom Weapon, steps from 1 to 5 stacks in it and in test mode.
 
 The **Fading** page can bring a faded action bar back to full while a proc is up for one of its buttons; see [Layout](Layout).
 
@@ -373,6 +375,8 @@ To share trackers, use **Export trackers** and **Import trackers** under **Share
 | `/flatui tracker set 1 happy on` | A pet tracker is low while a hunter's pet is not happy |
 | `/flatui tracker use 2 <item>` | Sets what weapon tracker 2 puts on its weapon with a click |
 | `/flatui tracker proc colour 1 ffd100` | One added proc's colour. `proc time 1 10` sets its time |
+| `/flatui tracker proc sound Overpower bell` | A proc's own sound, or `none` to silence it. A proc of your class goes by its name, as `proc colour Execute ff3030` |
+| `/flatui tracker proc reset Execute` | A proc's colour, sound and time as the page has them again |
 | `/flatui tracker export` | Opens **Share**, to copy every tracker as text. `import` opens it to paste trackers |
 | `/flatui tracker test` | Each look for 3 seconds: fine, low, missing, then the game's own look |
 | `/flatui tracker check` | What each tracker shows and why, and what happened in the last fight |
