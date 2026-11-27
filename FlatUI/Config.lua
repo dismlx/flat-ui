@@ -2451,6 +2451,8 @@ ns.PAGES = {
 			tip = "The big name that fades in near the top of the screen as you enter a zone, and its PvP line. The zone name on the minimap has its own row." },
 		{ key = "subzoneTitle", kind = "bool", default = false, label = "Hide the subzone title",
 			tip = "The smaller name of a part of a zone, such as a town, that fades in under it." },
+		{ key = "zoneTitleSize", kind = "number", default = 100, min = 50, max = 150, step = 5, unit = "%", label = "Zone title size",
+			tip = "The zone and subzone names that fade in near the top of the screen, and their PvP lines, from the next time they show. Hidden ones stay hidden; 100% is the game's size." },
 		{ key = "talkingHead", kind = "bool", default = false, label = "Hide the talking head",
 			tip = "The portrait that speaks at the bottom of the screen, and its voice. One that already shows plays to its end." },
 		{ section = "Timers" },

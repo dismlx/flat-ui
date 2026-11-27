@@ -810,6 +810,7 @@ ns.SETUP_STEPS = {
 		{ "hud.errorForm", "r", "behaviour", "Hides the messages of a spell that needs another stance or form, or an item used while shapeshifted." },
 		{ "hud.zoneTitle", "o", "behaviour", "Hides the big zone name that fades in near the top of the screen as you enter a zone." },
 		{ "hud.subzoneTitle", "o", "behaviour", "Hides the smaller name of a part of a zone, such as a town, that fades in under it." },
+		{ "hud.zoneTitleSize", "r", "behaviour", "Makes the zone and subzone names that fade in near the top of the screen smaller or larger, from 50% to 150%." },
 		{ "hud.talkingHead", "r", "behaviour", "Hides the talking head, the portrait that speaks at the bottom of the screen, and silences its voice." },
 		{ "hud.mirror", "o", "mock-xp-micro" },
 		{ "hud.mirrorTime", "o", "mock-xp-micro" },
