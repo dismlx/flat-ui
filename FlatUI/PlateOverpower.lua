@@ -161,10 +161,21 @@ local function NameInside()
 	return Plain(styles, "table") and Plain(style, "number") and style == styles.InsideHealthBar
 end
 
+local function NameShown(unitFrame)
+	if type(ns.PlateNameShown) ~= "function" then
+		return true
+	end
+	local ok, shown = pcall(ns.PlateNameShown, unitFrame)
+	return not ok or shown ~= false
+end
+
 local function AnchorOf(unitFrame)
 	local name, bars = Region(unitFrame, "name"), Region(unitFrame, "HealthBarsContainer")
 	local only = unitFrame.showOnlyName
-	if (Plain(only, "boolean") and only) or not NameInside() then
+	if Plain(only, "boolean") and only then
+		return name or bars
+	end
+	if not NameInside() and NameShown(unitFrame) then
 		return name or bars
 	end
 	return bars or name

@@ -115,6 +115,14 @@ local function NameInside()
 	return Plain(styles, "table") and Plain(style, "number") and style == styles.InsideHealthBar
 end
 
+local function NameShown(unitFrame)
+	if type(ns.PlateNameShown) ~= "function" then
+		return true
+	end
+	local ok, shown = pcall(ns.PlateNameShown, unitFrame)
+	return not ok or shown ~= false
+end
+
 local function Collapses(frame)
 	return frame ~= nil and Ask(frame.CollapsesLayout, frame) == true
 end
@@ -167,7 +175,7 @@ local function Target(unitFrame, place)
 			return over, "BOTTOM", "TOP", 0, K.GAP, stale
 		end
 		local name = Region(unitFrame, "name")
-		return (NameInside() and bars or name) or bars, "BOTTOM", "TOP", 0, K.GAP, stale
+		return ((NameInside() or not NameShown(unitFrame)) and bars or name) or bars, "BOTTOM", "TOP", 0, K.GAP, stale
 	end
 	if place == "right" then
 		local after = target or (side == "right" and value) or nil

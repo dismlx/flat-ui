@@ -448,7 +448,7 @@ local function Above(frame)
 		end
 	end
 	local name = Usable(frame.name)
-	if name then
+	if name and (type(ns.PlateNameShown) ~= "function" or ns.PlateNameShown(frame) ~= false) then
 		local ok, shown = pcall(name.IsShown, name)
 		if ok and shown == true then
 			return name

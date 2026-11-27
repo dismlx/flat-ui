@@ -263,3 +263,192 @@ ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
 	end
 end)
 ns.AddEvent(KEY, "UPDATE_MOUSEOVER_UNIT", Mouseover)
+
+do
+	local LINE_PART, LINE_ALPHA, LINE_LEVEL = "low health line", 0.7, 3
+	local lines = setmetatable({}, { __mode = "k" })
+	local owns = setmetatable({}, { __mode = "k" })
+	local Mark
+
+	local function LineOn()
+		return ns.Enabled(KEY) and not ns.IsStopped(KEY) and not ns.PartStopped(KEY, LINE_PART) and Opt("lowHealth") == true and Opt("lowHealthLine") == true
+	end
+
+	local function Share()
+		local at = Opt("lowHealthAt")
+		at = ns.Finite(at) and math.max(0, math.min(100, at)) or 20
+		return at / 100
+	end
+
+	local function Wants(frame)
+		if not LineOn() or not ns.IsPlate(frame) then
+			return false
+		end
+		local own = owns[frame]
+		if (type(own) == "table" and own.styleOn == false) or Is(frame.showOnlyName, true) or Is(frame.widgetsOnlyMode, true) then
+			return false
+		end
+		local unit = frame.unit
+		if type(unit) ~= "string" or ns.IsSecret(unit) then
+			return false
+		end
+		return Call(UnitCanAttack, "player", unit) == true
+	end
+
+	local function Spot(line)
+		local holder, texture = line.holder, line.texture
+		local ok, width = pcall(holder.GetWidth, holder)
+		if not ok or not ns.Finite(width) or width <= 0 then
+			return
+		end
+		local px = ns.Pixels(holder, 1)
+		if not ns.Finite(px) or px <= 0 then
+			return
+		end
+		local x = math.floor(width * Share() / px + 0.5) * px
+		if line.x == x and line.px == px then
+			return
+		end
+		line.x, line.px = x, px
+		texture:ClearAllPoints()
+		texture:SetPoint("TOPLEFT", holder, "TOPLEFT", x, 0)
+		texture:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", x, 0)
+		texture:SetWidth(px)
+	end
+
+	local function Locked(frame, bar)
+		return InCombatLockdown() and (type(ns.MaybeProtected) ~= "function" or ns.MaybeProtected(frame) or ns.MaybeProtected(bar))
+	end
+
+	local function Wait(frame)
+		local line = lines[frame]
+		if line == nil then
+			line = {}
+			lines[frame] = line
+		end
+		if line.waiting then
+			return
+		end
+		line.waiting = true
+		ns.OutOfCombat(function()
+			line.waiting = nil
+			if lines[frame] == line and not ns.Forbidden(frame) then
+				ns.EachPart(KEY, LINE_PART, Mark, frame)
+			end
+		end)
+	end
+
+	local function Make(frame)
+		local line = lines[frame]
+		if line and line.holder then
+			return line
+		end
+		local bar = Bar(frame)
+		if bar == nil then
+			return nil
+		end
+		if Locked(frame, bar) then
+			Wait(frame)
+			return nil
+		end
+		line = line or {}
+		lines[frame] = line
+		local holder = CreateFrame("Frame", nil, bar)
+		ns.Own[holder] = true
+		holder:SetAllPoints(bar)
+		local ok, level = pcall(bar.GetFrameLevel, bar)
+		if ok and ns.Finite(level) then
+			pcall(holder.SetFrameLevel, holder, level + LINE_LEVEL)
+		end
+		local texture = holder:CreateTexture(nil, "OVERLAY")
+		ns.Own[texture] = true
+		line.holder, line.texture = holder, texture
+		holder:SetScript("OnSizeChanged", function()
+			pcall(Spot, line)
+		end)
+		holder:Hide()
+		return line
+	end
+
+	local function Still(line)
+		if line and line.holder and line.shown then
+			line.shown = nil
+			line.holder:Hide()
+		end
+	end
+
+	function Mark(frame)
+		if ns.Forbidden(frame) then
+			return
+		end
+		if not Wants(frame) then
+			Still(lines[frame])
+			return
+		end
+		local line = Make(frame)
+		if not (line and line.holder) then
+			return
+		end
+		local r, g, b = ns.Colour(KEY .. ".lowHealthColour")
+		if line.r ~= r or line.g ~= g or line.b ~= b then
+			line.r, line.g, line.b = r, g, b
+			line.texture:SetColorTexture(r, g, b, LINE_ALPHA)
+		end
+		line.x = nil
+		Spot(line)
+		if not line.shown then
+			line.shown = true
+			line.holder:Show()
+		end
+	end
+
+	local function StandDown()
+		for _, line in pairs(lines) do
+			pcall(Still, line)
+		end
+	end
+
+	extra.show[#extra.show + 1] = function(frame, own)
+		if type(own) == "table" then
+			owns[frame] = own
+		end
+		if LineOn() or lines[frame] ~= nil then
+			ns.EachPart(KEY, LINE_PART, Mark, frame)
+		end
+	end
+	extra.layout[#extra.layout + 1] = function(frame, own)
+		if type(own) == "table" then
+			owns[frame] = own
+		end
+		if lines[frame] ~= nil then
+			ns.EachPart(KEY, LINE_PART, Mark, frame)
+		end
+	end
+	extra.leave[#extra.leave + 1] = function(frame)
+		pcall(Still, lines[frame])
+	end
+	extra.refresh[#extra.refresh + 1] = function()
+		if ns.IsStopped(KEY) or ns.PartStopped(KEY, LINE_PART) then
+			pcall(StandDown)
+			return
+		end
+		local seen = {}
+		ns.EachPlate(function(frame)
+			seen[frame] = true
+			ns.EachPart(KEY, LINE_PART, Mark, frame)
+		end)
+		for frame, line in pairs(lines) do
+			if not seen[frame] then
+				pcall(Still, line)
+			end
+		end
+	end
+	ns.AddEvent(KEY, "UNIT_FACTION", function(unit)
+		local frame = ns.PlateUnitFrame(unit)
+		if frame ~= nil and (LineOn() or lines[frame] ~= nil) then
+			ns.EachPart(KEY, LINE_PART, Mark, frame)
+		end
+	end, function(unit)
+		return type(unit) == "string" and not ns.IsSecret(unit) and unit:find("^nameplate%d") ~= nil
+	end)
+end

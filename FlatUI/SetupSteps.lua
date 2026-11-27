@@ -139,6 +139,7 @@ ns.SETUP_STEPS = {
 		{ "nameplates.lowHealth", "c", "mock-nameplate-threat" },
 		{ "nameplates.lowHealthAt", "o", "mock-nameplate-threat" },
 		{ "nameplates.lowHealthColour", "r", "mock-nameplate-threat" },
+		{ "nameplates.lowHealthLine", "r", "mock-nameplate-threat" },
 		{ "nameplates.threatValue", "o", "mock-nameplate-threat" },
 		{ "nameplates.threatValueWhen", "r", "behaviour", "Chooses when the threat value shows." },
 		{ "nameplates.threatValueColour", "r", "mock-nameplate-threat" },

@@ -371,6 +371,7 @@ function P.NewPlate(S, parent)
 	p.band = Tex(p.bar, "BACKGROUND", -8)
 	p.fill = Tex(p.bar, "ARTWORK", 0)
 	p.heal, p.absorb, p.healAbsorb, p.over = Tex(p.bar, "ARTWORK", 1), Tex(p.bar, "ARTWORK", 2), Tex(p.bar, "ARTWORK", 3), Tex(p.bar, "ARTWORK", 4)
+	p.lowLine = Tex(p.bar, "ARTWORK", 5)
 	p.outline = P.Outline(S, p.bar, p.bar)
 	p.edges = { Tex(p.bar, "OVERLAY", 5), Tex(p.bar, "OVERLAY", 5), Tex(p.bar, "OVERLAY", 5), Tex(p.bar, "OVERLAY", 5) }
 	p.lowFrame = Frame(p.bar)
@@ -1745,6 +1746,18 @@ function P.Plate(p, spec, sets)
 	end
 	p.lowFrame:SetAlpha((low and share * 100 < Get("lowHealthAt")) and 1 or 0)
 	p.lowFrame:SetShown(low and true or false)
+	local line = low and not spec.friendly and Get("lowHealthLine") == true
+	if line then
+		local at, px = Get("lowHealthAt"), ns.Pixels(p.bar, 1)
+		local x = math.floor(m.HW * (ns.Finite(at) and at or 20) / 100 / px + 0.5) * px
+		p.lowLine:ClearAllPoints()
+		p.lowLine:SetPoint("TOPLEFT", p.bar, "TOPLEFT", x, 0)
+		p.lowLine:SetPoint("BOTTOMLEFT", p.bar, "BOTTOMLEFT", x, 0)
+		p.lowLine:SetWidth(px)
+		local r, g, b = ns.Colour(KEY .. ".lowHealthColour")
+		p.lowLine:SetColorTexture(r, g, b, 0.7)
+	end
+	p.lowLine:SetShown(line and true or false)
 	P.Border(p, spec, o)
 	P.TargetFlash(p, spec, o)
 	p.name:ClearAllPoints()
@@ -2182,7 +2195,7 @@ function P.Parts(S)
 	Set({ "threat", "threatRole", "threatGood", "threatTransition", "threatBad", "threatSameColours", "threatDamageGood", "threatDamageTransition",
 		"threatDamageBad" }, plates.threat and plates.threat.chips.f or plate.bar)
 	Set({ "hover", "hoverColour" }, (Live("hover") or plate).bar)
-	Set({ "lowHealth", "lowHealthAt", "lowHealthColour" }, (Live("low") or plate).bar)
+	Set({ "lowHealth", "lowHealthAt", "lowHealthColour", "lowHealthLine" }, (Live("low") or plate).bar)
 	Set({ "cast", "castBackdrop", "castFlat", "castTexture", "castHeight" }, plate.cbar)
 	Set({ "castTextSize", "castTextOutline", "castTextColour" }, plate.ctext)
 	Set({ "castIconSize" }, plate.cicon)
