@@ -802,6 +802,7 @@ ns.SETUP_STEPS = {
 		{ "general.sparkleStrength", "o", "behaviour", "Raises the game's particle and spell density so that the sparkle on quest items and gathering nodes is thicker, at some cost to frame rate." },
 		{ "general.sparkleGlow", "o", "behaviour", "Draws a pulsing glow, gold or by what it is, on the herb, vein or quest object your Interact Key would use, while the game gives it a nameplate." },
 		{ "general.sparkleGlowColour", "r", "behaviour", "Colours the glow by what the object is: herb, ore, quest or loot." },
+		{ "general.sparkleGlowSize", "r", "behaviour", "Sets the size of the glow on the nearest object, with its ring and stars." },
 		{ "general.sparkleGlowSound", "r", "behaviour", "Plays a sound once as the glow lands on a herb, vein or quest object, out of a fight." },
 		{ "general.sparkleSetup", "r", "behaviour", "Turns on the game's Interact Key and its icons for every object, which the glow needs to show." },
 		{ "general.cameraZoom", "o", "behaviour", "Lets the camera zoom out farther than the game's own options allow, a game setting that applies to every profile." },
@@ -1748,6 +1749,7 @@ ns.SETUP_STEPS = {
 	{ id = "consumables", area = "Drink and health macros", title = "Drink and health macros", draw = "mock-screen", built = false, rows = {
 		{ "consumables.enabled", "c", "behaviour", "Keeps two macros in your macro list, one that drinks and one that heals, up to date with your bags and level." },
 		{ "consumables.say", "o", "behaviour", "Says in chat when a macro moves to a better drink, food, potion or healthstone, or has none left in your bags." },
+		{ "consumables.pickup", "o", "behaviour", "Puts Flat UI Drink or Flat UI Health on your cursor, so a click on an action button places it." },
 		{ "consumables.drink", "c", "behaviour", "Keeps a macro that drinks the best drink your level allows, conjured water first." },
 		{ "consumables.manaPotion", "o", "behaviour", "Has the drink macro take your best mana potion in a fight." },
 		{ "consumables.manaGem", "r", "behaviour", "Has the drink macro take a mage's mana gem before the potion in a fight." },

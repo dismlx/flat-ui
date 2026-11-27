@@ -1493,6 +1493,29 @@ local function Measure(text, value, size)
 	return #value * size / 2
 end
 
+function P.MenuRoom(slot, screen)
+	local frame = slot.frame
+	local okBottom, bottom = pcall(frame.GetBottom, frame)
+	local okTop, top = pcall(frame.GetTop, frame)
+	local okScale, scale = pcall(frame.GetEffectiveScale, frame)
+	local okParent, parent = pcall(UIParent.GetEffectiveScale, UIParent)
+	if not (okBottom and okTop and okScale and okParent and ns.Finite(bottom) and ns.Finite(top) and ns.Finite(scale) and ns.Finite(parent))
+		or scale <= 0 or parent <= 0 then
+		return nil
+	end
+	local share = scale / parent
+	local room
+	if P.Anchor(slot.panel) == "ANCHOR_BOTTOM" then
+		room = bottom * share - 2
+	else
+		room = screen - top * share - 2
+	end
+	if not ns.Finite(room) or room <= 0 then
+		return nil
+	end
+	return math.min(room, screen - 16)
+end
+
 function P.OpenMenu(slot, stream, title, items)
 	if P.MenuOpen(slot) then
 		P.CloseMenu()
@@ -1512,7 +1535,8 @@ function P.OpenMenu(slot, stream, title, items)
 	local per = #items
 	local okScreen, screen = pcall(UIParent.GetHeight, UIParent)
 	if okScreen and ns.Finite(screen) and screen > 0 then
-		per = math.max(4, math.floor((screen - 2 * EDGE - height - 16) / height))
+		local room = P.MenuRoom(slot, screen) or (screen - 16)
+		per = math.max(4, math.floor((room - 2 * EDGE - height) / height))
 	end
 	per = math.max(1, math.min(per, #items))
 	local columns = math.ceil(#items / per)

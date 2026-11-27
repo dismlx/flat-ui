@@ -730,7 +730,7 @@ local function SetNow(map, p, point)
 	Tell(("Waypoint at %s%s."):format(way.last, p.note and (": " .. p.note) or ""))
 end
 
-local function Look(token, tries)
+local function LookForMap(token, tries)
 	local pending = way.pending
 	if token ~= way.token or not pending then
 		return
@@ -744,7 +744,7 @@ local function Look(token, tries)
 			return
 		end
 		C_Timer.After(WAIT_STEP, function()
-			E.Run(part, Look, token, tries + 1)
+			E.Run(part, LookForMap, token, tries + 1)
 		end)
 		return
 	end
@@ -761,15 +761,20 @@ local function Wait(pending)
 	local token = way.token
 	Tell(pending.clear and "the waypoint comes off as you close the map." or "the waypoint goes on as you close the map.")
 	C_Timer.After(WAIT_STEP, function()
-		E.Run(part, Look, token, 1)
+		E.Run(part, LookForMap, token, 1)
 	end)
 end
 
 local function Clear()
 	local M = Map()
+	local waiting = way.pending
 	if E.Ask(M.HasUserWaypoint) == false then
 		Drop()
-		Tell("There is no waypoint to clear.")
+		if waiting and not waiting.clear then
+			Tell("the waypoint that waited for the map to close is dropped.")
+		else
+			Tell("There is no waypoint to clear.")
+		end
 		return
 	end
 	if E.Shown(_G.WorldMapFrame) then

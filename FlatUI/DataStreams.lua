@@ -179,6 +179,41 @@ function P.Money(copper, size)
 	return table.concat(parts, " ")
 end
 
+local function ClockSetting(name, default)
+	local cvars = type(C_CVar) == "table" and not ns.IsSecret(C_CVar) and C_CVar or nil
+	local value = Ask(cvars and cvars.GetCVarBool or _G.GetCVarBool, name)
+	if type(value) == "boolean" then
+		return value
+	end
+	return default
+end
+
+local function Formatted(pattern, fallback, ...)
+	if type(pattern) == "string" and not ns.IsSecret(pattern) then
+		local ok, text = pcall(string.format, pattern, ...)
+		if ok and type(text) == "string" and text ~= "" then
+			return text
+		end
+	end
+	return fallback:format(...)
+end
+
+local function ClockText(hour, minute)
+	if not (ns.Finite(hour) and ns.Finite(minute)) then
+		return nil
+	end
+	hour, minute = math.floor(hour) % 24, math.floor(minute) % 60
+	if ClockSetting("timeMgrUseMilitaryTime", true) then
+		return Formatted(_G.TIMEMANAGER_TICKER_24HOUR, "%02d:%02d", hour, minute)
+	end
+	local shown = hour % 12
+	shown = shown == 0 and 12 or shown
+	if hour < 12 then
+		return Formatted(_G.TIME_TWELVEHOURAM, "%d:%02d AM", shown, minute)
+	end
+	return Formatted(_G.TIME_TWELVEHOURPM, "%d:%02d PM", shown, minute)
+end
+
 local function Record()
 	local store, key, money = P.Store(true), ns.CharacterKey(), Count((Ask(GetMoney)))
 	if not (store and type(key) == "string" and money) then
@@ -214,6 +249,16 @@ local function MoneyChanged()
 		P.Float("gold", money - lastMoney)
 	end
 	lastMoney = money
+end
+
+local function SessionSince()
+	local char = ns.Character()
+	local began = type(char) == "table" and Count(char.sessionStartAt) or nil
+	if not began or type(date) ~= "function" then
+		return nil
+	end
+	local ok, parts = pcall(date, "*t", began)
+	return ok and ClockText(Field(parts, "hour"), Field(parts, "min")) or nil
 end
 
 local function SessionFromNow()
@@ -263,13 +308,23 @@ P.Stream({
 			end
 			return nil
 		end)
-		if okSession and ns.Finite(session) and session ~= 0 then
-			local hourly = ""
-			if ns.Finite(seconds) and seconds >= HOURLY_AFTER then
-				hourly = (" (%s an hour)"):format(P.Money(math.abs(session) * 3600 / seconds))
+		if okSession and ns.Finite(session) then
+			local shown
+			if session == 0 then
+				shown = DIM .. P.Money(0) .. "|r"
+			else
+				local hourly = ""
+				if ns.Finite(seconds) and seconds >= HOURLY_AFTER then
+					hourly = (" (%s an hour)"):format(P.Money(math.abs(session) * 3600 / seconds))
+				end
+				shown = (session > 0 and (GOOD .. "+") or (BAD .. "-")) .. P.Money(math.abs(session)) .. hourly .. "|r"
+			end
+			local since = SessionSince()
+			if since then
+				shown = shown .. DIM .. "  since " .. since .. "|r"
 			end
 			lines[#lines + 1] = { " " }
-			lines[#lines + 1] = { "This session", (session > 0 and (GOOD .. "+") or (BAD .. "-")) .. P.Money(math.abs(session)) .. hourly .. "|r" }
+			lines[#lines + 1] = { "This session", shown }
 		end
 		return lines
 	end,
@@ -703,41 +758,6 @@ P.Stream({
 		end
 	end,
 })
-
-local function ClockSetting(name, default)
-	local cvars = type(C_CVar) == "table" and not ns.IsSecret(C_CVar) and C_CVar or nil
-	local value = Ask(cvars and cvars.GetCVarBool or _G.GetCVarBool, name)
-	if type(value) == "boolean" then
-		return value
-	end
-	return default
-end
-
-local function Formatted(pattern, fallback, ...)
-	if type(pattern) == "string" and not ns.IsSecret(pattern) then
-		local ok, text = pcall(string.format, pattern, ...)
-		if ok and type(text) == "string" and text ~= "" then
-			return text
-		end
-	end
-	return fallback:format(...)
-end
-
-local function ClockText(hour, minute)
-	if not (ns.Finite(hour) and ns.Finite(minute)) then
-		return nil
-	end
-	hour, minute = math.floor(hour) % 24, math.floor(minute) % 60
-	if ClockSetting("timeMgrUseMilitaryTime", true) then
-		return Formatted(_G.TIMEMANAGER_TICKER_24HOUR, "%02d:%02d", hour, minute)
-	end
-	local shown = hour % 12
-	shown = shown == 0 and 12 or shown
-	if hour < 12 then
-		return Formatted(_G.TIME_TWELVEHOURAM, "%d:%02d AM", shown, minute)
-	end
-	return Formatted(_G.TIME_TWELVEHOURPM, "%d:%02d PM", shown, minute)
-end
 
 local function LocalClock()
 	if type(date) ~= "function" then

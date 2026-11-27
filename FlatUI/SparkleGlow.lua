@@ -297,6 +297,20 @@ local function Show()
 	end
 end
 
+local function Grow()
+	if not holder or InCombatLockdown() then
+		return
+	end
+	local size = ns.Get("general.sparkleGlowSize")
+	size = ns.Finite(size) and math.max(50, math.min(200, size)) or 100
+	local scale = size / 100
+	holder:SetScale(scale)
+	if anchor then
+		holder:ClearAllPoints()
+		holder:SetPoint("CENTER", anchor, "BOTTOM", 0, BELOW / scale)
+	end
+end
+
 local function Attach(plate, unit)
 	if not holder then
 		Build()
@@ -309,6 +323,7 @@ local function Attach(plate, unit)
 	holder:ClearAllPoints()
 	holder:SetPoint("CENTER", plate, "BOTTOM", 0, BELOW)
 	anchor, anchorUnit, seen = plate, unit, true
+	Grow()
 end
 
 local function Detach()
@@ -438,6 +453,7 @@ local function Apply()
 	end
 	Listen(true)
 	Evaluate()
+	Grow()
 end
 
 function ns.SparkleGlowChanged()
