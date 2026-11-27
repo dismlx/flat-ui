@@ -994,6 +994,8 @@ do
 			p["combattext." .. key] = S.out[1]
 		end
 		p["combattext.missWords"] = S.enemy[5]
+		-- Spell names: the 510 sample over the enemy, named Fireball while Spell names is After every spell.
+		p["combattext.abilityName"] = S.enemy[4]
 		for _, key in ipairs({ "friend", "friendUnits", "friendDamage", "friendHeal", "friendPet", "friendWords", "friendSigns", "friendDamageColour", "friendHealColour", "friendSize", "friendHeight" }) do
 			p["combattext." .. key] = S.friends[key == "friendHeight" and 1 or 2].frame
 		end

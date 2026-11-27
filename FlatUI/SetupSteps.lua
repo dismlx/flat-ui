@@ -1365,7 +1365,7 @@ ns.SETUP_STEPS = {
 		{ "combattext.units", "o", "behaviour", "Chooses whether every enemy with a nameplate gets numbers or only the target." },
 		{ "combattext.school", "c", "mock-combat-text" },
 		{ "combattext.abilityColour", "o", "behaviour", "Chooses whether the hit of a special attack such as Maul or Heroic Strike shows in yellow, as a spell, or in white, as a swing." },
-		{ "combattext.abilityName", "o", "behaviour", "Chooses whether the name of Maul, Heroic Strike, Cleave or Raptor Strike, or of every spell of yours, shows after its number." },
+		{ "combattext.abilityName", "o", "mock-combat-text" },
 		{ "combattext.friend", "o", "mock-combat-text" },
 		{ "combattext.friendUnits", "o", "mock-combat-text" },
 		{ "combattext.friendDamage", "o", "mock-combat-text" },
