@@ -463,6 +463,9 @@ TM.StandIn({
 		local box = P.Plate(p, spec, P.Sets())
 		p.f:ClearAllPoints()
 		p.f:SetPoint("BOTTOM", holder, "CENTER", 0, PLATE_UP)
+		if type(ns.PlateSlipPlaced) == "function" then
+			pcall(ns.PlateSlipPlaced, p)
+		end
 		if holder.caption then
 			holder.caption:ClearAllPoints()
 			holder.caption:SetPoint("TOP", p.f, "BOTTOM", 0, (box and ns.Finite(box.b) and box.b or 0) - 4)
