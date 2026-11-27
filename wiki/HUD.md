@@ -282,7 +282,7 @@ Place the panels with the **Top data panel** and **Bottom data panel** boxes in 
 | **Guild online** | how many guild members are online | opens the guild window |
 | **Equipment set** | the equipment set you wear | changes the set |
 
-A slot that shows nothing for this character takes no room: **Soul shards** for a warrior, **Ammunition** without a bow, crossbow, gun or thrown weapon, **Experience** at the top level. A window a click opens in a fight opens as the fight ends, with a line in chat that says so. Feeds that other addons offer can fill a slot too.
+A slot that shows nothing for this character takes no room: **Soul shards** for a warrior, **Ammunition** without a bow, crossbow, gun or thrown weapon, **Experience** at the top level. A window a click opens in a fight opens as the fight ends, with a line in chat that says so. The **Hearthstone** slot's click goes with its panel: if the panel or the page is turned off in a fight, nothing is left to click where it was once the fight ends. Feeds that other addons offer can fill a slot too.
 
 ### Choosing a slot's content with the mouse
 
