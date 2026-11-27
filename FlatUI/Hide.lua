@@ -570,11 +570,44 @@ ns.Register(KEY, {
 	Refresh = Refresh,
 	Status = Status,
 	slash = {
-		hide = function()
-			if type(ns.OpenPanelPage) == "function" then
-				ns.OpenPanelPage(KEY)
+		hide = function(rest)
+			local text = (type(rest) == "string" and rest or ""):match("^%s*(.-)%s*$"):lower():gsub("%s+", " ")
+			if text == "" then
+				if type(ns.OpenPanelPage) == "function" then
+					ns.OpenPanelPage(KEY)
+				end
+				return
+			elseif text == "list" then
+				local names = {}
+				for _, item in ipairs(H.List()) do
+					names[#names + 1] = item.label
+				end
+				print(#names > 0 and ("Flat UI: hidden: %s."):format(table.concat(names, ", ")) or "Flat UI: no frame is hidden.")
+				return
+			end
+			local found, near
+			for _, entry in ipairs(ENTRIES) do
+				local label = tostring(H.Label(entry.key)):lower()
+				if entry.key:lower() == text or label == text then
+					found = entry.key
+					break
+				elseif not near and label:find(text, 1, true) then
+					near = entry.key
+				end
+			end
+			found = found or near
+			if not found then
+				print(("Flat UI: the Hidden frames page has no \"%s\". Try minimap, tracker, buffs, debuffs, castBar or /flatui hide list."):format(text))
+				return
+			end
+			H.Toggle(found)
+			if not H.Ticked(found) then
+				print(("Flat UI: %s shows again."):format(H.Label(found)))
+			elseif not H.Left(found) then
+				print(("Flat UI: %s is hidden. /flatui hide %s shows it again."):format(H.Label(found), text))
 			end
 		end,
 	},
-	help = { "/flatui hide - the Hidden frames page of the options" },
+	help = { "/flatui hide - the Hidden frames page of the options", "/flatui hide <frame> - hide a frame or show it again",
+		"/flatui hide list - name the frames you have hidden" },
 })

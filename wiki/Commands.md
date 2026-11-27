@@ -63,6 +63,8 @@ Guide: [Layout](Layout)
 | `/flatui move reset windows` | Puts every window back to its default place and size |
 | `/flatui grab` | Picks the frame under the mouse to move. In a fight it starts when the fight ends. |
 | `/flatui hide` | Opens the **Hidden frames** page, where a tick hides a frame of the game |
+| `/flatui hide tracker` | Hides that frame or shows it again, and says so: "Flat UI: Objective tracker is hidden. /flatui hide tracker shows it again." It takes a row's name or part of it, as `minimap`, `buffs` or `objective tracker`, and works from a macro. In a fight the change waits for its end. |
+| `/flatui hide list` | Names the frames you have hidden, or says "Flat UI: no frame is hidden." |
 
 The [Layout](Layout) guide covers the boxes, the toolbar, selecting several frames and the keys.
 

@@ -199,7 +199,7 @@ Each tick's tip says what goes with the frame and what still works. For example,
 
 In `/flatui move`, Shift and right-click a box to hide its frame, or press **Hide frame** in the inspector. The **Hidden** group at the top of the frame list shows a frame again with its eye. A change made in a fight waits for its end. **Fading** leaves a hidden frame alone: once it is back, it comes back at its own opacity and fades again from there.
 
-`/flatui hide` opens the **Hidden frames** page.
+`/flatui hide` opens the **Hidden frames** page. `/flatui hide tracker` hides the objective tracker, or shows it again if it is hidden, and says which in chat; it takes any row's name or part of it, as `minimap`, `buffs` or `objective tracker`, so a macro can hide a frame for a boss and bring it back after. In a fight the change waits for its end. `/flatui hide list` names the frames you have hidden.
 
 ## Tooltip position
 
