@@ -1977,6 +1977,9 @@ ns.PAGES = {
 			tip = "Changed out of combat." },
 		{ key = "druidManaShift", kind = "bool", default = true, label = "Mark the cost of a shift", needs = "druidMana",
 			tip = "A thin line on the bar at the mana a shift into the form you are in costs, for a powershift: fill past it pays for one." },
+		-- UnitManaRule.lua: a spark of Flat UI's own across the player's mana bar for the 5 seconds after a spell that costs mana.
+		{ key = "manaRule", kind = "bool", default = false, label = "Five-second rule",
+			tip = "After you spend mana, a spark crosses your mana bar over 5 seconds. Spirit refills your mana again once it reaches the end. A druid in Bear or Cat Form sees it on the druid mana bar." },
 	},
 	{
 		key = "unitframesTarget", label = "Target frame", parent = "unitframes", owner = "unitframes",

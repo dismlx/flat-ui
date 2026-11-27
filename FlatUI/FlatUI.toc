@@ -96,6 +96,7 @@ UnitParts.lua
 UnitExtras.lua
 UnitGroupMarks.lua
 UnitDruidMana.lua
+UnitManaRule.lua
 UnitPetTarget.lua
 UnitHots.lua
 Hud.lua

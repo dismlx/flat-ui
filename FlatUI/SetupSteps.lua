@@ -474,6 +474,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.druidManaText", "o", "mock-unit-frame" },
 		{ "unitframes.druidManaHeight", "r", "mock-unit-frame" },
 		{ "unitframes.druidManaShift", "o", "mock-unit-frame" },
+		{ "unitframes.manaRule", "o", "mock-unit-frame" },
 		{ "unitframes.targetPicture", "c", "mock-unit-frame" },
 		{ "unitframes.targetName", "o", "mock-unit-frame" },
 		{ "unitframes.targetLevel", "o", "mock-unit-frame" },

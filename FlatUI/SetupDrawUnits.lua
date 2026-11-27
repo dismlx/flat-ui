@@ -39,7 +39,8 @@ local ADDON_NAME, ns = ...
 -- Under the setup's player frame, for a druid while Druid mana in forms is on, the druid mana bar of UnitDruidMana.lua is drawn as in Cat Form (the
 -- frame's energy full): 60% full in mana blue, Mana bar height high, with "60%" or "3.6K" just right of it by Mana text at Power text size (85% of
 -- it with Smaller, lighter bar text), and with Mark the cost of a shift a white line at 35%, the cost of Cat Form, in the border, background,
--- Corners and hang of the live bar in either Frame style.
+-- Corners and hang of the live bar in either Frame style. With Five-second rule the spark of UnitManaRule.lua stands 40% of the way across the bar
+-- that shows the player's mana: that druid mana bar, else the power bar of a class with mana.
 
 local KEY = "unitframes"
 local MEDIA = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\"
@@ -1014,6 +1015,8 @@ function E.make(stage, id, given)
 	o.shade = Tex(top, "OVERLAY", 7)
 	-- The resurrection icon of a party frame (E.icons).
 	o.rez = sample.kind == "party" and Tex(top, "OVERLAY", 3) or nil
+	-- The spark of Five-second rule on the setup's player frame (E.manaRule); test mode shows the live spark's own sweep (UnitManaRule.lua).
+	o.rule = sample.kind == "player" and given == nil and Tex(top, "OVERLAY", 4) or nil
 	o.auras = {}
 	for index, aura in ipairs(sample.auras or {}) do
 		local icon = ns.IconNew(top)
@@ -2130,6 +2133,39 @@ function E.druidMana(o, g, L)
 	return top + tall + L.t, right
 end
 
+-- The spark of Five-second rule on the setup's player frame while the row is on, 40% of the way across the bar that shows the player's mana: the
+-- druid's mana bar under the frame while it is drawn (E.druidMana), else the power bar of a class whose power at rest is mana (REST) while it shows,
+-- as UnitManaRule.lua Pick chooses. The casting bar's spark in ADD blend, twice the bar's height (at least 8 units), as the live one.
+local MANA_RULE = { share = 0.4, file = "Interface\\CastingBar\\UI-CastingBar-Spark", tall = 2, least = 8, wide = 0.6, alpha = 0.9 }
+
+function E.manaRule(o, g, L)
+	local spark = o.rule
+	local bar = nil
+	if g.enabled and Get("manaRule") == true then
+		if L.druid then
+			bar = o.druid.frame
+		elseif L.power and REST[o.s.class] == nil then
+			bar = o.power
+		end
+	end
+	spark:SetShown(bar ~= nil)
+	if bar == nil then
+		return
+	end
+	local ok, width = pcall(bar.GetWidth, bar)
+	local okTall, tall = pcall(bar.GetHeight, bar)
+	width = ok and ns.Finite(width) and width or L.size.bar
+	tall = okTall and ns.Finite(tall) and tall > 0 and tall or L.size.power
+	local high = math.max(MANA_RULE.least, tall * MANA_RULE.tall)
+	spark:ClearAllPoints()
+	spark:SetPoint("CENTER", bar, "LEFT", width * MANA_RULE.share, 0)
+	spark:SetSize(high * MANA_RULE.wide, high)
+	spark:SetTexture(MANA_RULE.file)
+	spark:SetVertexColor(1, 1, 1, 1)
+	pcall(spark.SetBlendMode, spark, "ADD")
+	spark:SetAlpha(MANA_RULE.alpha)
+end
+
 function E.draw(o, g)
 	local L = Layout(o, g)
 	-- A druid's mana bar under the setup's player frame, drawn with the player's bars in Cat Form (E.bars, E.druidMana).
@@ -2199,6 +2235,9 @@ function E.draw(o, g)
 	if bottom then
 		o.height = math.max(o.height, bottom + L.t)
 		o.width = math.max(o.width, textRight)
+	end
+	if o.rule then
+		E.manaRule(o, g, L)
 	end
 	o.layout = L
 	return k
@@ -2542,7 +2581,7 @@ local MARK = {
 	backdrop = { "player", "body" }, flat = { "player", "health" }, healthColour = { "player", "health" }, healthTexture = { "player", "health" },
 	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "boss", "health" },
 	lowHealth = { "party1", "health" }, lowHealthAt = { "party1", "health" }, lowHealthColour = { "party1", "health" }, hoverHighlight = { "player", "health" },
-	druidMana = { "player", "druid" }, druidManaText = { "player", "druid" }, druidManaHeight = { "player", "druid" }, druidManaShift = { "player", "druid" },
+	druidMana = { "player", "druid" }, druidManaText = { "player", "druid" }, druidManaHeight = { "player", "druid" }, druidManaShift = { "player", "druid" }, manaRule = { "player", "power" },
 	petTarget = { "pet", "petTarget" }, petTargetWidth = { "pet", "petTarget" }, petTargetWarn = { "pet", "petTarget" }, petTargetWarnColour = { "pet", "petTarget" },
 	lowHealthTarget = { "target", "health" }, lowHealthTargetAt = { "target", "health" }, lowHealthPulse = { "party1", "health" }, dispelBorder = { "party1", "health" }, dispelIcon = { "party1", "health" },
 	dispelFlash = { "party1", "health" },
