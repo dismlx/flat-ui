@@ -588,7 +588,9 @@ local function Top(frame)
 	local top = 0
 	ns.EachPlate(function(other)
 		if other ~= frame then
-			local level = Read(other, "GetFrameLevel")
+			local rec = recs[other]
+			local lifted = rec and rec.grow and rec.grow.base
+			local level = lifted and lifted.raised and lifted.level or Read(other, "GetFrameLevel")
 			if ns.Finite(level) and level > top then
 				top = level
 			end
@@ -613,11 +615,11 @@ end
 local function Lift(frame, grow)
 	local base = grow.base
 	local want = math.min(math.max(grow.top or 0, base.level) + RISE, TOP_LEVEL)
-	if base.raised and base.raised >= want then
+	if want <= base.level or (base.raised and base.raised >= want) then
 		return
 	end
-	if base.using then
-		Call(frame, "SetUsingParentLevel", false)
+	if base.using and not base.unparented and Call(frame, "SetUsingParentLevel", false) then
+		base.unparented = true
 	end
 	if Call(frame, "SetFrameLevel", want) then
 		base.raised = want
@@ -636,7 +638,7 @@ local function Settle(frame, grow)
 		Call(frame, "ClearAllPoints")
 		Anchor(frame, base.points)
 	end
-	if base.raised and not (base.using and Call(frame, "SetUsingParentLevel", true)) then
+	if (base.raised or base.unparented) and not (base.unparented and Call(frame, "SetUsingParentLevel", true)) then
 		Call(frame, "SetFrameLevel", base.level)
 	end
 end
@@ -1053,9 +1055,6 @@ local function SampleGrow(p, kind)
 	Aim(grow.plate, goal, not ok or snaps ~= false)
 	grow.again = true
 	Push(grow)
-	if goal > 1 then
-		Box(p, goal)
-	end
 end
 
 function ns.PlateSlipSample(p, spec, o, on)
@@ -1101,4 +1100,28 @@ end
 function ns.PlateSlipShown(p)
 	local cue = type(p) == "table" and p.slipCue or nil
 	return cue ~= nil and cue.on == true and cue.holder or nil
+end
+
+function ns.PlateSlipBox(p)
+	local grow = type(p) == "table" and p.slipGrow or nil
+	if grow and ns.Finite(grow.goal) and grow.goal > 1 then
+		Box(p, grow.goal)
+	end
+end
+
+function ns.PlateSlipPlaced(p, label, gap)
+	local grow = type(p) == "table" and p.slipGrow or nil
+	if grow == nil or type(p.f) ~= "table" then
+		return
+	end
+	ApplySample(grow)
+	local share, scale, m, box = grow.plate.now, grow.scale, p.m, p.box
+	if label == nil or share == 1 or type(m) ~= "table" or type(box) ~= "table" then
+		return
+	end
+	if not (ns.Finite(share) and ns.Finite(scale) and ns.Finite(gap) and ns.Finite(m.BW) and ns.Finite(m.center) and ns.Finite(box.l)) then
+		return
+	end
+	label:ClearAllPoints()
+	label:SetPoint("RIGHT", p.f, "BOTTOMLEFT", (box.l + m.BW / 2 * (share - 1)) * scale - gap, m.center * share * scale)
 end
