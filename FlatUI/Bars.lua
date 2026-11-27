@@ -9,7 +9,9 @@ local _, ns = ...
 -- With Flat fill off, a thin strip of the addon's own along the bottom of the target and focus bars takes the colour of the player's interrupt
 -- for an enemy cast that can be interrupted (Interrupt strip, below), Interrupt strip height thick.
 -- The spell icon of the player and pet bars and the latency zone of the player bar show with or without Flat fill: on the cover's marks with it
--- (PaintMarks), and on a set of the addon's own without it (Cast marks without Flat fill, below).
+-- (PaintMarks), and on a set of the addon's own without it (Cast marks without Flat fill, below), the zone in Latency zone colour (red at first,
+-- LatencyTint). The game's own small icon of those bars, which
+-- Edit Mode's Lock to player frame shows on the same spot, is faded meanwhile (ApplyCastIcon).
 -- The names and numbers on the bars are sized and hidden with the font and the alpha of their font strings.
 
 local BAR_BACKGROUND = "UI-HUD-CoolDownManager-Bar-BG"
@@ -1274,7 +1276,23 @@ end
 
 -- The icon of the target and focus bars: where the game has it, on the right of the bar, or hidden. The game anchors the icon once, in its
 -- XML (CastingBarFrame.xml:247-252), and does not anchor it again. The bars hang from protected frames, so the anchor waits for the end of combat.
+-- On the player and pet bars the game's own 16x16 icon, which their UNITFRAME look under Edit Mode's Lock to player frame shows
+-- (PlayerFrame.lua:34-48, CastingBarFrame.lua:886-899) on the very spot of Flat UI's bar-tall one, is faded while Spell icon on player and pet bars
+-- is on and Flat UI draws its own, so only one icon shows; the game only ever shows and hides it, so the fade (SetAlpha) also holds in a fight.
 local function ApplyCastIcon(bar, option)
+	if option == "player" or option == "pet" then
+		local hide = ns.Enabled("castbars") and ns.Get("castbars.playerIcon") == true and not ns.PartStopped("castbars", "cast marks")
+			and not (ns.Get("castbars.flat") == true and ns.PartStopped("castbars", "flat fill"))
+		local state = castParts[bar]
+		if hide or (state and state.Icon) then
+			if not state then
+				state = {}
+				castParts[bar] = state
+			end
+			FadePart(bar, state, "Icon", hide)
+		end
+		return
+	end
 	if option ~= "target" and option ~= "focus" then
 		return
 	end
@@ -1552,6 +1570,26 @@ local function HideMarks(record)
 	end
 end
 
+-- Latency zone colour (0.5.41, red at first; always red before) at 60% opacity on the zones given, set again only when the row changed since the
+-- last time on that holder (a cover's record or a set of marks, its latencyHex). A widget call on textures of the addon's own, so also in a fight.
+local function LatencyTint(holder, ...)
+	local hex = ns.Get("castbars.latencyColour")
+	if holder.latencyHex == hex then
+		return
+	end
+	local ok, r, g, b = pcall(ns.Colour, "castbars.latencyColour")
+	if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		r, g, b = 1, 0, 0
+	end
+	for i = 1, select("#", ...) do
+		local zone = select(i, ...)
+		if zone then
+			zone:SetColorTexture(r, g, b, 0.6)
+		end
+	end
+	holder.latencyHex = hex
+end
+
 -- A texture of the addon's own on the bar, laid over the cover. Nil while the bar cannot take one yet or when the game refused its anchor.
 local function MakeMark(bar, record, name, anchor)
 	if record.markFailed or (InCombatLockdown() and Protected(bar)) then
@@ -1620,6 +1658,7 @@ local function Marks(bar, record, wantIcon, wantLatency)
 			record.latencySide = side
 		end)
 		if latency then
+			LatencyTint(record, latency)
 			if record.latencySide ~= side then
 				latency:ClearAllPoints()
 				latency:SetPoint("TOP" .. side, bar, "TOP" .. side, 0, 0)
@@ -2071,8 +2110,9 @@ end
 -- at every refresh of the cast bars (ns.CastMarksSync) and at the end of a fight while some are missing. A frame of its own looks at the three
 -- bars every 0.05 s while the marks are wanted and does what Marks does for a cover: UnitCastingInfo, else UnitChannelInfo, of the player or the
 -- pet, each answer tested before it is used; the zone of the cast's side shows, as wide a share of the bar as the world latency (GetNetStats)
--- is of the cast, and the icon takes the spell's texture and the bar's height. Only Show, Hide, SetWidth, SetTexture and SetSize reach them in
--- a fight. With Flat fill on, the cover's PaintMarks does this and these stay hidden.
+-- is of the cast, and the icon takes the spell's texture and the bar's height. The zones take Latency zone colour (LatencyTint, 0.5.41). Only Show,
+-- Hide, SetWidth, SetTexture, SetSize and SetColorTexture (when that row changed) reach them in a fight. With Flat fill on, the cover's
+-- PaintMarks does this and these stay hidden.
 do
 	local MARK_BARS = { { "PlayerCastingBarFrame", "player" }, { "OverlayPlayerCastingBarFrame", "player" }, { "PetCastingBarFrame", "pet" } }
 	local MARK_EVERY, MARK_PART, MARK_NAMES = 0.05, "cast marks", { "icon", "cast", "channel" }
@@ -2192,6 +2232,7 @@ do
 		if not set.cast then
 			return
 		end
+		LatencyTint(set, set.cast, set.channel)
 		local side = channel and "channel" or "cast"
 		ShowMark(set, channel and "cast" or "channel", false)
 		local width = PlainNumber(bar:GetWidth())

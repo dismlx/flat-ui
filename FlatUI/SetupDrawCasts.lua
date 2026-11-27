@@ -14,9 +14,9 @@ local _, ns = ...
 --   the right end of the player bar of CastTime.lua (+0.4 on the first row), the whole cast after the seconds left while Total cast time too is
 --   on (1.0 / 2.5 on the first row), and the interrupt colours of Interrupt.lua on the Target row (ready), the Focus row (on cooldown) and the
 --   Target, out of range row (Frostbolt, ready but out of range, 0.5.39) while Interrupt readiness is on: on the fill with Flat fill, else on the
---   strip along the bar's bottom edge, Interrupt strip height thick; the name of the cast's target ("> Jon") past the end of the Target row while
---   Target of enemy casts is on, the pushback in Pushback colour, and the latency zone and the spell icon of the player and pet bars while their
---   rows are on, with or without Flat fill (0.5.39; with Flat fill only before).
+--   strip along the bar's bottom edge, Interrupt strip height thick; the name of the cast's target ("> Jon", in a warrior's class colour, 0.5.41)
+--   past the end of the Target row while Target of enemy casts is on, the pushback in Pushback colour, and the latency zone (in Latency zone
+--   colour, 0.5.41) and the spell icon of the player and pet bars while their rows are on, with or without Flat fill (0.5.39; with Flat fill only before).
 --   resource display: ApplyResourceBar, JoinBar, ApplyResourceFill, ApplyResourceText (Bars.lua:78-165), the custom colours (Bars.lua:195-250).
 --   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530), and the
 --   Queued ability colour of Q over the first main hand timer in the second half of each of its swings.
@@ -280,13 +280,13 @@ end
 -- Cast bars ---------------------------------------------------------------------------------------------------
 
 -- time: the seconds left; total: the whole cast, after them while Total cast time too is on (CastTime.lua); aim: the name of the cast's target past
--- the bar's end while Target of enemy casts is on (CastTime.lua).
+-- the bar's end while Target of enemy casts is on (CastTime.lua), in the class colour of aimClass (the player's own class when it has none).
 local CAST_ROWS = {
 	{ opt = "player", label = "Player", name = "Shadow Bolt", rank = "Rank 3", state = "cast", part = 0.6, game = { 208, 11 }, time = "1.0", total = "2.5",
 		push = "+0.4" },
 	{ opt = "pet", label = "Pet", name = "Firebolt", state = "cast", part = 0.45, game = { 195, 13 }, time = "1.4", total = "2.0" },
 	{ opt = "target", label = "Target", name = "Fireball", state = "cast", part = 0.6, game = { 150, 10 }, small = true, time = "1.2", total = "3.5",
-		kick = "ready", aim = "> Jon" },
+		kick = "ready", aim = "> Jon", aimClass = "WARRIOR" },
 	{ opt = "focus", label = "Focus", name = "Arcane Missiles", state = "channel", part = 0.4, game = { 150, 10 }, small = true, time = "1.8",
 		total = "5.0", kick = "cooling" },
 	{ opt = "target", label = "Target, out of range", name = "Frostbolt", state = "cast", part = 0.35, game = { 150, 10 }, small = true, time = "2.1",
@@ -429,7 +429,7 @@ local function BuildCast(stage)
 	p["castbars.spark"] = player.spark
 	p["castbars.shield"] = shielded and shielded.shield or player.spark
 	p["castbars.stateBorder"] = player.bar
-	p["castbars.latency"] = player.latency
+	p["castbars.latency"], p["castbars.latencyColour"] = player.latency, player.latency
 	for _, row in ipairs(rows) do
 		if row.ticks then
 			p["castbars.ticks"] = p["castbars.ticks"] or row.bar
@@ -610,12 +610,18 @@ local function PaintTicks(row, look, state, w, part)
 end
 
 -- The latency zone of the player bar: at the right end of a cast, at the left end of a channel, where it drains to, as Marks of Bars.lua has it
--- (and its set of marks without Flat fill); shown while Latency zone is on, with or without Flat fill, and not while the cast is interrupted.
+-- (and its set of marks without Flat fill); shown while Latency zone is on, with or without Flat fill, and not while the cast is interrupted, in
+-- Latency zone colour at 60% (0.5.41).
 local function PlaceLatency(row, look, state, w)
 	local latency = row.latency
 	if not latency then
 		return
 	end
+	local ok, r, g, b = pcall(ns.Colour, "castbars.latencyColour")
+	if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		r, g, b = 1, 0, 0
+	end
+	latency:SetColorTexture(r, g, b, 0.6)
 	local side = state == "channel" and "LEFT" or "RIGHT"
 	latency:ClearAllPoints()
 	latency:SetPoint("TOP" .. side, row.bar, "TOP" .. side, 0, 0)
@@ -639,6 +645,19 @@ local function ShowAim(row, look, state)
 	if row.aim then
 		row.aim:SetShown(look.enabled and G("castbars.castTarget") == true and state ~= "interrupted")
 	end
+end
+
+-- The class colour of the sample target's name, as CastTime.lua colours the name (0.5.41): of spec.aimClass, else the player's own class (test
+-- mode's "> You"); the warrior's fixed colour when the client does not answer.
+local function AimRGB(spec)
+	if spec.aimClass and type(C_ClassColor) == "table" then
+		local ok, colour = pcall(C_ClassColor.GetClassColor, spec.aimClass)
+		if ok and type(colour) == "table" and ns.Finite(colour.r) and ns.Finite(colour.g) and ns.Finite(colour.b) then
+			return colour.r, colour.g, colour.b
+		end
+		return SAMPLE_CLASS[1], SAMPLE_CLASS[2], SAMPLE_CLASS[3]
+	end
+	return ClassRGB()
 end
 
 -- Paints one bar of a place (opt) in a state at `part` of its width, w by h. kick: an enemy cast the player's interrupt is ready for.
@@ -688,7 +707,8 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 			end
 			row.aim:SetText(spec.aim or "")
 			ShowAim(row, look, state)
-			Look(row.aim, look.percent, nil, nil, nil, look.outline)
+			local ar, ag, ab = AimRGB(spec)
+			Look(row.aim, look.percent, ar, ag, ab, look.outline)
 		end
 	else
 		row.icon:SetSize(h, h)
