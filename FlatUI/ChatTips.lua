@@ -5,6 +5,7 @@ local GREY = { 0.8, 0.8, 0.8 }
 local WEAPONS = { [16] = true, [17] = true, [18] = true }
 local added = setmetatable({}, { __mode = "k" })
 local byAdded = setmetatable({}, { __mode = "k" })
+local casters = setmetatable({}, { __mode = "k" })
 local BY_MOST, YOU_RED = 6, { 1, 0.25, 0.25 }
 local GUILD_OWN, GUILD_OTHER = { 0.25, 1, 0.25 }, { 0.55, 0.75, 1 }
 
@@ -531,6 +532,97 @@ local function Icon(tooltip, data, item)
 	pcall(line.SetText, line, ("|T%s:0|t %s"):format(icon, text))
 end
 
+local AURA_GETTERS = {
+	GetUnitAura = "HELPFUL", GetUnitBuff = "HELPFUL", GetUnitDebuff = "HARMFUL",
+	GetUnitAuraByAuraInstanceID = true, GetUnitBuffByAuraInstanceID = true, GetUnitDebuffByAuraInstanceID = true,
+}
+
+local function Field(t, key)
+	if not Plain(t, "table") then
+		return nil
+	end
+	local ok, value = pcall(function() return t[key] end)
+	if ok and not IsSecret(value) then
+		return value
+	end
+	return nil
+end
+
+local function AuraOf(tooltip, data)
+	local info = Field(tooltip, "processingInfo")
+	if not rawequal(Field(info, "tooltipData"), data) then
+		local first = Field(Field(tooltip, "infoList"), 1)
+		if rawequal(Field(first, "tooltipData"), data) or info == nil then
+			info = first
+		end
+	end
+	local getter, args = Field(info, "getterName"), Field(info, "getterArgs")
+	local base = Plain(getter, "string") and AURA_GETTERS[getter]
+	local unit, which = Field(args, 1), Field(args, 2)
+	if not base or not Plain(unit, "string") or unit == "" or not Plain(which, "number") then
+		return nil
+	end
+	if base == true then
+		return Ask(Call(C_UnitAuras, "GetAuraDataByAuraInstanceID"), unit, which)
+	end
+	local filter = Field(args, 3)
+	if not Plain(filter, "string") or filter == "" then
+		filter = base
+	elseif getter ~= "GetUnitAura" and not filter:find(base, 1, true) then
+		filter = base .. "|" .. filter
+	end
+	return Ask(Call(C_UnitAuras, "GetAuraDataByIndex"), unit, which, filter)
+end
+
+local function CasterName(src)
+	local name = Ask(UnitName, src)
+	if not Plain(name, "string") or name == "" or (Plain(UNKNOWNOBJECT, "string") and name == UNKNOWNOBJECT) then
+		name = nil
+	end
+	local r, g, b
+	if Ask(UnitIsUnit, src, "player") == true then
+		name = "You"
+		r, g, b = ns.ClassColourOf("player")
+	elseif Ask(UnitIsUnit, src, "pet") == true then
+		return name and ("your pet (" .. name .. ")") or "your pet"
+	elseif not name then
+		return nil
+	elseif Ask(UnitIsPlayer, src) == true then
+		r, g, b = ns.ClassColourOf(src)
+	end
+	if not r and name ~= "You" then
+		r, g, b = ns.ReactionColour(src)
+	end
+	if r and not (IsSecret(r) or IsSecret(g) or IsSecret(b)) then
+		return Hex(r, g, b) .. name .. "|r"
+	end
+	return name
+end
+
+local function CasterLine(tooltip, data)
+	local ok, shown = pcall(tooltip.NumLines, tooltip)
+	if not ok or not Plain(shown, "number") then
+		return
+	end
+	local record = casters[tooltip]
+	if record and rawequal(record.data, data) and shown >= record.lines then
+		return
+	end
+	local id = data.id
+	local aura = Plain(id, "number") and AuraOf(tooltip, data)
+	if not Plain(aura, "table") then
+		return
+	end
+	local spell, src = Field(aura, "spellId"), Field(aura, "sourceUnit")
+	if not Plain(spell, "number") or spell ~= id or not Plain(src, "string") or src == "" or Hidden(src) then
+		return
+	end
+	local name = CasterName(src)
+	if name and pcall(tooltip.AddLine, tooltip, "Cast by " .. name, GREY[1], GREY[2], GREY[3]) then
+		casters[tooltip] = { data = data, lines = shown + 1 }
+	end
+end
+
 local function Lines(tooltip, data)
 	if not Plain(tooltip, "table") or not Plain(data, "table") or ns.Forbidden(tooltip) then
 		return
@@ -561,10 +653,13 @@ local function Lines(tooltip, data)
 				AddBy(tooltip, data, who)
 			end
 		end
-	elseif Opt("icons") == true then
-		local item = IsData(data, "Item")
-		if item or IsData(data, "Spell") or IsData(data, "UnitAura") then
+	else
+		local item, aura = IsData(data, "Item"), IsData(data, "UnitAura")
+		if Opt("icons") == true and (item or aura or IsData(data, "Spell")) then
 			Icon(tooltip, data, item)
+		end
+		if aura and Opt("auraCaster") == true then
+			CasterLine(tooltip, data)
 		end
 	end
 end

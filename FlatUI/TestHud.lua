@@ -231,12 +231,18 @@ end
 local function AuraStandIn(id, game, label, list, filter)
 	local function Times(holder, now)
 		for index, aura in ipairs(list) do
-			local left = math.ceil(aura.seconds - (now % aura.seconds))
+			local exact = aura.seconds - (now % aura.seconds)
+			local left = math.ceil(exact)
+			local words
+			if exact > 0 and exact < (holder.tenths or 0) then
+				words = ("%.1f"):format(exact)
+			end
 			local cell = holder.cells[index]
-			if cell.left ~= left then
-				cell.left = left
-				cell.time:SetText(AuraTime(left))
-				AuraColour(holder, cell, left)
+			local shown = words or left
+			if cell.left ~= shown then
+				cell.left = shown
+				cell.time:SetText(words or AuraTime(left))
+				AuraColour(holder, cell, words and exact or left)
 			end
 		end
 	end
@@ -267,6 +273,7 @@ local function AuraStandIn(id, game, label, list, filter)
 			local on = ns.Get("hud.enabled") == true
 			holder.mode = on and (colour == "warn" or colour == "white") and colour or "game"
 			holder.under = type(ns.AuraWarnAt) == "function" and ns.AuraWarnAt() or AURA_WARN
+			holder.tenths = on and type(ns.AuraTenthsAt) == "function" and ns.AuraTenthsAt() or 0
 			for index, aura in ipairs(list) do
 				local cell = holder.cells[index]
 				ns.DrawHud.PaintAura(cell, aura.kind)

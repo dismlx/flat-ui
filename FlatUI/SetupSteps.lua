@@ -731,6 +731,7 @@ ns.SETUP_STEPS = {
 		{ "hud.durationFormat", "o", "behaviour", "Chooses whether the time on a buff, debuff or totem shows 8m with no space, or 8 m as the game has it." },
 		{ "hud.durationColour", "o", "behaviour", "Chooses whether the time on a buff, debuff or totem is white, white turning red near its end, or gold as the game has it." },
 		{ "hud.durationWarn", "o", "behaviour", "Sets how many seconds are left when the time on a buff, debuff or totem turns red." },
+		{ "hud.durationTenths", "o", "behaviour", "Shows tenths of a second on a buff or debuff in its last seconds." },
 		{ "hud.countSize", "c", "mock-buff-row" },
 	} },
 	{ id = "hud-bars", area = "HUD", title = "Experience and menu bars", draw = "mock-xp-micro", built = true, rows = {
@@ -906,6 +907,7 @@ ns.SETUP_STEPS = {
 		{ "windows.combinedBags", "c", "mock-bag-slots" },
 		{ "windows.bagKey", "o", "behaviour", "Makes B, your key for Toggle Backpack, open every bag, the reagent bag too." },
 		{ "windows.durability", "c", "behaviour", "Shows the durability of your gear on the Character window." },
+		{ "windows.durabilitySlots", "o", "behaviour", "Shows the durability of each worn item on its slot of the Character window." },
 		{ "windows.thorns", "o", "behaviour", "Shows the damage an attacker takes each time it strikes you in melee on the Character window." },
 		{ "windows.thornsZero", "r", "behaviour", "Keeps a grey Thorns 0 on the Character window while nothing deals damage to attackers." },
 		{ "windows.statTips", "o", "behaviour", "Explains each stat on the Character window in plain words and your own numbers when you point at it." },
@@ -993,6 +995,7 @@ ns.SETUP_STEPS = {
 		{ "chat.count", "o", "mock-tooltip" },
 		{ "chat.itemLevel", "o", "behaviour", "Adds the item level of a weapon or a piece of armour to its tooltip, also in the comparison beside it." },
 		{ "chat.icons", "o", "behaviour", "Puts the icon of an item, spell, buff or debuff before its name in its tooltip." },
+		{ "chat.auraCaster", "o", "behaviour", "Adds a line naming who cast a buff or debuff to its tooltip." },
 		{ "chat.targetLine", "c", "behaviour", "Adds a line naming what a unit targets to its tooltip." },
 		{ "chat.targetedBy", "o", "behaviour", "In a group, adds a line naming the members who target the unit to its tooltip." },
 		{ "chat.compareShift", "c", "behaviour", "Shows the items you wear beside an item's tooltip only while Shift is held." },
