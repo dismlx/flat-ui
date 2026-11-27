@@ -10,8 +10,9 @@ local _, ns = ...
 -- pinned slot (B.Pins.Get, BagsPins.lua) gets a cell there too, its live empty button, so an item dropped on it goes in the slot, and Free slots,
 -- which skips every slot that has a cell, shows another. Like any cell, it shows what fills its slot while the window is open, also loot the
 -- game puts there, with the pin's hollow mark, until the next layout. While this character has a pin, the bag window always has the title of
--- Keep in place, as it has Junk's (B.Pins.Any). A section the player hid (B.Categories.Hidden, from a title's menu, BagsOrder.lua) is not laid
--- out in either window, its items filed elsewhere by B.Categories.Of; with Keep in place hidden an empty pinned slot gets no cell, and neither
+-- Keep in place, as it has Junk's (B.Pins.Any). A section the player deleted (B.Categories.Hidden: Delete this section in a title's menu, or the
+-- row Delete a section, BagsOrder.lua) is not laid out in either window, its items filed elsewhere by B.Categories.Of; with Keep in place hidden
+-- an empty pinned slot gets no cell, and neither
 -- Junk nor Keep in place keeps its title while hidden. The rows that split a group of sections (Equipment, Consumables, Trade goods) and the
 -- hidden sections are part of what a layout is made with (Sign), so a change of them lays a window out afresh. The sections go in the player's
 -- order (B.Order.Ranks, BagsOrder.lua), else in the order of B.Categories.LIST. A section lies under its
@@ -32,9 +33,9 @@ local _, ns = ...
 -- never makes it unreadable.
 -- The player's own bag window also always has the titles of the sections the player made (B.Custom.Keys, BagsCustom.lua), and after the last
 -- section + New section, a title with no cell that makes one (never moved or folded). After the last section of either window, for any character,
--- while a section the rows show is hidden, Hidden (3) is a dim title with no cell, whose click, left or right, opens the menu of B.Order.HiddenMenu
--- that shows one again, and whose tooltip names them (B.Order.HiddenLabels); it never moves, folds or takes a drop, and gives an item dropped on it
--- back. With Drop slot in each section on, each open
+-- while a section the rows show is deleted (hidden), Deleted (3) is a dim title with no cell, whose click, left or right, opens the menu of
+-- B.Order.HiddenMenu that brings one back, and whose tooltip names them (B.Order.HiddenLabels); it never moves, folds or takes a drop, and gives an
+-- item dropped on it back. With Drop slot in each section on, each open
 -- section whose title takes a drop ends in a + slot there, one cell more, so the empty Junk title and an empty section of the player's own have
 -- one cell. Free slots says "12 of 80": the free slots of the general bags of all their slots, the count in gold at 4 or fewer and the whole title
 -- red with none left (the footer's colours, BagsWindow.lua:145-146, 1212), and it stays, as its title alone, while the bags are full.
@@ -94,7 +95,7 @@ local _, ns = ...
 -- ("3 of 24") in the Highlight colour, and its count alone again once the search is cleared, with no layout: a folded title is measured for the
 -- widest of those texts, and an open one keeps the width of its plain count and says the matches alone ("3") where "3 of 24" would not fit. A
 -- section with no match, or a bag's label in Bag by bag, fades to 40% meanwhile (SetAlpha of its text and rule); the top shelf, Free slots, + New
--- section and Hidden (3), which hold no item, keep theirs. A title still under the mouse after a layout (a fold clicked, which keeps the window's
+-- section and Deleted (3), which hold no item, keep theirs. A title still under the mouse after a layout (a fold clicked, which keeps the window's
 -- height, BagsWindow.lua) draws its tooltip again, so it says what the next click does. A window that closes ends a drag in it (B.Order.Cancel).
 -- These run as the parts order and pins of the module, so a fault of theirs stops them alone.
 -- The + slot, the catcher and the flash are BagsCustom.lua's, as the part custom: each pass starts and ends them (B.Custom.Begin, Done) and places
@@ -171,10 +172,10 @@ local FOLD_LINES, FOLD_ICON = 12, 14
 -- The key and the label of the title after the last section of the player's own bag window, which makes a section of the player's own
 -- (BagsCustom.lua); and the free count Free slots writes in gold, as the footer does (BagsWindow.lua:145-146).
 local ADD, ADD_LABEL = "+add", "New section"
--- The key and the label of the dim title after it while sections are hidden (BagsOrder.lua), and its tooltip.
-local UNHIDE, UNHIDE_LABEL = "+hidden", "Hidden (%d)"
-local UNHIDE_TIP = "Sections you hid with Hide this section in a title's right-click menu. Click to show one again. Hidden sections on the Bags "
-	.. "page shows them too."
+-- The key and the label of the dim title after it while sections are deleted (hidden, BagsOrder.lua), and its tooltip.
+local UNHIDE, UNHIDE_LABEL = "+hidden", "Deleted (%d)"
+local UNHIDE_TIP = "Sections you deleted with Delete this section in a title's right-click menu, or with Delete a section on the Bags page. Click "
+	.. "to bring one back. Deleted sections on the Bags page brings them back too."
 local LOW, LOW_HEX = 4, "|cffffd100"
 -- The tooltip of the Free slots title while the cursor holds no item.
 local FREE_TIPS = {
@@ -1436,14 +1437,14 @@ local function BuildSections(st)
 		sec.titleWidth = Measure(st, TitleText(sec, true))
 	end
 	-- + New section after the last section of the player's own bag window: a title with no cell, which makes a section of the player's own
-	-- (BagsCustom.lua). It comes after the sort, so it is always last but for Hidden, and never moves or folds (BagsOrder.lua).
+	-- (BagsCustom.lua). It comes after the sort, so it is always last but for Deleted, and never moves or folds (BagsOrder.lua).
 	if st.which == "bags" and st.mine then
 		local add = { key = ADD, add = true, label = ADD_LABEL, entries = {} }
 		add.titleWidth = Measure(st, TitleText(add))
 		list[#list + 1] = add
 	end
-	-- Hidden (3) after that, in either window and for any character, while a section the rows show is hidden (B.Order.HiddenCount): a dim title
-	-- with no cell whose click opens the menu that shows one again (B.Order.HiddenMenu). It never moves, folds or takes a drop.
+	-- Deleted (3) after that, in either window and for any character, while a section the rows show is deleted (B.Order.HiddenCount): a dim
+	-- title with no cell whose click opens the menu that brings one back (B.Order.HiddenMenu). It never moves, folds or takes a drop.
 	local okCount, hidden = pcall(Call, B.Order, "HiddenCount")
 	if okCount and Finite(hidden) and hidden > 0 then
 		local unhide = { key = UNHIDE, unhide = true, label = UNHIDE_LABEL:format(hidden), entries = {} }
@@ -1757,7 +1758,7 @@ function Layout.Dim(which)
 	end
 	-- While a search is typed every section's title says how many of its items match ("3 of 24", TitleText; a folded one shows no button, so its
 	-- title is all it has), and its count alone again once the search is cleared; a section, or a bag's label in Bag by bag (which keeps its
-	-- free count), with no match fades to TITLE_FADED. The top shelf, Free slots, + New section and Hidden (3), which hold no item, keep their titles.
+	-- free count), with no match fades to TITLE_FADED. The top shelf, Free slots, + New section and Deleted (3), which hold no item, keep their titles.
 	-- Nothing is laid out: a folded title was
 	-- measured for that text, and an open one too narrow for it says the matches alone (WriteTitle).
 	for index = 1, st.used do
@@ -2196,7 +2197,7 @@ function TitleClick(title, mouse)
 		return
 	end
 	if sec.unhide then
-		-- Hidden (3): either button opens the menu that shows a hidden section again (BagsOrder.lua).
+		-- Deleted (3): either button opens the menu that brings a deleted section back (BagsOrder.lua).
 		Run("order", Call, B.Order, "HiddenMenu", st, title.frame)
 		return
 	end

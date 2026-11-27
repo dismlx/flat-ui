@@ -29,11 +29,11 @@ local _, ns = ...
 -- dragging; the wheel still scrolls.
 --
 -- The menu: a right click on a title that can be dragged, with no item on the cursor, opens a menu of BagsLayout's (Layout.Menu) with Move to the
--- top, Move up, Move down and Move to the bottom, among the sections that window shows, Fold or Unfold, Hide this section on every section of Flat
--- UI's own but Other, the lines of its group's row on a section of a group (below), and while an order is saved, a line that puts Flat UI's order
--- back, while a section that window shows is open, Fold every section, while a section that window shows is folded, Unfold every section (a fold
--- kept for a hidden section, or for a kind of a group its row does not show now, does not count), and while a section the rows show is hidden,
--- Show hidden sections (3), which opens the Hidden button's menu (below) under the title.
+-- top, Move up, Move down and Move to the bottom, among the sections that window shows, Fold or Unfold, Delete this section on every section of
+-- Flat UI's own but Other, the lines of its group's row on a section of a group (below), and while an order is saved, a line that puts Flat UI's
+-- order back, while a section that window shows is open, Fold every section, while a section that window shows is folded, Unfold every section (a
+-- fold kept for a deleted section, or for a kind of a group its row does not show now, does not count), and while a section the rows show is
+-- deleted, Bring back deleted sections (3), which opens the Deleted button's menu (below) under the title.
 -- At the live bank (B.Bank.Live), while Deposit and Take out is on (the row that shows those buttons, B.Opt("bankButtons")), a section of the
 -- player's own slots also has Put <section> in the bank in the bag window and Take <section> out in the bank window, which run the pass of Deposit
 -- and Take out of BagsBank.lua with the section (B.Categories.Of) in place of the search, and its tooltip says so; not on Keep in place, whose
@@ -64,16 +64,29 @@ local _, ns = ...
 -- title, a Shift-click or its menu) keeps that window's height while the mouse stays on it (B.Window.KeepHeight), so the title clicked stays under
 -- the mouse and its tooltip, drawn again by BagsLayout.lua, says what the next click does; the bank window, which hangs from its top left, shrinks.
 --
--- Hiding: Hide this section hides the section in both windows and for every character (B.Categories.SetHidden, BagsCategories.lua, which keeps the
--- set in FlatUIDB.bags.hidden and files its items elsewhere), with one line in chat; a section of the player's own has Delete instead. Its place in
--- the order and its fold stay, so it comes back where it was. After the last section of the Sections view, in either window and for any character,
--- BagsLayout.lua draws Hidden (3), a dim title with no cell, while a section the rows show is hidden (Order.HiddenCount); a click on it opens a
--- menu of Layout.Menu (Order.HiddenMenu) with each hidden section, a click on one showing it again, after Show every hidden section while two or
--- more are hidden; either says in chat what shows again, and the section shown again flashes Shown (B.Custom.Took). Its tooltip names the hidden
--- sections (Order.HiddenLabels: "Potions, Rings and Junk", "and 3 more" after eight). It never moves, folds, takes a drop or fades while a search
--- is typed. The rows Hidden sections (ns.BagsHiddenLines, ns.BagsHiddenPick), which also lists a hidden section the rows do not show now marked
--- (not in use now), and Folded sections, which marks a folded one that is hidden, or one the rows do not show now (not in use now), are on the
--- Bags page. A hide or a show lays both windows out again and, from a window, draws the rows of an open options window again (ns.RefreshPanel).
+-- Deleting: the player's word for hiding one of Flat UI's own sections is delete. Delete this section hides the section in both windows and for
+-- every character (B.Categories.SetHidden, BagsCategories.lua, which keeps the set in FlatUIDB.bags.hidden and files its items elsewhere), with one
+-- line in chat; a section of the player's own has BagsCustom.lua's own Delete this section instead, which takes it away (B.Custom.Delete, with
+-- Bring back for the last one). Its place in the order and its fold stay, so it comes back where it was. After the last section of the Sections
+-- view, in either window and for any character, BagsLayout.lua draws Deleted (3), a dim title with no cell, while a section the rows show is hidden
+-- (Order.HiddenCount); a click on it opens a menu of Layout.Menu (Order.HiddenMenu), Bring back, with each hidden section, a click on one bringing
+-- it back, after Bring back every deleted section while two or more are hidden; either says in chat what is back, and the section brought back
+-- flashes Back (B.Custom.Took). Its tooltip names the deleted sections (Order.HiddenLabels: "Potions, Rings and Junk", "and 3 more" after eight).
+-- It never moves, folds, takes a drop or fades while a search is typed. On the Bags page, the row Delete a section (ns.BagsRemoveLines,
+-- ns.BagsRemovePick) lists, in the order the windows show them (Order.List), every section a delete takes away now: the player's own, marked
+-- (yours), which go through B.Custom.Delete, so Bring back of Custom sections and of + New section's menu still brings the last one back; and each
+-- of Flat UI's own that can be hidden (B.Categories.Hideable: never New items, Free slots or Other), is not hidden and that the rows show now
+-- (B.Categories.Exists), which goes through SetHidden as Delete this section does. While the row of Equipment, Consumables or Trade goods splits
+-- its group (B.Categories.GroupBase, any choice but One section), the group's sections are listed together where its first one stands, its base,
+-- which holds the group's rest, marked (the rest), after one line that deletes them all at once ("Equipment: all 8 kinds", while two or more of its
+-- kinds can be deleted), which also hides the group's base when its row does not show it (Equipment at Weapons, armour and jewellery), so the group
+-- stays deleted under every choice of its row. Other, which takes what no other section does, is never listed, and neither are New items and Free
+-- slots, shelves no row turns off (New items at the top off keeps nothing as new, but the shelf still takes what comes in while the bags are open,
+-- and Free slots has only its two kinds). A pick says one line in chat; nothing here refuses in a fight, as neither SetHidden nor B.Custom.Delete
+-- does. The rows Deleted sections (ns.BagsHiddenLines, ns.BagsHiddenPick), which also lists a deleted section the rows do not show now marked (not
+-- in use now), and Folded sections, which marks a folded section that is deleted (deleted), or one the rows do not show now (not in use now), are
+-- on the Bags page too. A delete or a bring back lays both windows out again and, from a window, draws the rows of an open options window again
+-- (ns.RefreshPanel); from a row, the options window draws its rows again itself.
 -- Groups: on a section of a group (B.Categories.GroupRow: Equipment, Consumables or Trade goods), the menu writes that group's row of the Bags page
 -- as the options window does (ns.Set, Core.lua, which refreshes the module and so lays both windows out again, then ns.RefreshPanel), and notes
 -- the change as the options window does (ns.PanelHome.Noted), so Home's Recent changes lists it and Ctrl+Z takes it back: with two choices
@@ -93,9 +106,9 @@ local BAR_LEVEL = 50
 local RESET_LINE = "Put the sections back in Flat UI's order"
 local TIPS = {
 	drag = "Drag the title to move this section. Right-click it to move it, or to put Flat UI's order back.",
-	-- A section of Flat UI's own that can be hidden, and one of a group (B.Categories.GroupRow).
-	dragHide = "Drag the title to move this section. Right-click it to move, hide or colour it, or to put Flat UI's order back.",
-	dragGroup = "Drag the title to move this section. Right-click it to move, hide or colour it, to split its group by kind or join it into one, "
+	-- A section of Flat UI's own that can be deleted (hidden), and one of a group (B.Categories.GroupRow).
+	dragHide = "Drag the title to move this section. Right-click it to move, colour or delete it, or to put Flat UI's order back.",
+	dragGroup = "Drag the title to move this section. Right-click it to move, colour or delete it, to split its group by kind or join it into one, "
 		.. "or to put Flat UI's order back.",
 	keep = "Your pinned slots, in the order of your bags: nothing here is sorted, and after a clean up Flat UI puts each item back in its slot. "
 		.. "Ctrl+right-click an item to pin or unpin its slot. Drag the title to move this section, or right-click it for more.",
@@ -148,20 +161,37 @@ local FOLD_SAY = {
 	one = "Flat UI: %s is open again.",
 	none = "Flat UI: no bag section is folded.",
 }
--- Hidden sections: the line of a title's menu, the title and first line of the menu that shows them again (the Hidden button after the last
--- section, BagsLayout.lua, and Show hidden sections), what the rows Folded sections and Hidden sections add after a label, and what is said.
-local HIDE_LINE, SHOW_HIDDEN, SHOW_TITLE, SHOW_ALL = "Hide this section", "Show hidden sections (%d)", "Show again", "Show every hidden section"
-local HIDDEN_MARK, UNUSED_MARK = " (hidden)", " (not in use now)"
-local HIDDEN_NONE = "No section is hidden. Right-click a section's title in the bag window and choose Hide this section."
+-- Deleted (hidden) sections: the line of a title's menu, the title and first line of the menu that brings them back (the Deleted button after the
+-- last section, BagsLayout.lua, and Bring back deleted sections), what the rows Folded sections and Deleted sections add after a label, and what
+-- is said.
+local HIDE_LINE, SHOW_HIDDEN, SHOW_TITLE = "Delete this section", "Bring back deleted sections (%d)", "Bring back"
+local SHOW_ALL = "Bring back every deleted section"
+local HIDDEN_MARK, UNUSED_MARK = " (deleted)", " (not in use now)"
+local HIDDEN_NONE = "No section is deleted. Choose one in Delete a section, or right-click a section's title in the bag window and choose Delete "
+	.. "this section."
 local HIDE_SAY = {
-	hidden = "Flat UI: %s is hidden in both windows, and its items go to the sections that take them. Click Hidden after the last section to "
-		.. "show it again.",
-	all = "Flat UI: every hidden bag section shows again.",
-	one = "Flat UI: %s shows again.",
-	none = "Flat UI: no bag section is hidden.",
+	hidden = "Flat UI: deleted %s from the bags, in both windows; its items go to the sections that take them. Click Deleted after the last "
+		.. "section to bring it back.",
+	all = "Flat UI: every deleted bag section is back.",
+	one = "Flat UI: %s is back in the bags.",
+	none = "Flat UI: no bag section is deleted.",
 }
--- The words a section shown again flashes (B.Custom.Took), and how many hidden sections the tooltip of the Hidden button names before "and 3 more".
-local SHOWN_FLASH, HIDDEN_NAMES = "Shown", 8
+-- The row Delete a section: what its lines add after a section of the player's own (with how many items are placed in it) and after the base of a
+-- split group, which holds the group's rest, its group line (two kinds, or more), its line while nothing can be deleted, and what a pick says.
+local REMOVE = {
+	mine = " (yours)",
+	minePlaced = " (yours, %d placed)",
+	rest = " (the rest)",
+	both = "%s: both kinds",
+	all = "%s: all %d kinds",
+	none = "Every section that can be deleted is deleted. Deleted sections brings one back.",
+	one = "Flat UI: deleted %s from the bags. Deleted sections on the Bags page brings it back.",
+	group = "Flat UI: deleted %s from the bags, all %d of its sections. Deleted sections on the Bags page brings them back.",
+	gone = "Flat UI: that section is deleted already, or not in use now.",
+}
+-- The words a section brought back flashes (B.Custom.Took), and how many deleted sections the tooltip of the Deleted button names before "and 3
+-- more".
+local SHOWN_FLASH, HIDDEN_NAMES = "Back", 8
 -- The lines of a title's menu that split a group of sections by kind or join it, for a row of two choices (Trade goods); a row of three (Equipment,
 -- Consumables) lists its choices under its label, the one in use ticked.
 local SPLIT_LINE, JOIN_LINE = "Split by kind", "Join into one section"
@@ -656,8 +686,8 @@ local function Repaint()
 	end
 end
 
--- Hides a section, or shows it again with on false (B.Categories.SetHidden lays both windows out again), and shows the options window's rows again
--- unless the row Hidden sections asked (row), which the options window draws again itself. True when it changed.
+-- Hides (deletes) a section, or shows it again with on false (B.Categories.SetHidden lays both windows out again), and shows the options window's
+-- rows again unless a row asked (row: Delete a section, Deleted sections), which the options window draws again itself. True when it changed.
 local function SetHidden(key, on, row)
 	local ok, changed = pcall(Call, B.Categories, "SetHidden", key, on)
 	if ok and changed == true then
@@ -680,10 +710,10 @@ local function ShowAll(row)
 	return false
 end
 
--- The menu of the Hidden button after the last section (BagsLayout.lua), and of Show hidden sections in a title's menu: each hidden section the
--- rows show now, which a click shows again, after a line that shows them all while two or more are hidden. Under anchor, for st's window.
--- A pick says in chat what shows again, as Hide this section says what hid, and the section shown again flashes Shown at its next placing in that
--- window (B.Custom.Took), as a section brought back flashes Back.
+-- The menu of the Deleted button after the last section (BagsLayout.lua), and of Bring back deleted sections in a title's menu: each deleted
+-- section the rows show now, which a click brings back, after a line that brings them all back while two or more are deleted. Under anchor, for
+-- st's window. A pick says in chat what is back, as Delete this section says what went, and the section brought back flashes Back at its next
+-- placing in that window (B.Custom.Took), as placements brought back do.
 function Order.HiddenMenu(st, anchor)
 	local keys = HiddenNow(true)
 	local which = type(st) == "table" and st.which or nil
@@ -706,13 +736,13 @@ function Order.HiddenMenu(st, anchor)
 	Call(B.Layout, "Menu", anchor, SHOW_TITLE, items, which)
 end
 
--- How many hidden sections the rows show now, for the Hidden button's title (BagsLayout.lua).
+-- How many hidden (deleted) sections the rows show now, for the Deleted button's title (BagsLayout.lua).
 function Order.HiddenCount()
 	return #HiddenNow(true)
 end
 
 -- The hidden sections the rows show now by their labels, in the order the windows show them, as one text ("Potions, Rings and Junk"; after
--- HIDDEN_NAMES of them "and 3 more"), for the tooltip of the Hidden button (BagsLayout.lua); nil while none is hidden.
+-- HIDDEN_NAMES of them "and 3 more"), for the tooltip of the Deleted button (BagsLayout.lua); nil while none is hidden.
 function Order.HiddenLabels()
 	local keys = HiddenNow(true)
 	local labels = {}
@@ -990,7 +1020,8 @@ function Order.Menu(st, sec, anchor)
 	items[#items + 1] = { text = Order.Folded(key) and "Unfold" or "Fold", part = "order", pick = function()
 		Toggle(st, sec)
 	end }
-	-- A section of Flat UI's own but Other hides, in both windows (B.Categories.SetHidden); a section of the player's own has Delete instead.
+	-- A section of Flat UI's own but Other is deleted (hidden), in both windows (B.Categories.SetHidden); a section of the player's own has
+	-- BagsCustom.lua's Delete this section instead.
 	local okHide, hideable = pcall(Call, B.Categories, "Hideable", key)
 	if okHide and hideable == true then
 		items[#items + 1] = { text = HIDE_LINE, part = "order", pick = function()
@@ -1032,7 +1063,7 @@ function Order.Menu(st, sec, anchor)
 			Order.UnfoldAll(st)
 		end }
 	end
-	-- While a section the rows show is hidden, the menu of the Hidden button opens from here too.
+	-- While a section the rows show is deleted, the menu of the Deleted button opens from here too.
 	local hidden = #HiddenNow(true)
 	if hidden > 0 then
 		items[#items + 1] = { text = SHOW_HIDDEN:format(hidden), part = "order", pick = function()
@@ -1073,7 +1104,7 @@ function Order.Tip(st, sec)
 		if placed > 0 then
 			click = click .. " " .. (placed == 1 and PLACED_TIP.one or PLACED_TIP.many:format(placed))
 		end
-		-- What the menu does besides moving: hide a section of Flat UI's own, and split or join its group.
+		-- What the menu does besides moving: delete a section of Flat UI's own, and split or join its group.
 		local drag = TIPS.drag
 		local okHide, hideable = pcall(Call, B.Categories, "Hideable", sec.key)
 		if okHide and hideable == true then
@@ -1104,14 +1135,14 @@ end
 
 -- The row Folded sections ---------------------------------------------------------------------------------------------------------------------
 
--- True for a section the player hid (B.Categories.Hidden), which the rows mark.
+-- True for a section the player deleted (B.Categories.Hidden), which the rows mark.
 local function IsHidden(key)
 	local ok, hidden = pcall(Call, B.Categories, "Hidden", key)
 	return ok and hidden == true
 end
 
--- Every folded section by its label, in the order the windows show them, a hidden one marked so (it keeps its fold while hidden), and one the rows
--- do not show now (Rings with Equipment at One section, B.Categories.Exists) marked (not in use now), as Hidden sections marks it.
+-- Every folded section by its label, in the order the windows show them, a deleted one marked (deleted) (it keeps its fold while deleted), and one
+-- the rows do not show now (Rings with Equipment at One section, B.Categories.Exists) marked (not in use now), as Deleted sections marks it.
 function ns.BagsFoldLines()
 	local folded = Folds()
 	if not folded then
@@ -1152,10 +1183,149 @@ function ns.BagsFoldPick(id)
 	return true, FOLD_SAY.one:format(SectionLabel(key))
 end
 
--- The row Hidden sections ---------------------------------------------------------------------------------------------------------------------
+-- The row Delete a section ---------------------------------------------------------------------------------------------------------------------
 
--- Every hidden section by its label, in the order the windows show them, one the rows do not show now (Jewellery with Equipment at Each kind)
--- marked so, after a line that shows them all while two or more are hidden; with none, one line that says how to hide one.
+-- True for a section the player made (B.Custom.Is, BagsCustom.lua).
+local function IsMine(key)
+	local ok, mine = pcall(Call, B.Custom, "Is", key)
+	return ok and mine == true
+end
+
+-- True for a section of Flat UI's own that a delete takes away now: one that can be hidden (B.Categories.Hideable: not New items, Free slots or
+-- Other), is not hidden yet, and that the rows of the Sections part show now (B.Categories.Exists).
+local function Deletable(key)
+	local okHide, hideable = pcall(Call, B.Categories, "Hideable", key)
+	if not (okHide and hideable == true) or IsHidden(key) then
+		return false
+	end
+	local okExists, exists = pcall(Call, B.Categories, "Exists", key)
+	return okExists and exists == true
+end
+
+-- The base of the group of a section key ("gear", "consumable", "trade") while its row splits it now (B.Categories.GroupBase), else nil.
+local function SplitBase(key)
+	local ok, base, split = pcall(Call, B.Categories, "GroupBase", key)
+	if ok and type(base) == "string" and split == true then
+		return base
+	end
+	return nil
+end
+
+-- Per group its row splits now, by its base: the sections of it a delete takes away now, in the order of list (Order.List), the base among them
+-- where it is one. { [base] = { key, ... } }.
+local function SplitSections(list)
+	local groups = {}
+	for _, key in ipairs(list) do
+		local base = SplitBase(key)
+		if base and Deletable(key) then
+			local keys = groups[base] or {}
+			keys[#keys + 1] = key
+			groups[base] = keys
+		end
+	end
+	return groups
+end
+
+-- How many of a group's sections are kinds: all but its base.
+local function KindCount(base, keys)
+	local count = 0
+	for _, key in ipairs(keys) do
+		if key ~= base then
+			count = count + 1
+		end
+	end
+	return count
+end
+
+-- Every section a delete takes away now, in the order the windows show them (Order.List): the player's own, marked (yours) with how many items
+-- are placed in it, and Flat UI's own that can be deleted (Deletable). The sections of a group its row splits come together where the first of
+-- them stands, after one line that deletes them all while two or more of its kinds can go ("Equipment: all 8 kinds"), its base marked (the rest).
+-- Other, New items and Free slots are never listed (see the top of the file); with nothing to delete, one line that says so.
+function ns.BagsRemoveLines()
+	local list = Order.List()
+	local groups = SplitSections(list)
+	local lines, done = {}, {}
+	for _, key in ipairs(list) do
+		if IsMine(key) then
+			local okCount, count = pcall(Call, B.Custom, "Count", key)
+			count = okCount and ns.Finite(count) and count or 0
+			local mark = count > 0 and REMOVE.minePlaced:format(count) or REMOVE.mine
+			lines[#lines + 1] = { "mine:" .. key, (SectionLabel(key):gsub("|", "||")) .. mark }
+		else
+			local base = SplitBase(key)
+			local keys = base and groups[base] or nil
+			if keys then
+				if not done[base] then
+					done[base] = true
+					local kinds = KindCount(base, keys)
+					if kinds >= 2 then
+						lines[#lines + 1] = { "group:" .. base, (kinds == 2 and REMOVE.both or REMOVE.all):format(SectionLabel(base), kinds) }
+					end
+					for _, kind in ipairs(keys) do
+						lines[#lines + 1] = { "section:" .. kind, SectionLabel(kind) .. (kind == base and REMOVE.rest or "") }
+					end
+				end
+			elseif not base and Deletable(key) then
+				lines[#lines + 1] = { "section:" .. key, SectionLabel(key) }
+			end
+		end
+	end
+	if #lines == 0 then
+		return { { "none", REMOVE.none } }
+	end
+	return lines
+end
+
+-- Deletes what a line of Delete a section names, with the page on or off, and says one line in chat (the second answer, Panel.lua's AddList): a
+-- section of the player's own through B.Custom.Delete, which says its own line and keeps it for Bring back; one of Flat UI's own through
+-- SetHidden, as Delete this section does, so its items go to the next section that takes them, Junk keeps the sell list, Keep in place keeps the
+-- pins and both windows are laid out again; a group's line each section of it a delete takes away now, and its base, so the group stays deleted
+-- under every choice of its row. A window that shows is laid out again.
+function ns.BagsRemovePick(id)
+	if type(id) ~= "string" then
+		return false
+	end
+	local mine = id:match("^mine:(.+)$")
+	if mine then
+		local delete = Fn(B.Custom, "Delete")
+		if not delete then
+			return false, REMOVE.gone
+		end
+		return delete(mine)
+	end
+	local key = id:match("^section:(.+)$")
+	if key then
+		if not SetHidden(key, true, true) then
+			return false, REMOVE.gone
+		end
+		return true, REMOVE.one:format(SectionLabel(key))
+	end
+	local base = id:match("^group:(.+)$")
+	if not base then
+		return false
+	end
+	local count = 0
+	for _, kind in ipairs(SplitSections(Order.List())[base] or {}) do
+		if SetHidden(kind, true, true) then
+			count = count + 1
+		end
+	end
+	if SetHidden(base, true, true) then
+		count = count + 1
+	end
+	if count == 0 then
+		return false, REMOVE.gone
+	end
+	if count == 1 then
+		return true, REMOVE.one:format(SectionLabel(base))
+	end
+	return true, REMOVE.group:format(SectionLabel(base), count)
+end
+
+-- The row Deleted sections --------------------------------------------------------------------------------------------------------------------
+
+-- Every deleted (hidden) section by its label, in the order the windows show them, one the rows do not show now (Jewellery with Equipment at
+-- Each kind) marked so, after a line that brings them all back while two or more are deleted; with none, one line that says how to delete one.
 function ns.BagsHiddenLines()
 	local keys = HiddenNow(false)
 	if #keys == 0 then
@@ -1172,7 +1342,7 @@ function ns.BagsHiddenLines()
 	return lines
 end
 
--- Shows one hidden section again, or every one ("all"), with the page on or off; a window that shows is laid out again.
+-- Brings one deleted section back, or every one ("all"), with the page on or off; a window that shows is laid out again.
 function ns.BagsHiddenPick(id)
 	if id == "all" then
 		if ShowAll(true) then

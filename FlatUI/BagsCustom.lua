@@ -12,9 +12,10 @@ local _, ns = ...
 -- The sections: FlatUIDB.bags.custom, { { key = "custom1", name = "Raid" }, ... } in the order they were made, for the whole account beside the
 -- placements, the order and the folds (ns.Account, Core.lua:3010-3012; a new layout of BagsData's record resets only its v and chars), and
 -- FlatUIDB.bags.customNext, the number of the next key. A key is "custom" and digits, so it never meets a key of Flat UI's own (B.Categories.LIST,
--- "bag" of Bag by bag, "+add" of the title that makes one, "+hidden" of the title of hidden sections), and none is used twice: the next number
--- is above every number saved in the list, the placements, the folds and the order. A section of the player's own cannot be hidden (its title's
--- menu has Delete instead of Hide this section, BagsOrder.lua). At most MOST sections, a name of 1 to LONGEST letters, trimmed, with no bar,
+-- "bag" of Bag by bag, "+add" of the title that makes one, "+hidden" of the title of deleted sections), and none is used twice: the next number
+-- is above every number saved in the list, the placements, the folds and the order. A section of the player's own cannot be hidden: its title's
+-- menu has this file's Delete this section where one of Flat UI's own has BagsOrder.lua's, which hides it, and BagsOrder.lua's row Delete a
+-- section deletes one of the player's own with Delete too, so Bring back still brings it back. At most MOST sections, a name of 1 to LONGEST letters, trimmed, with no bar,
 -- unique and none of Flat UI's own section names (their names at Each kind too, such as Potions), whatever the case; a section made before keeps
 -- its name, since Read does not check it. A section of the player's own holds only the items placed in it by hand
 -- (FlatUIDB.bags.placed, whose shape stays { [itemID] = key }): Make, Rename and Delete change the list alone, and Delete also takes the
@@ -89,7 +90,7 @@ local _, ns = ...
 --
 -- The bells: the section that took an item flashes in the Highlight colour and says what happened for a moment ("Kept: Linen Cloth", "Moved in: ...",
 -- "Bought: ...", "On your sell list", "Pinned", "Made", "Renamed", "Back"; and from BagsOrder.lua's menus, which pass their own words to Took,
--- "Shown" for a hidden section shown again, "Placed 7" for the items the search found and "Back" for placements brought back), on a frame of its
+-- "Back" for a deleted section brought back, "Placed 7" for the items the search found and "Back" for placements brought back), on a frame of its
 -- own over the section. The words are on a tag of their
 -- own (the panel colour, outlined in the Highlight colour), as wide as they need and in the title's font, so a narrow section never cuts them: on the
 -- title's row right after its text; where that would pass the content's right edge, over the first row of the section's cells; for a section with no

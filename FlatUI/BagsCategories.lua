@@ -4,9 +4,9 @@ local _, ns = ...
 -- placement of items by hand with drops on Junk. Bags.lua makes ns.Bags with B.Categories and B.Categories.New; this file only adds their
 -- fields. It makes no frame and owns no event: BagsData.lua hears BAG_UPDATE_DELAYED and BAG_NEW_ITEMS_UPDATED and hands New.Seen the slots that
 -- changed, or whose new flag is set, before it asks for a redraw, and the window's layout (BagsLayout.lua) asks Of, Compare, Label, Hidden,
--- HiddenKeys and HiddenSign when it lays a window out; BagsOrder.lua asks Hideable, Exists, GroupRow, SetHidden and ShowAll for a title's menu, the
--- Hidden button after the last section and the row Hidden sections, and Placeable, PlacedCount, PutBack, LastPutBack, Unput and PlaceAll for the
--- lines of a title's menu that put back, bring back and place items.
+-- HiddenKeys and HiddenSign when it lays a window out; BagsOrder.lua asks Hideable, Exists, GroupRow, GroupBase, SetHidden and ShowAll for a title's
+-- menu, the Deleted button after the last section and the rows Delete a section and Deleted sections, and Placeable, PlacedCount, PutBack,
+-- LastPutBack, Unput and PlaceAll for the lines of a title's menu that put back, bring back and place items.
 --
 -- An item lands in the first section whose rule it meets: New items, then Junk, then Keep in place, then the section the player placed it in by
 -- hand, then Equipment sets, Quest items, Equipment, Consumables, Trade goods, Reagents, Recipes, Ammunition, Bags and quivers, Keys and Other.
@@ -34,9 +34,11 @@ local _, ns = ...
 -- show goes to the one that holds its kind there (Rings to Jewellery, Jewellery at Each kind to the ring's own section, and every one to the group's
 -- base at One section), and Of files an item in the sections the rows show.
 --
--- Hidden sections: the player may hide any section of Flat UI's own but New items, Free slots and Other (a title's right-click menu, BagsOrder.lua),
--- in both windows and for every character, a set of keys for the whole account in FlatUIDB.bags.hidden, { [key] = true }, beside the order and the
--- folds, read with a type test at each use; an empty set is not kept. A hidden section is passed by as if it were not there: its items go to the
+-- Hidden sections: the player may hide any section of Flat UI's own but New items, Free slots and Other, which the player's words call deleting
+-- (Delete this section in a title's right-click menu and the row Delete a section, which also deletes a split group's every kind at once; the
+-- row Deleted sections and Deleted (3) after the last section bring one back, BagsOrder.lua), in both windows and for every character, a set of
+-- keys for the whole account in FlatUIDB.bags.hidden, { [key] = true }, beside the order and the folds, read with a type test at each use; an
+-- empty set is not kept. A hidden section is passed by as if it were not there: its items go to the
 -- next rule that takes them, a hidden kind of a split group to the section that holds the group's rest under its row's choice while that shows
 -- (Potions to Consumables, Rings to Equipment, Weapons to Armour at Weapons, armour and jewellery), and Other at worst; the explosives and devices
 -- of Trade goods, which Consumables only claims, go on to Trade goods' rule then. Junk hidden changes only where junk shows (IsJunk, the sell list,
@@ -583,6 +585,16 @@ end
 function Categories.GroupRow(key)
 	local group = type(key) == "string" and GROUP_OF[key] or nil
 	return group and group.row or nil
+end
+
+-- The base of the group of section key ("gear", "consumable", "trade") and true while its row splits it now (any choice but One section); nil for
+-- a key of no group. The row Delete a section (BagsOrder.lua) asks it for the line that deletes a whole split group before its kinds.
+function Categories.GroupBase(key)
+	local group = type(key) == "string" and GROUP_OF[key] or nil
+	if not group then
+		return nil, false
+	end
+	return group.base, Mode(group) ~= "one"
 end
 
 -- Filing ---------------------------------------------------------------------------------------------------------------------------------
@@ -1430,14 +1442,14 @@ local UNDO_SAY = {
 	none = "Flat UI: nothing to bring back.",
 }
 
--- Every placement, by the name of its item: { { itemID, "Name (ID): Section" }, ... }, "(hidden)" after a section the player hid, after a line that
+-- Every placement, by the name of its item: { { itemID, "Name (ID): Section" }, ... }, "(deleted)" after a section the player hid, after a line that
 -- takes them all off while two or more are placed, as Folded sections and Pinned slots have; with none, one line that says how to place one. While
 -- the last put back can be brought back (a section title's menu or the line that takes them all off here), its line comes first.
 function ns.BagsPlacedLines()
 	local lines = {}
 	for id, key in pairs(Categories.Placed()) do
 		local fitted = Fit(key, { id = id }, true)
-		lines[#lines + 1] = { id, ("%s: %s%s"):format(Named(id), Categories.Label(fitted), Hidden(fitted) and " (hidden)" or "") }
+		lines[#lines + 1] = { id, ("%s: %s%s"):format(Named(id), Categories.Label(fitted), Hidden(fitted) and " (deleted)" or "") }
 	end
 	table.sort(lines, function(a, b)
 		return a[2] < b[2]
