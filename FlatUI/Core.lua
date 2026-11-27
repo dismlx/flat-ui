@@ -20,6 +20,7 @@ local READERS = {
 	["cooldowns.place"] = "trackers", ["cooldowns.size"] = "trackers", ["cooldowns.spacing"] = "trackers", ["cooldowns.perRow"] = "trackers",
 	["cooldowns.rows"] = "trackers",
 	["defensives.own"] = "ownbuffs", ["defensives.enabled"] = "ownbuffs", ["defensives.place"] = "ownbuffs",
+	["ownbuffs.barTexture"] = "defensives",
 	["unitframes.numberStyle"] = "nameplates",
 	["nameplates.threatRole"] = { "hud", "chat" },
 	["hud.hitTableRules"] = "chat",

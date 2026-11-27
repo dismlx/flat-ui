@@ -391,7 +391,8 @@ How the icons look:
 - **Time left** is **On the icon** at first, or **Under the icon**, **Thin bar under the icon** or **Off**. The time turns amber in its last 5 seconds.
 - **Icon size** (40), **Spacing** (3) and **Icon border** (on) set the icons. The numbers grow and shrink with the icon.
 - **Flash when one lands** (on) gives an icon a quick white flash as its buff comes, also in a fight, though not when you cast a buff again while it shows.
-- **Sound when one ends** (None at first, or **Raid warning**, **Alarm** or **Whisper warning**) plays once as one of your class's short buffs leaves you, also in a fight. A buff with a tracker is left out, since the tracker has its own sound.
+- **Sound when one ends** (None at first, or **Raid warning**, **Alarm** or **Whisper warning**) plays once as one of your class's short buffs leaves you, also in a fight. A buff whose tracker plays its own sound as it drops is left out; a tracker with **Sound when it drops** off, or a sound the game does not play in a fight, no longer silences it.
+- **Bar texture** fills the thin bar under each icon, here and on **Defensives on you**, so the two rows match. It is dimmed while neither page has **Time left** at **Thin bar under the icon**.
 - **Buff tooltips** shows the game's tooltip over an icon **On**, **Out of combat only** or **Off**. A click still goes through to the world.
 
 Where it sits:

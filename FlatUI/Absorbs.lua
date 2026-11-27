@@ -4,6 +4,7 @@ local KEY = "absorbs"
 local MOVER, MOVER_TARGET = "FlatUIAbsorbs", "FlatUIAbsorbsTarget"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local SHIELD_ICON = "Interface\\Icons\\Spell_Holy_PowerWordShield"
+local STRIPES, STRIPES_GLOW, STRIPES_ALPHA = "Interface\\RaidFrame\\Shield-Overlay", "Interface\\RaidFrame\\Shield-Overshield", 0.55
 local FONT = "GameFontHighlightSmall"
 local CROP = 0.08
 local MOST = 6
@@ -327,6 +328,41 @@ local function Inner(icon, bar, frame, h, thick)
 	bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -thick, thick)
 end
 
+function A.Stripes(parts, bar, h)
+	local fill = bar:GetStatusBarTexture()
+	if not fill then
+		return
+	end
+	if not parts.stripes then
+		local stripes = Own(bar:CreateTexture(nil, "ARTWORK", nil, 3))
+		stripes:SetTexture(STRIPES, "REPEAT", "REPEAT")
+		stripes:SetHorizTile(true)
+		stripes:SetVertTile(true)
+		stripes:SetAlpha(STRIPES_ALPHA)
+		local box = Own(CreateFrame("Frame", nil, bar))
+		parts.clipped = pcall(box.SetClipsChildren, box, true)
+		local glow = Own(box:CreateTexture(nil, "ARTWORK", nil, 4))
+		glow:SetTexture(STRIPES_GLOW)
+		glow:SetBlendMode("ADD")
+		glow:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
+		glow:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0)
+		parts.stripes, parts.glow, parts.glowBox = stripes, glow, box
+	end
+	if parts.striped ~= fill then
+		parts.striped = fill
+		parts.stripes:ClearAllPoints()
+		parts.stripes:SetPoint("TOPLEFT", fill, "TOPLEFT", 0, 0)
+		parts.stripes:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", 0, 0)
+		parts.glowBox:ClearAllPoints()
+		parts.glowBox:SetPoint("TOPLEFT", fill, "TOPLEFT", 0, 0)
+		parts.glowBox:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", 0, 0)
+	end
+	parts.glow:SetWidth(math.max(4, math.floor(h / 2)))
+	local show = Opt("stripes") == true
+	parts.stripes:SetShown(show)
+	parts.glowBox:SetShown(show and parts.clipped == true)
+end
+
 function A.Holder()
 	if not A.holder then
 		local holder = Own(CreateFrame("Frame", nil, UIParent))
@@ -413,6 +449,7 @@ function A.PaintRow(row, w, h)
 		end
 		row.file = file
 	end
+	A.Stripes(row, row.bar, h)
 	row.strip:SetHeight(math.max(2, math.floor(h / 6)))
 	local text = TextHeight(h)
 	for _, name in ipairs({ "name", "amount", "time" }) do
@@ -471,8 +508,8 @@ end
 function A.Layout()
 	local w, h = Number("barWidth", 180), Number("barHeight", 16)
 	local parts = { w, h, Number("spacing", 2), Opt("grow"), Opt("show"), Opt("name"), A.File(), ns.Get("general.thickness"), ns.Get("general.border"),
-		ns.Get("general.borderMode"), ns.Borderless(), ns.Get("general.backdrop"), ns.Get("general.backdropAlpha"), #A.rows, A.target ~= nil, Opt("time") }
-	for index = 1, 16 do
+		ns.Get("general.borderMode"), ns.Borderless(), ns.Get("general.backdrop"), ns.Get("general.backdropAlpha"), #A.rows, A.target ~= nil, Opt("time"), Opt("stripes") }
+	for index = 1, 17 do
 		parts[index] = tostring(parts[index])
 	end
 	local key = table.concat(parts, ":")
@@ -1189,6 +1226,7 @@ function A.PaintButton(parts)
 		end
 		local r, g, b = A.Colour(parts.mask)
 		parts.bar:SetStatusBarColor(r, g, b, TIME_ALPHA)
+		pcall(A.Stripes, parts, parts.bar, h)
 	end
 	if parts.edges then
 		Edges(parts.edges, button, thick)

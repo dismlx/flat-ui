@@ -118,7 +118,7 @@ Guide: [Combat](Combat)
 | `/flatui pulse test` | Shows a pulse at each spot in use |
 | `/flatui pulse ignore Frost Nova` | Leaves a spell or item out: a name, an ID or a shift-clicked link |
 | `/flatui pulse watch Frost Nova` | Lets it pulse again |
-| `/flatui pulse list` | Says what pulses, what is left out, and the own sounds and spots |
+| `/flatui pulse list` | Says what pulses, what is left out, the own sounds and spots, and **When it pulses** |
 | `/flatui pulse sound Frost Nova bell` | Gives one its own pulse sound. `none` silences it, and `page` gives it the page's sound again. |
 | `/flatui pulse spot Frost Nova 2` | Sends one to pulse spot 2 (1, 2 or 3). `1` puts it back. |
 
@@ -153,7 +153,7 @@ Guide: [Combat](Combat)
 | `/flatui tracker proc sound Overpower bell` | Gives a proc its own sound: `none`, `spell`, `chimes`, `bell`, `warhorn`, `raid`, `alarm` or `whisper`. `none` silences it |
 | `/flatui tracker proc time Revenge 5` | Gives a proc its own time in seconds; `0` is no time limit |
 | `/flatui tracker proc reset Execute` | Puts a proc's colour, sound and time back as the page has them |
-| `/flatui tracker check` | Says what each tracker shows and why, and what happened in the last fight |
+| `/flatui tracker check` | Says what each tracker shows and why, what happened in the last fight, and which trackers have a sound the game does not play in a fight |
 | `/flatui tracker test` | Shows each look for 3 seconds: fine, low, missing, then the game's own look |
 
 ### Defensives, absorbs and enemy cooldowns

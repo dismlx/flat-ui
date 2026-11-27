@@ -1178,6 +1178,9 @@ function ns.TrackerSet(index, word, text)
 		value = nil
 	end
 	entry[key] = value
+	if key == "kit" then
+		K.KitWarn(value, entry)
+	end
 	return Done(("Tracker %d: %s is %s."):format(index, word, text), key)
 end
 
@@ -1287,6 +1290,9 @@ function ns.TrackerSetOwn(index, key, value)
 		return false, "That value is not allowed for this tracker."
 	end
 	entry[key] = value
+	if key == "kit" and value ~= nil then
+		K.KitWarn(value, entry)
+	end
 
 	return Done()
 end
@@ -1772,7 +1778,7 @@ local function Fill(entry, reading)
 	local kind = KINDS[entry.kind]
 	local charges = not (kind and type(kind.Count) == "function")
 	if charges and Value(entry, "barFill") == "charges" and entry.charged and reading.count and top and top >= 1 then
-		return math.min(1, reading.count / top)
+		return math.min(1, reading.count / top), top
 	end
 	if reading.expires and reading.length then
 		return math.max(0, math.min(1, (reading.expires - Now()) / reading.length))
@@ -1834,7 +1840,7 @@ local function Looks(entry, reading, how)
 		end
 	end
 	if how ~= "last" then
-		look.fill = Fill(entry, reading)
+		look.fill, look.top = Fill(entry, reading)
 	end
 	if entry.charged and Value(entry, "counts") then
 		if how == "last" then
@@ -4208,11 +4214,37 @@ local function Refresh()
 	GameSound()
 end
 
+K.KIT_NAMES = { spell = "Spell alert", chimes = "Chimes", bell = "Bell", warhorn = "Warhorn" }
+K.KIT_WARN = "Trackers: %s plays for a buff between fights only. In a fight the game plays only Raid warning, Alarm or Whisper warning."
+
+function K.KitWarn(word, entry)
+	local name, fights = K.KIT_NAMES[word], ns.TrackerKitInFights
+	if not name or type(fights) ~= "function" or fights(word) then
+		return
+	end
+	if entry and not (entry.kind == nil or entry.kind == "buff" or entry.kind == "debuff") then
+		return
+	end
+	for _, row in ipairs({ "sound", "comes", "stacks" }) do
+		local on
+		if entry then
+			on = Value(entry, row)
+		else
+			on = Opt(row)
+		end
+		if on == true then
+			print(K.KIT_WARN:format(name))
+			return
+		end
+	end
+end
+
 function ns.TrackerKitChanged()
 	ns.Try(KEY, Refresh)
 	if not InCombatLockdown() and type(ns.PlayKit) == "function" then
 		ns.PlayKit(K.KITS[Opt("kit")] or K.KITS.raid, KEY)
 	end
+	K.KitWarn(Opt("kit"))
 end
 
 function ns.TrackerLookChanged(path)

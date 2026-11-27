@@ -167,6 +167,21 @@ local function Taken(entry, trigger)
 	return true
 end
 
+local function Silent()
+	local names = {}
+	for _, entry in ipairs(ns.Enabled(KEY) and type(ns.TrackerEntries) == "function" and ns.TrackerEntries() or {}) do
+		if Whole(entry) and entry.on ~= false and not FILES[ns.TrackerValue(entry, "kit")] then
+			for _, each in ipairs(TRIGGERS) do
+				if ns.TrackerValue(entry, each.row) == true then
+					names[#names + 1] = type(ns.TrackerLabel) == "function" and ns.TrackerLabel(entry) or tostring(entry.name)
+					break
+				end
+			end
+		end
+	end
+	return names
+end
+
 local function Lines(counted)
 	local counts = {}
 	for _, made in pairs(registered) do
@@ -181,6 +196,10 @@ local function Lines(counted)
 			lines[#lines + 1] = ("Game's sound for %s: refused by the game."):format(each.what)
 		end
 	end
+	local silent = Silent()
+	if #silent > 0 then
+		lines[#lines + 1] = ("Silent in a fight: %s, whose sound the game does not play; Raid warning, Alarm and Whisper warning play in a fight."):format(table.concat(silent, ", "))
+	end
 	return lines
 end
 
@@ -194,4 +213,20 @@ ns.TrackerGameSound = { Sync = Sync, Taken = Taken, Lines = Lines }
 
 function ns.TrackerSoundFile(word)
 	return FILES[word]
+end
+
+function ns.TrackerKitInFights(word)
+	return FILES[word] ~= nil
+end
+
+function ns.TrackerDropSoundIDs()
+	local ids = {}
+	for _, entry in ipairs(ns.Enabled(KEY) and type(ns.TrackerEntries) == "function" and ns.TrackerEntries() or {}) do
+		for _, want in ipairs(Wanted(entry, "Removed")) do
+			if want.unit == "player" and Plain(want.spellID) then
+				ids[want.spellID] = true
+			end
+		end
+	end
+	return ids
 end

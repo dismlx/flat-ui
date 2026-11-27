@@ -723,8 +723,8 @@ function B.SoundsWanted()
 		return wanted, trigger
 	end
 	local left = {}
-	if ns.Enabled("trackers") and type(ns.TrackerSpellIDs) == "function" then
-		Merge(left, ns.TrackerSpellIDs())
+	if ns.Enabled("trackers") and type(ns.TrackerDropSoundIDs) == "function" then
+		Merge(left, ns.TrackerDropSoundIDs())
 	end
 	local map, limit = B.ClassMap(), Opt("limit")
 	local list = type(ns.ClassShortBuffs) == "table" and Plain(B.class, "string") and ns.ClassShortBuffs[B.class] or nil
@@ -1211,6 +1211,13 @@ function ns.OwnBuffsLookChanged(path)
 		return
 	end
 	ns.Try(KEY, ns.OwnBuffsTest, true, path)
+end
+
+function ns.OwnBuffsBarUnused()
+	if Opt("time") == "bar" then
+		return false
+	end
+	return not (ns.Enabled("defensives") and ns.Get("defensives.time") == "bar")
 end
 
 function B.Holding()

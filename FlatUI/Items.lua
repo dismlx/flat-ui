@@ -620,6 +620,7 @@ end
 local function OnPaperDoll(button)
 	if Usable(button) and (buttons[button] or not Idle()) and not ns.Forbidden(button) and KindOf(button) == "char" then
 		ns.EachPart(KEY, PART, Dress, button, EntryOf(button, "char"))
+		Items.OwnSoon()
 	end
 end
 
@@ -690,6 +691,79 @@ local function AverageSoon()
 		Soon(function()
 			inspect.queued = false
 			ns.EachPart(KEY, PART, Average)
+		end)
+	end
+end
+
+Items.own = { text = nil, queued = false }
+
+function Items.OwnAverage()
+	local call = _G.GetAverageItemLevel
+	if type(call) == "function" then
+		local ok, _, equipped = pcall(call)
+		if ok and ns.Finite(equipped) and equipped > 0 then
+			return equipped
+		end
+	end
+	local total, worn = 0, 0
+	for slot = 1, 18 do
+		local link = slot ~= 4 and WornLink("player", slot) or nil
+		local level = LevelOf(link)
+		if level then
+			total, worn = total + level, worn + 1
+			if slot == 16 and WornLink("player", 17) == nil then
+				local ok, _, _, _, where = pcall(C_Item.GetItemInfoInstant, link)
+				if ok and not ns.IsSecret(where) and where == "INVTYPE_2HWEAPON" then
+					total = total + level
+				end
+			end
+		end
+	end
+	return worn > 0 and total / 17 or nil
+end
+
+function Items.OwnLevel()
+	local own = Items.own
+	local live = ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and not refused[PART] and Opt("ilvlCharacter")
+	local level = live and Items.OwnAverage() or nil
+	if level == nil then
+		if own.text then
+			pcall(own.text.Hide, own.text)
+		end
+		return
+	end
+	if own.text == nil then
+		local page, host = _G.PaperDollFrame, _G.PaperDollLevelInfo
+		if not Usable(host) or ns.Forbidden(host) then
+			host = page
+		end
+		if not Usable(host) or ns.Forbidden(host) or Blocked(host) then
+			return
+		end
+		local text = ns.OwnText(host, "OVERLAY", AVERAGE_FONT)
+		if text == nil then
+			Refuse(PART, "Windows: item level stopped, the game refused a text on the Character window.")
+			return
+		end
+		local below = _G.CharacterLevelText
+		if not (Usable(below) and pcall(text.SetPoint, text, "TOP", below, "BOTTOM", 0, -2)) then
+			pcall(text.SetPoint, text, "TOP", Usable(page) and page or host, "TOP", 0, -56)
+		end
+		own.text = text
+	end
+	local colour = Opt("ilvlColour") == "gold" and GOLD or WHITE
+	pcall(own.text.SetTextColor, own.text, colour[1], colour[2], colour[3], 1)
+	pcall(own.text.SetText, own.text, AverageWords(level))
+	pcall(own.text.Show, own.text)
+end
+
+function Items.OwnSoon()
+	local own = Items.own
+	if not own.queued then
+		own.queued = true
+		Soon(function()
+			own.queued = false
+			ns.EachPart(KEY, PART, Items.OwnLevel)
 		end)
 	end
 end
@@ -794,6 +868,7 @@ function Items.Apply()
 		ns.EachPart(KEY, PART, Dress, button, entry)
 	end
 	ns.EachPart(KEY, PART, InspectApplied)
+	Items.OwnSoon()
 	if Quiet() then
 		touched = false
 	end
@@ -819,6 +894,9 @@ local function Refill()
 	for button, entry in pairs(buttons) do
 		ns.EachPart(KEY, PART, Dress, button, entry)
 	end
+	if Opt("ilvlCharacter") then
+		Items.OwnSoon()
+	end
 end
 
 local function OnInfo()
@@ -835,6 +913,11 @@ end
 
 ns.AddEvent(KEY, "GET_ITEM_INFO_RECEIVED", OnInfo)
 ns.AddEvent(KEY, "INSPECT_READY", OnInspectReady)
+ns.AddEvent(KEY, "PLAYER_EQUIPMENT_CHANGED", function()
+	if Opt("ilvlCharacter") or Items.own.text then
+		Items.OwnSoon()
+	end
+end)
 ns.AddEvent(KEY, "ADDON_LOADED", OnAddonLoaded, function(name)
 	return not ns.IsSecret(name) and name == INSPECT_ADDON
 end)
