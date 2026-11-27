@@ -7,7 +7,7 @@ local HT = {
 	ROW = "hud.hitTableTip", LINES = "hud.hitTableLines", SPECIAL = "hud.hitTableSpecial", FACING = "hud.hitTableFacing", RULES = "hud.hitTableRules",
 	DETAIL = "chat.tipDetail",
 	SIZE = "hud.hitTableTipSize", FONT_STRING = "GameTooltipText%s%d",
-	CTRL = "hud.hitTableTipCtrl", HINT = "hud.hitTableTipHint", HINT_TEXT = "Hold Ctrl for the hit table",
+	CTRL = "hud.hitTableTipCtrl", HINT = "hud.hitTableTipHint", HINT_TEXT = "Ctrl: your hit table against it",
 	CTRL_KEYS = { LCTRL = true, RCTRL = true },
 	UNIT = 2,
 	KINDS = { melee = true, ranged = true, spell = true },

@@ -41,4 +41,10 @@
 	</Binding>
 	<Binding name="CLICK FlatUITestButton:LeftButton" category="Flat UI">
 	</Binding>
+	<Binding name="CLICK FlatUIGearKey:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUITrinketKey:LeftButton" category="Flat UI">
+	</Binding>
+	<Binding name="CLICK FlatUICopyKey:LeftButton" category="Flat UI">
+	</Binding>
 </Bindings>
