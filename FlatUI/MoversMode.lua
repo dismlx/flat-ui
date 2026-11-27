@@ -139,6 +139,7 @@ local function Step(from, to)
 		return
 	end
 	local names = {}
+	S.burst = nil
 	repeat
 		to[#to + 1] = { step[1], Copy((Kit().Saved() or {})[step[1]]) or false, step[3] }
 		S.undoing = true
@@ -635,21 +636,22 @@ function MM.Let(name, dragged)
 	end
 end
 
-local function CanMove(name)
+local function CanMove(name, alone)
 	local kit = Kit()
 	local look = kit.looks[name]
 	if S.hidden[name] or not (look and look.shown and not look.placedByGame and kit.handles[name] and kit.Describe(name)) then
 		return false
 	end
 	local H = ns.HideFrames
-	local key = H and H.Key(name)
+	local key = not alone and H and H.Key(name)
 	return not (key and H.Hidden(key))
 end
 
 local function Movable()
 	local names, skipped = {}, {}
+	local alone = Count() == 1
 	for _, name in ipairs(Names()) do
-		local list = CanMove(name) and names or skipped
+		local list = CanMove(name, alone) and names or skipped
 		list[#list + 1] = name
 	end
 	return names, skipped
@@ -947,13 +949,15 @@ local function ResetThese()
 	local kit = Kit()
 	local saved = kit.Saved() or {}
 	local names = {}
-	for _, name in ipairs(Names()) do
+	local movable, skipped = Movable()
+	Skipped(skipped)
+	for _, name in ipairs(movable) do
 		if saved[name] ~= nil then
 			names[#names + 1] = name
 		end
 	end
 	if #names == 0 then
-		print("Flat UI: none of the selected frames has been moved.")
+		print("Flat UI: None of the selected frames that can move has been moved.")
 		return
 	end
 	Grouped(function()
@@ -1059,7 +1063,8 @@ local function BuildGroup(panel)
 		end
 	end
 	local reset = Button(body, "Reset these", GROUP_BUTTON, ResetThese, nil, function()
-		return "Reset these", "Puts each selected frame back where the game has it. Undo takes them all back in one step."
+		return "Reset these", "Puts each selected frame you moved back where the game has it; hidden frames, frames not on screen now and frames the game "
+			.. "places stay put. Undo takes them all back in one step."
 	end)
 	reset:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -36 - 4 * GROUP_ROW)
 	ui.groupNote = Text(body, "GameFontHighlightSmall", "text-dim")
