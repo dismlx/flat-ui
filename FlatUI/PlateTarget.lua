@@ -26,6 +26,10 @@ end
 local function Thickness()
 	local px = Opt("targetThickness")
 	px = ns.Finite(px) and px >= 1 and math.floor(px + 0.5) or 1
+	local mark = type(ns.PlateMarkPx) == "function" and ns.PlateMarkPx() or nil
+	if ns.Finite(mark) and mark > px then
+		px = mark
+	end
 	return px + K.GROW
 end
 
@@ -99,8 +103,11 @@ local function Make(unitFrame)
 	ns.Own[holder] = true
 	holder:SetAllPoints(bar)
 	holder:SetAlpha(0)
+	local top = type(ns.PlateMarkLevel) == "function" and ns.PlateMarkLevel() or nil
 	local ok, level = pcall(bar.GetFrameLevel, bar)
-	if ok and ns.Finite(level) then
+	if ns.Finite(top) then
+		pcall(holder.SetFrameLevel, holder, top + 1)
+	elseif ok and ns.Finite(level) then
 		pcall(holder.SetFrameLevel, holder, level + K.LEVEL)
 	end
 	local outline = ns.SetOutlineArea(ns.Outline(holder, holder), KEY)

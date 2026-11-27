@@ -441,6 +441,9 @@ local function PlateMoves(holder, now)
 			P.Combo(p, spec, p.o, p.m)
 			P.Threat(p, spec, p.o, p.m)
 			P.QuestMark(p, spec, p.o, p.m)
+			if type(ns.PlateMarkSample) == "function" then
+				pcall(ns.PlateMarkSample, p, spec, p.o, p.m)
+			end
 		end
 	end
 end
@@ -464,7 +467,7 @@ TM.StandIn({
 			holder.caption:SetTextColor(DIM[1], DIM[2], DIM[3])
 		end
 		local class = Class()
-		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, quest = true,
+		holder.spec = { name = "Defias Pillager", level = 18, health = 0.7, auras = { count = 3 }, quest = true, target = true,
 			overpower = class == "WARRIOR" or class == "HUNTER", combo = (class == "ROGUE" or class == "DRUID") and 1 or nil,
 			cast = { name = "Shadow Bolt", share = 0, left = PLATE_CAST } }
 	end,
@@ -478,9 +481,6 @@ TM.StandIn({
 		local box = P.Plate(p, spec, P.Sets())
 		p.f:ClearAllPoints()
 		p.f:SetPoint("BOTTOM", holder, "CENTER", 0, PLATE_UP)
-		if type(ns.PlateSlipPlaced) == "function" then
-			pcall(ns.PlateSlipPlaced, p)
-		end
 		if holder.caption then
 			holder.caption:ClearAllPoints()
 			holder.caption:SetPoint("TOP", p.f, "BOTTOM", 0, (box and ns.Finite(box.b) and box.b or 0) - 4)

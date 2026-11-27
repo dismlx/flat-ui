@@ -685,6 +685,15 @@ function ns.PlateQuestAbove(unitFrame)
 	return nil
 end
 
+function ns.PlateQuestBeside(unitFrame)
+	local rec = unitFrame ~= nil and recs[unitFrame]
+	local place = Opt("questMarkPlace")
+	if S.on and rec and rec.holder and rec.shown and rec.to ~= nil and (place == "left" or place == "right") and rec.side == place then
+		return rec.holder, place, rec.count
+	end
+	return nil
+end
+
 function ns.PlateQuestPlace(unitFrame)
 	local rec = unitFrame ~= nil and recs[unitFrame]
 	if S.on and rec and rec.holder then
