@@ -1154,5 +1154,6 @@ function ns.BagsHiddenPick(id)
 	if not key or not SetHidden(key, false, true) then
 		return false, HIDE_SAY.none
 	end
+	Call(B, "Part", "custom", Call, B.Custom, "Took", "bags", key, nil, nil, SHOWN_FLASH)
 	return true, HIDE_SAY.one:format(SectionLabel(key))
 end
