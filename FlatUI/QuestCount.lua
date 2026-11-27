@@ -5,6 +5,7 @@ local GAP, EDGE = 4, -22
 local FULL = { 1, 0.3, 0.3 }
 local GOLD = { 1, 0.82, 0 }
 local AMBER = { 1, 0.6, 0.15 }
+local READY = { 0.3, 0.9, 0.3 }
 local PULSE = { time = 0.6, count = 2, low = 0.35 }
 local FILLED = "Flat UI: your quest log is full (%d/%d)."
 local FILL_STEP, LOAD_WAIT = 2, 2
@@ -65,6 +66,32 @@ local function Walk(log, entries)
 	return count
 end
 
+local function Ready(log, entries)
+	if type(log.GetInfo) ~= "function" or type(log.IsComplete) ~= "function" or not ns.Finite(entries) then
+		return nil
+	end
+	local ready = 0
+	for index = 1, math.min(math.floor(entries), 100) do
+		local ok, info = pcall(log.GetInfo, index)
+		local id = ok and Read(info, "questID") or nil
+		if ns.Finite(id) and id > 0 and Read(info, "isHeader") ~= true and Read(info, "isHidden") ~= true then
+			local okDone, done = pcall(log.IsComplete, id)
+			if okDone and not ns.IsSecret(done) and done == true then
+				ready = ready + 1
+			end
+		end
+	end
+	return ready
+end
+
+local function ReadyCode()
+	local ok, r, g, b = pcall(ns.Colour, KEY .. ".xpQuestColour")
+	if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		r, g, b = READY[1], READY[2], READY[3]
+	end
+	return ("|cff%02x%02x%02x"):format(math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5))
+end
+
 local function Numbers()
 	local log = QuestLog()
 	if not log then
@@ -87,7 +114,8 @@ local function Numbers()
 	end
 	most = most or (ns.Finite(_G.MAX_QUESTLOG_QUESTS) and _G.MAX_QUESTLOG_QUESTS > 0 and _G.MAX_QUESTLOG_QUESTS)
 		or (ns.Finite(_G.MAX_QUESTS) and _G.MAX_QUESTS > 0 and _G.MAX_QUESTS) or nil
-	return math.floor(quests), most and math.floor(most) or nil
+	local ready = ns.Get(KEY .. ".trackerCountReady") == true and Ready(log, entries) or nil
+	return math.floor(quests), most and math.floor(most) or nil, ready
 end
 
 local Queue
@@ -245,13 +273,23 @@ local function Filled(quests, most)
 		and quests - last <= FILL_STEP
 end
 
+local function ReadyRose(ready, quests, before, loading)
+	local last = S.lastReady
+	if loading then
+		return false
+	end
+	S.lastReady = ready
+	return last ~= nil and ready ~= nil and ready > last and ready - last <= FILL_STEP and before ~= nil and before > 0
+		and math.abs(quests - before) <= FILL_STEP
+end
+
 local function Update()
-	local quests, most
+	local quests, most, ready
 	if Wanted() then
-		quests, most = Numbers()
+		quests, most, ready = Numbers()
 	end
 	if not quests then
-		S.last = nil
+		S.last, S.lastReady = nil, nil
 		Hide()
 		ns.ClearNote(KEY, NOTE)
 		return
@@ -260,7 +298,9 @@ local function Update()
 	if quests > 0 then
 		S.seen = true
 	end
+	local before = S.last
 	local filled = not loading and Filled(quests, most)
+	local rose = ReadyRose(ready, quests, before, loading)
 	if filled then
 		print(FILLED:format(quests, most))
 	end
@@ -283,9 +323,13 @@ local function Update()
 		r, g, b = AMBER[1], AMBER[2], AMBER[3]
 	end
 	S.text:SetTextColor(r, g, b)
-	S.text:SetText(most and ("%d/%d"):format(quests, most) or tostring(quests))
+	local shown = most and ("%d/%d"):format(quests, most) or tostring(quests)
+	if ready and ready > 0 then
+		shown = shown .. "  " .. ReadyCode() .. ready .. " ready|r"
+	end
+	S.text:SetText(shown)
 	S.text:Show()
-	if filled then
+	if filled or rose then
 		Pulse()
 	end
 	if S.button then

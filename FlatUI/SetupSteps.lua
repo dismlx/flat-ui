@@ -834,6 +834,7 @@ ns.SETUP_STEPS = {
 		{ "hud.trackerHeaders", "c", "mock-objective" },
 		{ "hud.trackerCount", "o", "behaviour", "Shows how many quests your log holds, as 12/20, on the Quests heading." },
 		{ "hud.trackerCountWarn", "o", "behaviour", "Turns the quest count amber with one free slot, and pulses it and says so in chat when your quest log becomes full." },
+		{ "hud.trackerCountReady", "o", "behaviour", "Adds how many of your quests are ready to hand in after the quest count." },
 		{ "hud.trackerBars", "c", "mock-objective" },
 		{ "hud.trackerItems", "c", "mock-objective" },
 		{ "hud.trackerTexture", "o", "mock-objective" },
@@ -1550,6 +1551,7 @@ ns.SETUP_STEPS = {
 		{ "fade.cast", "o", "behaviour", "Keeps faded frames fully visible while you cast." },
 		{ "fade.proc", "o", "behaviour", "Brings a faded action bar to full opacity while a proc alert is up for a spell on it, such as Overpower or Execute." },
 		{ "fade.hurt", "o", "behaviour", "Keeps faded frames fully visible until your health and mana are full again." },
+		{ "fade.holdKey", "o", "behaviour", "Brings faded frames back while you hold Shift, Ctrl or Alt." },
 	} },
 	{ id = "movers", area = "Positions", title = "Moving frames and windows", draw = "mock-screen", built = true, rows = {
 		{ "movers.enabled", "c", "behaviour", "Turns on frame moving; /flatui move shows the handles." },

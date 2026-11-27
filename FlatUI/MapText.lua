@@ -33,7 +33,7 @@ local LATER_CALENDAR = "Flat UI: the calendar opens when the fight ends."
 local LATER_CHARACTER = "Flat UI: the character window opens when the fight ends."
 local LATER_MAP = "Flat UI: the world map opens when the fight ends."
 
-local S = { text = {}, button = {}, shown = {}, colour = {}, size = {}, why = {}, below = 0, above = 0 }
+local S = { text = {}, button = {}, shown = {}, colour = {}, size = {}, why = {}, sampled = {}, below = 0, above = 0 }
 local P = { hold = 3, out = 0.5, gap = 6, inset = 4, sample = "Bex" }
 
 local function Ask(fn, ...)
@@ -181,13 +181,8 @@ function ns.PerfColour(kind, value, codes)
 	return (type(codes) == "table" and codes or PERF_CODES)[level]
 end
 
-local function Perf()
-	local rate, net = _G.GetFramerate, _G.GetNetStats
+local function PerfLine(fps, home, world)
 	local show = Opt("mapPerfShow")
-	local wantRate, wantNet = show ~= "ms", show ~= "fps"
-	if not ((wantRate and type(rate) == "function") or (wantNet and type(net) == "function")) then
-		return nil
-	end
 	local colour = Opt("mapPerfColour") == true
 	local function Number(kind, value)
 		local whole = math.floor(value + 0.5)
@@ -195,14 +190,10 @@ local function Perf()
 		return code and (code .. whole .. "|r") or tostring(whole)
 	end
 	local parts = {}
-	local fps = wantRate and Ask(rate) or nil
-	if ns.Finite(fps) and fps >= 0 then
+	if show ~= "ms" and ns.Finite(fps) and fps >= 0 then
 		parts[#parts + 1] = Number("fps", fps) .. " fps"
 	end
-	if wantNet and type(net) == "function" then
-		local ok, _, _, home, world = pcall(net)
-		home = ok and ns.Finite(home) and home >= 0 and home or nil
-		world = ok and ns.Finite(world) and world >= 0 and world or nil
+	if show ~= "fps" then
 		local which = Opt("mapLatency")
 		if which == "home" and home then
 			parts[#parts + 1] = Number("ms", home) .. " ms"
@@ -214,10 +205,28 @@ local function Perf()
 			parts[#parts + 1] = Number("ms", home) .. " / " .. Number("ms", world) .. " ms"
 		end
 	end
-	if #parts == 0 then
+	return #parts > 0 and table.concat(parts, "   ") or nil
+end
+
+local function Perf()
+	local rate, net = _G.GetFramerate, _G.GetNetStats
+	local show = Opt("mapPerfShow")
+	local wantRate, wantNet = show ~= "ms", show ~= "fps"
+	if not ((wantRate and type(rate) == "function") or (wantNet and type(net) == "function")) then
+		return nil
+	end
+	local fps = wantRate and Ask(rate) or nil
+	local home, world
+	if wantNet and type(net) == "function" then
+		local ok, _, _, h, w = pcall(net)
+		home = ok and ns.Finite(h) and h >= 0 and h or nil
+		world = ok and ns.Finite(w) and w >= 0 and w or nil
+	end
+	local line = PerfLine(fps, home, world)
+	if not line then
 		return nil, "hidden, the game does not say them"
 	end
-	return table.concat(parts, "   ")
+	return line
 end
 
 local function Formatted(pattern, fallback, ...)
@@ -280,6 +289,29 @@ local function Clock()
 end
 
 local READ = { coords = Coords, durability = Durability, perf = Perf, clock = Clock }
+local SAMPLE = { coords = { 45.2, 61.8 }, durability = 42, perf = { 62, 48, 95 }, clock = { 14, 5 } }
+
+local function Sample(line)
+	local id, at = line.id, SAMPLE[line.id]
+	if id == "coords" then
+		local decimals = math.max(0, math.min(2, math.floor(tonumber(Opt("mapCoordsDecimals")) or 1)))
+		return ("%." .. decimals .. "f, %." .. decimals .. "f"):format(at[1], at[2])
+	elseif id == "durability" then
+		local word = _G.DURABILITY
+		if ns.IsSecret(word) or type(word) ~= "string" or word == "" then
+			word = "Durability"
+		end
+		return ("%s %d%%"):format(word, at), YELLOW
+	elseif id == "perf" then
+		return PerfLine(at[1], at[2], at[3])
+	end
+	return Stamp(at[1], at[2])
+end
+
+local function Sampling(line)
+	local tm = ns.TestMode
+	return tm ~= nil and type(tm.IsOn) == "function" and tm.IsOn() == true and Available(line) and not (line.id == "coords" and S.game)
+end
 
 local function Tooltip()
 	local tip = _G.GameTooltip
@@ -345,6 +377,18 @@ local function Tip(_, line, button, fresh)
 	if not button or not S.shown[line.id] then
 		return
 	end
+	if S.sampled[line.id] then
+		local tip = Tooltip()
+		if tip then
+			pcall(function()
+				tip:SetOwner(button, ANCHOR)
+				tip:SetText(line.label, 1, 1, 1)
+				tip:AddLine("A sample while test mode is on.", DIM_RGB[1], DIM_RGB[2], DIM_RGB[3])
+				tip:Show()
+			end)
+		end
+		return
+	end
 	if line.id == "clock" then
 		ClockTip(button)
 		return
@@ -364,7 +408,7 @@ end
 
 local function ChatText(line)
 	local shown = S.shown[line.id]
-	if line.id ~= "coords" or type(shown) ~= "string" then
+	if line.id ~= "coords" or type(shown) ~= "string" or S.sampled[line.id] then
 		return nil
 	end
 	local zone = Ask(_G.GetZoneText)
@@ -592,10 +636,16 @@ local function Read(line)
 		return
 	end
 	local value, more = READ[line.id]()
+	S.sampled[line.id] = nil
+	if type(value) ~= "string" and Sampling(line) then
+		S.why[line.id] = type(more) == "string" and more or nil
+		value, more = Sample(line)
+		S.sampled[line.id] = type(value) == "string" or nil
+	end
 	if type(value) == "string" then
 		Show(line, value, type(more) == "table" and more or nil)
 	else
-		S.why[line.id] = type(more) == "string" and more or nil
+		S.why[line.id] = type(more) == "string" and more or S.why[line.id]
 		Hide(line)
 	end
 end
@@ -782,7 +832,7 @@ local function Update()
 	Ticker()
 end
 
-local W = { every = 0.1, up = 6, pad = 6, level = 9500, gap = "    ", back = 0.6 }
+local W = { every = 0.1, up = 6, pad = 6, level = 9500, gap = "    ", size = 100 }
 
 function W.Wanted()
 	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and Opt("mapWorldCoords") == true and MapCalls() ~= nil
@@ -861,14 +911,15 @@ function W.Read()
 	W.shown = value
 	if not value then
 		W.text:Hide()
-		W.backing:Hide()
+		ns.SetOutline(W.outline, false, false)
 		return
 	end
 	W.text:SetText(value)
 	W.text:Show()
 	local width, height = Ask(W.text.GetStringWidth, W.text), Ask(W.text.GetStringHeight, W.text)
-	W.frame:SetSize((ns.Finite(width) and width or 120) + W.pad * 2, (ns.Finite(height) and height or LINE) + 4)
-	W.backing:Show()
+	local pad = W.pad * W.size / 100
+	W.frame:SetSize((ns.Finite(width) and width or 120) + pad * 2, (ns.Finite(height) and height or LINE) + pad * 2 / 3)
+	ns.SetOutline(W.outline, true, true)
 end
 
 function W.Step(_, elapsed)
@@ -911,11 +962,8 @@ function W.Make()
 	frame:SetPoint("BOTTOM", container, "BOTTOM", 0, W.up)
 	frame:SetFrameLevel(W.level)
 	frame:EnableMouse(false)
-	local backing = frame:CreateTexture(nil, "BACKGROUND")
-	ns.Own[backing] = true
-	backing:SetAllPoints(frame)
-	backing:SetColorTexture(0, 0, 0, W.back)
-	backing:Hide()
+	local outline = ns.SetOutlineArea(ns.Outline(frame, frame), KEY)
+	ns.SetOutline(outline, false, false)
 	local text = ns.OwnText(frame, "OVERLAY", "GameFontHighlightSmall")
 	if not text then
 		frame:Hide()
@@ -924,7 +972,7 @@ function W.Make()
 	end
 	text:SetPoint("CENTER", frame, "CENTER", 0, 0)
 	text:Hide()
-	W.frame, W.text, W.backing = frame, text, backing
+	W.frame, W.text, W.outline = frame, text, outline
 	frame:SetScript("OnUpdate", W.Step)
 	frame:SetScript("OnHide", function()
 		W.at = W.every
@@ -950,6 +998,10 @@ function W.Draw()
 		return
 	end
 	if W.Make() then
+		local size = tonumber(Opt("mapTextSize")) or 100
+		if W.size ~= size and ns.TextStyle(W.text, { percent = size }) then
+			W.size = size
+		end
 		W.shown, W.at = false, W.every
 		W.frame:Show()
 	end
@@ -1009,7 +1061,11 @@ function P.Make(map)
 	return true
 end
 
-function P.Place(map, x, y)
+function P.Round()
+	return not ns.Enabled(KEY) or ns.PartStopped(KEY, "minimap") or ns.Get(KEY .. ".shape") ~= "square"
+end
+
+function P.Place(map, x, y, offsets)
 	local text = P.text
 	text:ClearAllPoints()
 	local width, height = Ask(map.GetWidth, map), Ask(map.GetHeight, map)
@@ -1017,12 +1073,22 @@ function P.Place(map, x, y)
 		text:SetPoint("TOP", map, "TOP", 0, -P.gap)
 		return
 	end
-	if math.abs(x) <= 1 and math.abs(y) <= 1 then
+	if not offsets and math.abs(x) <= 1 and math.abs(y) <= 1 then
 		x, y = x * width, y * height
 	end
 	local wide, tall = Ask(text.GetStringWidth, text), Ask(text.GetStringHeight, text)
 	wide = ns.Finite(wide) and wide or 40
 	tall = ns.Finite(tall) and tall or LINE
+	if P.Round() then
+		local reach = math.max(0, math.min(width, height) / 2 - wide / 2 - P.inset)
+		local mid = y + P.gap + tall / 2
+		local far = math.sqrt(x * x + mid * mid)
+		if far > reach and far > 0 then
+			x, mid = x * reach / far, mid * reach / far
+		end
+		text:SetPoint("BOTTOM", map, "CENTER", x, mid - tall / 2)
+		return
+	end
 	local side = math.max(0, width / 2 - wide / 2 - P.inset)
 	local low, high = -height / 2 + P.inset, height / 2 - tall - P.inset
 	x = math.max(-side, math.min(side, x))
@@ -1030,7 +1096,7 @@ function P.Place(map, x, y)
 	text:SetPoint("BOTTOM", map, "CENTER", x, y)
 end
 
-function P.Show(name, r, g, b, x, y)
+function P.Show(name, r, g, b, x, y, offsets)
 	local map = _G.Minimap
 	if map == nil or ns.Forbidden(map) or not P.Wanted() or not P.Make(map) then
 		return false
@@ -1041,14 +1107,25 @@ function P.Show(name, r, g, b, x, y)
 	end
 	P.text:SetText(name)
 	P.text:SetTextColor(r or 1, g or 1, b or 1)
-	P.Place(map, x, y)
+	P.Place(map, x, y, offsets)
 	P.at = 0
 	P.frame:SetAlpha(1)
 	P.frame:Show()
 	return true
 end
 
-function P.Ping(_, unit, y, x)
+function P.Spot(first, second)
+	local map = _G.Minimap
+	if map ~= nil and not ns.Forbidden(map) and type(map.GetPingPosition) == "function" then
+		local ok, x, y = pcall(map.GetPingPosition, map)
+		if ok and ns.Finite(x) and ns.Finite(y) then
+			return x, y, true
+		end
+	end
+	return first, second, false
+end
+
+function P.Ping(_, unit, first, second)
 	if not P.Wanted() then
 		return
 	end
@@ -1075,7 +1152,8 @@ function P.Ping(_, unit, y, x)
 		return
 	end
 	local r, g, b = ns.ClassColourOf(unit)
-	P.Show(name, r, g, b, x, y)
+	local x, y, offsets = P.Spot(first, second)
+	P.Show(name, r, g, b, x, y, offsets)
 end
 
 function P.Sample()
@@ -1090,8 +1168,46 @@ function P.Sample()
 	if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
 		r, g, b = 1, 1, 1
 	end
-	P.Show(P.sample, r, g, b, x, y)
+	P.Show(P.sample, r, g, b, x, y, true)
 end
+
+function P.Payload(lead, first, ...)
+	if lead > 0 and not ns.IsSecret(first) and (first == nil or type(first) == "table" or first == "MINIMAP_PING") then
+		return P.Payload(lead - 1, ...)
+	end
+	return first, ...
+end
+
+function P.Heard(...)
+	if ns.IsStopped(KEY) then
+		return
+	end
+	ns.EachPart(KEY, PART, P.Ping, P, ...)
+end
+
+function P.Listen()
+	local ok, ear = pcall(CreateFrame, "Frame")
+	if not ok or type(ear) ~= "table" then
+		P.deaf = true
+		return
+	end
+	ns.Own[ear] = true
+	P.ear = ear
+	if type(ear.RegisterEventCallback) == "function" then
+		local took, result = pcall(ear.RegisterEventCallback, ear, "MINIMAP_PING", function(...)
+			P.Heard(P.Payload(math.min(select("#", ...), 2), ...))
+		end)
+		P.callback = took and result ~= false
+	end
+	if not P.callback then
+		ear:SetScript("OnEvent", function(_, _, ...)
+			P.Heard(...)
+		end)
+		local took, result = pcall(ear.RegisterEvent, ear, "MINIMAP_PING")
+		P.deaf = not took or result == false
+	end
+end
+P.Listen()
 
 function P.Refresh()
 	if not P.Wanted() then
@@ -1164,15 +1280,17 @@ ns.AddEvent(KEY, "ADDON_LOADED", function()
 end, function(name)
 	return not ns.IsSecret(name) and name == "Blizzard_WorldMap"
 end)
-ns.AddEvent(KEY, "MINIMAP_PING", function(...)
-	ns.EachPart(KEY, PART, P.Ping, P, ...)
-end)
 
 if ns.TestMode then
+	ns.TestMode.Register("maptext", { module = KEY, label = "Map text", Start = Queue, Stop = Queue })
 	ns.TestMode.Register("mapping", { module = KEY, label = "Minimap ping name", every = 5, Start = function()
 		ns.EachPart(KEY, PART, P.Sample, {})
 	end, Tick = function()
 		ns.EachPart(KEY, PART, P.Sample, {})
+	end, Stop = function()
+		if P.frame then
+			P.frame:Hide()
+		end
 	end })
 end
 
@@ -1186,8 +1304,8 @@ ns.AddStatus(KEY, function()
 	if P.Wanted() then
 		local events = _G.C_EventUtils
 		local valid = type(events) == "table" and not ns.IsSecret(events) and Ask(events.IsEventValid, "MINIMAP_PING")
-		if valid == false then
-			lines[#lines + 1] = "Ping names: the game gives no minimap pings to addons here."
+		if valid == false or P.deaf then
+			lines[#lines + 1] = "Ping names: the game gives addons no minimap pings here."
 		elseif P.secret then
 			lines[#lines + 1] = "Ping names: the game withholds who pinged here."
 		elseif P.broken then

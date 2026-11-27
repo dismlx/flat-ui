@@ -405,6 +405,7 @@ local function Scan()
 			end
 		end
 	end
+	found.seed = quest == nil or quest.missing == true or (quest.all == 0 and found.all > 0)
 	quest = found
 	local last = s and s.last
 	if Opt("xpQuestEnough") == true and Opt("xpQuest") == true and last and found.ready > 0 and found.readyXP > 0 and s.saidEnough ~= last[1] then
@@ -814,7 +815,7 @@ function ns.XpQuestState()
 		if known and quest.all == 0 and entered and now and now - entered < LOAD_WAIT then
 			known = false
 		end
-		return { xp = known and quest.readyXP or 0, count = known and quest.ready or 0, known = known }
+		return { xp = known and quest.readyXP or 0, count = known and quest.ready or 0, known = known, seed = known and quest.seed == true }
 	end) or { xp = 0, count = 0, known = false }
 end
 
