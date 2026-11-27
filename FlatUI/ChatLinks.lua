@@ -609,6 +609,7 @@ end
 
 local HELP_COLOUR = { 1, 0.82, 0 }
 local COPIED_CLOSE = 0.6
+local KEEP_KEYS = { LEFT = true, RIGHT = true, UP = true, DOWN = true, HOME = true, END = true }
 local WordEntered
 
 local function CloseBox()
@@ -704,7 +705,25 @@ local function BuildBox()
 			help:SetTextColor(HELP_COLOUR[1], HELP_COLOUR[2], HELP_COLOUR[3])
 		end
 	end)
+	local function Keep()
+		if box.mode == "copy" and box.address ~= nil then
+			pcall(edit.HighlightText, edit)
+		end
+	end
+	edit:SetScript("OnMouseUp", Keep)
 	edit:SetScript("OnKeyDown", function(_, key)
+		if box.mode == "copy" and box.address ~= nil and not ns.IsSecret(key) and type(key) == "string" and KEEP_KEYS[key] then
+			local opened = box.opened
+			if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+				pcall(C_Timer.After, 0, function()
+					local ok, shown = pcall(box.frame.IsShown, box.frame)
+					if ok and not ns.IsSecret(shown) and shown == true and box.opened == opened then
+						Keep()
+					end
+				end)
+			end
+			return
+		end
 		if box.mode == "copy" and box.address ~= nil and box.address ~= "" and help and ns.ChatCopyKey(key) then
 			help:SetText(WORDS.COPIED)
 			help:SetTextColor(HELP_COLOUR[1], HELP_COLOUR[2], HELP_COLOUR[3])

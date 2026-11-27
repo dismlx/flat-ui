@@ -23,6 +23,7 @@ local COPY = { LINES = { { 50, "The last 50 lines" }, { 200, "The last 200 lines
 	SAY = "The last %d %s heard: press %s to copy %s, or select a part first. Escape closes this.",
 	COPIED = "Copied %d %s. Paste %s where you like; Escape closes this.",
 	COPIED_PART = "Copied what you selected. Paste it where you like; Escape closes this.",
+	NOTHING = "Nothing is selected: drag over some lines, or press %s for every line.",
 	PART_HELP = "Select with the mouse or Shift and the arrows; %s selects every line. Escape closes this.",
 	KEY_NAME = "FlatUICopyKey", KEY_LABEL = "Copy recent chat",
 	NONE = "Flat UI: no chat heard yet to copy. Lines are heard while Chat and tooltips is on.",
@@ -428,10 +429,26 @@ local function BuildCopy()
 			box.part = nil
 		end
 	end)
+	local function Cursor()
+		local ok, at = pcall(edit.GetCursorPosition, edit)
+		if ok and ns.Finite(at) then
+			return at
+		end
+	end
 	edit:SetScript("OnMouseDown", function()
 		box.part = true
+		box.downAt = Cursor()
 		if box.help then
 			box.help:SetText(COPY.PART_HELP:format(Mac() and "Cmd+A" or "Ctrl+A"))
+		end
+	end)
+	edit:SetScript("OnMouseUp", function()
+		local at, down = Cursor(), box.downAt
+		box.downAt = nil
+		if at ~= nil and down ~= nil and at == down and not Held("IsShiftKeyDown") then
+			box.part = "none"
+		else
+			box.part = true
 		end
 	end)
 	edit:SetScript("OnKeyDown", function(_, key)
@@ -441,7 +458,11 @@ local function BuildCopy()
 		if type(ns.ChatCopyKey) == "function" and ns.ChatCopyKey(key) then
 			if box.help then
 				local count = box.lines or 0
-				box.help:SetText(box.part and COPY.COPIED_PART or COPY.COPIED:format(count, count == 1 and "line" or "lines", count == 1 and "it" or "them"))
+				if box.part == "none" then
+					box.help:SetText(COPY.NOTHING:format(Mac() and "Cmd+A" or "Ctrl+A"))
+				else
+					box.help:SetText(box.part and COPY.COPIED_PART or COPY.COPIED:format(count, count == 1 and "line" or "lines", count == 1 and "it" or "them"))
+				end
 			end
 		elseif key == "A" then
 			if Held("IsControlKeyDown") or Held("IsMetaKeyDown") then
@@ -452,7 +473,7 @@ local function BuildCopy()
 				end
 			end
 		elseif COPY.MOVES[key] then
-			box.part = true
+			box.part = Held("IsShiftKeyDown") and true or "none"
 		end
 	end)
 	pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_DISABLED")

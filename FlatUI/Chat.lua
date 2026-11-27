@@ -343,14 +343,54 @@ end
 
 local typing = setmetatable({}, { __mode = "k" })
 local Watch
-local LEFT = { SHOW = 50, AMBER = 20, LIMIT = 255, FONT = "GameFontDisableSmall", X = -8,
+local LEFT = { SHOW = 50, AMBER = 20, LIMIT = 255, FONT = "GameFontDisableSmall", X = -8, GAP = 4,
 	AMBER_COLOUR = { 1, 0.7, 0.2 }, RED_COLOUR = { 1, 0.3, 0.3 } }
+
+function LEFT.Insets(box)
+	local ok, l, r, t, b = pcall(box.GetTextInsets, box)
+	if ok and ns.Finite(l) and ns.Finite(r) and ns.Finite(t) and ns.Finite(b) then
+		return l, r, t, b
+	end
+end
+
+function LEFT.Room(box, record, width)
+	local l, r, t, b = LEFT.Insets(box)
+	if not l then
+		return
+	end
+	local inset = record.leftInset
+	if inset and r ~= inset.set then
+		inset = nil
+	end
+	local base = inset and inset.base or r
+	local wanted = math.ceil(-LEFT.X + width + LEFT.GAP)
+	if wanted <= base then
+		if inset then
+			pcall(box.SetTextInsets, box, l, base, t, b)
+		end
+		record.leftInset = nil
+		return
+	end
+	if r ~= wanted and pcall(box.SetTextInsets, box, l, wanted, t, b) then
+		record.leftInset = { base = base, set = wanted }
+	elseif r == wanted then
+		record.leftInset = { base = base, set = wanted }
+	end
+end
 
 function LEFT.Hide(box)
 	local record = boxes[box]
 	local text = record and record.left
 	if text then
 		pcall(text.Hide, text)
+	end
+	local inset = record and record.leftInset
+	if inset then
+		record.leftInset = nil
+		local l, r, t, b = LEFT.Insets(box)
+		if l and r == inset.set then
+			pcall(box.SetTextInsets, box, l, inset.base, t, b)
+		end
 	end
 end
 
@@ -368,7 +408,8 @@ function LEFT.Count(box, record)
 	if not okLimit or not ns.Finite(limit) or limit <= 0 then
 		limit = LEFT.LIMIT
 	end
-	local visible = typed:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h", ""):gsub("|h", "")
+	local visible = typed:gsub("|cn[^:|]*:", ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h", ""):gsub("|h", "")
+		:gsub("|T.-|t", ""):gsub("|A.-|a", "")
 	local left = limit - #visible
 	if left > LEFT.SHOW then
 		LEFT.Hide(box)
@@ -389,6 +430,10 @@ function LEFT.Count(box, record)
 	pcall(text.SetTextColor, text, colour[1], colour[2], colour[3])
 	pcall(text.SetText, text, tostring(math.max(0, left)))
 	pcall(text.Show, text)
+	local okWidth, width = pcall(text.GetStringWidth, text)
+	if okWidth and ns.Finite(width) then
+		LEFT.Room(box, record, width)
+	end
 end
 
 local function ReadFocus(box)
@@ -841,6 +886,21 @@ local function Filled(tooltip, data)
 	end
 end
 
+function X.BagsNamesMe(tooltip, id)
+	local bags = ns.Bags
+	if not (rawequal(tooltip, GameTooltip) or rawequal(tooltip, ItemRefTooltip)) or not Usable(bags) or type(bags.On) ~= "function"
+		or ns.Get("bags.altCounts") ~= true or ns.PartStopped("bags", "tooltips") then
+		return false
+	end
+	local okOn, on = pcall(bags.On)
+	local data = bags.Data
+	if not okOn or on ~= true or not Usable(data) or type(data.Mine) ~= "function" then
+		return false
+	end
+	local ok, _, bank = pcall(data.Mine, id)
+	return ok and IsNumber(bank) and bank > 0
+end
+
 local function Extras(tooltip, data)
 	if not ns.Enabled(KEY) or not (Opt("ids") or Opt("count")) or not Usable(tooltip) or ns.Forbidden(tooltip) then
 		return
@@ -853,7 +913,7 @@ local function Extras(tooltip, data)
 		if item and Opt("count") and type(C_Item) == "table" and type(C_Item.GetItemCount) == "function" then
 			local okBags, bags = pcall(C_Item.GetItemCount, id)
 			local okAll, all = pcall(C_Item.GetItemCount, id, true)
-			if okBags and okAll and IsNumber(bags) and IsNumber(all) then
+			if okBags and okAll and IsNumber(bags) and IsNumber(all) and not (all > bags and X.BagsNamesMe(tooltip, id)) then
 				lines[#lines + 1] = all > bags and ("Count: %d in bags, %d with bank"):format(bags, all) or ("Count: %d in bags"):format(bags)
 			end
 		end
