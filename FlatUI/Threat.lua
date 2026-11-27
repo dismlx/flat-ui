@@ -114,10 +114,18 @@ function T.Mob()
 		return "target"
 	elseif T.Enemy("targettarget") then
 		return "targettarget"
-	elseif Opt("follow") ~= false then
-		return T.TankMob()
 	end
-	return nil
+	local mob = Opt("follow") ~= false and T.TankMob() or nil
+	if not mob and type(ns.ThreatMobs) == "table" then
+		mob = ns.ThreatMobs.Worst()
+	end
+	return mob
+end
+
+function T.Wakes()
+	local mobs = ns.ThreatMobs
+	return T.fighting == true and T.tank == true and type(mobs) == "table" and mobs.Both() and ns.Enabled(KEY)
+		and type(UnitDetailedThreatSituation) == "function" and T.Allowed()
 end
 
 function T.Tanks()
@@ -575,6 +583,18 @@ function T.ReadRole()
 	T.tank = ok and not IsSecret(role) and role == "tank" or false
 end
 
+function T.Calm(entries)
+	if Opt("otherTanks") == false or type(entries) ~= "table" then
+		return false
+	end
+	for _, other in ipairs(entries) do
+		if other.tanking == true and not other.me then
+			return T.OtherTank(other) == true
+		end
+	end
+	return false
+end
+
 function T.Lost(entry, who, entries)
 	if who ~= T.lostOn then
 		T.held, T.lostUntil, T.lostOn = nil, nil, who
@@ -585,17 +605,12 @@ function T.Lost(entry, who, entries)
 	end
 	if entry.tanking then
 		T.held, T.lostUntil = who, nil
+	elseif T.lostUntil and T.Calm(entries) then
+		T.lostUntil = nil
 	elseif T.held == who then
 		T.held = nil
-		if Opt("otherTanks") ~= false and type(entries) == "table" then
-			for _, other in ipairs(entries) do
-				if other.tanking == true and not other.me then
-					if T.OtherTank(other) then
-						return
-					end
-					break
-				end
-			end
+		if T.Calm(entries) then
+			return
 		end
 		local now = Ask(GetTime)
 		T.lostUntil = ns.Finite(now) and now + LOST_TIME or nil
@@ -759,7 +774,7 @@ function T.Draw(mob, entries)
 		T.Showing(false)
 		T.Alarm(nil, nil)
 		T.Lost(nil, nil)
-		T.Tick(mob == "targettarget" or T.Following())
+		T.Tick(mob == "targettarget" or T.Following() or T.Wakes())
 		return
 	end
 	T.Frame()
@@ -802,7 +817,7 @@ end
 
 function T.Taker(entries)
 	for _, entry in ipairs(entries or {}) do
-		if entry.tanking == true and not entry.me and not entry.withheld then
+		if entry.tanking == true and not entry.me and not entry.withheld and not (Opt("otherTanks") ~= false and T.OtherTank(entry)) then
 			return entry
 		end
 	end
@@ -964,7 +979,7 @@ function T.Update()
 	HearAll(FIGHT_EVENTS, fighting)
 	Hear("UNIT_TARGET", fighting, "target")
 	local mob = fighting and T.Mob() or nil
-	HearAll(ENEMY_EVENTS, mob ~= nil)
+	HearAll(ENEMY_EVENTS, mob ~= nil or (fighting and T.Wakes()))
 	if mob then
 		local entries, withheld = T.Scan(mob)
 		T.withheld = withheld

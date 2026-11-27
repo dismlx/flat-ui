@@ -1057,6 +1057,30 @@ function M.Suffix(unit, lost)
 	end
 end
 
+function M.Worst()
+	if not M.Both() or not T.fighting or T.tank ~= true then
+		return nil
+	end
+	if M.mode ~= "both:live" then
+		M.mode, M.known, M.last, M.readAt, M.unranked = "both:live", {}, nil, nil, nil
+	end
+	if M.Due() or M.last == nil then
+		M.last, M.unranked = M.Read(), true
+	end
+	local best, rank, share
+	for _, mob in ipairs(M.last) do
+		local at = mob.state == "lost" and 1 or mob.state == "slipping" and 2 or nil
+		local value = ns.Finite(mob.share) and mob.share or 0
+		if at and (mob.key == M.worst and (rank == nil or at <= rank)) then
+			best, rank, share = mob, at, math.huge
+		elseif at and (rank == nil or at < rank or (at == rank and value > share)) then
+			best, rank, share = mob, at, value
+		end
+	end
+	M.worst = best and best.key or nil
+	return best and best.unit or nil
+end
+
 function M.Below(unit)
 	local sample = unit == nil
 	if not M.Both() or not (sample or (T.fighting and T.tank == true)) then
@@ -1068,9 +1092,12 @@ function M.Below(unit)
 		M.mode, M.known, M.last, M.readAt = mode, {}, nil, nil
 	end
 	M.Tick(not sample)
-	local fresh = sample or M.Due() or M.last == nil
+	local fresh = sample or M.unranked or M.Due() or M.last == nil
 	if fresh then
-		M.last = sample and M.Spares() or M.Read()
+		if sample or not M.unranked then
+			M.last = sample and M.Spares() or M.Read()
+		end
+		M.unranked = nil
 		M.Rank(M.last)
 	end
 	local key = unit and Ask(UnitGUID, unit) or nil
@@ -1105,7 +1132,7 @@ function M.BelowOff(keep)
 		if not (keep and M.mode == "both:live") then
 			M.mode, M.known = nil, {}
 		end
-		M.last, M.readAt = nil, nil
+		M.last, M.readAt, M.unranked = nil, nil, nil
 	end
 	if not M.below then
 		return
@@ -1126,7 +1153,7 @@ function M.Stop()
 	if M.mode ~= nil or next(M.known) ~= nil then
 		M.known, M.mode = {}, nil
 	end
-	M.count, M.shown, M.last, M.readAt, M.belowLaid = 0, 0, nil, nil, nil
+	M.count, M.shown, M.last, M.readAt, M.belowLaid, M.unranked, M.worst = 0, 0, nil, nil, nil, nil, nil
 	if M.line then
 		M.line:Hide()
 	end
