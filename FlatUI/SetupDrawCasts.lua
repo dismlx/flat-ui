@@ -421,9 +421,11 @@ local function PlaceCastText(text, bar, mode)
 	end
 	text:SetWidth(CAST_TEXT_WIDTH)
 	if mode == "inside" then
-		text:SetPoint("CENTER", bar, "CENTER", 0, 0)
+		text:SetPoint("LEFT", bar, "LEFT", 4, 0)
+		text:SetPoint("RIGHT", bar, "RIGHT", -(type(ns.CastNameInset) == "function" and ns.CastNameInset() or 4), 0)
 	elseif mode == "below" then
-		text:SetPoint("TOP", bar, "BOTTOM", 0, 1)
+		text:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", 0, 1)
+		text:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", 0, 1)
 	else
 		text:SetPoint("TOP", bar, "TOP", 0, -10)
 	end

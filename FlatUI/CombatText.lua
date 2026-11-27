@@ -2950,6 +2950,9 @@ local function Refresh()
 	if ns.CombatCuesRefresh ~= nil then
 		ns.CombatCuesRefresh()
 	end
+	if ns.CastLandSync ~= nil then
+		ns.CastLandSync()
+	end
 end
 
 local function OnRoster()
