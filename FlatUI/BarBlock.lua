@@ -26,7 +26,8 @@ local _, ns = ...
 -- Leave vehicle button hangs from the main bar in the game (VehicleLeaveButton.xml:4), which Movers leaves to the game, so it is not placed
 -- here; /flatui block facts still lists it.
 -- All of it is planned out of combat. A bar the game does not stack (Action bars 6 to 8) and a bar the player has placed in Edit Mode stay
--- where the block put them in a fight; the others are put back by the game's stack until the fight ends.
+-- where the block put them in a fight; the others are put back by the game's stack until the fight ends. A change of a block's bars, Stack
+-- direction, Line up bars or gap in a fight waits for its end too, and the first one in a fight says so in chat (TellWait).
 -- Background panel: a frame of the module's own behind the rectangle of each block, in the general colours, or with Own panel colour in Panel
 -- colour at Panel opacity (75% by default), set at once (ns.SetOutlineFill). Fade the block: the alpha of each
 -- held frame (SetAlpha, which the game allows in a fight) eases to the faded value over Fade time, once the block has not been wanted for Wait
@@ -947,7 +948,35 @@ local function Watch(_, elapsed)
 	end
 end
 
+-- The rows that lay a block out (its bars, Stack direction, Line up bars and the gap), as one string, and the line chat gets once a fight when one
+-- of them changes in it: the block lays out again as the fight ends (Replan), as a cast bar takes its new size then (CastBarSize.lua). The first
+-- Refresh only reads them, so a /reload in a fight says nothing.
+local WAIT_LINE = "Flat UI: the bar block lays out again when the fight ends."
+local function Layout()
+	local parts = {}
+	for n = 1, #blocks do
+		local suffix = SUFFIX[n]
+		for _, key in ipairs({ "bars" .. n, "direction" .. suffix, "align" .. suffix, "ownGap" .. suffix, "barGap" .. suffix }) do
+			parts[#parts + 1] = tostring(Opt(key))
+		end
+	end
+	return table.concat(parts, ";")
+end
+
+local function TellWait()
+	local layout = Layout()
+	local was = state.layout
+	state.layout = layout
+	if was ~= nil and was ~= layout and InCombatLockdown() and not state.told then
+		state.told = true
+		print(WAIT_LINE)
+	end
+end
+
 local function Refresh()
+	if ns.Enabled(KEY) then
+		TellWait()
+	end
 	if not ns.Enabled(KEY) then
 		if state.watch then
 			state.watch:Hide()
@@ -1462,6 +1491,7 @@ ns.Register(KEY, {
 		PLAYER_SPECIALIZATION_CHANGED = Queue,
 		PLAYER_REGEN_ENABLED = function()
 			Record("stop")
+			state.told = nil
 			if state.pending then
 				Queue()
 			end
