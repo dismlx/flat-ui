@@ -1299,7 +1299,7 @@ AREAS = [
         ProcData Procs ProcArt ProcGlow ButtonEffects ProcTriggers BarBlock BarBlockButtons BarBlockLists Blocks"""),
     ("trackers", "Trackers and cooldowns", """Trackers TrackerSound TrackerSlots IconRow Tracking Defensives PartyCooldowns
         PartySync EnemyCooldowns Threat HealerMana GroupTools OwnBuffs TrackerShapes TrackerKinds TrackerMarks
-        TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs PingBar"""),
+        TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs ResourceBarrier PingBar"""),
     ("hud", "HUD, windows, movers, chat and tooltips", """BagSort BagKey Bags BagsData BagsCategories BagsSearch BagsItems
         BagsLayout BagsWindow BagsBank BagsSlots BagsCurrency BagsTooltip BagsOrder BagsPins BagsCustom Windows ItemMarks CharacterDurability CharacterThorns StatTips StatTipsMore Hud MapButtons
         AuraTime XpStats XpBar QuestCount QuestieSkin MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable HitTableTip Chat
