@@ -30,6 +30,7 @@ PlateThreatLook.lua
 PlateText.lua
 PlateClick.lua
 PlateThreatText.lua
+PlateSlip.lua
 PlateOverpower.lua
 PlateQuest.lua
 PlateCombo.lua
@@ -59,6 +60,8 @@ PartyCooldowns.lua
 PartySync.lua
 EnemyCooldowns.lua
 Threat.lua
+ThreatLook.lua
+ThreatMobs.lua
 HealerMana.lua
 GroupTools.lua
 PingBar.lua

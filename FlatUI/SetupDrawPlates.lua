@@ -1137,6 +1137,9 @@ function P.Threat(p, spec, o, m)
 		end
 	end
 	P.Alpha(p, alpha)
+	if type(ns.PlateSlipSample) == "function" then
+		pcall(ns.PlateSlipSample, p, spec, o, on)
+	end
 end
 
 function P.Playing(group)
@@ -2126,6 +2129,7 @@ function P.Parts(S)
 		Set({ "threatTransition", "threatDamageTransition" }, changing.bar)
 		Set({ "threatBad", "threatDamageBad" }, bad.bar)
 		Set({ "threatGlow", "threatFlash", "threatRingPx" }, bad.ring:IsShown() and bad.ring or bad.bar)
+		Set({ "threatSlipping" }, type(ns.PlateSlipShown) == "function" and ns.PlateSlipShown(bad) or bad.bar)
 		Set({ "threatBar", "threatBorder", "threatBackground" }, bad.bar)
 		Set({ "threatName" }, bad.name)
 		Set({ "threatHealthText" }, bad.htext)

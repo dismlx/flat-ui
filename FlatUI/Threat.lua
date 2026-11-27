@@ -43,6 +43,15 @@ local function Own(object)
 	return object
 end
 
+local function Look(name, ...)
+	local look = ns.ThreatLook
+	local fn = type(look) == "table" and look[name] or nil
+	if type(fn) == "function" then
+		return fn(...)
+	end
+	return nil
+end
+
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -381,6 +390,7 @@ function T.Showing(on, now)
 		for _, row in ipairs(T.rows) do
 			row.who = nil
 		end
+		Look("Forget", T.rows)
 	end
 end
 
@@ -464,6 +474,7 @@ function T.Row(index)
 	end)
 	row = { bar = bar, track = track, name = name, share = share, mine = mine, alarm = alarm, near = near, pulse = made and pulse or nil }
 	T.rows[index] = row
+	Look("Dress", row)
 	return row
 end
 
@@ -642,7 +653,15 @@ function T.Layout(n)
 		bar:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD, -(top + (index - 1) * (height + GAP)))
 		bar:SetSize(width, height)
 	end
+	Look("Laid", T.rows, n, PAD, top, height + GAP, width)
 	T.frame:SetSize(width + 2 * PAD, top + n * height + (n - 1) * GAP + PAD)
+end
+
+function T.Bar(row, value, jump)
+	if Look("Value", row, value, jump) then
+		return true
+	end
+	return Glide(row.bar, value, jump)
 end
 
 function T.Fill(row, entry)
@@ -654,6 +673,7 @@ function T.Fill(row, entry)
 	row.who = who
 	local r, g, b = T.Colour(entry)
 	row.bar:SetStatusBarColor(r, g, b, 1)
+	Look("Name", row, r, g, b)
 	local spec = entry.sample
 	if spec and spec[1] ~= false then
 		row.name:SetText(entry.rank and ("%d. %s"):format(entry.rank, spec[1]) or spec[1])
@@ -661,14 +681,14 @@ function T.Fill(row, entry)
 		SetName(row.name, spec and "player" or entry.member.unit, entry.rank)
 	end
 	if entry.withheld then
-		if not Glide(row.bar, entry.scaled, jump) then
+		if not T.Bar(row, entry.scaled, jump) then
 			row.bar:SetValue(0)
 		end
 		if not pcall(row.share.SetFormattedText, row.share, "%.0f%%", entry.scaled) then
 			row.share:SetText("")
 		end
 	else
-		Glide(row.bar, entry.scaled, jump)
+		T.Bar(row, entry.scaled, jump)
 		row.share:SetText(("%d%%"):format(math.floor(entry.scaled + 0.5)))
 	end
 	row.bar:Show()
@@ -731,6 +751,7 @@ function T.Draw(mob, entries)
 		T.rows[index].bar:Hide()
 		T.rows[index].who = nil
 	end
+	Look("Order", T.rows, n, who, T.frame)
 	T.Alarm(own, who)
 	if mob then
 		SetName(T.title, mob)
@@ -850,6 +871,14 @@ end
 function T.Update()
 	T.pending = nil
 	local on = ns.Enabled(KEY)
+	local mobs = ns.ThreatMobs
+	if type(mobs) == "table" and mobs.Take(on) then
+		HearAll(FIGHT_EVENTS, false)
+		HearAll(ENEMY_EVENTS, false)
+		Hear("UNIT_TARGET", false)
+		T.Tick(false)
+		return
+	end
 	local fighting = on and T.fighting and type(UnitDetailedThreatSituation) == "function" and T.Allowed()
 	HearAll(FIGHT_EVENTS, fighting)
 	Hear("UNIT_TARGET", fighting, "target")
@@ -882,6 +911,9 @@ function T.Off()
 	HearAll(ENEMY_EVENTS, false)
 	Hear("UNIT_TARGET", false)
 	T.Tick(false)
+	if type(ns.ThreatMobs) == "table" then
+		ns.ThreatMobs.Stop()
+	end
 	T.Showing(false, true)
 end
 
@@ -929,6 +961,9 @@ function T.Status()
 	end
 	if T.withheld then
 		lines[#lines + 1] = LINE_WITHHELD
+	end
+	if type(ns.ThreatMobs) == "table" then
+		ns.ThreatMobs.Status(lines)
 	end
 	return lines
 end
