@@ -1,46 +1,15 @@
 local _, ns = ...
 
--- Defensives on you: a row of icons for the shields, wards and protections other players cast on the player, each with its time left,
--- its charges and the name of the caster. The game draws them: an aura container of the game's own lists the buffs on the player
--- that match a list of spell IDs (CooldownData.lua), also while the game hides buffs from addon code in a fight. The parts of each
--- icon are made inside the function the game calls while it builds the button, because from then on the game closes the button to
--- addon code while it hides buffs. A change to those parts, and Icon size on the buttons already shown, waits until the game says buffs
--- are open; a change to the container itself (its layout of sizes and spacing) is allowed at any time. Where the game will not make the container, the same icons show out of combat from a read of the
--- player's buffs. The helpers are in one table, D, and the lines of /flatui check are Tracking.lua's.
--- Buff tooltips (On by default, as on Your buffs) gives the game's buttons the game's own tooltip on hover and never a click, so clicks go
--- through to the world; Out of combat only has the game hide it in a fight. The samples of test mode follow Icon border, Borderless and the
--- border colour as the real icons do, and with Caster's name on carry the names of test mode's party under them. Sound when one lands (None by
--- default) has the game play a sound as a listed defensive you do not know yourself comes on you, also in a fight (D.SyncSounds).
--- Flash when one lands (on by default) gives each icon a quick white flash as its defensive lands: on the game's buttons an animation the game
--- plays itself as the button shows (AddAuraShownAnimation), so also in a fight; on the icons of a read, a flash of IconRow.lua. The time left
--- turns amber in its last 5 seconds, coloured by the game (a colour curve on the time text, D.TimeOptions). The samples of the test and of
--- test mode flash as they appear and play Sound when one lands, not a sound at the end of their sweep. Out of combat with test mode off and no
--- defensive on you (none of the game's buttons shows), a change of Place, Icon size, Spacing, Caster's name, Icon border or Flash when one
--- lands, or a pick of either sound, shows the samples for 4 seconds in the new look and place, with no line in the chat
--- (ns.DefensivesLookChanged); they flash as they come, and a further change redraws them with their sweeps running on and flashes them again
--- only for Flash when one lands or a sound. The row read out of combat is read again as a test or such a preview ends. Sound when one ends
--- (None by default) has the game play a sound as a listed defensive you do not know yourself leaves you (trigger Removed), and /flatui test
--- icons plays it once as its samples go; its line in the chat names each sound and whether the game played it. The numbers on an icon, the
--- time left and the charges, follow Icon size: today's heights at the default of 32, grown and shrunk with it (D.TextSize), on the game's
--- buttons, the icons of a read and the samples.
-
 local KEY = "defensives"
--- The name of the row among the saved spots of the movers.
 local MOVER = "FlatUIDefensives"
--- The row hangs from the top left corner of the player frame: this far right and up. The room for the caster's name under the
--- icons is part of the height.
 local OFFSET_X, OFFSET_Y = 0, 20
 local ROOM = 16
 local CROP = 0.08
 local REREAD = 0.2
 local TEST_TIME = 8
--- How long the samples a change of the look shows stay after the last change.
 local PREVIEW = 4
--- The flash of a defensive that lands: from this opacity to none in FLASH seconds. The time left is amber under LOW seconds, in the amber
--- of the trackers' low.
 local FLASH_FROM, FLASH = 0.8, 0.5
 local LOW, AMBER = 5, { 1, 0.7, 0.2 }
--- The sound kits of Sound when one lands, for the samples: the game plays the files of these kits for a real one (TrackerSound.lua).
 local KITS = { raid = 8959, alarm = 12889, whisper = 37666 }
 local MOST_LISTED, MOST_EXTERNAL = 6, 4
 local GROUPS = { "listed", "external", "own" }
@@ -82,7 +51,6 @@ local function Plain(value, kind)
 	return not IsSecret(value) and type(value) == kind
 end
 
--- A field of a frame, or nil when it is missing, cannot be read or is withheld.
 local function Field(frame, key)
 	local ok, value = pcall(function()
 		return frame[key]
@@ -93,8 +61,6 @@ local function Field(frame, key)
 	return nil
 end
 
--- The row's place ------------------------------------------------------------------------------------------------------------
-
 function D.Holder()
 	if not D.holder then
 		local holder = Own(CreateFrame("Frame", nil, UIParent))
@@ -104,7 +70,6 @@ function D.Holder()
 	return D.holder
 end
 
--- The highest bar of the personal resource display that is shown, or the display itself.
 function D.TopBar(display)
 	for _, key in ipairs(BARS) do
 		local bar = Field(display, key)
@@ -118,14 +83,11 @@ function D.TopBar(display)
 	return display
 end
 
--- True when a frame anchored to something has a rectangle. A client that cannot say is taken to have one.
 function D.Anchored(frame)
 	local ok, left = pcall(frame.GetLeft, frame)
 	return not ok or IsSecret(left) or left ~= nil
 end
 
--- Hangs the holder from the player frame, the personal resource display or the spot of the movers. Returns which: "player",
--- "resource", "own" or "screen" (no player frame to hang from).
 function D.Place()
 	local holder = D.Holder()
 	local place = Opt("place")
@@ -140,7 +102,6 @@ function D.Place()
 	if place == "resource" then
 		local display = PersonalResourceDisplayFrame
 		if display ~= nil and not ns.Forbidden(display) then
-			-- Over the Your buffs row when that hangs over the bars.
 			local over = type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder("above") or nil
 			if over then
 				holder:SetPoint("BOTTOMLEFT", over, "TOPLEFT", 0, ROOM + 4)
@@ -166,8 +127,6 @@ function D.Place()
 	return "screen"
 end
 
--- The parts of a button --------------------------------------------------------------------------------------------------------
-
 local function EdgeColour()
 	if ns.Borderless() or not Opt("iconBorder") then
 		return 0, 0, 0, 0
@@ -176,8 +135,6 @@ local function EdgeColour()
 	return r, g, b, 1
 end
 
--- The thickness of the border follows the general border thickness. It is worked out from the holder, so that no call is made on a button
--- to find out whether the border changed.
 local function Thick()
 	return ns.Pixels(D.Holder(), ns.Get("general.thickness"))
 end
@@ -187,7 +144,6 @@ local function EdgeKey()
 	return ("%s,%s,%s,%s,%s"):format(Thick(), r, g, b, a)
 end
 
--- The four edges of the thin border, just inside the button.
 function D.PaintEdges(parts)
 	local button, edges = parts.button, parts.edges
 	local thick = Thick()
@@ -210,10 +166,6 @@ function D.PaintEdges(parts)
 	parts.borderKey = EdgeKey()
 end
 
--- Buff tooltips: the game's tooltip on hover and never a click, as Your buffs does (OwnBuffs.lua's Mouse; Blizzard_CooldownViewer/
--- CooldownViewer.lua:326-328). Out of combat only keeps the hover and has the game hide the tooltip in a fight (Blizzard_AuraButton.lua:177-183);
--- Off takes the mouse away, so the row is as it was before the row came. A refused call leaves parts.tips empty, so ApplyTips tries again, and the
--- status names it.
 function D.Mouse(parts)
 	local button, tips = parts.button, Opt("tooltips")
 	local ok = pcall(button.SetMouseClickEnabled, button, false)
@@ -228,8 +180,6 @@ function D.Mouse(parts)
 	end
 end
 
--- The options of the game's time text: white, amber in the last LOW seconds. The game colours the text by a step curve of the time left
--- (DurationTextBindingProperty.RemainingDuration), so also in a fight. Made once; nil where the game has no colour curve.
 function D.TimeOptions()
 	if D.timeOptions == nil then
 		local ok, options = pcall(function()
@@ -244,15 +194,12 @@ function D.TimeOptions()
 	return D.timeOptions or nil
 end
 
--- The numbers on an icon follow Icon size: the time left (NumberFontNormal) and the charges (NumberFontNormalSmall) at their own heights at
--- the default Icon size of BASE, grown and shrunk with it, 8 to 24 (IconRow.lua). Gives the two heights for size.
 D.BASE = 32
 function D.TextSize(size)
 	return ns.IconNumberHeight(ns.IconFontHeight("NumberFontNormal", 14), size, D.BASE),
 		ns.IconNumberHeight(ns.IconFontHeight("NumberFontNormalSmall", 12), size, D.BASE)
 end
 
--- The time left and the charges of a button at the heights of size; true when the game took them.
 function D.SizeText(parts, size)
 	local time, count = D.TextSize(size)
 	local ok = true
@@ -268,8 +215,6 @@ function D.SizeText(parts, size)
 	return ok
 end
 
--- Makes the parts of one button. Run by the game inside AddAuraGroup while the button is still open; nothing here may raise, and a
--- part the game refuses is left out and named in the status.
 function D.Init(button)
 	local parts = { button = button, casterOn = Opt("caster") }
 	D.list[#D.list + 1] = parts
@@ -318,7 +263,6 @@ function D.Init(button)
 		local left = Own(top:CreateFontString(nil, "OVERLAY", "NumberFontNormal"))
 		left:SetPoint("CENTER", top, "CENTER", 0, 0)
 		parts.left = left
-		-- The game's time text, amber in its last seconds, else white; the sweep's own numbers are the way out only when it is refused.
 		local options = D.TimeOptions()
 		local bound = options ~= nil and pcall(button.SetDurationText, button, left, options)
 		if not bound and not pcall(button.SetDurationText, button, left, nil) and parts.sweep then
@@ -348,8 +292,6 @@ function D.Init(button)
 		parts.edges = edges
 		D.PaintEdges(parts)
 	end)
-	-- A white square over the button, at no opacity but while its fade plays: the game plays the fade as the button shows, as a defensive
-	-- lands. The square is a child of the button, as the game asks of the regions of such an animation.
 	Part("flash", function()
 		local flash = Own(top:CreateTexture(nil, "OVERLAY", nil, 7))
 		flash:SetAllPoints(button)
@@ -369,9 +311,6 @@ function D.Init(button)
 	pcall(D.SizeText, parts, Opt("size"))
 end
 
--- Changes that wait for the game to open its buttons ------------------------------------------------------------------------------
-
--- Caster's name on or off on every button: ClearCasterName and a hidden font string, or SetCasterName again.
 function D.ApplyCaster()
 	local want = Opt("caster")
 	for _, parts in ipairs(D.list) do
@@ -396,9 +335,6 @@ local function Layout()
 	return { elementSpacing = Opt("spacing"), elementWidth = Opt("size"), elementHeight = Opt("size") }
 end
 
--- The layout of the groups again where Icon size or Spacing has changed, from which the game places the slots, and the new size on every
--- button already made (its parts are set on all its points and follow). Run while buttons are open (D.Change); a button that refuses keeps
--- its size, is tried again at the next change and is named in the status.
 function D.ApplySize()
 	local size, spacing = Opt("size"), Opt("spacing")
 	if D.sized ~= size .. ":" .. spacing then
@@ -418,7 +354,6 @@ function D.ApplySize()
 				refused = true
 			end
 		end
-		-- The numbers on the icon grow and shrink with it; refused, they are tried again at the next change.
 		if parts.textSize ~= size then
 			D.SizeText(parts, size)
 		end
@@ -426,7 +361,6 @@ function D.ApplySize()
 	D.refused.size = refused
 end
 
--- The border again where its thickness or colour has changed.
 function D.ApplyBorder()
 	for _, parts in ipairs(D.list) do
 		if parts.edges and parts.borderKey ~= EdgeKey() then
@@ -437,7 +371,6 @@ function D.ApplyBorder()
 	end
 end
 
--- Buff tooltips again where the setting has changed.
 function D.ApplyTips()
 	for _, parts in ipairs(D.list) do
 		if parts.tips ~= Opt("tooltips") then
@@ -446,7 +379,6 @@ function D.ApplyTips()
 	end
 end
 
--- Flash when one lands again where it has changed: the square shows or hides, and the fade the game plays stays registered.
 function D.ApplyFlash()
 	local want = Opt("flash") ~= false
 	for _, parts in ipairs(D.list) do
@@ -462,7 +394,6 @@ end
 
 D.apply = { caster = D.ApplyCaster, border = D.ApplyBorder, size = D.ApplySize, tips = D.ApplyTips, flash = D.ApplyFlash }
 
--- Runs what waited, once the game says buffs are open.
 function D.Flush()
 	if next(D.pending) == nil or not T.Open() then
 		return
@@ -474,7 +405,6 @@ function D.Flush()
 	end
 end
 
--- Does a change to the buttons now when the game says they are open, else when it does.
 function D.Change(kind)
 	if T.Open() then
 		pcall(D.apply[kind])
@@ -490,7 +420,6 @@ function D.Change(kind)
 	end
 end
 
--- The game's four restrictions that hide buffs: Combat, Encounter, Challenge mode and PvP match (types 0 to 3).
 function D.Restricted()
 	for kind = 0, 3 do
 		if D.active[kind] then
@@ -512,7 +441,6 @@ function D.OnRestriction(kind, state)
 	end
 end
 
--- What the restrictions are when the module starts.
 function D.ReadRestrictions()
 	local call = type(C_RestrictedActions) == "table" and C_RestrictedActions.IsAddOnRestrictionActive or nil
 	for kind = 0, 3 do
@@ -520,8 +448,6 @@ function D.ReadRestrictions()
 		D.active[kind] = answer == true
 	end
 end
-
--- The lists -----------------------------------------------------------------------------------------------------------------------
 
 local function Copy(set)
 	local copy = {}
@@ -544,7 +470,6 @@ local function Name(id)
 	return SpellName(id) or ("Spell " .. id)
 end
 
--- The buffs added to the list and the buffs taken off it, kept for the account: two maps by spell ID, whole numbers only.
 function D.Saved()
 	local account = ns.Account()
 	if type(account) ~= "table" then
@@ -570,7 +495,6 @@ function D.Saved()
 	return saved
 end
 
--- The buff IDs the lists name now: the game's list of abilities, and what was added, less what was taken off. A map by spell ID.
 function D.Effective()
 	local set = Copy(T.Listed())
 	local saved = D.Saved()
@@ -585,7 +509,6 @@ function D.Effective()
 	return set
 end
 
--- The IDs the second group leaves out: the list, and what was taken off it, so that a removed buff shows in neither group.
 function D.Excluded()
 	local set = D.Effective()
 	local saved = D.Saved()
@@ -595,7 +518,6 @@ function D.Excluded()
 	return set
 end
 
--- The buff IDs of the defensives and immunities of the player's class, and the racial ones of every race, that the player casts on themself.
 function D.OwnIDs()
 	local set = {}
 	local class = T.Ask(UnitClassBase, "player")
@@ -612,7 +534,6 @@ function D.OwnIDs()
 	return set
 end
 
--- Gives both lists of the container their new maps, once combat is over. Where the game made no container the next read has them.
 function D.ApplyLists()
 	D.QueueSounds()
 	if D.path == "reading" then
@@ -630,7 +551,6 @@ function D.ApplyLists()
 	end)
 end
 
--- Lines with the same name get the rank or other text the game shows beside the name.
 local function Distinguish(rows)
 	local seen = {}
 	for _, row in ipairs(rows) do
@@ -658,7 +578,6 @@ local function ByName(rows)
 	return rows
 end
 
--- The buffs of the game's list of abilities that are not on the list now, by name.
 function ns.DefensiveCandidates()
 	local rows, set, seen = {}, D.Effective(), {}
 	for _, ability in ipairs(type(ns.ABILITIES) == "table" and ns.ABILITIES or {}) do
@@ -674,7 +593,6 @@ function ns.DefensiveCandidates()
 	return ByName(rows)
 end
 
--- The buffs on the list, by name, so that opening the list of Remove a spell also shows what is on it.
 function ns.DefensiveListed()
 	local rows = {}
 	for id in pairs(D.Effective()) do
@@ -683,7 +601,6 @@ function ns.DefensiveListed()
 	return ByName(rows)
 end
 
--- Both work in a fight and with the page off: they change what is saved and nothing on screen. The container hears of it after combat.
 function ns.DefensiveAdd(id)
 	local saved = D.Saved()
 	if not (Whole(id) and SpellName(id)) then
@@ -702,7 +619,6 @@ function ns.DefensiveAdd(id)
 	if not saved.removed[id] and count >= MOST_ADDED then
 		return false, ("%d added spells is the most."):format(MOST_ADDED)
 	end
-	-- A buff the game's list names comes back by dropping its removal; any other is added.
 	if saved.removed[id] then
 		saved.removed[id] = nil
 	else
@@ -731,7 +647,6 @@ local function ParseID(text)
 	return Whole(id) and id or nil
 end
 
--- The IDs on the list whose name is the one typed, in any capitals.
 local function IDsNamed(text)
 	local found, wanted = {}, text:lower()
 	for id in pairs(D.Effective()) do
@@ -788,10 +703,6 @@ function D.Slash(rest)
 	end
 end
 
--- The game's container --------------------------------------------------------------------------------------------------------------
-
--- Three groups of buttons on one container for the player: the buffs the lists name that other players cast, every external defensive
--- the game flags that the lists do not name, and the defensives the player casts on themself.
 function D.Build()
 	D.tried = true
 	local holder = D.Holder()
@@ -814,7 +725,6 @@ function D.Build()
 	D.container = container
 	D.sized = Opt("size") .. ":" .. Opt("spacing")
 	if made then
-		-- The buffs the player casts on themself, off until Your own defensives is on; a refusal of this group leaves the other two.
 		local ownMade = pcall(function()
 			container:AddAuraGroup("own", "HELPFUL|PLAYER", { candidateFilters = { includeSpellIDs = D.OwnIDs() }, maxFrameCount = MOST_OWN,
 				layout = Layout(), initializeFrame = D.InitCall })
@@ -829,7 +739,6 @@ function D.Build()
 	D.path = "reading"
 end
 
--- The function the game calls for each button.
 function D.InitCall(button)
 	local ok, err = pcall(D.Init, button)
 	if not ok then
@@ -838,7 +747,6 @@ function D.InitCall(button)
 	end
 end
 
--- Turns the groups on or off; the third is on only with Your own defensives. A container call, allowed at any time.
 function D.Groups(on)
 	local container = D.container
 	if not container then
@@ -849,9 +757,6 @@ function D.Groups(on)
 	end
 end
 
--- The reading path -------------------------------------------------------------------------------------------------------------------
-
--- The colour of a class, or nil.
 local function ClassColour(unit)
 	local class = T.Ask(UnitClassBase, unit)
 	local colours = RAID_CLASS_COLORS
@@ -861,8 +766,6 @@ local function ClassColour(unit)
 	end
 end
 
--- The buffs on the player that the list names and the player did not cast, from one read: plain tables only. Nothing when the game
--- hides buffs.
 function D.Read()
 	if not T.Open() then
 		return nil
@@ -909,7 +812,6 @@ function D.Icon(index)
 	return icon
 end
 
--- One pass of the reading path: the icons that match what was read, and none when nothing could be read.
 function D.Pass()
 	D.scheduled = false
 	if D.path ~= "reading" or not ns.Enabled(KEY) or D.testing then
@@ -918,14 +820,11 @@ function D.Pass()
 	local read = D.Read()
 	local found = read or {}
 	local shown = {}
-	-- A defensive that was not in the last read (by its spell and its end, so a new cast counts) flashes as it lands; none at the first read,
-	-- nor at the first after the game hid buffs.
 	local before, now = D.landed, {}
 	D.landed = read and now or nil
 	for index = 1, math.min(#found, MOST_LISTED) do
 		local item, icon = found[index], D.Icon(index)
 		if icon then
-			-- No kind: the border keeps the colour of the page and Borderless hides it, as on the game's buttons (EdgeColour).
 			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { border = Opt("iconBorder") })
 			ns.IconCountdownHeight(icon, Opt("size"), D.BASE)
 			local landing = item.id .. ":" .. item.expires
@@ -980,7 +879,6 @@ function D.StartReading()
 			return
 		end
 		D.watcher = Own(frame)
-		-- The payload is not read where the game sends the event for the player alone: it may be withheld.
 		frame:SetScript("OnEvent", function(_, _, unit)
 			if D.path == "reading" and (D.playerOnly or (Plain(unit, "string") and unit == "player")) then
 				D.Queue()
@@ -1006,17 +904,6 @@ function D.StopReading()
 	end
 end
 
--- Sound when one lands ------------------------------------------------------------------------------------------------------------------
-
--- Sound when one lands (None by default): the game plays a sound as a listed defensive comes on the player, also in a fight, where the buff
--- cannot be read: a sound registered with the game plays even while it withholds the aura from addons (C_UnitAuras.AddAuraSound with trigger
--- Added, UnitAuraDocumentation.lua:11-27), as the trackers' sounds do (TrackerSound.lua, whose files the three sounds are). One registration for
--- each ID of the list that the player does not know as a spell (C_SpellBook.IsSpellKnown, else IsPlayerSpell), so a priest's own Power Word:
--- Shield stays silent. AddAuraSound has restrictions, so the registrations change only out of combat and while aura values are open
--- (C_Secrets.ShouldAurasBeSecret); a change that has to wait is tried again on a frame of this file's own at the end of a fight or of a
--- restriction, also while the page is off, so the registrations go once it is turned off. Sound when one ends (None by default) is one more
--- registration for each such ID, with trigger Removed, as the trackers' Sound when it drops is: the game plays it as the defensive leaves the
--- player. sounds: by spell ID and trigger ("10060:Added"), { id, file }. TRIGGERS: the row of each trigger.
 D.sounds = {}
 D.TRIGGERS = { Added = "sound", Removed = "endSound" }
 
@@ -1040,7 +927,6 @@ function D.Withheld()
 	return ok and not IsSecret(answer) and answer == true
 end
 
--- One D.SyncSounds out of combat, however often it is asked for meanwhile.
 function D.QueueSounds()
 	if D.soundQueued then
 		return
@@ -1052,7 +938,6 @@ function D.QueueSounds()
 	end)
 end
 
--- The wait for aura values to be open: the frame hears the end of a fight, of a restriction and a loading screen only while a change waits.
 function D.SoundsWait(on)
 	if on == (D.soundWaiting == true) then
 		return
@@ -1073,7 +958,6 @@ function D.SoundsWait(on)
 	end
 end
 
--- Makes the registrations match the page: drops the ones not wanted now or of another sound, adds the missing ones.
 function D.SyncSounds()
 	local auras = type(C_UnitAuras) == "table" and C_UnitAuras or {}
 	local add, remove = auras.AddAuraSound, auras.RemoveAuraSound
@@ -1085,14 +969,12 @@ function D.SyncSounds()
 		return
 	end
 	D.SoundsWait(false)
-	-- The file of each trigger whose row has a sound: Added for Sound when one lands, Removed for Sound when one ends.
 	local triggers = type(Enum) == "table" and Enum.UnitAuraSoundTrigger or nil
 	local files = {}
 	if D.Capable() and ns.Enabled(KEY) and Opt("place") ~= "off" and type(ns.TrackerSoundFile) == "function" then
 		for name, row in pairs(D.TRIGGERS) do
 			local file = ns.TrackerSoundFile(Opt(row))
 			local trigger = type(triggers) == "table" and triggers[name] or nil
-			-- Removed only where the game names it, so that a missing trigger is never taken for another.
 			if file and (trigger ~= nil or name == "Added") then
 				files[name] = { file = file, trigger = trigger }
 			end
@@ -1130,9 +1012,6 @@ function D.SyncSounds()
 	end
 end
 
--- Putting it all in place -------------------------------------------------------------------------------------------------------------
-
--- True when the game has the call that reads a unit's buffs. Without it the module makes nothing.
 function D.Capable()
 	return type(C_UnitAuras) == "table" and type(C_UnitAuras.GetUnitAuras) == "function"
 end
@@ -1174,12 +1053,10 @@ function D.Refresh()
 	end
 end
 
--- True while the Own spot has a handle in the movers.
 function ns.DefensivesOwnShown()
 	return ns.Enabled(KEY) and Opt("place") == "own"
 end
 
--- The movers set or put back the spot.
 function ns.DefensivesMoved()
 	if D.holder and ns.Enabled(KEY) then
 		ns.OutOfCombat(D.Place)
@@ -1195,9 +1072,6 @@ function D.Start()
 	D.Sync()
 end
 
--- The check and the test ---------------------------------------------------------------------------------------------------------------
-
--- What /flatui check says about this module, and about a listed buff on the player.
 function ns.DefensivesPathText()
 	if not D.Capable() then
 		return "Defensives on you: the game gives no buff information."
@@ -1250,15 +1124,12 @@ local function Now()
 	return type(GetTime) == "function" and GetTime() or 0
 end
 
--- The casters of the three samples, test mode's party (TestUnits.lua): a priest's shield, a paladin's protection and a warlock's ward.
 D.CASTERS = { { "Eli", "PRIEST" }, { "Mara", "PALADIN" }, { "Ivo", "WARLOCK" } }
 
--- The look of a sample: the border of the page's colour, which Borderless and Icon border off take away, as on the game's buttons (EdgeColour).
 function D.SampleLook()
 	return { border = Opt("iconBorder") ~= false }
 end
 
--- The caster's name under sample `index` while Caster's name is on, in the colour of the caster's class, as under the game's buttons.
 function D.SampleName(icon, index)
 	if not icon.name then
 		local made, name = pcall(icon.frame.CreateFontString, icon.frame, nil, "OVERLAY", "GameFontNormalSmall")
@@ -1285,8 +1156,6 @@ function D.SampleName(icon, index)
 	icon.name:Show()
 end
 
--- Ends a test: the sweeps are cleared, the icons hidden, and what the game did is said, with Sound when one ends played once as the samples go.
--- cut: a new test takes its place, and plays its own sounds, so this one plays none.
 function D.EndTest(token, cut)
 	local test = D.testing
 	if not test or (token and test ~= token) then
@@ -1303,7 +1172,6 @@ function D.EndTest(token, cut)
 		end
 	end
 	if not test.quiet then
-		-- Sound when one ends, once, as the samples go, as a real one leaving does.
 		local ends = Opt("endSound")
 		local line = ("Defensives on you: the sweep ended on %d of 3 icons. Sound when one lands: %s."):format(done,
 			D.SoundWords(Opt("sound"), test.sound))
@@ -1315,13 +1183,11 @@ function D.EndTest(token, cut)
 	if D.holder and not (ns.Enabled(KEY) and Opt("place") ~= "off") then
 		D.holder:Hide()
 	end
-	-- The read stood down while the samples showed: what is on the player now is read again.
 	if D.path == "reading" then
 		D.Queue()
 	end
 end
 
--- The words of a sound row in the line of the test: the sound's name and what the game did, or None.
 function D.SoundWords(word, result)
 	local kit = KITS[word]
 	if not kit then
@@ -1339,8 +1205,6 @@ function D.SoundWords(word, result)
 	return name .. ", the game played no sound"
 end
 
--- Sound when one lands (or the sound row given), once, for the samples: the kit whose file the game plays for a real defensive. Gives "none"
--- for None, else "played" or "refused".
 function D.SampleSound(word)
 	local kit = KITS[word or Opt("sound")]
 	if not kit then
@@ -1349,9 +1213,6 @@ function D.SampleSound(word)
 	return type(ns.PlayKit) == "function" and ns.PlayKit(kit, KEY) and "played" or "refused"
 end
 
--- Three samples for 8 seconds, each flashing as it appears as a defensive that lands does, with Sound when one lands once. quiet: for
--- PREVIEW seconds, with no sound and no line in the chat (ns.DefensivesLookChanged). A quiet test over one that runs keeps its start, so the
--- sweeps run on and the samples flash again only for path Flash when one lands or a sound row (D.FLASH_AGAIN): a slider drag does not strobe.
 D.FLASH_AGAIN = { [KEY .. ".flash"] = true, [KEY .. ".sound"] = true, [KEY .. ".endSound"] = true }
 
 function D.Test(quiet, path)
@@ -1386,7 +1247,6 @@ function D.Test(quiet, path)
 		icon.done = 0
 		list[index] = icon
 	end
-	-- The sweeps run 2, 4 and 6 seconds: once the longest has run out, a further step starts them again, still with no flash.
 	local now = Now()
 	if again and again.start and now - again.start < 6 then
 		now = again.start
@@ -1414,9 +1274,6 @@ function D.Test(quiet, path)
 	end
 end
 
--- True when a defensive the row would show is on the player. Where the game draws the row, any of its buttons that shows, listed, external or
--- the player's own, and one that cannot be asked counts as shown; else one of the list from another player, or with Your own defensives on
--- one of the player's own.
 function D.Up()
 	if D.path == "container" then
 		for _, parts in ipairs(D.list) do
@@ -1440,13 +1297,6 @@ function D.Up()
 	return false
 end
 
--- A row of the look changed (Place, Icon size, Spacing, Caster's name, Icon border, Flash when one lands), or a sound picked (Sound when one
--- lands, Sound when one ends): the page is refreshed, as without a changed function of the row (Core.lua's Changed), which also registers the
--- game's sounds for the pick (D.Sync, D.QueueSounds), and out of combat with test mode off (its own samples show then), no test of /flatui
--- test icons under way and no defensive on the player (none of the game's buttons shows), the three samples show for PREVIEW seconds in the
--- new look and at the new place, flashing in as they land, with no line in the chat and no sound of their own: the panel plays a pick once
--- itself. Each change keeps them up again, so a slider dragged keeps them up until PREVIEW after its last step; they flash once as they come
--- and again only at a change of Flash when one lands or a sound (D.Test). Place at Off takes a preview away at once.
 function ns.DefensivesLookChanged(path)
 	ns.Try(KEY, D.Refresh)
 	if D.testing and D.testing.quiet and Opt("place") == "off" then
@@ -1462,10 +1312,6 @@ function ns.DefensivesLookChanged(path)
 	ns.Try(KEY, D.Test, true, path)
 end
 
--- Test mode (TestMode.lua): while it is on, out of combat, with the page on and Place not Off, the holder shows three sample icons of its own, apart
--- from those of /flatui test icons. Each Sync lays them out again with Icon size and Spacing, so a change of the row shows at once, and the ticker
--- of test mode starts their sweeps again (IconRow.lua: ns.IconSampleHeld, ns.IconSampleLoop). Off, a fight and the page or the row going off take
--- them away; the holder then hides as Sync says.
 function D.Held()
 	local list = D.held or {}
 	D.held = list
@@ -1480,8 +1326,6 @@ function D.Held()
 			return
 		end
 	end
-	-- No flash and no sound at the end of a sweep: a sample that comes flashes, and the first to come since test mode came on plays Sound
-	-- when one lands, as a defensive that lands does.
 	local look, flash, came = D.SampleLook(), Opt("flash") ~= false, false
 	look.flash, look.sound = false, false
 	for index, icon in ipairs(list) do
@@ -1502,7 +1346,6 @@ function D.Held()
 	ns.IconLayout(list, holder, Opt("size"), Opt("spacing"), "right")
 end
 
--- The ticker of test mode: a sample whose sweep ended starts again, and flashes as a defensive cast again does.
 function D.Tick(now)
 	local again = {}
 	if Opt("flash") ~= false then
@@ -1585,12 +1428,10 @@ ns.Register(KEY, {
 		EDIT_MODE_LAYOUTS_UPDATED = function()
 			D.Refresh()
 		end,
-		-- A spell learnt is left out of Sound when one lands.
 		SPELLS_CHANGED = function()
 			D.QueueSounds()
 		end,
 	},
-	-- /flatui test, test on and test off are test mode's (Core.lua takes them first); test icons is the 8-second test of the icon rows.
 	slash = { check = D.Check, defensives = D.Slash, test = function(rest)
 		if not (rest or ""):lower():match("^%s*icons%s*$") then
 			print("/flatui test - samples of your hidden frames on screen until you turn it off; test on and test off also work")
@@ -1612,7 +1453,6 @@ ns.Register(KEY, {
 	Status = D.Status,
 })
 
--- The samples of test mode go at once at Off and at the start of a fight; the Refresh after it waits for the end of a fight (D.Refresh).
 TM.Register(KEY, {
 	module = KEY,
 	label = "Defensives on you",

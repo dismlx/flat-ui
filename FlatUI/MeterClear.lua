@@ -1,45 +1,12 @@
 local _, ns = ...
 
--- Clear the damage meter: hud.meterClear on the Messages and timers page (Off, the default; When you enter a dungeon or raid; Ask when you
--- enter one) with At each raid boss (hud.meterClearBoss, off), part "damage meter clear" of Minimap and HUD, which stops alone after a few
--- failures. Not a module: Hud.lua calls ns.MeterClearRefresh in every refresh of the page, and the events come through that module (ns.AddEvent),
--- so nothing is heard while the page is off.
--- The game's meter (Blizzard_DamageMeter, loaded at start on the standard and camelot clients: Blizzard_DamageMeter.toc:2) keeps its numbers until
--- the player clears them from its own menu, which calls C_DamageMeter.ResetAllCombatSessions (DamageMeterSessionWindow.lua:506-507). Flat UI makes
--- the same call, which the documentation lists with no protection or restriction (DamageMeterDocumentation.lua:123-127), and the game's windows
--- draw themselves again on DAMAGE_METER_RESET (DamageMeterSessionWindow.lua:95, 204). On PLAYER_ENTERING_WORLD and ZONE_CHANGED_NEW_AREA, when
--- IsInInstance says the player is in a dungeon or a raid ("party" or "raid": InstanceDocumentation.lua:170-178) and C_DamageMeter.IsDamageMeterAvailable
--- plainly says yes (DamageMeterDocumentation.lua:112-122), it waits 2 seconds and clears, or with Ask shows a popup of Flat UI's own, an entry of
--- StaticPopupDialogs shown with StaticPopup_Show (Blizzard_StaticPopup/StaticPopup.lua:309-325), as Clean up bags does (BagSort.lua), whose Yes
--- clears while the player is still in that instance. As Clean up bags' popup, it has no OnHide, so a No or an Escape runs no code of Flat UI's
--- (StaticPopup_OnHide calls a popup's OnHide directly and then rewrites the game's list of shown popups: StaticPopup.lua:630-664). Once the player
--- has left that instance or the rows no longer ask, Flat UI hides it with StaticPopup_Hide only while it is the one popup shown, as Errands hides
--- the game's (Errands.HideAlone): beside another one it stays up, since the game renews that list securely only once it is empty
--- (StaticPopup.lua:89-104), and its Yes then clears nothing. The instance is known by the 8th answer of GetInstanceInfo, its instance ID
--- (InstanceDocumentation.lua:103-120), kept in FlatUICharDB.meterClear with the time the player left it by the realm's clock (GetServerTime,
--- SystemTimeDocumentation.lua:30-37): a /reload inside, or a run back after a wipe, does not clear again; another instance does, and so does the
--- same one after an hour away. The instance the player is in when the row goes on, or at login, counts as entered already, so turning the row on
--- inside a dungeon clears nothing. A player found outside then, after a logout inside it or with the rows off, has been away since Flat UI last
--- saw them inside it (on entering, at the logout, as the rows went off). With At each raid boss, ENCOUNTER_START in a raid clears without
--- asking, on the next frame, outside the game's synchronous dispatch of that event (EncounterInfoDocumentation.lua:53-64). That clear runs in
--- the fight, which the documentation allows, though no code of the game's on Forever clears there. A withheld or failed answer counts as no
--- instance, so nothing is cleared, and every client call is in a pcall. /flatui status names the last clear and where it happened.
--- This follows the automatic clear of EnhanceQoL's damage meter by Philipp Barth (R41Z0R), adapted with his permission
--- (EnhanceQoLDamageMeter/DamageMeter.lua:42-43, 100, 1700-1712, 7665-7674 and 7696-7803): its Never, Ask and Always, its 2 seconds, its instance
--- key and its clear at a raid boss's pull. Flat UI clears the game's own meter, keeps the instance across a reload and waits for an hour away
--- before the same one clears again.
-
 local KEY, PART = "hud", "damage meter clear"
 local ROW, BOSS_ROW = "hud.meterClear", "hud.meterClearBoss"
 local POPUP = "FLATUI_METER_CLEAR"
--- Seconds after entering before the clear (EnhanceQoLDamageMeter/DamageMeter.lua:100), and the seconds away after which the same instance clears again.
 local DELAY, AWAY = 2, 3600
 local ASKS = { party = "Clear the damage meter for this dungeon?", raid = "Clear the damage meter for this raid?" }
 local PLACES = { party = "a dungeon", raid = "a raid" }
 
--- token: counts the clears asked for, so one that a later event or a change of the rows has made stale does nothing. pending: the instance a clear
--- waits for. on: the rows wanted a clear at the last refresh. asked: the popup may still be up (no OnHide tells when it goes). refused: the game
--- refused the last clear.
 local M = { token = 0, pending = nil, on = false, asked = false, refused = false }
 
 local function Choice()
@@ -55,7 +22,6 @@ local function Whole(value)
 	return ns.Finite(value) and value >= 0 and value == math.floor(value)
 end
 
--- The time by the realm's clock, which a reload or a new session keeps; nil when the game does not say.
 local function Now()
 	if type(GetServerTime) ~= "function" then
 		return nil
@@ -64,9 +30,6 @@ local function Now()
 	return ok and ns.Finite(now) and now or nil
 end
 
--- What the character keeps: instance, the ID of the dungeon or raid last entered with the row on; left, when the player left it (nil while inside);
--- seen, when Flat UI last knew the player to be inside it; last = { at, where, boss }, the last clear. A damaged value is dropped. Nil before the
--- saved data is read, or with make false when nothing is kept.
 local function Saved(make)
 	local char = ns.Character()
 	if type(char) ~= "table" then
@@ -96,8 +59,6 @@ local function Saved(make)
 	return saved
 end
 
--- The dungeon or raid the player is in: its kind ("party" or "raid"), its instance ID and its name. Nil anywhere else, and when the game withholds
--- an answer or a call fails.
 local function Where()
 	if type(IsInInstance) ~= "function" or type(GetInstanceInfo) ~= "function" then
 		return nil
@@ -133,7 +94,6 @@ local function Available()
 	return ok and not ns.IsSecret(yes) and yes == true
 end
 
--- Clears the meter and keeps when and where. False when the game refuses, which /flatui status says.
 local function Clear(where, boss)
 	local meter = Meter()
 	if meter == nil or not pcall(meter.ResetAllCombatSessions) then
@@ -148,7 +108,6 @@ local function Clear(where, boss)
 	return true
 end
 
--- A global string of the game's, or the English words when the client has none.
 local function Word(name, fallback)
 	local text = _G[name]
 	if type(text) == "string" and not ns.IsSecret(text) and text ~= "" then
@@ -157,8 +116,6 @@ local function Word(name, fallback)
 	return fallback
 end
 
--- Yes in the popup: the meter is cleared while the rows still ask and the player is still in the instance asked about. A popup left up beside
--- another one (Unask) can be answered after that.
 local function Accepted(_, data)
 	M.asked = false
 	if not Wanted() then
@@ -176,8 +133,6 @@ local function Accepted(_, data)
 	Clear(data.where)
 end
 
--- Puts the popup in the game's list of them, once. Like Clean up bags' popup, it has an OnAccept only: no OnHide or OnCancel, so a No, an Escape
--- or a hide by the game runs no code of Flat UI's.
 local function Register()
 	local list = StaticPopupDialogs
 	if type(list) ~= "table" or ns.IsSecret(list) then
@@ -199,10 +154,6 @@ local function Register()
 	return true
 end
 
--- Takes the popup down: the player has left the instance, or the rows no longer ask. Only while it is the one popup shown, with Errands' helper
--- for the game's popups (Errands.HideAlone reads StaticPopup1 to 4 with IsShown and their field which, then calls StaticPopup_Hide): hidden
--- beside another popup, it would leave values written by Flat UI's code in the game's list of shown popups, which the game renews securely only
--- once that list is empty (StaticPopup.lua:89-104). Beside another popup it stays up, and asked stays, so a later pass tries again.
 local function Unask()
 	if not M.asked then
 		return
@@ -219,8 +170,6 @@ local function Unask()
 	M.asked = up and not errands.HideAlone(POPUP)
 end
 
--- The popup that asks. Nothing is cleared when the client has no popups or will not show this one. One still up beside another popup is shown
--- again with this instance, as Clean up bags shows its own again (StaticPopup_Show takes the one up: StaticPopup.lua:379-386).
 local function Ask(kind, id, where)
 	Unask()
 	if type(StaticPopup_Show) ~= "function" or not Register() then
@@ -230,7 +179,6 @@ local function Ask(kind, id, where)
 	M.asked = M.asked or (ok and popup ~= nil and popup ~= false)
 end
 
--- DELAY seconds after the player entered: still in the same instance, the meter is cleared or the popup asks.
 local function Due(_, token, kind, id, where)
 	if token ~= M.token then
 		return
@@ -254,21 +202,15 @@ local function Due(_, token, kind, id, where)
 	end
 end
 
--- True after an hour away from the instance kept.
 local function Away(saved)
 	local now = Now()
 	return saved.left ~= nil and now ~= nil and now - saved.left >= AWAY
 end
 
--- PLAYER_ENTERING_WORLD and ZONE_CHANGED_NEW_AREA: in a dungeon or raid not kept, or kept but left an hour ago, a clear waits DELAY seconds.
 local function Entered()
 	local saved = Saved(true)
 	local kind, id, name = Where()
 	if kind == nil then
-		-- Out of every dungeon and raid: a clear that waits is dropped, the popup goes, and the time away from the last one starts. Now, not seen:
-		-- Apply ran as the rows went on and at login (Hud.lua's Start is its Refresh, run at PLAYER_LOGIN, which comes before
-		-- PLAYER_ENTERING_WORLD), so a left still empty here was heard as it happened, and seen, the time of entering, would date a long run's
-		-- exit from its start.
 		M.token, M.pending = M.token + 1, nil
 		Unask()
 		if saved and saved.instance ~= nil and saved.left == nil then
@@ -296,7 +238,6 @@ local function Entered()
 	end
 end
 
--- ENCOUNTER_START (encounterID, encounterName, difficultyID, groupSize): in a raid, with At each raid boss on, the meter is cleared without asking.
 local function Pulled(_, _, encounterName)
 	if ns.Get(BOSS_ROW) ~= true or type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then
 		return
@@ -316,8 +257,6 @@ local function Pulled(_, _, encounterName)
 	end)
 end
 
--- Notes the time while the player is still in the instance kept: should Flat UI next hear from the player outside it, after a logout inside it or
--- with the rows off, the time away counts from here.
 local function Seen(saved)
 	if saved == nil or saved.instance == nil or saved.left ~= nil then
 		return
@@ -328,9 +267,6 @@ local function Seen(saved)
 	end
 end
 
--- The rows went on, or the player logged in with them on: the instance the player is in counts as entered already, and outside the one kept the
--- time away from it counts from when Flat UI last saw the player inside it (Seen), or from now when it never did. The rows off: the time is noted
--- while the player is inside, a clear that waits is dropped and the popup goes.
 local function Apply()
 	local on = Wanted()
 	if on and not M.on then
@@ -362,14 +298,12 @@ end
 ns.AddEvent(KEY, "ENCOUNTER_START", function(...)
 	ns.EachPart(KEY, PART, Pulled, {}, ...)
 end, Heard)
--- A logout or a /reload inside the instance kept: the time away, if the player is outside it at the next login, counts from here (Apply).
 ns.AddEvent(KEY, "PLAYER_LOGOUT", function()
 	ns.EachPart(KEY, PART, function()
 		Seen(Saved(false))
 	end, {})
 end, Heard)
 
--- How long ago a time of the realm's clock was, in words.
 local function Ago(at)
 	local now = Now()
 	local seconds = now and math.max(0, now - at) or 0
@@ -408,8 +342,6 @@ ns.AddStatus(KEY, function()
 	return lines
 end)
 
--- Hud.lua calls this in every refresh of the module: a changed row, the page, the profile, the module stopped. Once the part has stopped on errors,
--- the rows count as off, so nothing waits and the popup goes.
 function ns.MeterClearRefresh()
 	if not ns.PartStopped(KEY, PART) then
 		ns.EachPart(KEY, PART, Apply, {})

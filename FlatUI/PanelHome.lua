@@ -1,18 +1,5 @@
 local _, ns = ...
 
--- The Home page of the options window: the profile in use, the accent and density, the last changes of the session with Undo, the modules
--- with their switches, and the changes that need a reload. A recent change says what it was, from the value before to the value now ("Off to On",
--- "300 ms to 450 ms"), in the words of the reset arrow's tooltip (ns.PanelTrust.ValueText), and its Undo names the value it puts back. A click on a
--- recent change or on a line of Needs a reload opens the tab of its setting, scrolls to the row and flashes it, as a search result does
--- (host.Arrive). A batch (a Reset page, the reload notice's Undo) is one line, "Reset page on Cast bars > Size" and its count, with one Undo that
--- puts the whole batch back, and counts as one line of the MAX kept (Home.Lines). Every Undo says in the strip what it did, as Ctrl+Z does. Also the
--- record of the changes made in the window, which Panel.lua feeds; Ctrl+Z on any page puts back the newest line (Home.UndoNewest), and Ctrl+Y or
--- Ctrl+Shift+Z makes again what Undo or Ctrl+Z took back, a batch in one press, until a new change is made (Home.Redo). A change whose value was
--- taken away since (Reset profile, Copy from, an import, setup's Finish) is left off the list until the value comes back, and a renamed profile
--- keeps its changes (Home.Renamed); Ctrl+Z with nothing to undo then says that the Profiles page's Bring back puts the profile back (ns.LostProfile).
--- Undo, Ctrl+Z and Ctrl+Y give the change they made with their words, so the window can show its row (Panel.lua, ui.ShowChange). Each line of Needs
--- a reload has an Undo of its own, dimmed in a fight, that puts that change alone back to its value at login (Home.UndoReload).
-
 local Home = {}
 ns.PanelHome = Home
 
@@ -24,14 +11,9 @@ local MARGIN, GAP, MAX = 24, 12, 50
 local SHOWN = 3
 local TILE_H, CARD_H = 64, 140
 
--- The record --------------------------------------------------------------------------------------------
-
 local log = {}
--- What Undo and Ctrl+Z took back, newest last, for Ctrl+Y: groups { entries, batch }, a group being one Undo (one change, or a whole batch).
 local undone = {}
 
--- The changes that need a reload, as ns.ReloadLines (Core.lua) gives them from the values at login, so a change made before the window was opened,
--- in setup, by a profile switch or a slash command, is listed too. Entries { label, field, path, value, was }, was being the value at login.
 function Home.ReloadLines()
 	return ns.ReloadLines()
 end
@@ -44,12 +26,10 @@ local function ReloadText(entry)
 end
 Home.ReloadText = ReloadText
 
--- Where a setting is saved: a key of the window is kept for the account, any other key in the profile in use.
 local function Where(item)
 	return item.path:sub(1, 6) == "panel." and "" or ns.Profile()
 end
 
--- Two values alike; a number the game holds can come back a hair off.
 local function Same(a, b)
 	if type(a) == "number" and type(b) == "number" then
 		return math.abs(a - b) <= 1e-6 * math.max(1, math.abs(b))
@@ -57,7 +37,6 @@ local function Same(a, b)
 	return a == b
 end
 
--- True while the value a change made is still the setting's value: a reset, a copy, an import that replaces or setup's Finish can take it away.
 local function Stands(entry)
 	local ok, now = pcall(ns.Get, entry.item.path)
 	if not ok or ns.IsSecret(now) then
@@ -66,7 +45,6 @@ local function Stands(entry)
 	return Same(now, entry.new)
 end
 
--- The record keeps MAX lines of Recent changes: a batch counts as one, and its changes go together.
 local function Trim()
 	local count, last = 0, nil
 	for index, entry in ipairs(log) do
@@ -83,11 +61,6 @@ local function Trim()
 	end
 end
 
--- A change made in the window: the setting, the profile it was saved in, the value it had and the value it has. A setting has one line: a new change
--- to it replaces the line and keeps the first value, so a slider that moves 20 times is one line, and a change back to the first value takes the line
--- away. A line whose value was taken away meanwhile (Stands) is replaced without its first value. A change of a batch (Reset page: { label }) is a line
--- of its own, merged with nothing, so the line of an earlier change of the setting waits under it, hidden while the reset stands (Log). The record
--- keeps MAX lines (Trim). A new change ends what Ctrl+Y can do again.
 function Home.Noted(item, before, after, batch)
 	if type(item) ~= "table" or not item.path or before == after then
 		return
@@ -113,9 +86,6 @@ function Home.Noted(item, before, after, batch)
 	Trim()
 end
 
--- The changes made in the profile in use and in the window, newest first. A change made in another profile is not listed, nor one whose value no
--- longer stands (Reset profile, Copy from, an import, setup's Finish, a profile switch): Undo and Ctrl+Z cannot reach it, and it shows again when
--- the value comes back.
 function Home.Log()
 	local list, profile = {}, ns.Profile()
 	for _, entry in ipairs(log) do
@@ -126,8 +96,6 @@ function Home.Log()
 	return list
 end
 
--- The lines of Recent changes: Log with each run of the changes of one batch (a Reset page, the reload notice's Undo) folded into one line, newest
--- first. A line is { entry (its first change, whose row a click opens), entries, batch }.
 function Home.Lines(list)
 	local lines = {}
 	for _, entry in ipairs(list or Home.Log()) do
@@ -141,7 +109,6 @@ function Home.Lines(list)
 	return lines
 end
 
--- A renamed profile keeps its changes (ns.RenameProfile, Core.lua), and what Ctrl+Y can do again.
 function Home.Renamed(old, new)
 	for _, entry in ipairs(log) do
 		if entry.profile == old then
@@ -157,7 +124,6 @@ function Home.Renamed(old, new)
 	end
 end
 
--- The words of a setting and of a value, as the reset arrow's tooltip has them.
 local function LabelOf(entry)
 	return type(entry.item.label) == "string" and entry.item.label or "a setting"
 end
@@ -166,7 +132,6 @@ local function ValueOf(entry, value)
 	return ns.PanelTrust and ns.PanelTrust.ValueText(entry.item, value) or "changed"
 end
 
--- Takes a change out of the record and puts its setting back to the value before it.
 local function Take(entry)
 	for index, other in ipairs(log) do
 		if other == entry then
@@ -177,7 +142,6 @@ local function Take(entry)
 	ns.Set(entry.item.path, entry.old)
 end
 
--- What the strip says of one change put back: "Undid Border colour: back to #000000."
 function Home.UndoText(entry)
 	local old = ValueOf(entry, entry.old)
 	if old == "changed" then
@@ -186,16 +150,12 @@ function Home.UndoText(entry)
 	return ("Undid %s: back to %s."):format(LabelOf(entry), old)
 end
 
--- Puts a setting back to the value it had before the change, and keeps the change for Ctrl+Y. Returns what the strip says, and the change, whose row
--- Ctrl+Z shows (Panel.lua, ui.ShowChange).
 function Home.Undo(entry)
 	Take(entry)
 	undone[#undone + 1] = { entries = { entry } }
 	return Home.UndoText(entry), entry
 end
 
--- Puts back every change of a batch that Log (or list) still shows, newest first, as one step of Ctrl+Y. Returns what the strip says, a batch of one
--- change saying it as that change's Undo does, and the oldest change it put back: the first row of a Reset page.
 function Home.UndoBatch(batch, list)
 	local taken = {}
 	for _, other in ipairs(list or Home.Log()) do
@@ -214,10 +174,6 @@ function Home.UndoBatch(batch, list)
 	return ("Undid %s: %d settings back."):format(batch.label or "Reset page", #taken), taken[#taken]
 end
 
--- Ctrl+Z on the options pages (Panel.lua, BuildKeys): the newest line of Recent changes goes back, as its Undo does, and each press goes one line
--- further back. A Reset page goes back whole in one press, every row it reset. Returns what the strip says, and the change (Home.Undo). With
--- nothing to undo while Reset profile, Copy from, an import or setup's Finish took the profile in use this session, it says that Bring back of
--- the Profiles page puts it back (ns.LostProfile, Core.lua).
 function Home.UndoNewest()
 	local list = Home.Log()
 	local entry = list[1]
@@ -234,7 +190,6 @@ function Home.UndoNewest()
 	return Home.Undo(entry)
 end
 
--- A change Undo took back can be made again while its setting still has the value Undo gave it, in the profile it was made in.
 local function Redoable(entry)
 	if entry.profile ~= Where(entry.item) then
 		return false
@@ -243,9 +198,6 @@ local function Redoable(entry)
 	return ok and not ns.IsSecret(now) and Same(now, entry.old)
 end
 
--- Ctrl+Y or Ctrl+Shift+Z on the options pages (Panel.lua, BuildKeys): the newest step that Undo or Ctrl+Z took back is made again, a whole batch in
--- one press, and goes back into Recent changes where it was. A step of another profile waits for that profile; a new change ends them all (Noted).
--- Returns what the strip says, and the oldest change it made again (the first row of a Reset page), whose row Ctrl+Y shows (Panel.lua, ui.ShowChange).
 function Home.Redo()
 	for index = #undone, 1, -1 do
 		local group = undone[index]
@@ -257,7 +209,6 @@ function Home.Redo()
 		end
 		if #redo > 0 then
 			table.remove(undone, index)
-			-- Oldest first, so the record reads as it did before the Undo.
 			for at = #redo, 1, -1 do
 				local entry = redo[at]
 				ns.Set(entry.item.path, entry.new)
@@ -273,16 +224,12 @@ function Home.Redo()
 			end
 			return ("Redid %s: %d settings again."):format(group.batch and group.batch.label or "the change", #redo), redo[#redo]
 		elseif group.entries[1] and group.entries[1].profile == Where(group.entries[1].item) then
-			-- Its settings were changed since by something else (a slash command, setup's Finish): it cannot come back.
 			table.remove(undone, index)
 		end
 	end
 	return "Nothing to redo."
 end
 
--- The Undo of a line of Needs a reload: that change alone goes back to the value the game runs since login, so it needs no reload, by the rule of the
--- reload notice's Undo (Reload.lua, NoticeUndo): not in a fight. It goes into the record as a change of its own, so Recent changes, Ctrl+Z and Ctrl+Y
--- can make the change again, and the line and the notice go once nothing needs a reload.
 function Home.UndoReload(entry)
 	if type(entry) ~= "table" then
 		return
@@ -300,14 +247,13 @@ function Home.UndoReload(entry)
 		geterrorhandler()(err)
 	elseif ns.Get(path) == was then
 		local item = ns.Def(path) or { path = path, label = label }
-		Home.Noted(item, now, was)
-		kit.Say(("Undid %s: back to %s. It needs no reload now."):format(type(label) == "string" and label or "a setting",
-			ns.PanelTrust.ValueText(item, was)))
+		local name = type(label) == "string" and label or "a setting"
+		Home.Noted(item, now, was, { label = "Undo of " .. name, what = "Needs a reload's Undo" })
+		kit.Say(("Undid %s: back to %s. It needs no reload now. Ctrl+Z makes it again."):format(name, ns.PanelTrust.ValueText(item, was)))
 	end
 	kit.Refresh()
 end
 
--- A change made on Home goes into the record like the same change on the Flat UI page: with the row of Config.lua of the key.
 local function Choose(path, label, value)
 	local item = { path = path, label = label }
 	for _, page in ipairs(ns.PAGES) do
@@ -322,15 +268,12 @@ local function Choose(path, label, value)
 	Home.Noted(item, before, ns.Get(path))
 end
 
--- The number of settings of each module that are not at their default, by the page of the module. A setting that the game or a function of ns holds is
--- not counted.
 function Home.Counts(model)
 	local counts = {}
 	for _, page in ipairs(ns.PAGES) do
 		local entry = model.byKey[page.key]
 		if entry then
 			local top = Nav.Top(model, entry)
-			-- A page of the sidebar that is part of another module counts on that module's tile.
 			top = top.partOf and model.byKey[top.partOf] or top
 			for _, item in ipairs(page) do
 				if item.path and item.kind ~= "list" and item.kind ~= "entries" and not ns.RowUnsaved(item) and ns.Get(item.path) ~= item.default then
@@ -342,8 +285,6 @@ function Home.Counts(model)
 	return counts
 end
 
--- The modules as the sidebar lists them: the entries of the groups, in order. A page of the sidebar that holds part of another module (Buffs
--- and debuffs of Minimap and HUD) is no module of its own: it has its module's switch, and the module has one tile.
 function Home.Modules(model)
 	local list = {}
 	for _, group in ipairs(Nav.Groups(model)) do
@@ -356,7 +297,6 @@ function Home.Modules(model)
 	return list
 end
 
--- "17 of 24 modules on".
 function Home.Subtitle(model)
 	local on, total = 0, 0
 	for _, entry in ipairs(Home.Modules(model)) do
@@ -368,7 +308,6 @@ function Home.Subtitle(model)
 	return ("%d of %d modules on"):format(on, total)
 end
 
--- The page of the sidebar a row of a page is on, or nil.
 local pageOf
 function Home.EntryOf(model, item)
 	if not pageOf or pageOf.model ~= model then
@@ -384,7 +323,6 @@ function Home.EntryOf(model, item)
 	return item and pageOf[item]
 end
 
--- The row of the options pages that sets a saved path, and its page, or nil.
 function Home.RowOf(model, path)
 	for _, entry in ipairs(model.pages) do
 		for _, row in ipairs(entry.page) do
@@ -396,7 +334,6 @@ function Home.RowOf(model, path)
 	return nil
 end
 
--- The words that say where a setting is: its module, and the page when that is a tab of the module.
 local function Crumb(model, item)
 	local entry = Home.EntryOf(model, item)
 	if not entry then
@@ -409,10 +346,8 @@ local function Crumb(model, item)
 	local frame = ns.PanelTabs.FrameName(entry)
 	return top.label .. " > " .. (ns.PanelTabs.Label(model, entry) or entry.label) .. (frame and " > " .. frame or "")
 end
--- The strip names it after Ctrl+Z or Ctrl+Y on another tab (Panel.lua, ui.ShowChange).
 Home.Crumb = Crumb
 
--- How many characters use a profile; the profile in use counts this character at least. The title bar of the window says it too (Panel.lua).
 function Home.UserCount(name)
 	local db = ns.Account()
 	local count = 0
@@ -432,12 +367,9 @@ local function Users(name)
 	return count == 1 and "Used by 1 character" or ("Used by %d characters"):format(count)
 end
 
--- The page ------------------------------------------------------------------------------------------------
-
 local ACCENTS = { { "indigo", "Indigo" }, { "sage", "Sage" }, { "amber", "Amber" }, { "rose", "Rose" }, { "ice", "Ice" }, { "class", "Class colour" },
 	{ "custom", "Custom" } }
 
--- A row of segments for a choice of the look: the chosen one in the accent. Returns the function that paints it again.
 local function Segmented(row, choices, path, label)
 	local frame = kit.Frame(row.frame)
 	frame:SetSize(#choices * 84, 24)
@@ -484,8 +416,6 @@ local function Segmented(row, choices, path, label)
 	end
 end
 
--- host: Model(), right, width, top and height of the column, Show(entry), Arrive(entry, item), Setup(), Call(name), Act(name, ...), ProfileLines(),
--- Profile(), Toggle(item).
 function Home.Build(host)
 	local scroller = kit.Scroller(host.right, host.width, host.height)
 	scroller.frame:SetPoint("TOPLEFT", host.right, "TOPLEFT", 0, -host.top)
@@ -516,7 +446,6 @@ function Home.Build(host)
 		frame:SetSize(w, h)
 	end
 
-	-- Profile
 	local profile = Card(half, "Profile")
 	local row = kit.NewRow(profile, 32, "Profile in use")
 	local menu = kit.Dropdown(row, 190, {
@@ -529,8 +458,6 @@ function Home.Build(host)
 	menu.frame:SetPoint("RIGHT", row.frame, "RIGHT", 0, 0)
 	local users = kit.Dim(kit.Label(profile, "GameFontHighlightSmall", "LEFT", half - 32))
 	users:SetPoint("TOPLEFT", profile, "TOPLEFT", 16, -(32 + rowH + 8))
-	-- The three buttons share the room by the length of their text (the third field, in twelfths), so Set up my screen fits at every density.
-	-- Ready-made opens the welcome screen's ready-made looks (SetupWelcome.lua).
 	local room = half - 32 - 16
 	local buttons = { { "Set up my screen", function() host.Setup() end, 5 }, { "Export", function() ns.OpenPanelShare() end, 3 },
 		{ "Ready-made", function() host.Call("OpenProfiles") end, 4 } }
@@ -546,7 +473,6 @@ function Home.Build(host)
 		users:SetText(Users(host.Profile()))
 	end
 
-	-- Accent and density
 	local look = Card(half, "Accent and density")
 	local accentRow = kit.NewRow(look, 32, "Accent")
 	local swatches = {}
@@ -588,12 +514,10 @@ function Home.Build(host)
 	refreshers[#refreshers + 1] = Segmented(kit.NewRow(look, 32 + 2 * rowH, "Corners"), { { "square", "Square" }, { "soft", "Soft" }, { "round", "Round" } },
 		"panel.corners", "Corners")
 
-	-- Needs a reload
 	local reload = Card(inner, "Needs a reload")
 	local reloadButton = kit.Button(reload, "Reload", 88, ns.Reload)
 	reloadButton:SetPoint("TOPRIGHT", reload, "TOPRIGHT", -16, -4)
 	ns.SecureReload(reloadButton)
-	-- A line of a setting lights up under the mouse, and a click opens its row (Open). line.path, or line.entry of a recent change, names it.
 	local function Opens(frame, line)
 		local fill = kit.Fill(frame, "BACKGROUND")
 		fill:SetAllPoints(frame)
@@ -631,7 +555,6 @@ function Home.Build(host)
 		line.label = kit.Label(frame, "GameFontHighlight", "LEFT", inner - 32 - 70)
 		line.label:SetPoint("LEFT", frame, "LEFT", 4, 0)
 		Opens(frame, line)
-		-- Undo puts back this change alone (Home.UndoReload); its tip in the strip names the value it puts back.
 		line.undo = kit.Button(frame, "Undo", 60, function()
 			Home.UndoReload(line.entry)
 		end)
@@ -651,7 +574,6 @@ function Home.Build(host)
 		reloadLines[index] = line
 	end
 
-	-- Recent changes
 	local recent = Card(inner, "Recent changes")
 	local more = kit.Frame(recent)
 	more:SetSize(120, 20)
@@ -675,7 +597,6 @@ function Home.Build(host)
 		Opens(frame, line)
 		line.label = kit.Label(frame, "GameFontHighlight", "LEFT", 200)
 		line.label:SetPoint("LEFT", frame, "LEFT", 0, 0)
-		-- What the change was: the value before it to the value now.
 		line.value = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", 190))
 		line.value:SetPoint("LEFT", line.label, "RIGHT", 8, 0)
 		local rule = kit.Fill(frame, "BORDER")
@@ -685,7 +606,6 @@ function Home.Build(host)
 		kit.Painted(function()
 			Look.Solid(rule, "line-faint")
 		end)
-		-- Undo puts back the change, or every change of a batch line, and the strip says what it did, as Ctrl+Z does.
 		local undo = kit.Button(frame, "Undo", 70, function()
 			if line.entry then
 				local text = line.batch and Home.UndoBatch(line.batch) or Home.Undo(line.entry)
@@ -694,8 +614,6 @@ function Home.Build(host)
 			end
 		end)
 		undo:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
-		-- Its tip in the strip names the value it puts back, or how many settings a batch line puts back; the hover fill of kit.Button stays (HookScript
-		-- on a frame of Flat UI's own).
 		undo:HookScript("OnEnter", function()
 			if line.entry then
 				local keys = " Ctrl+Z puts back the newest change; Ctrl+Y does it again."
@@ -716,7 +634,6 @@ function Home.Build(host)
 		return line
 	end
 
-	-- Modules
 	local modulesLabel = kit.Dim(kit.Label(child, "GameFontHighlight", "LEFT", 300))
 	modulesLabel:SetText("Modules")
 	local modulesCount = kit.Dim(kit.Label(child, "GameFontHighlight", "RIGHT", 300))
@@ -734,13 +651,11 @@ function Home.Build(host)
 		tile.icon:SetSize(20, 20)
 		tile.icon:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -12)
 		Nav.Cell(tile.icon, Nav.CELLS[entry.key] and entry.key or "more")
-		-- The icon is in the colour of the text, fainter when the module is off.
 		function tile.Paint()
 			local r, g, b = Look.Colour(tile.live and "text" or "text-dim")
 			tile.icon:SetVertexColor(r, g, b, tile.live and 0.9 or 0.45)
 		end
 		kit.Painted(tile.Paint)
-		-- The name has two lines to the right edge. The state and the switch are under it.
 		tile.name = kit.Label(frame, "GameFontHighlight", "LEFT", tileW - 40 - 12, true)
 		tile.name:SetJustifyV("TOP")
 		tile.name:SetHeight(30)
@@ -800,7 +715,6 @@ function Home.Build(host)
 		for _, refresh in ipairs(refreshers) do
 			refresh()
 		end
-		-- The recent changes, a batch of more than one change (a Reset page) on one line with its count and no crumb.
 		local mine = Home.Lines()
 		local total = #mine
 		local shownLines = view.all and total or math.min(total, SHOWN)
@@ -815,7 +729,6 @@ function Home.Build(host)
 				local entry = group.entry
 				line.entry, line.batch, line.count = entry, group.batch, #group.entries
 				if group.batch and line.count > 1 then
-					-- The batch's name takes the room of the crumb it does not have.
 					line.label:SetWidth(400)
 					line.label:SetText(group.batch.label or "Reset page")
 					line.value:SetText(("%d settings"):format(line.count))
@@ -823,7 +736,6 @@ function Home.Build(host)
 				else
 					line.label:SetWidth(200)
 					line.label:SetText(entry.item.label or "")
-					-- Two values that read alike (a list, a value with no words of its own) say nothing.
 					local Value = ns.PanelTrust.ValueText
 					local old, new = Value(entry.item, entry.old), Value(entry.item, entry.new)
 					line.value:SetText(old ~= new and ("%s to %s"):format(old, new) or "")
@@ -838,7 +750,6 @@ function Home.Build(host)
 				lines[index].frame:Hide()
 			end
 		end
-		-- What needs a reload
 		local needed = Home.ReloadLines()
 		local fight = InCombatLockdown() == true
 		for index, line in ipairs(reloadLines) do
@@ -854,7 +765,6 @@ function Home.Build(host)
 			line.undo:SetAlpha(fight and 0.4 or 1)
 			line.frame:SetShown(entry ~= nil)
 		end
-		-- The modules
 		local counts, on = Home.Counts(model), 0
 		for _, tile in ipairs(tiles) do
 			local count = counts[tile.entry] or 0

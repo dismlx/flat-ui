@@ -1,72 +1,27 @@
 local _, ns = ...
 
--- Enemy cooldowns: up to four icons beside the nameplate of each enemy player, each an ability with the time left on its cooldown.
--- Place on nameplates hangs the row right of the health bar (the default), left of it, above the name or below the bar, each time past
--- the parts the plate shows there and the room the game keeps for its own icons, so the row stays off the enemy's character (E.Spot).
--- A use is seen from a kick that stopped the player's own cast (Tracking.lua), from the casts of the enemy where the game does not
--- hide them, and from the buffs of abilities where the game does not hide buffs (Tracking.lua keeps the timers and listens, one
--- small frame for each nameplate of an enemy player). The game hides the casts of every unit but the player and his pet, in or out
--- of a fight (SecretPredicatesDocumentation.lua:114-118, UnitDocumentation.lua:4847-4855), and buffs while a fight is on (84-88): a
--- hidden cast still comes, with its spell ID withheld. Nothing addon code may call turns that ID into a use of one of the listed
--- abilities: telling which one it is takes a comparison or a lookup, which a withheld value refuses, the cooldown sweep and the duration
--- objects refuse a withheld length (FrameAPICooldownDocumentation.lua:281-346, LuaDurationObjectAPIDocumentation.lua:432-470), and the
--- spell calls that take one tell the player's own cooldown, not the enemy's (SpellDocumentation.lua:309-345). So such a cast is left
--- alone, and an icon claims only what was seen: with Show on Always an ability with no timer is bright, ready, only while a use of it
--- would be seen and could have been for one cooldown before (E.Visible); any other is dim with a question mark, ready or used not known.
--- The game's spell-ID groups serve units the player can assist only, so the container route is not used here. The rows are frames of
--- this addon's own, children of the nameplate's unit frame only when the game says plainly that it is not protected, else after
--- combat, and placed again in a fight only on such a plate. In combat only the picture, the sweep, the colour and show or hide of icons
--- that exist are touched. Two bars of up to eight icons, for the target and the focus, are rows of the same kind that hang from
--- UIParent, above the target and focus frames until a spot is saved with the movers. Pointing at an icon of those bars writes the ability with
--- its class, in its kind's colour, the enemy's name and Ready, the time left or that its use is not known, in GameTooltip (Icon tooltips: On,
--- Out of combat only or Off), written again each second while the mouse stays, so the time counts down and turns to Ready (E.TipTick); those
--- icons take the mouse's motion only, never a click. Icons on nameplates take no mouse, so plates are
--- clicked as ever. Flash when ready flashes the icon at the end of a timer and, for the target and focus, Sound plays, but only for a cooldown
--- at least Shortest cooldown that sounds long (0 by default, every one; E.Loud), so a Kick or a Pummel can end quiet while a Divine Shield
--- rings; the flash is for every one. /flatui test icons and the samples of test mode follow both rows (the samples have no length and
--- always sound). The Add and Hide
--- lists and /flatui enemy are kept for the account. The helpers are in one table, E.
-
 local KEY = "enemycd"
 local SPACING = 2
--- Units between the part of the plate the row hangs from and the row.
 local BELOW = 1
 local MOST = 4
 local BAR_MOST = 8
--- Units between the top of a target or focus frame and the bottom of its bar.
 local BAR_UP = 4
 local LOOK = 0.5
 local TEST_TIME = 8
 local UNKNOWN_ICON = 134400
--- How long an icon whose timer has ended stays to flash, how long after the end of a timer the addon still counts it as just ended, and
--- how long after the end the addon looks for itself in case the game does not say the sweep is done.
 local HOLD = 0.5
 local JUST = 1
 local NET_LATE = 0.1
--- The look of a used icon in Always, the abilities added by hand at most, and the longest cooldown and the highest spell ID that can be typed.
 local DARK = 0.6
--- The colours of a tooltip's lines: Ready, and the text-dim of the windows (PanelLook.lua).
 local READY = { 0.4, 0.9, 0.4 }
 local DIM = { 0.66, 0.68, 0.62 }
--- The look of an icon in Always whose ability may be ready or used: its use could not be seen. Its question mark takes the font of the
--- countdown numbers of an icon that size (the largest size with each font).
 local UNKNOWN = 0.45
 local MARK_FONTS = { { 22, "NumberFontNormalSmall" }, { 36, "NumberFontNormal" }, { 52, "NumberFontNormalLarge" }, { math.huge, "NumberFontNormalHuge" } }
--- The room the game keeps on a plate for its own icons: two crowd control icons right of the health bar and two buffs left of it
--- (Blizzard_NamePlates.xml:228-243), one row of debuffs above the name (Blizzard_NamePlateUnitFrame.lua:864-869), each icon AURA units
--- high times the plate's aura scale (Blizzard_NamePlateConstants.lua:30, Blizzard_NamePlateAuras.lua:274, 286, 505-510). Right of the bar
--- the crowd control list starts CC_GAP past the bar or the level box (Blizzard_NamePlateUnitFrame.lua:877; Nameplates.lua puts it past
--- Flat UI's level box and a class icon on that side); left of it the buffs hang past the raid marker and the classification icon
--- (Blizzard_NamePlates.xml:186-199, 235).
 local AURA, AURAS_BESIDE, CC_GAP = 25, 2, 5
 local RAID_MARK, CLASSIFICATION, BUFF_GAP = 22, 20, 5
--- The space Flat UI's class icon above the name keeps from it (Nameplates.lua: GAP).
 local ICON_GAP = 3
--- Buffs that never give the start of a use. Grounding Totem Effect (8178) is an aura of the totem's area (SpellEffect: effect 65, aura
--- 96) with no duration of its own (SpellMisc: duration index 21), and Tracking.lua reads no start from a buff with no length.
 local NO_START = { [8178] = true }
 local MOST_ADDED, MOST_SECONDS, MOST_ID = 30, 86400, 9999999
--- The places of the Sound choices in ns.SOUNDS (IconRow.lua).
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 local HELP = {
 	"/flatui enemy add Blink 15 - an ability, a spell ID or a shift-clicked spell, and its cooldown in seconds",
@@ -75,7 +30,6 @@ local HELP = {
 	"/flatui enemy clear - forgets the running timers of enemies",
 }
 local PLATES = 40
--- The kinds each switch shows (CooldownData.lua: ns.COOLDOWN_KINDS), in the order of the icons.
 local SWITCHES = { { "interrupts", { 1 } }, { "wards", { 6 } }, { "breaks", { 5 } }, { "defensives", { 2 } }, { "mobility", { 7 } }, { "offensive", { 8 } } }
 local LINE_CASTS = "Enemy cooldowns: the game hides enemy casts. Abilities with a buff are tracked while you are out of combat."
 local LINE_HERE = "Enemy cooldowns: the game hides enemy casts and buffs here. Timers already running stay."
@@ -90,7 +44,6 @@ local T = ns.Tracking
 local TM = ns.TestMode
 local E = { plates = {}, rows = setmetatable({}, { __mode = "k" }), stuck = {}, tex = {}, byKey = nil, order = nil, never = {}, holds = setmetatable({}, { __mode = "k" }),
 	owners = setmetatable({}, { __mode = "k" }),
-	-- The time buffs became readable again after the game hid them (E.Sight), and whether they were readable at the last look.
 	sight = -math.huge, open = nil,
 	arena = { on = false, stamp = 0, tex = {}, raised = false, durationRaised = false },
 	bars = { target = { unit = "target", mover = "FlatUIEnemyTarget", frame = "TargetFrame" }, focus = { unit = "focus", mover = "FlatUIEnemyFocus", frame = "FocusFrame" } } }
@@ -103,13 +56,11 @@ local function Plain(value, kind)
 	return not IsSecret(value) and type(value) == kind
 end
 
--- A game call that answers a plain string, or nil.
 local function Text(fn, ...)
 	local answer = T.Ask(fn, ...)
 	return Plain(answer, "string") and answer ~= "" and answer or nil
 end
 
--- Runs fn on the next frame, or at once when the client has no timer.
 local function Soon(fn)
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
 		C_Timer.After(0, fn)
@@ -118,9 +69,6 @@ local function Soon(fn)
 	end
 end
 
--- The plates ---------------------------------------------------------------------------------------------------------------------
-
--- The unit frame of the plate of a unit token, or nil when there is none or the game forbids it.
 function E.UnitFrameOf(unit)
 	local plate = T.Ask(type(C_NamePlate) == "table" and C_NamePlate.GetNamePlateForUnit or nil, unit)
 	if type(plate) ~= "table" then
@@ -135,23 +83,18 @@ function E.UnitFrameOf(unit)
 	return frame
 end
 
--- True while the plates show icons: Place is Both or On enemy nameplates.
 function E.PlatesOn()
 	return Opt("place") ~= "bars"
 end
 
--- True while the target and focus bars show icons: Place is Both or Bars for target and focus.
 function E.BarsOn()
 	return Opt("place") ~= "plates"
 end
 
--- True when the unit is an enemy player: both answers are plain and true.
 function E.Enemy(unit)
 	return T.Ask(UnitIsPlayer, unit) == true and T.Ask(UnitCanAttack, "player", unit) == true
 end
 
--- The part of a unit frame a row below the bar hangs from: the widget container, which the game hangs under the cast bar
--- (Blizzard_NamePlateUnitFrame.lua:550-557), else the cast bars, else the frame.
 function E.Target(frame)
 	for _, name in ipairs({ "WidgetContainer", "CastBarsContainer" }) do
 		local ok, part = pcall(function()
@@ -164,8 +107,6 @@ function E.Target(frame)
 	return frame
 end
 
--- A part of a unit frame by its keys, each inside the one before (AurasFrame, then CrowdControlListFrame), or nil when one is missing or
--- the game forbids it. Only read.
 function E.Part(frame, ...)
 	local part = frame
 	for index = 1, select("#", ...) do
@@ -181,7 +122,6 @@ function E.Part(frame, ...)
 	return part
 end
 
--- True when a part of a plate shows: the game says so plainly.
 function E.Shown(part)
 	if not part then
 		return false
@@ -190,7 +130,6 @@ function E.Shown(part)
 	return ok and Plain(shown, "boolean") and shown
 end
 
--- The scale the game draws the aura icons of a plate at (Blizzard_NamePlateAuras.lua:505-510), else 1.
 function E.AuraScale(frame)
 	local auras = E.Part(frame, "AurasFrame")
 	if not auras then
@@ -205,8 +144,6 @@ function E.AuraScale(frame)
 	return 1
 end
 
--- True when the game draws the name inside the health bar (Modern and Block styles): the debuffs then hang over the bar, not the name
--- (Blizzard_NamePlateUnitFrame.lua:864-869). Only read.
 function E.NameInside()
 	local options, constants = NamePlateSetupOptions, NamePlateConstants
 	if not (Plain(options, "table") and Plain(constants, "table")) then
@@ -218,15 +155,11 @@ function E.NameInside()
 	return ok and Plain(style, "number") and Plain(inside, "number") and style == inside
 end
 
--- The space the game keeps between the name and the debuffs over it, its setting nameplateDebuffPadding
--- (Blizzard_NamePlateUnitFrame.lua:864-869), else none.
 function E.Padding()
 	local number = tonumber(Text(type(C_CVar) == "table" and C_CVar.GetCVar or nil, "nameplateDebuffPadding") or "")
 	return ns.Finite(number) and math.max(number, 0) or 0
 end
 
--- How high over the name of an enemy player (over the bar, with the name inside it) Flat UI's class icon reaches with Class icon position
--- Above (Nameplates.lua PlaceIcon): its gap, its size (the bar's height while it fits the bar) and its offset up. 0 when it is not there.
 function E.IconAbove(frame)
 	if not (ns.Enabled("nameplates") and ns.Get("nameplates.classEnemy") == true and ns.Get("nameplates.classPosition") == "above") then
 		return 0
@@ -244,12 +177,6 @@ function E.IconAbove(frame)
 	return ICON_GAP + (ns.Finite(size) and size or 0) + (ns.Finite(up) and math.max(up, 0) or 0)
 end
 
--- Where Place on nameplates hangs the row of a plate: the point of the row, the part of the plate, its point and the two offsets, and the
--- way the icons grow, always away from the bar. Right of the bar the row starts past the game's crowd control list, which sits past the
--- level box and a class icon on that side; left of it, past the buff list, which sits past a class icon, the raid marker and the
--- classification icon; above, past one row of debuffs over the name and Flat UI's class icon there. The room of the game's lists is kept
--- while they are empty too, so the row stays put when an icon of theirs comes. A plate that lacks a part gives the next one, and the place
--- below the bar is the last.
 function E.Spot(frame)
 	local place = Opt("platePlace")
 	local scale = E.AuraScale(frame)
@@ -273,7 +200,6 @@ function E.Spot(frame)
 			return "RIGHT", bar, "LEFT", -(RAID_MARK + CLASSIFICATION + BUFF_GAP + beside), 0, "left"
 		end
 	elseif place == "above" then
-		-- The debuffs and a class icon above hang from the name, or from the health bar when the name is inside it.
 		local base = E.Part(frame, "name")
 		if E.NameInside() then
 			base = E.Part(frame, "HealthBarsContainer", "healthBar") or E.Part(frame, "HealthBarsContainer") or base
@@ -284,8 +210,6 @@ function E.Spot(frame)
 	end
 	return "TOP", E.Target(frame), "BOTTOM", 0, -BELOW, "center"
 end
-
--- The abilities --------------------------------------------------------------------------------------------------------------------
 
 function E.Ability(key)
 	if not E.byKey then
@@ -298,9 +222,6 @@ function E.Ability(key)
 	return E.byKey[key]
 end
 
--- The rank of an ability in a row, or nil when it is hidden or no switch of its kinds is on: interrupts, wards and immunities, crowd
--- control breaks, defensives, mobility, offensive cooldowns. An ability with a second kind shows when either switch is on. An ability
--- added by hand shows whatever its kind and comes first.
 function E.Rank(a)
 	local lists = E.Lists()
 	if lists.hidden[a.key] then
@@ -325,10 +246,6 @@ function E.Rank(a)
 	return nil
 end
 
--- The icons a plate or bar shows now, in order: { a, start, seconds }, at most four for a plate and `most` for a bar. A used ability has
--- start and seconds. With Show on Always the other abilities of the player's class and race are in the list too, with no start: ready
--- when a use of it would have been seen (E.Visible), else unknown; with Only while on cooldown an icon whose timer has just ended stays
--- for the flash, ready.
 function E.Items(rec, most)
 	local list = {}
 	local book = T.Book(rec.owner)
@@ -362,7 +279,6 @@ function E.Items(rec, most)
 		end
 		return E.order[x.a.key] < E.order[y.a.key]
 	end)
-	-- When there is no room the icons whose state is not known give way first, then the ready ones.
 	for _, field in ipairs({ "unknown", "ready" }) do
 		for index = #list, 1, -1 do
 			if #list <= (most or MOST) then
@@ -378,9 +294,6 @@ function E.Items(rec, most)
 	return list
 end
 
--- The ready icons ----------------------------------------------------------------------------------------------------------------------
-
--- The race of the player of a plate or bar, as the name and the file name the game gives, or false when it is not plain.
 function E.RaceOf(rec)
 	if rec.race == nil then
 		local ok, name, file = pcall(UnitRace, rec.unit)
@@ -395,8 +308,6 @@ function E.RaceIs(rec, race)
 	return name == race or (file and (file == race:gsub("%s", "") or (file == "Scourge" and race == "Undead"))) or false
 end
 
--- True when the ability can be on the row of this player: his class and race are the ability's, and either he was seen to use it or it
--- is no talent, rune or item and his level is high enough.
 function E.Fits(rec, a)
 	if a.race and not E.RaceIs(rec, a.race) then
 		return false
@@ -411,7 +322,6 @@ function E.Fits(rec, a)
 	return a.lvl == nil or not rec.level or rec.level <= 0 or rec.level >= a.lvl
 end
 
--- True for an ability whose kind, or second kind, is crowd control: the auras it lists are on its target, not on the player.
 function E.Crowd(a)
 	if a.kind == 4 then
 		return true
@@ -424,22 +334,15 @@ function E.Crowd(a)
 	return false
 end
 
--- True when the game says a spell is cast on hostile targets (SpellDocumentation.lua:900-913): an aura of it is on a target.
 function E.Harmful(id)
 	return T.Ask(type(C_Spell) == "table" and C_Spell.IsSpellHarmful or nil, id) == true
 end
 
--- The secrecy level the game gives a spell as an aura (Enum.SecrecyLevel: 0 never hidden, 1 always hidden, 2 hidden in some states), or nil.
 function E.AuraLevel(id)
 	local level = T.Ask(type(C_Secrets) == "table" and C_Secrets.GetSpellAuraSecrecy or nil, id)
 	return Plain(level, "number") and level or nil
 end
 
--- How a use of an ability can reach the addon, from its data and the secrecy levels the game gives its spells (Tracking.lua hears the
--- casts and the buffs of the player of a plate, a bar's unit, and no pet). cast: a cast of the player himself (not flag p) that is not
--- always hidden. buff: a buff of his own (not flag o, cast on others and seen only on a player with a plate, nor p) that gives the start
--- of a use: not one of NO_START, not the aura a crowd control or harmful spell leaves on its target, and not always hidden. never: such a
--- cast or buff the game never hides. Kept until the next refresh.
 function E.Ways(a)
 	local ways = E.never[a.key]
 	if ways then
@@ -465,18 +368,15 @@ function E.Ways(a)
 	return ways
 end
 
--- The cooldown of an ability in seconds: the one typed for it, else its own.
 function E.Cooldown(a)
 	local seconds = E.Lists().seconds[a.key] or a.cd
 	return Plain(seconds, "number") and seconds or 0
 end
 
--- True for an interrupt of the player himself: a kick of the player's own cast shows those of its uses that stopped it (Tracking.lua).
 function E.Kick(a)
 	return a.kind == 1 and not a.flags:find("p", 1, true)
 end
 
--- Notes the moment buffs can be read again after the game hid them (a fight): a use in the time between was not seen.
 function E.Sight()
 	local open = ns.AurasReadable() == true
 	if open and E.open == false then
@@ -485,9 +385,6 @@ function E.Sight()
 	E.open = open
 end
 
--- True when a use of the ability would be seen at this moment (E.Ways): a cast or a buff the game never hides, a cast of the unit the
--- game lets through, or a buff that gives its start while buffs can be read. A kick shows only the uses that stopped the player's own
--- cast, so it is not enough. `state` keeps the answers of one pass.
 function E.Seeable(a, rec, state)
 	local ways = E.Ways(a)
 	if ways.never then
@@ -500,9 +397,6 @@ function E.Seeable(a, rec, state)
 	return (state.casts and ways.cast) or (state.auras and ways.buff)
 end
 
--- True when an ability with no timer is ready, as far as the addon can tell: a use of it would be seen now, and one seen by its buff
--- could have been seen for its whole cooldown before now, since buffs were last hidden. Otherwise its state is not known: the game hid
--- its use, and an icon that showed it ready could be wrong.
 function E.Visible(a, rec, state)
 	if not E.Seeable(a, rec, state) then
 		return false
@@ -511,8 +405,6 @@ function E.Visible(a, rec, state)
 	return ways.never or (state.casts and ways.cast) or T.Now() - E.sight >= E.Cooldown(a)
 end
 
--- Adds to a list the abilities of the player's class and race that are shown and fit him, and are not on it: ready when E.Visible says
--- so, else with their state unknown.
 function E.Bright(rec, list, have)
 	if type(ns.ABILITIES) ~= "table" or type(ns.ABILITIES_BY_CLASS) ~= "table" or type(rec.class) ~= "string" then
 		return
@@ -538,7 +430,6 @@ function E.Bright(rec, list, have)
 	end
 end
 
--- Adds to a list the icons whose timer ended a moment ago, so that they can flash.
 function E.Held(rec, list, have)
 	local held = E.holds[rec.owner]
 	if not held then
@@ -560,12 +451,10 @@ function E.Held(rec, list, have)
 	end
 end
 
--- True when a ready cue is on: the flash, a sound or both.
 local function Cue()
 	return Opt("flash") == true or KITS[Opt("sound")] ~= nil
 end
 
--- True when the sound is for this plate or bar: the target and the focus.
 function E.Hears(rec)
 	if rec.mover then
 		return true
@@ -578,8 +467,6 @@ function E.Hears(rec)
 	return false
 end
 
--- The timer of ability `key` has ended, a moment ago: with a flash or a sound chosen, its icon stays a moment, ready, so that it can flash.
--- The sound holds it only for a cooldown that reaches Shortest cooldown that sounds (E.Loud).
 function E.Ended(rec, key, last)
 	if rec.owner == nil or type(last) ~= "table" or T.Now() - (last.start + last.seconds) > JUST then
 		return
@@ -599,21 +486,16 @@ function E.Ended(rec, key, last)
 	end
 end
 
--- The sound kit of Sound (ns.SOUNDS, IconRow.lua), or nil for None.
 function E.Kit()
 	local sound = ns.SOUNDS[KITS[Opt("sound")] or 0]
 	return sound and sound[1] or nil
 end
 
--- False for a cooldown shorter than Shortest cooldown that sounds, whose end stays quiet; a length that is not known (the samples) sounds,
--- as Party cooldowns' P.Kit has it.
 function E.Loud(seconds)
 	local least = Opt("soundMinimum")
 	return not (ns.Finite(seconds) and ns.Finite(least) and seconds < least)
 end
 
--- The icon of an ability that was used is now ready: it flashes, and for the target and the focus the sound plays, for a cooldown of
--- `seconds` that reaches Shortest cooldown that sounds.
 function E.Flash(row, icon, seconds)
 	local sound = ns.SOUNDS[KITS[Opt("sound")] or 0]
 	if Opt("flash") then
@@ -624,8 +506,6 @@ function E.Flash(row, icon, seconds)
 	end
 end
 
--- The game says the sweep of a number the addon set is done through OnCooldownDone, which may not come for it, so the row is drawn
--- again a moment after the timer ends.
 function E.Net(row, icon, item)
 	icon.net = nil
 	if not Cue() or type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then
@@ -643,7 +523,6 @@ function E.Net(row, icon, item)
 	end)
 end
 
--- The picture of an ability: the texture of its first spell the game knows.
 function E.Texture(a)
 	local file = E.tex[a.key]
 	if file then
@@ -660,10 +539,6 @@ function E.Texture(a)
 	return UNKNOWN_ICON
 end
 
--- The rows ------------------------------------------------------------------------------------------------------------------------
-
--- The row of a unit frame, made when first wanted, or of a bar (kept under the bar, on UIParent). nil when the game would not allow a
--- frame on it now.
 function E.Make(frame, bar)
 	local row = E.rows[bar or frame]
 	if row then
@@ -683,9 +558,6 @@ function E.Make(frame, bar)
 	return row
 end
 
--- Hangs a row where Place on nameplates puts it (E.Spot), and keeps the way its icons grow. A row that hangs somewhere already is placed
--- again in a fight only on a plate the game says plainly is not protected, else when the fight ends; the part it hangs from moves it
--- along meanwhile.
 function E.Anchor(row, frame)
 	local point, relative, relativePoint, x, y, direction = E.Spot(frame)
 	local key = ("%s:%s:%s:%.2f:%.2f"):format(point, tostring(relative), relativePoint, x, y)
@@ -703,15 +575,12 @@ function E.Anchor(row, frame)
 	end) then
 		row.spot, row.direction = key, direction
 	else
-		-- The game refused that part: the row hangs below the bar, from the part it always hung from.
 		pcall(holder.ClearAllPoints, holder)
 		pcall(holder.SetPoint, holder, "TOP", E.Target(frame), "BOTTOM", 0, -BELOW)
 		row.spot, row.direction = key, "center"
 	end
 end
 
--- Makes the icons a row needs and puts them in their places: from the middle, or away from the bar for a row beside it. Returns how many
--- it has.
 function E.Fit(row, count)
 	local size = Opt("size")
 	local direction = row.direction or "center"
@@ -726,7 +595,6 @@ function E.Fit(row, count)
 				E.RenderRec(rec)
 			end
 		end
-		-- The target and focus bars have tooltips; icons on a nameplate take no mouse.
 		if row.bar then
 			icon.frame:SetScript("OnEnter", function()
 				ns.Try(KEY, E.Tip, row, icon)
@@ -757,8 +625,6 @@ function E.Fit(row, count)
 	return count
 end
 
--- The question mark of an icon whose ability may be ready or used, in the middle of the icon: a text of this addon's own on the icon's
--- frame, made with the first one. Hidden with on false.
 function E.Mark(icon, on)
 	local mark = icon.mark
 	if not on then
@@ -791,8 +657,6 @@ function E.Mark(icon, on)
 	mark:Show()
 end
 
--- Puts what a slot shows on its icon, when it is not what the icon already shows. A used ability has the sweep and, with Show on Always,
--- is dark; a ready one has none and is bright; one whose state is not known has none, is dim and has a question mark.
 function E.Draw(row, slot, item)
 	local icon = row.icons[slot]
 	local key = "none"
@@ -831,7 +695,6 @@ function E.Draw(row, slot, item)
 	E.Mark(icon, item.unknown == true)
 end
 
--- Takes every icon of a row away and hides it.
 function E.Blank(row)
 	for slot = 1, #row.icons do
 		E.Draw(row, slot, nil)
@@ -839,7 +702,6 @@ function E.Blank(row)
 	row.holder:Hide()
 end
 
--- The icons of one plate, from the timers of its player.
 function E.RenderRec(rec)
 	if rec.mover then
 		return E.RenderBar(rec)
@@ -890,8 +752,6 @@ function E.Render()
 	end
 end
 
--- Tooltips -------------------------------------------------------------------------------------------------------------------------
-
 local function Tooltip()
 	local tip = _G.GameTooltip
 	if tip == nil or ns.Forbidden(tip) then
@@ -900,7 +760,6 @@ local function Tooltip()
 	return tip
 end
 
--- Whether GameTooltip is the icon's.
 local function Owned(icon)
 	local tip = Tooltip()
 	if not tip then
@@ -910,8 +769,6 @@ local function Owned(icon)
 	return ok and not IsSecret(owned) and owned == true
 end
 
--- An icon of a bar takes the mouse's motion while Icon tooltips is On or Out of combat only, never a click. Its own frame, so in a fight too;
--- only when the row changed.
 function E.Mouse(icon)
 	local tips = Opt("tooltips") or "on"
 	if icon.tips == tips then
@@ -926,15 +783,11 @@ function E.Mouse(icon)
 	end
 end
 
--- The time left as 1:42.
 local function Clock(seconds)
 	seconds = math.max(0, math.ceil(seconds))
 	return ("%d:%02d"):format(math.floor(seconds / 60), seconds % 60)
 end
 
--- The tooltip of an icon of a bar: the ability with its class in its kind's colour, the enemy, and Ready, the time left from the timer (plain
--- numbers of Tracking.lua) or that its use is not known. A sample of test mode says so; the arena break, which has no ability, has none.
--- Out of combat only shows nothing in a fight. True when it wrote the tooltip.
 function E.Tip(row, icon)
 	local tips = Opt("tooltips") or "on"
 	local tip = Tooltip()
@@ -976,9 +829,6 @@ function E.Tip(row, icon)
 	return true
 end
 
--- While the mouse stays on an icon, its tooltip is written again each second (C_Timer.NewTicker), so the time counts down, turns to Ready as
--- the sweep ends and follows the ability that moves into the slot. The step ends, and the tooltip hides, once GameTooltip is no longer the
--- icon's, the icon hides, Icon tooltips no longer allows it (Out of combat only in a fight) or the slot is empty.
 function E.TipTick(row, icon)
 	if icon.tipTicker or type(C_Timer) ~= "table" or type(C_Timer.NewTicker) ~= "function" then
 		return
@@ -1007,9 +857,6 @@ function E.Untip(icon)
 	end
 end
 
--- The bars ---------------------------------------------------------------------------------------------------------------------------
-
--- The record of the plate that shows a unit: the unit frame of its plate is the frame of one of the records.
 function E.PlateOf(unit)
 	local frame = E.UnitFrameOf(unit)
 	if frame then
@@ -1022,7 +869,6 @@ function E.PlateOf(unit)
 	return nil
 end
 
--- Hangs a bar from the spot saved with the movers, else above the target or focus frame, else from the middle of the screen.
 function E.PlaceBar(row, bar)
 	local x, y
 	if type(ns.MoverSaved) == "function" and ns.MoverSaved(bar.mover) and type(ns.MoverSpot) == "function" then
@@ -1048,11 +894,6 @@ function E.PlaceBar(row, bar)
 	end
 end
 
--- The arena ----------------------------------------------------------------------------------------------------------------------
-
--- True while the player is in an arena: IsActiveBattlefieldArena or C_PvP.IsArena answers a plain true (GlobalAPI.lua:6023 and 3475,
--- PvpInfoDocumentation.lua:914). A call that raises is noted for the status. EllesmereUI has no arena break icon; this is Flat UI's own,
--- and follows its rule of events only: no hook, no call into the game's arena frames.
 function E.ArenaNow()
 	local raised = false
 	local calls = { IsActiveBattlefieldArena or false, type(C_PvP) == "table" and C_PvP.IsArena or false }
@@ -1070,7 +911,6 @@ function E.ArenaNow()
 	return false
 end
 
--- Looks at the arena again: the icons are drawn again with a new stamp, and what the arena had told is dropped after leaving it.
 function E.ArenaCheck()
 	local A = E.arena
 	A.on = E.ArenaNow() and type(C_PvP) == "table" and type(C_PvP.GetArenaCrowdControlDuration) == "function"
@@ -1083,7 +923,6 @@ function E.ArenaCheck()
 	end
 end
 
--- The arena or the opponent list changed: the arena is looked at again and the bars are drawn.
 function E.ArenaChanged()
 	if not ns.Enabled(KEY) then
 		return
@@ -1097,9 +936,6 @@ function E.ArenaChanged()
 	end
 end
 
--- The game says which spell breaks the crowd control of an opponent. Its spell ID may be withheld: it is handed unread to the call that
--- makes the picture, and the picture is kept unread for the icon (UnitDocumentation.lua:3535-3545). A withheld opponent token keeps
--- nothing.
 function E.ArenaSpell(unit, spell)
 	local A = E.arena
 	A.stamp = A.stamp + 1
@@ -1117,7 +953,6 @@ function E.ArenaSpell(unit, spell)
 	end
 end
 
--- Another cooldown of the arena changed: the sweeps are asked for again.
 function E.ArenaCooldowns()
 	local A = E.arena
 	A.stamp = A.stamp + 1
@@ -1128,7 +963,6 @@ function E.ArenaCooldowns()
 	end
 end
 
--- The arena opponent a bar's unit is: a number 1 to 5 when UnitIsUnit answers a plain true, else nil and true when an answer was withheld.
 function E.ArenaOf(unit)
 	local withheld = false
 	for n = 1, ARENA_OPPONENTS do
@@ -1141,8 +975,6 @@ function E.ArenaOf(unit)
 	return nil, withheld
 end
 
--- The opponent whose break a bar shows, and the game's duration object for it: nothing while the setting is off, outside an arena, for
--- an unknown opponent and when the game refuses the call. bar.arenaWhy says which, for the check.
 function E.ArenaFor(bar)
 	local A = E.arena
 	bar.arenaWhy = nil
@@ -1169,8 +1001,6 @@ function E.ArenaFor(bar)
 	return n, duration
 end
 
--- Puts the break of opponent n on a slot of a bar's row: the picture of the spell the game named, the sweep from the duration object. Both
--- are handed on unread. Display only: no border by kind, no alert at the end of the sweep.
 function E.ArenaDraw(row, slot, n, duration)
 	local icon = row.icons[slot]
 	local key = ("arena:%s:%s:%s:%s"):format(n, E.arena.stamp, tostring(Opt("seconds")), Opt("numbersFont"))
@@ -1190,7 +1020,6 @@ function E.ArenaDraw(row, slot, n, duration)
 	ns.IconSet(icon, nil, nil, duration, { numbers = Opt("seconds") == true, font = Opt("numbersFont"), border = Opt("iconBorder") })
 end
 
--- One line for /flatui check, or nil: how the break of the target and focus bars stands in an arena.
 function ns.EnemyArenaLine()
 	if not ns.Enabled(KEY) or not E.arena.on then
 		return nil
@@ -1214,7 +1043,6 @@ function ns.EnemyArenaLine()
 	return "Arena crowd control break: no opponent targeted."
 end
 
--- The icons of a bar, from the timers of the player it shows.
 function E.RenderBar(bar)
 	local row = E.rows[bar]
 	if row and row.testing and row.testing ~= E.HELD then
@@ -1254,8 +1082,6 @@ function E.RenderBar(bar)
 	row.holder:Show()
 end
 
--- Who a bar shows now: { owner, class } for an enemy player whose GUID is plain, or whose plate has a record; nothing for a creature, a
--- friendly player or no unit. The second answer is true for an enemy player with no owner yet: his plate is not on screen.
 function E.BarWho(unit)
 	if not E.Enemy(unit) then
 		return nil
@@ -1269,7 +1095,6 @@ function E.BarWho(unit)
 	return { owner = owner, class = Text(UnitClassBase, unit) or rec and rec.class }
 end
 
--- The target or focus has changed: the bar shows that player, is listened to, and is drawn from his timers.
 function E.BarSet(unit)
 	local bar = E.bars[unit]
 	if not bar or not ns.Enabled(KEY) then
@@ -1297,7 +1122,6 @@ function E.BarSet(unit)
 	end
 end
 
--- A plate came or went: a bar that waits for a plate, or is kept by one, is looked at again.
 function E.BarsAgain()
 	for unit, bar in pairs(E.bars) do
 		if bar.pending or type(bar.owner) == "table" then
@@ -1312,7 +1136,6 @@ function E.BarsAll()
 	end
 end
 
--- True while a plate or a bar has icons to keep up to date.
 function E.Live()
 	if next(E.plates) ~= nil then
 		return true
@@ -1325,7 +1148,6 @@ function E.Live()
 	return false
 end
 
--- A plate that could not get its row in combat gets it when combat ends.
 function E.Later()
 	if E.queued or not InCombatLockdown() then
 		return
@@ -1337,7 +1159,6 @@ function E.Later()
 	end)
 end
 
--- A look every half second while a plate of an enemy player is on screen: icons whose sweep ended go, and the status is right.
 function E.Tick()
 	E.armed = false
 	if not ns.Enabled(KEY) then
@@ -1359,14 +1180,10 @@ function E.Arm()
 	end)
 end
 
--- The lists ----------------------------------------------------------------------------------------------------------------------------
-
 local function Whole(value, most)
 	return Plain(value, "number") and value >= 1 and value <= most and value == math.floor(value)
 end
 
--- What the account keeps: added = { [ability key] = true or seconds, [spell ID] = seconds } and hidden = { [ability key] = true }.
--- Damaged entries are dropped.
 function E.Saved()
 	local account = ns.Account()
 	if type(account) ~= "table" then
@@ -1397,8 +1214,6 @@ function E.Saved()
 	return saved
 end
 
--- The lists as the rows use them: maps added, hidden and seconds (by ability key), the abilities made from the spells added by ID
--- (custom), and those by cast ID. Kept until a list changes.
 function E.Lists()
 	local lists = E.lists
 	if lists then
@@ -1433,7 +1248,6 @@ function E.Lists()
 	return lists
 end
 
--- A list changed: what the rows read is made again, and the rows are drawn. Both work in a fight and with the page off.
 function E.Changed()
 	for _, a in ipairs(E.lists and E.lists.custom or {}) do
 		E.byKey[a.key], E.order[a.key] = nil, nil
@@ -1448,7 +1262,6 @@ local function Capital(class)
 	return class:sub(1, 1) .. class:sub(2):lower()
 end
 
--- An ability by name, with its class in brackets for a class's.
 function E.Name(a)
 	if a.class and a.class ~= "ALL" then
 		return ("%s (%s)"):format(a.name, Capital(a.class))
@@ -1456,7 +1269,6 @@ function E.Name(a)
 	return a.name
 end
 
--- The abilities of the data and the custom ones, as one list.
 function E.Every()
 	local list = {}
 	for _, a in ipairs(type(ns.ABILITIES) == "table" and ns.ABILITIES or {}) do
@@ -1468,7 +1280,6 @@ function E.Every()
 	return list
 end
 
--- The lines of a list as { key, text, ability }, by name; two with one name get the spell ID beside it.
 function E.Lines(abilities)
 	local rows, count = {}, {}
 	for _, a in ipairs(abilities) do
@@ -1491,17 +1302,14 @@ function E.Lines(abilities)
 	return rows
 end
 
--- True for an ability that has no cooldown to show.
 function E.NoCooldown(a)
 	return a.cd == 0 or a.flags:find("n", 1, true) ~= nil
 end
 
--- True when the ability is shown by the switches and the lists.
 function E.IsShown(a)
 	return not E.NoCooldown(a) and E.Rank(a) ~= nil
 end
 
--- The abilities of the data that the switches and the lists do not show now, by name.
 function ns.EnemyAbilityCandidates()
 	local out = {}
 	for _, a in ipairs(type(ns.ABILITIES) == "table" and ns.ABILITIES or {}) do
@@ -1512,7 +1320,6 @@ function ns.EnemyAbilityCandidates()
 	return E.Lines(out)
 end
 
--- The abilities shown now, by name.
 function ns.EnemyAbilityShown()
 	local out = {}
 	for _, a in ipairs(E.Every()) do
@@ -1523,7 +1330,6 @@ function ns.EnemyAbilityShown()
 	return E.Lines(out)
 end
 
--- The ability of a key, or nil.
 function E.ByKey(key)
 	if type(key) ~= "string" then
 		return nil
@@ -1536,7 +1342,6 @@ function E.ByKey(key)
 	return nil
 end
 
--- The abilities that have a spell ID among their casts.
 function E.ByCast(id)
 	local found = {}
 	for _, a in ipairs(E.Every()) do
@@ -1550,7 +1355,6 @@ function E.ByCast(id)
 	return found
 end
 
--- The abilities with a name, in any capitals, with or without the class in brackets.
 function E.ByName(text)
 	local found, wanted = {}, text:lower()
 	for _, a in ipairs(E.Every()) do
@@ -1561,7 +1365,6 @@ function E.ByName(text)
 	return found
 end
 
--- How many abilities were added by hand.
 function E.Count(saved)
 	local count = 0
 	for _ in pairs(saved.added) do
@@ -1570,7 +1373,6 @@ function E.Count(saved)
 	return count
 end
 
--- Shows an ability whatever its kind. With seconds the cooldown of its timers is that. Returns true or false and what to tell.
 function E.Add(a, seconds)
 	local saved = E.Saved()
 	if not saved then
@@ -1598,7 +1400,6 @@ function E.Add(a, seconds)
 	return true, ("Added %s."):format(E.Name(a))
 end
 
--- A spell the data lacks, by ID, with its cooldown in seconds. False and what to tell when the game knows no spell by the ID.
 function E.AddSpell(id, seconds)
 	local saved = E.Saved()
 	if not saved then
@@ -1616,7 +1417,6 @@ function E.AddSpell(id, seconds)
 	return true, ("Added %s, %d seconds."):format(name, seconds)
 end
 
--- Takes an ability off the rows.
 function E.Hide(a)
 	local saved = E.Saved()
 	if not saved then
@@ -1638,7 +1438,6 @@ function E.Hide(a)
 	return true, ("Hid %s."):format(E.Name(a))
 end
 
--- The two dropdowns of the page: each is called with the key of the line chosen.
 function ns.EnemyAbilityAdd(key)
 	local a = E.ByKey(key)
 	if not a then
@@ -1655,7 +1454,6 @@ function ns.EnemyAbilityHide(key)
 	return E.Hide(a)
 end
 
--- The words typed after add: a link or a number is a spell ID, anything else a name, and a number last is the cooldown in seconds.
 function E.Parse(text)
 	local id = tonumber(text:match("|Hspell:(%d+)"))
 	local rest = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|H[^|]*|h[^|]*|h", " "):gsub("|r", " ")
@@ -1679,8 +1477,6 @@ function E.Parse(text)
 	return { name = text }
 end
 
--- The one ability a word names. nil when there is none, and nil with a message when more than one has the name or the ID: then nothing
--- is changed.
 function E.Resolve(parsed, text)
 	local found = parsed.id and E.ByCast(parsed.id) or E.ByName(parsed.name or text)
 	if #found == 1 then
@@ -1736,8 +1532,6 @@ function E.SlashHide(text)
 	end
 end
 
--- /flatui enemy list: each ability shown with its cooldown and whether a use of it can be seen here: always, only when it stops your own
--- cast, only when its buff is on a player with a plate (one cast on others), or not.
 function E.SlashList()
 	local state = {}
 	local rec = { unit = "target" }
@@ -1759,7 +1553,6 @@ function E.SlashList()
 	end
 end
 
--- /flatui enemy clear: the running timers of enemies are forgotten. What was seen of a player stays.
 function E.Clear()
 	for owner in pairs(E.owners) do
 		local book = T.Book(owner)
@@ -1791,9 +1584,6 @@ function E.Slash(rest)
 	end
 end
 
--- Listening ---------------------------------------------------------------------------------------------------------------------------
-
--- A plate of an enemy player: it is listened to, and its row is drawn from the timers of its player.
 function E.Added(unit)
 	if not Plain(unit, "string") or not ns.Enabled(KEY) then
 		return
@@ -1805,7 +1595,6 @@ function E.Added(unit)
 	end
 	local row = E.rows[frame]
 	if not E.Enemy(unit) then
-		-- A unit frame the game gives to another unit keeps nothing of the last one.
 		if row then
 			row.rec = nil
 			E.Blank(row)
@@ -1829,8 +1618,6 @@ function E.Added(unit)
 	E.BarsAgain()
 end
 
--- A plate goes: its unit is not listened to any more, a timer kept by unit frame is lost with it, and its icons are taken away on the
--- next frame. A timer kept by GUID stays with the player.
 function E.Leave(unit)
 	local rec = E.plates[unit]
 	if not rec then
@@ -1860,7 +1647,6 @@ function E.Removed(unit)
 	end
 end
 
--- The plates on screen now, from the tokens the game names them by.
 function E.Scan()
 	for number = 1, PLATES do
 		local unit = "nameplate" .. number
@@ -1870,7 +1656,6 @@ function E.Scan()
 	end
 end
 
--- The module is off: no plate is listened to and no icon is shown.
 function E.Off()
 	T.DeafenAll(KEY)
 	for _, row in pairs(E.rows) do
@@ -1884,7 +1669,6 @@ function E.Off()
 	end
 end
 
--- The enemy a unit token names, as the plate record of an enemy player: a nameplate token, or a token whose GUID is a plate's.
 function E.Caster(source)
 	if not Plain(source, "string") then
 		return nil
@@ -1903,7 +1687,6 @@ function E.Caster(source)
 	return nil
 end
 
--- A cast of a unit that the game let through: the ability it is starts its timers.
 function E.Cast(unit, spell)
 	local rec = E.plates[unit] or E.bars[unit]
 	if not rec or not rec.owner then
@@ -1921,9 +1704,6 @@ function E.Cast(unit, spell)
 	end
 end
 
--- A kick of the player's own cast by the player of GUID `guid` (Tracking.lua T.Interrupted, which starts the timer kept by that GUID): a
--- plate or bar of his whose GUID the game withheld keeps his timers by its unit frame, so the timer starts there too. His unit token
--- comes from UnitTokenFromGUID, when the game gives it plainly (UnitDocumentation.lua:3296-3310). True when a timer started.
 function ns.EnemyKicked(guid, class, a, at)
 	if not ns.Enabled(KEY) or not Plain(guid, "string") then
 		return false
@@ -1942,7 +1722,6 @@ function ns.EnemyKicked(guid, class, a, at)
 	return started
 end
 
--- The abilities of the cast of a spell that have a cooldown typed for them: their timers take it.
 function E.Retime(owner, class, spell, now)
 	local lists = E.Lists()
 	if next(lists.seconds) == nil or type(ns.ABILITY_BY_CAST) ~= "table" then
@@ -1960,8 +1739,6 @@ function E.Retime(owner, class, spell, now)
 	end
 end
 
--- The abilities of the buffs of an enemy, from the abilities that list buff `id`: a buff of its own starts the timer of the enemy; a
--- buff cast on another (flag o) starts that of its caster, when the caster is one of the plates.
 function E.Begin(who, id, start, others)
 	local by = ns.ABILITY_BY_BUFF
 	local started = false
@@ -1977,7 +1754,6 @@ function E.Begin(who, id, start, others)
 	return started
 end
 
--- An ability started by a buff that has a cooldown typed for it: its timer takes it.
 function E.Retimed(owner, a, at)
 	local seconds = E.Lists().seconds[a.key]
 	local book = seconds and T.Book(owner)
@@ -1987,7 +1763,6 @@ function E.Retimed(owner, a, at)
 	end
 end
 
--- A buff of a unit seen in a pass.
 function E.Aura(unit, id, start, seconds, source)
 	local rec = E.plates[unit] or E.bars[unit]
 	if not rec or not rec.owner or type(ns.ABILITY_BY_BUFF) ~= "table" then
@@ -2003,8 +1778,6 @@ function E.Aura(unit, id, start, seconds, source)
 		E.Render()
 	end
 end
-
--- Putting it in place ---------------------------------------------------------------------------------------------------------------
 
 function E.Refresh()
 	if not ns.Enabled(KEY) then
@@ -2030,9 +1803,6 @@ function E.Refresh()
 	end
 end
 
--- A restriction that starts is enforced only once this event has been sent (RestrictedActionsConstantsDocumentation.lua: Activating), so
--- whether buffs can be read is noted now and again on the next frame, for E.Visible, whether or not a row has icons to draw (E.Items notes
--- it only for a row it draws).
 function E.OnRestriction()
 	E.Sight()
 	if E.Live() then
@@ -2046,7 +1816,6 @@ function E.OnRestriction()
 	end)
 end
 
--- The player enters a place: the timers may have been cleared (Tracking.lua), so the icons are drawn again after it has done so.
 function E.OnWorld()
 	E.Refresh()
 	if E.Live() then
@@ -2057,7 +1826,6 @@ function E.OnWorld()
 end
 
 function E.Start()
-	-- The kick that stops the player's own cast is heard by the small frame of Tracking.lua.
 	T.Listen()
 	T.Subscribe(KEY, function(unit, spell)
 		ns.Try(KEY, E.Cast, unit, spell)
@@ -2067,7 +1835,6 @@ function E.Start()
 	E.Refresh()
 end
 
--- True while the target bar or the focus bar has a handle in the movers.
 function ns.EnemyTargetBarShown()
 	return ns.Enabled(KEY) and E.BarsOn()
 end
@@ -2076,7 +1843,6 @@ function ns.EnemyFocusBarShown()
 	return ns.Enabled(KEY) and E.BarsOn()
 end
 
--- The movers set or put back the spot of a bar.
 function ns.EnemyBarsMoved()
 	for _, bar in pairs(E.bars) do
 		local row = E.rows[bar]
@@ -2095,21 +1861,12 @@ function ns.EnemyRender()
 	end
 end
 
--- Test mode (TestMode.lua) ---------------------------------------------------------------------------------------------------------------
--- While it is on, out of combat, with the page on, the target and focus bars (with Show on target and focus on) and the row of each enemy player's
--- plate on screen (with Show on nameplates on) that has nothing to show hold three sample icons, which need no unit: the bars at their spot. A
--- real timer takes the row back. They are used abilities, dark with Show on Always, flashing at the end of the sweep with Flash when ready. The
--- first end on a target or focus bar since test mode came on plays Sound once (TM.Sound, as Party cooldowns has it), the plates none, as the
--- sound is for the target and focus (E.Hears). Each Render lays them out again with Icon size and the looks of the page, as E.Refresh forgets the
--- old layout, and the ticker of test mode starts their sweeps again (IconRow.lua: ns.IconSampleHeld, ns.IconSampleLoop). Off, a fight and the
--- page going off blank them at the next Render, which the Refresh after each runs.
 E.HELD = {}
 
 function E.Holding()
 	return TM.IsOn() and ns.Enabled(KEY) and not InCombatLockdown()
 end
 
--- A row gives its samples up; the caller draws it again or blanks it.
 function E.Unhold(row)
 	row.testing = nil
 	for slot, icon in ipairs(row.icons) do
@@ -2118,7 +1875,6 @@ function E.Unhold(row)
 	end
 end
 
--- The samples of a bar or a plate's record with nothing to show. True while it holds them.
 function E.Hold(rec)
 	local bar = rec.mover ~= nil
 	local row = E.rows[bar and rec or rec.frame]
@@ -2170,10 +1926,6 @@ function E.TestTick(now)
 	end
 end
 
--- The test and the status -----------------------------------------------------------------------------------------------------------
-
--- Three sample icons on a row, for the test: their ends flash with Flash when ready, and sound with Sound on the target and focus bars and on
--- the plate of the target or focus (E.Hears).
 function E.Sample(row, rec, token, now)
 	row.rec, row.testing = rec, token
 	local count = E.Fit(row, 3)
@@ -2192,7 +1944,6 @@ function E.Sample(row, rec, token, now)
 	row.holder:Show()
 end
 
--- /flatui test icons: three sample icons on the plate of every enemy player on screen and on the target and focus bars, for a few seconds.
 function ns.EnemyTest()
 	if not ns.Enabled(KEY) or InCombatLockdown() then
 		return
@@ -2256,7 +2007,6 @@ function E.Status()
 	local seen = ns.CanSeeCasts(T.Heard(KEY)[1] or "target")
 	if seen == false then
 		lines[1] = (InCombatLockdown() or ns.AurasReadable() == false) and LINE_HERE or LINE_CASTS
-		-- With Show on Always the row shows what that means for its icons (E.Visible).
 		if Opt("show") == "always" then
 			lines[#lines + 1] = LINE_UNKNOWN
 		end

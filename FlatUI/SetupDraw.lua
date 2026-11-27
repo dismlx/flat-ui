@@ -1,16 +1,5 @@
 local _, ns = ...
 
--- The drawings of Flat UI setup: what a choice looks like, drawn on frames of the addon's own from the settings a module would read. They read through
--- ns.Get, so the caller runs a drawing inside ns.Viewing with the draft, and a border, a fill, a colour or a texture in a drawing is the one the
--- addon puts on the game's frames. The numbers are fixed samples: the game withholds a unit's health, power and cast times (UnitDocumentation.lua:1526-1529).
--- A drawing is { frame, regions, draw, parts, mark, width, height }: its frame holds its parts, regions lists every texture and text it made, draw paints
--- them all again, parts says which region a setting changes (hovering the row of the setting marks it), and width and height are the size of what it
--- last drew when its file says one, else nil. A file of drawings (SetupDraw<Area>.lua) registers ns.SetupDrawings["<id>"] = { build(stage), draw(stage),
--- parts = { [path] = region }, partsOf(stage) }, whose draw may return that width and height; Adapt makes a drawing of the framework from it.
--- The step pages show one drawing at a time on the stage of D.Build. A place of its own (D.Context) has its own stage, drawings and view: the preview band
--- of the options window, each card of setup's stops and the picture of the welcome screen. D.PaintIn paints a drawing there and scales it to fit a box,
--- and D.GROUND is the ground behind the cards. D.Card is a small picture of a whole profile, for the ready-made looks of the welcome screen.
-
 local kit = ns.PanelKit
 
 local D = { drawings = {}, failed = {} }
@@ -19,16 +8,12 @@ ns.SetupDraw = D
 local STAGE_W, STAGE_H = 658, 204
 D.STAGE_W, D.STAGE_H = STAGE_W, STAGE_H
 
--- The ground behind every card of setup and behind the picture of the welcome screen: a dark earth, the colour the unit frame drawings put behind
--- their frames, so a see-through background looks as it does in the world.
 D.GROUND = { 0.32, 0.27, 0.20 }
 
--- Colours the drawings use where the game or a setting does not give one.
 local REACTION = { hostile = { 0.77, 0.23, 0.23 }, neutral = { 0.88, 0.77, 0.29 }, friendly = { 0.24, 0.77, 0.35 }, tapped = { 0.54, 0.54, 0.54 } }
 local POWER = { MANA = { 0.18, 0.44, 0.88 }, RAGE = { 0.82, 0.18, 0.18 }, ENERGY = { 0.88, 0.82, 0.18 }, FOCUS = { 0.88, 0.5, 0.25 }, RUNIC_POWER = { 0.1, 0.8, 0.95 } }
 local SAMPLE_HEALTH, SAMPLE_POWER = 0.7, 0.7
 
--- The name of the player, or the sample name when the client does not say.
 local function PlayerName()
 	if type(UnitName) == "function" then
 		local ok, name = pcall(UnitName, "player")
@@ -39,7 +24,6 @@ local function PlayerName()
 	return "Brennan"
 end
 
--- A texture or a text of a drawing, kept in the drawing's list.
 local function Texture(drawing, parent, layer)
 	local texture = kit.Fill(parent, layer)
 	drawing.regions[#drawing.regions + 1] = texture
@@ -52,7 +36,6 @@ local function Text(drawing, parent, font, justify, width)
 	return text
 end
 
--- A bar: a black back and a fill. It is a pair of textures and not a status bar, since nothing here is a unit's. Set it with D.SetBar.
 local function NewBar(drawing, parent, width, height)
 	local bar = kit.Frame(parent)
 	bar:SetSize(width, height)
@@ -65,7 +48,6 @@ local function NewBar(drawing, parent, width, height)
 	return { frame = bar, fill = fill, width = width }
 end
 
--- Fills a bar to a share of its width in a colour, with the bar texture the settings choose (a solid colour for Flat, else the image file tinted).
 function D.SetBar(bar, share, r, g, b)
 	local file = ns.BarTexture()
 	local fill = bar.fill
@@ -90,7 +72,6 @@ local function Power(token)
 	return sample[1], sample[2], sample[3]
 end
 
--- A panel with the general border and background and a health and a power bar in it. The outline is the one the modules make, and follows the view.
 local function Panel(drawing, parent, width)
 	local panel = kit.Frame(parent)
 	panel:SetSize(width, 82)
@@ -111,16 +92,12 @@ local function Panel(drawing, parent, width)
 	return panel, Draw
 end
 
--- Drawings ---------------------------------------------------------------------------------------
-
--- A panel with a border, a background and a bar.
 local function BuildPanel(drawing)
 	local panel, draw = Panel(drawing, drawing.frame, 300)
 	panel:SetPoint("CENTER", drawing.frame, "CENTER", 0, 0)
 	drawing.draw = draw
 end
 
--- The groups of the bars drawing: the title, the rows { label, share, colour function }, the place.
 local function Groups()
 	local function Cast(label, share, path)
 		return { label, share, function() return ns.Colour(path) end }
@@ -150,7 +127,6 @@ local function Groups()
 	}
 end
 
--- A health bar, a cast bar, the reaction and power colours: every bar of the Look steps on the chosen texture.
 local function BuildBars(drawing)
 	local groups = Groups()
 	local bars = {}
@@ -176,18 +152,11 @@ local function BuildBars(drawing)
 	end
 end
 
--- Pictures of a ready-made profile ----------------------------------------------------------------
-
--- A card is a 336 by 112 scene of one profile: a player frame with a cast bar, a party column, two nameplates, a combat number and two rows of action
--- buttons. D.Card makes it from the settings of the view it is given (ns.Viewing), never from the profile in use, and shows the settings that tell the
--- profiles apart. The caller scales the frame (the tiles of the welcome screen fit it to their width). Its outlines are pixels whatever the scale
--- (ns.Outline, not direct).
 local CARD_W, CARD_H = 336, 112
 local CURRENT, MISSING = "9,360", "2,640"
 local FRIENDLY, GREY, PLAIN = REACTION.friendly, { 0.55, 0.55, 0.55 }, { 0.12, 0.12, 0.12 }
 local BUTTON_COLOURS = { { 0.75, 0.35, 0.25 }, { 0.3, 0.5, 0.8 }, { 0.35, 0.7, 0.4 }, { 0.8, 0.7, 0.3 }, { 0.6, 0.4, 0.75 }, { 0.3, 0.7, 0.7 } }
 
--- The text of a health value in one of the formats of the health text rows, for the sample 9,360 of 12,000 (78%).
 local function HealthText(style)
 	if style == "pct" then
 		return "78%"
@@ -203,7 +172,6 @@ local function HealthText(style)
 	return ""
 end
 
--- A text in the size a setting gives (a share in percent): the font object nearest to it. The colour is set again, since a font object brings its own.
 local function Sized(text, percent)
 	local name = percent >= 150 and "GameFontNormalLarge" or percent >= 105 and "GameFontHighlight" or "GameFontHighlightSmall"
 	pcall(text.SetFontObject, text, name)
@@ -324,7 +292,6 @@ function D.Card(parent, view)
 
 	function card.draw()
 		local get = ns.Get
-		-- The player frame.
 		local square = get("unitframes.squarePortrait") == true
 		local pictured = square and get("unitframes.portraitPlayer") == true and get("unitframes.portraitStyle") ~= "none"
 		local left = pictured and 24 or 4
@@ -347,7 +314,6 @@ function D.Card(parent, view)
 		power.frame:SetShown(get("unitframes.playerPowerBar") == true)
 		D.SetBar(power, 0.7, Power("MANA"))
 		Shown(defensive, get("defensives.enabled") == true and get("defensives.own") == true)
-		-- The player cast bar.
 		local custom = get("castbars.playerSize") == true
 		local width = (custom and get("castbars.playerWidth") or 208) * 140 / 208
 		local height = (custom and get("castbars.playerHeight") or 11) * 140 / 208
@@ -360,7 +326,6 @@ function D.Card(parent, view)
 		castText:SetText("Fireball")
 		Sized(castText, get("castbars.textSize"))
 		D.SetBar(cast, 0.6, ns.Colour("castbars.castColour"))
-		-- The party column.
 		local on = get("unitframes.party") == true
 		local pictureOn = square and get("unitframes.partyPicture") ~= "none"
 		local shade = get("unitframes.partyRangeDim") == true and get("unitframes.partyRangeOpacity") / 100 or 1
@@ -376,7 +341,6 @@ function D.Card(parent, view)
 			Sized(row.text, get("unitframes.healthTextSize"))
 			D.SetBar(row.bar, 0.78, r, g, b)
 		end
-		-- The nameplates: the target first.
 		local barWidth, barHeight = 76 * get("nameplates.barWidth") / 100, 8 * get("nameplates.healthHeight") / 100
 		local base = get("nameplates.colours") == true and REACTION.hostile or GREY
 		local always = get("nameplates.aurasWhen") == "always"
@@ -400,7 +364,6 @@ function D.Card(parent, view)
 		end
 		local boxed = get("nameplates.level") == "box"
 		local hiddenLevel = get("nameplates.level") == "hidden"
-		-- Thin border and Text only: a square the height of the bar, at the gap chosen.
 		local square = get("nameplates.level") ~= "default" and not hiddenLevel and get("nameplates.levelShape") == "square"
 		level:SetSize(square and barHeight or 8, square and barHeight or 8)
 		level:SetPoint("TOPLEFT", root, "TOPLEFT", 170 + barWidth + (square and get("nameplates.levelGap") or 2), -10)
@@ -412,7 +375,6 @@ function D.Card(parent, view)
 		D.SetBar(plateCast, 0.5, ns.Colour("castbars.castColour"))
 		plateCastTime:SetText("0.8")
 		Shown(plateCastTime, get("nameplates.castTime") == true)
-		-- The combat number and the action buttons.
 		number:SetText("1,240")
 		Shown(number, get("combattext.enabled") == true)
 		Sized(number, get("combattext.size"))
@@ -447,7 +409,6 @@ function D.Card(parent, view)
 		end
 	end
 
-	-- Paints the card from its own view; a card that fails is reported once and the others still paint.
 	function card.Paint()
 		local ok, err = ns.Viewing(view, card.draw)
 		if ok then
@@ -465,7 +426,6 @@ function D.Card(parent, view)
 	return card
 end
 
--- A view for a card: the values of a profile (a table of saved path to value, or a function that gives it), with no positions.
 D.noSpots = {}
 function D.CardView(valuesOf)
 	return setmetatable({ spots = D.noSpots }, { __index = function(_, path)
@@ -479,12 +439,12 @@ end
 
 local BUILDERS = { ["mock-panel"] = BuildPanel, ["mock-bars"] = BuildBars }
 
--- Registered drawings ----------------------------------------------------------------------------
+function D.Builds(id)
+	return BUILDERS[id] ~= nil
+end
 
 ns.SetupDrawings = ns.SetupDrawings or {}
 
--- Builds a registered drawing on the frame of a drawing of the framework. Every outline it makes follows the draft view (ns.SetOutlineView) and is painted
--- again after each draw (ns.RepaintOutline), so a file of drawings does not have to. A build that fails is reported and the drawing is not shown.
 local function Adapt(drawing, registered)
 	drawing.outlines = {}
 	local made = ns.Outline
@@ -503,20 +463,16 @@ local function Adapt(drawing, registered)
 		geterrorhandler()(err)
 		return false
 	end
-	-- A file that keeps one scene per stage gives the marks of this stage (partsOf); the others keep one table.
 	local of = registered.partsOf
 	drawing.parts = (type(of) == "function" and of(drawing.frame)) or registered.parts or {}
-	-- A stage that names its view makes the outlines of a drawing made after the build follow it too (SetupDrawPlates.lua, P.Follow).
 	drawing.frame.view = D.view
 	function drawing.draw()
-		-- A draw that returns a width and a height says the size of what it drew, which D.PaintIn fits to its box; any other answer says none.
 		local width, height = registered.draw(drawing.frame)
 		if ns.Finite(width) and ns.Finite(height) and width > 0 and height > 0 then
 			drawing.width, drawing.height = width, height
 		else
 			drawing.width, drawing.height = nil, nil
 		end
-		-- A file that lays its parts out again on each draw gives the new table.
 		if type(of) == "function" then
 			drawing.parts = of(drawing.frame) or drawing.parts
 		end
@@ -527,7 +483,6 @@ local function Adapt(drawing, registered)
 	return true
 end
 
--- The part marks: an accent bracket round the region a setting changes, shown while its row is hovered.
 local function Bracket(drawing)
 	local mark = kit.Frame(drawing.frame)
 	mark:SetAllPoints(drawing.frame)
@@ -541,13 +496,11 @@ local function Bracket(drawing)
 	return mark
 end
 
--- Marks the region the setting `path` changes in the drawing that is shown, or clears the mark for nil or a setting with no part.
 function D.Mark(path)
 	local drawing = D.current
 	return D.MarkRegion(drawing and path and drawing.parts and drawing.parts[path])
 end
 
--- Marks a region of the drawing that is shown, or clears the mark for nil. A region is a frame, a texture or a text.
 function D.MarkRegion(region)
 	local drawing = D.current
 	if not drawing then
@@ -582,9 +535,6 @@ function D.MarkRegion(region)
 	return true
 end
 
--- The area -------------------------------------------------------------------------------------
-
--- Makes the frame the drawings sit on, inside `parent`, and keeps the view they read.
 function D.Build(parent, view)
 	D.view = view
 	local stage = kit.Frame(parent)
@@ -594,14 +544,10 @@ function D.Build(parent, view)
 	return stage
 end
 
--- A place for drawings of its own (the preview band of the options window, a card of setup, the picture of the welcome screen): a stage, the drawings
--- made on it and the view they read.
 function D.Context(parent, view)
 	return { stage = kit.Frame(parent), drawings = {}, failed = {}, view = view }
 end
 
--- Runs fn(...) with the stage, the drawings, the view and the drawing shown of `context` in place of those of setup, and puts these back.
--- Returns what fn returned, or raises its error.
 function D.In(context, fn, ...)
 	local stage, drawings, failed, view, current = D.stage, D.drawings, D.failed, D.view, D.current
 	D.stage, D.drawings, D.failed, D.view, D.current = context.stage, context.drawings, context.failed, context.view, context.current
@@ -614,7 +560,6 @@ function D.In(context, fn, ...)
 	return result
 end
 
--- Shows one drawing and hides the others; makes it the first time. Returns the drawing, or nil for an id with none.
 function D.Show(id)
 	local drawing = D.drawings[id]
 	local registered = ns.SetupDrawings[id]
@@ -643,7 +588,6 @@ function D.Show(id)
 	return drawing
 end
 
--- Paints the drawing that is shown from what ns.Get says now. The caller has put the view in place with ns.Viewing.
 function D.Paint()
 	local drawing = D.current
 	if drawing and drawing.draw then
@@ -651,11 +595,6 @@ function D.Paint()
 	end
 end
 
--- Shows drawing `id` on the stage of `context`, paints it under the context's view, and scales the stage so the drawing, with `pad` units round it
--- (8 when nil, room for a scene's own ground), fits a box of w by h units of the stage's parent, at most `most` times its size (1 when nil), centred.
--- A drawing that says its size is fitted by it, any other by the stage's 658 by 204. A paint that changes the scale is done once more at the new one,
--- since a drawing works out its lines in screen pixels from the scale it is painted at (ns.Pixels). Returns true when it painted. An error is reported,
--- not raised, and once for each drawing of a context, as a card of D.Card is: the cards of a stop paint again each time a choice is pointed at.
 function D.PaintIn(context, id, w, h, most, pad)
 	local stage = context.stage
 	if not context.sized then

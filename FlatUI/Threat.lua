@@ -1,115 +1,36 @@
 local _, ns = ...
 
--- Threat list: a small window of Flat UI's own with the members of the group by their threat on the enemy the player fights, highest first:
--- one bar each, in the class colour of the member (a pet in its owner's colour, a shade darker), with the share of what pulls aggro. The game
--- gives that share as scaledPercentage of UnitDetailedThreatSituation (UnitDocumentation.lua:1086-1106), beside rawPercentage, the share of the
--- tank's threat that the game's own threat number on the target frame shows (Mainline/UnitFrame.lua:1030-1031). At 100% the enemy turns to that
--- member, wherever the member stands, so a full bar is aggro. The enemy is the player's target, else the target of the target (a healer who
--- targets the tank), never a player and never a dead one. The list shows only in a fight (PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED,
--- UnitDocumentation.lua:3887, 3893), in a group, in a dungeon or raid, or also alone as Show says, and it is hidden while no member is on the
--- threat table of the enemy. Out of a fight the module
--- hears only the start of one: a frame of the addon's own hears the target (PLAYER_TARGET_CHANGED, UNIT_TARGET for the target:
--- UnitDocumentation.lua:3976, 4871) only in a fight Show allows, the threat events and the pets (UNIT_THREAT_LIST_UPDATE,
--- UNIT_THREAT_SITUATION_UPDATE, UNIT_PET: UnitDocumentation.lua:4891-4910, 4451) only while there is an enemy, and a step of one second runs
--- only while the list shows, or while the target of the target is an enemy nobody is on yet, as no event says when that one is pulled (T.Draw).
--- A burst of events is drawn once, a moment after the first. The window and its bars are made the first time they show.
--- The game withholds the threat of a member on some enemies: a query of the player, the pet or an ally against a target that is no boss is
--- generally not secret (SecretPredicatesDocumentation.lua:165-168, ShouldUnitThreatValuesBeSecret in SecretPredicateAPIDocumentation.lua:415-430),
--- so a boss is where it is. A withheld value is never read, compared or added: it goes as it is to SetValue of the bar and to SetFormattedText
--- of its text, which take it (SimpleStatusBarAPIDocumentation.lua:355-365, SimpleFontStringAPIDocumentation.lua:539-548). Nothing can be sorted
--- on it, so then the members keep the order of the group, the player first in a party, and the pets come after all of them: Number of bars
--- leaves out a pet before a member, so the five bars of the default show every member of a party. /flatui status says so. A member's name and
--- the enemy's go to SetText the same way when the game withholds them (SimpleFontStringAPIDocumentation.lua:664-673).
--- The player's own bar has a thin white outline (Mark your own bar; the player by UnitIsUnit, plain answers only, so his raid token counts).
--- With Always show your bar, when the player ranks below the last bar of Number of bars (2 or more), the last bar is his, his place before his
--- name ("12. Jon"; on a boss, where the bars keep the order of the group, with no number), so his outline and his pulse are always on screen.
--- With Warn near aggro, while the player is not the one tanking (isTanking of UnitDetailedThreatSituation, plain only) and his plain share is
--- at Warn at or above, his bar pulses red (a looping Alpha animation of a texture of Flat UI's own) and Warning sound plays once for that
--- enemy: again only after his share fell more than 10 under Warn at, the enemy changed (UnitGUID, plain only) or the list hid. Once he holds
--- the enemy's aggro (isTanking true, plain only) his bar keeps a steady red wash, no pulse, so it reads apart from "about to pull", and the
--- sound plays then if it has not for that enemy, so a sudden pull from under Warn at is heard too (T.Holding). A withheld share or isTanking,
--- as on a boss, warns of nothing. Not for a tank: while ns.PlayerRole (Core.lua: the group role, else the stance, form or aura nameplate
--- threat reads, else the talents) says tank, read at the start of each fight and at each refresh, his bar never pulses near aggro. A tank has
--- Warn when you lose aggro instead: when an enemy he was tanking (isTanking, plain only, on that enemy's GUID) turns to someone else while it is
--- still the enemy of the list, his bar pulses red for 2 seconds and Warning sound plays once, and for those 2 seconds the bar of the member
--- or pet now tanking it (isTanking true, plain only) pulses red with his (T.Took), so the one to taunt off is marked; a new enemy, a withheld
--- share or the list hiding forgets what he held. With Show who is near your aggro, while his role is a tank's, the bar of any other member or pet at Warn at or above who
--- is not tanking (plain share and isTanking only) wears a steady amber wash under its text, with no sound, so he sees who is about to pull and
--- can taunt or slow down (T.Others). The samples preview all three: for a damage dealer or healer the player's sample bar passes 90% at some
--- steps of test mode and every fifth step reaches 100% and holds aggro; while his role is a tank's his sample bar holds aggro at 100%, every
--- fifth step (10 seconds) a sample Mage takes it for one step, so his bar and the Mage's pulse as Warn when you lose aggro has it, and two steps after each of
--- those the sample Rogue climbs to 94% and turns amber. Each sound plays once for each time test mode is turned on (TestMode.lua's gate,
--- TM.Sound).
--- A bar glides to each new share (Enum.StatusBarInterpolation.ExponentialEaseOut, as the pet target bar has it, UnitPetTarget.lua), a withheld one
--- too, while it shows the same member (his unit token, or the same sample) on the same enemy; a bar that turns to another member as the order
--- changes, a bar that was hidden as the list shrank, a new enemy, a list that just showed or a client with no interpolation takes the value at
--- once, so a bar never slides between two people or from a stale share.
--- The title has the enemy's raid marker before its name, from GetRaidTargetIndex: an index the game withholds goes unread to SetSpriteSheetCell, as
--- the game's own target frame hands it on (Mainline/TargetFrame.lua:697-701), and RAID_TARGET_UPDATE draws it again while there is an enemy. The
--- sample shows a Skull.
--- The window is a child of UIParent in the LOW strata with a flat background and a thin border in the colours of the Flat UI page, as the data
--- panels have, its bars in Bar texture (the bar texture of that page by default, else one of its own, set again at once when it changes); it
--- takes no mouse and hides with the interface. It fades in over 0.15 seconds as it shows and out over 0.35 as it hides (two Alpha animation
--- groups of the window, T.Showing); showing again while it fades out stops the fade at once, and turning the module off hides it at once.
--- /flatui move places it (FlatUIThreat in
--- Movers.lua: the window's top left corner is the top left corner of the box, or with Bars stack Up its bottom left corner the bottom left
--- corner of the box, so a list above the action bars grows upward). /flatui threat shows sample bars for a few seconds, out of
--- combat. While test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh and sorted again every 2 seconds as their shares
--- move; the sample Wolf and Voidwalker show only with Pets on, as pets do in a real list. Nothing of the game is changed.
--- Built on the threat meter of EnhanceQoL's damage meter by Philipp Barth (R41Z0R), adapted with his permission
--- (EnhanceQoLDamageMeter/DamageMeter.lua:2841-2936, 7345-7368, 7450-7468): the enemy it reads, the units of the group with their pets, the
--- events that draw it again and the wait that draws a burst once. Its meter windows, its focus and focus target, and its share of the tank's
--- threat sorted on raw threat are left out: that share is worked out from the raw threat, which a withheld value does not allow, while the
--- game's scaled percentage needs no sum and says when aggro changes hands.
-
 local KEY = "threat"
 local MOVER = "FlatUIThreat"
--- The box of the handle in Movers.lua: the room of five bars at the default size, and where it is with no spot saved, right of the middle.
 local BOX_W, BOX_H, BOX_X, BOX_Y = 188, 112, 420, 0
--- Units inside the edge of the window, between two bars, and between the end of a bar and its text.
 local PAD, GAP, INSET = 4, 2, 4
--- A burst of events is drawn once, this long after the first. The step while the list shows. How long /flatui threat shows.
 local STEP, TICK, TEST_TIME = 0.2, 1, 8
 local MOST_ROWS = 10
 local FONT = "GameFontHighlightSmall"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
--- The text-dim of the windows (PanelLook.lua) for the enemy's name, the track behind a fill, the colour of a member whose class the game
--- withholds, and how much darker a pet's bar is than its owner's.
 local DIM = { 0.66, 0.68, 0.62 }
 local TRACK = { 0.2, 0.2, 0.2, 0.5 }
 local GREY = { 0.6, 0.6, 0.6 }
 local PET = 0.7
--- The outline of the player's bar, and the red of its pulse near aggro, its lowest opacity and the length of one swell.
 local MINE = { 1, 1, 1, 0.9 }
 local ALARM, ALARM_LOW, ALARM_TIME = { 1, 0.12, 0.08, 0.55 }, 0.15, 0.45
--- The steady amber over the bar of a member about to pull aggro from a tank (Show who is near your aggro).
 local NEAR = { 1, 0.65, 0.1, 0.4 }
--- The share under Warn at, in points, that lets the sound play again; the places of the Warning sound choices in ns.SOUNDS (IconRow.lua).
 local REARM = 10
--- How long the player's bar pulses after he lost aggro as a tank.
 local LOST_TIME = 2
--- How long the window fades in as it shows and out as it hides.
 local FADE_IN, FADE_OUT = 0.15, 0.35
--- The sheet of the eight raid marker icons, 4 by 4, and the room between the marker and the enemy's name.
 local MARKERS, MARKER_GAP = "Interface\\TargetingFrame\\UI-RaidTargetingIcons", 3
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
--- What the frame of the addon's own hears in a fight Show allows, and while there is an enemy.
 local FIGHT_EVENTS = { "PLAYER_TARGET_CHANGED" }
 local ENEMY_EVENTS = { "UNIT_THREAT_LIST_UPDATE", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_PET", "RAID_TARGET_UPDATE" }
 local LINE_WITHHELD = "Threat list: the game withheld the threat on the last enemy, so its bars kept the order of the group, the pets after the members."
 local LINE_MISSING = "Threat list: this client has no UnitDetailedThreatSituation, so the list stays hidden."
 local HELP = { "/flatui threat - sample bars of the threat list for a few seconds, out of combat" }
--- The bars of /flatui threat: a name, a class, the share, and true for a pet. false is the player, by name and class.
 local SAMPLE = {
 	{ "Tank", "WARRIOR", 100 }, { false, nil, 86 }, { "Mage", "MAGE", 71 }, { "Rogue", "ROGUE", 63 }, { "Hunter", "HUNTER", 52 },
 	{ "Wolf", "HUNTER", 40, true }, { "Warlock", "WARLOCK", 33 }, { "Voidwalker", "WARLOCK", 24, true }, { "Priest", "PRIEST", 12 }, { "Druid", "DRUID", 6 },
 }
 
 local IsSecret = ns.IsSecret
--- frame: the window, outline its background and border, title the enemy's name. rows: the bars. listener: the frame that hears the events, and
--- heard: what it hears. fighting: true between PLAYER_REGEN_DISABLED and PLAYER_REGEN_ENABLED. pending: a draw waits. ticker: the token of the
--- step. sample: the token of /flatui threat while it shows. placed: the spot the window was put at, laid: the layout of its bars. withheld: the
--- game withheld the threat on the last enemy read.
 local T = { rows = {}, heard = {}, fighting = false, withheld = false }
 ns.ThreatList = T
 
@@ -122,7 +43,6 @@ local function Own(object)
 	return object
 end
 
--- The first answer of a call of the client, or nil when the call is missing, raises or the answer is withheld.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -134,13 +54,11 @@ local function Ask(fn, ...)
 	return nil
 end
 
--- A number row, else its default.
 local function Number(key, default)
 	local value = Opt(key)
 	return ns.Finite(value) and value or default
 end
 
--- A count the game gives, as a whole number from 0 to most.
 local function Count(fn, most)
 	local value = Ask(fn)
 	if ns.Finite(value) and value > 0 then
@@ -149,12 +67,10 @@ local function Count(fn, most)
 	return 0
 end
 
--- The text is as high as the bar allows, as on the bars of the trackers (TrackerShapes.lua).
 local function TextHeight(height)
 	return math.max(7, math.min(14, height - 4))
 end
 
--- Whether the player is in a fight now, for a first look; a withheld answer counts as out of combat, as for the cursor ring (CursorRing.lua).
 local function InFight()
 	local value = Ask(UnitAffectingCombat, "player")
 	if type(value) == "boolean" then
@@ -163,14 +79,10 @@ local function InFight()
 	return Ask(InCombatLockdown) == true
 end
 
--- A timer of the client, false when there is none or it raises.
 local function After(seconds, fn)
 	return type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, seconds, fn)
 end
 
--- Where and on what --------------------------------------------------------------------------------------------------------------------------
-
--- True when Show lets the list show now: in a group, in a dungeon or raid, or anywhere.
 function T.Allowed()
 	local show = Opt("show")
 	if show == "always" then
@@ -182,13 +94,11 @@ function T.Allowed()
 	return Ask(IsInGroup) == true
 end
 
--- True for a unit with a threat table the group can be on: it exists, can be attacked, is no player and is not dead.
 function T.Enemy(unit)
 	return Ask(UnitExists, unit) == true and Ask(UnitCanAttack, "player", unit) == true and Ask(UnitIsPlayer, unit) ~= true
 		and Ask(UnitIsDeadOrGhost, unit) ~= true
 end
 
--- The enemy whose threat the list shows: the target, else the target of the target.
 function T.Mob()
 	if T.Enemy("target") then
 		return "target"
@@ -198,8 +108,6 @@ function T.Mob()
 	return nil
 end
 
--- The members of the group in its order, each { unit, owner, pet }: in a raid raid1 to raid40, the player among them; else the player, then
--- party1 to party4. With Pets on, each pet comes after its owner.
 function T.Members()
 	local list, pets = {}, Opt("pets") == true
 	local function Member(unit, pet)
@@ -223,12 +131,6 @@ function T.Members()
 	return list
 end
 
--- The members on the threat table of the enemy, each { member, order, scaled, value, withheld, tanking, me }, and true when the game withheld a
--- value. tanking and me are true only from plain answers: the member has aggro, the member is the player. The
--- game answers nothing for a member who is not on the table (MayReturnNothing; isTanking, status, scaledPercentage, rawPercentage, rawThreat).
--- Plain shares are sorted, highest first, the raw threat and then the order of the group deciding a tie. A withheld share is kept as it is for
--- the bar and its text, and then the entries are sorted on what Flat UI knows of them alone: the members first, then the pets, each in the order
--- of the group. T.Members puts each pet right after its owner, and in that order a pet would take the bar of the last member of a party.
 function T.Scan(mob)
 	local entries, withheld = {}, false
 	for order, member in ipairs(T.Members()) do
@@ -271,19 +173,12 @@ function T.Scan(mob)
 	return entries, withheld
 end
 
--- The bars of /flatui threat.
--- The sample bars. At each step of test mode (T.step, TestMode.lua's Tick) every bar but the first moves up or down by a share of SHIFT, in turn, and
--- the bars are sorted again, highest first, as a fight would move them. Every TURN steps the aggro moves: a damage dealer or healer's own sample
--- takes it (100%, the Tank 96%) for one step; while the player's role is a tank's (T.tank) his sample holds it (100%, the Tank 88%) and the Mage
--- takes it from him (100%, his 97%) for one step, so Warn when you lose aggro shows; between the Mage's turns (the second step of each TURN) the
--- Rogue climbs to 94% without the aggro, so Show who is near your aggro turns his bar amber.
 local SHIFT = { 0, 7, -5, 11, -8, 4, -3, 9 }
 local TURN = 5
 
 function T.Sample()
 	local entries, step = {}, T.step or 0
 	local turn = step > 0 and step % TURN == 0
-	-- The sample pets show only with Pets on, as the real list adds pets (T.Members); order stays the place in SAMPLE, for SHIFT and the sort.
 	local pets = Opt("pets") == true
 	for order, spec in ipairs(SAMPLE) do
 		local share, me, tanking = spec[3], spec[1] == false, order == 1
@@ -321,15 +216,11 @@ function T.Sample()
 	return entries
 end
 
--- True while test mode is on (TestMode.lua), out of a fight: the sample bars are held with the rows' look, with no 8 second end.
 function T.Testing()
 	local mode = ns.TestMode
 	return mode ~= nil and mode.IsOn() == true
 end
 
--- Drawing -----------------------------------------------------------------------------------------------------------------------------------
-
--- Red, green and blue of a class by its file name, or nil.
 local function ClassRGB(class)
 	local colours = RAID_CLASS_COLORS
 	if type(class) ~= "string" or type(colours) ~= "table" or IsSecret(colours) then
@@ -346,7 +237,6 @@ local function ClassRGB(class)
 	return nil
 end
 
--- The colour of a bar: the class colour of the member, a pet's owner's a shade darker, grey where the game withholds the class.
 function T.Colour(entry)
 	local r, g, b, pet
 	local spec = entry.sample
@@ -370,8 +260,6 @@ function T.Colour(entry)
 	return r, g, b
 end
 
--- Writes the name of a unit, or nothing; a withheld name goes to the text as it is. With a rank, the place goes before the name ("12. Jon"), a
--- withheld name through SetFormattedText, which takes it.
 local function SetName(text, unit, rank)
 	local ok, name = pcall(UnitName, unit)
 	if ok and (IsSecret(name) or type(name) == "string") then
@@ -383,8 +271,6 @@ local function SetName(text, unit, rank)
 	end
 end
 
--- Sets the value of a bar, gliding to it where the client has the interpolation (UnitPetTarget.lua has the same), at once with now or where it
--- has not. A withheld value goes as it is, as to SetValue. False when the client refuses the value.
 local function Glide(bar, value, now)
 	local list = not now and type(Enum) == "table" and Enum.StatusBarInterpolation or nil
 	local how = type(list) == "table" and list.ExponentialEaseOut or nil
@@ -394,8 +280,6 @@ local function Glide(bar, value, now)
 	return (pcall(bar.SetValue, bar, value))
 end
 
--- The cell of a marker on the sheet of the eight icons, 4 by 4 (UnitPetTarget.lua Cell). True when the icon shows a marker; a withheld index goes
--- unread to SetSpriteSheetCell.
 local function Cell(icon, index)
 	if type(icon.SetSpriteSheetCell) == "function" then
 		return (pcall(icon.SetSpriteSheetCell, icon, index, 4, 4))
@@ -406,8 +290,6 @@ local function Cell(icon, index)
 	return false
 end
 
--- The fades of a window of the addon's own: an Alpha animation from 0 to 1, and one from 1 to 0 that hides the window as it ends and puts its
--- opacity back. Nil for each where the client makes none. Healer mana has the same (HealerMana.lua).
 local function Fades(frame)
 	local ok, fadeIn, fadeOut = pcall(function()
 		local come = frame:CreateAnimationGroup()
@@ -433,8 +315,6 @@ local function Fades(frame)
 	return nil, nil
 end
 
--- Shows or hides a window with its fades: on shows it, fading in when it was hidden, and stops a fade out at once; off fades it out, or hides it
--- at once with now or with no fades.
 local function Showing(frame, fadeIn, fadeOut, on, now)
 	local fading = fadeOut ~= nil and fadeOut:IsPlaying()
 	if on then
@@ -465,8 +345,6 @@ local function Showing(frame, fadeIn, fadeOut, on, now)
 	end
 end
 
--- The window, made the first time it shows: a frame of the addon's own on UIParent with a flat background and a thin border, and the line for
--- the enemy's name with its raid marker before it (hidden while it has none).
 function T.Frame()
 	if T.frame then
 		return T.frame
@@ -494,8 +372,6 @@ function T.Frame()
 	return frame
 end
 
--- Shows the window with its fade in, or hides it with its fade out; at once with now, or where the client made no fades. Showing while it fades
--- out stops the fade and puts its opacity back. Hiding forgets whose share each bar shows, so the next one takes its value at once.
 function T.Showing(on, now)
 	if T.frame then
 		Showing(T.frame, T.fadeIn, T.fadeOut, on, now)
@@ -508,8 +384,6 @@ function T.Showing(on, now)
 	end
 end
 
--- The raid marker of the enemy before its name, or of the sample (8, Skull), and the name moved right of it while it shows. The index is never
--- read: a withheld one goes to the icon as it is, and an enemy with no marker answers nothing, which the icon does not take.
 function T.Marker(mob)
 	local marker, shown = T.marker, false
 	if not marker then
@@ -537,7 +411,6 @@ function T.Marker(mob)
 	end
 end
 
--- Bar number index, made the first time the list needs it: a track, the fill, the name on the left and the share on the right.
 function T.Row(index)
 	local row = T.rows[index]
 	if row then
@@ -558,7 +431,6 @@ function T.Row(index)
 	name:SetWordWrap(false)
 	name:SetPoint("LEFT", bar, "LEFT", INSET, 0)
 	name:SetPoint("RIGHT", share, "LEFT", -INSET, 0)
-	-- The outline of the player's bar: four thin edges on a frame of the addon's own over the bar, hidden until it is his.
 	local mine = Own(CreateFrame("Frame", nil, bar))
 	mine:SetAllPoints(bar)
 	for _, edge in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true }, { "TOPLEFT", "BOTTOMLEFT" }, { "TOPRIGHT", "BOTTOMRIGHT" } }) do
@@ -573,12 +445,10 @@ function T.Row(index)
 		end
 	end
 	mine:Hide()
-	-- The red pulse near aggro over the whole bar, under the text: a texture whose opacity swells and ebbs while it plays.
 	local alarm = Own(bar:CreateTexture(nil, "OVERLAY", nil, -8))
 	alarm:SetAllPoints(bar)
 	alarm:SetColorTexture(ALARM[1], ALARM[2], ALARM[3], ALARM[4])
 	alarm:Hide()
-	-- The steady amber of a member about to pull aggro from a tank (T.Others), under the text; never on the player's bar, so never with the red.
 	local near = Own(bar:CreateTexture(nil, "OVERLAY", nil, -8))
 	near:SetAllPoints(bar)
 	near:SetColorTexture(NEAR[1], NEAR[2], NEAR[3], NEAR[4])
@@ -597,8 +467,6 @@ function T.Row(index)
 	return row
 end
 
--- True when an entry of the player is near aggro: Warn near aggro is on, his role is no tank's (T.tank), he is not tanking and his plain share is
--- at Warn at or above.
 function T.Near(entry)
 	if Opt("warn") == false or T.tank or not entry or not entry.me or entry.withheld or entry.tanking then
 		return false
@@ -606,51 +474,65 @@ function T.Near(entry)
 	return ns.Finite(entry.scaled) and entry.scaled >= Number("warnAt", 90)
 end
 
--- True when an entry of the player holds the enemy's aggro while his role is no tank's: Warn near aggro is on and his plain isTanking is true.
--- His bar then keeps a steady red wash (T.Pulse), and Warning sound plays if it has not for that enemy (T.Alarm).
 function T.Holding(entry)
 	return Opt("warn") ~= false and not T.tank and entry ~= nil and entry.me == true and not entry.withheld and entry.tanking == true
 end
 
--- True when an entry of another member is about to pull aggro from the player as a tank: Show who is near your aggro is on, ns.PlayerRole says
--- tank (T.tank), the member is not tanking and his plain share is at Warn at or above. His bar then turns a steady amber, with no sound.
+local function Assigned(assignment, unit)
+	if type(GetPartyAssignment) ~= "function" then
+		return false
+	end
+	local ok, yes = pcall(GetPartyAssignment, assignment, unit)
+	return ok and not IsSecret(yes) and yes ~= nil and yes ~= false
+end
+
+function T.OtherTank(entry)
+	local member = entry and entry.member
+	if not member or entry.me or member.pet or type(member.unit) ~= "string" then
+		return false
+	end
+	local unit = member.unit
+	if Ask(UnitGroupRolesAssigned, unit) == "TANK" or Assigned("MAINTANK", unit) then
+		return true
+	end
+	return Ask(IsInRaid) ~= true and Ask(UnitHasEffectivelyTankAura, unit) == true
+end
+
 function T.Others(entry)
 	if not T.tank or Opt("others") == false or not entry or entry.me or entry.withheld or entry.tanking then
 		return false
 	end
-	return ns.Finite(entry.scaled) and entry.scaled >= Number("warnAt", 90)
+	if not (ns.Finite(entry.scaled) and entry.scaled >= Number("warnAt", 90)) then
+		return false
+	end
+	return Opt("otherTanks") == false or not T.OtherTank(entry)
 end
 
--- True while the player's bar pulses because he lost aggro as a tank (T.Lost).
 function T.Losing(entry)
-	if not T.lostUntil or not entry or not entry.me then
+	if not T.lostUntil or not entry or not entry.me or entry.tanking == true then
 		return false
 	end
 	local now = Ask(GetTime)
 	return ns.Finite(now) and now < T.lostUntil
 end
 
--- True while the bar of whoever took the enemy from the player as a tank pulses with his (T.Lost): another member's or pet's entry, not withheld,
--- whose plain isTanking is true (T.Scan keeps plain answers only), for the same LOST_TIME, so the one to taunt off is marked at a glance. T.Others
--- skips a tanking entry, so its amber never meets this red on one bar.
 function T.Took(entry)
 	if not T.lostUntil or not entry or entry.me or entry.withheld or entry.tanking ~= true then
 		return false
 	end
+	if Opt("otherTanks") ~= false and T.OtherTank(entry) then
+		return false
+	end
 	local now = Ask(GetTime)
 	return ns.Finite(now) and now < T.lostUntil
 end
 
--- Reads the player's role for the warnings: true while ns.PlayerRole says tank (Core.lua). Read at the start of a fight and at each refresh.
 function T.ReadRole()
 	local ok, role = pcall(ns.PlayerRole)
 	T.tank = ok and not IsSecret(role) and role == "tank" or false
 end
 
--- Warn when you lose aggro: while the player is a tank, his plain isTanking on the enemy (its GUID, else its token: who) is kept, and when an
--- enemy he held is still the enemy of the list but no longer his, his bar pulses red for LOST_TIME and Warning sound plays once. A new enemy, a
--- withheld entry, no entry of his or the list hiding (who nil) forget what he held.
-function T.Lost(entry, who)
+function T.Lost(entry, who, entries)
 	if who ~= T.lostOn then
 		T.held, T.lostUntil, T.lostOn = nil, nil, who
 	end
@@ -659,12 +541,21 @@ function T.Lost(entry, who)
 		return
 	end
 	if entry.tanking then
-		T.held = who
+		T.held, T.lostUntil = who, nil
 	elseif T.held == who then
 		T.held = nil
+		if Opt("otherTanks") ~= false and type(entries) == "table" then
+			for _, other in ipairs(entries) do
+				if other.tanking == true and not other.me then
+					if T.OtherTank(other) then
+						return
+					end
+					break
+				end
+			end
+		end
 		local now = Ask(GetTime)
 		T.lostUntil = ns.Finite(now) and now + LOST_TIME or nil
-		-- The bars are drawn again as the pulse ends, so it lasts LOST_TIME however far the next step is (the samples move every 2 seconds).
 		After(LOST_TIME + 0.05, function()
 			ns.Try(KEY, T.Soon)
 		end)
@@ -676,7 +567,6 @@ function T.Lost(entry, who)
 	end
 end
 
--- Starts or stops the red pulse of a bar; with steady, the red stays on at its own opacity with no pulse (the player holds aggro, T.Holding).
 function T.Pulse(row, on, steady)
 	if steady then
 		if row.pulse and row.pulse:IsPlaying() then
@@ -697,10 +587,6 @@ function T.Pulse(row, on, steady)
 	end
 end
 
--- Warning sound, once for an enemy while the player is near aggro on it or holds it (T.Holding, so a sudden pull from under Warn at is heard
--- too): again once his plain share fell more than REARM under Warn at, he left
--- its table, the enemy changed (its GUID, else its token, when the game withholds the GUID) or the list hid (who nil). A sample's sound plays
--- once for each time test mode is turned on (TM.Sound).
 function T.Alarm(entry, who)
 	if who == nil or not entry then
 		T.warned = nil
@@ -723,9 +609,6 @@ function T.Alarm(entry, who)
 	end
 end
 
--- Bar texture, and the height of the text, on one bar. A texture the game refuses leaves a flat fill. The height is given on every draw, a few
--- calls: Fonts, which starts after this module at login (MODULE_ORDER in Core.lua), may set the font object of the text again (Fonts.lua),
--- and a string can take its font object's height back, as Group tools notes for its countdown number.
 local function Paint(row, file, text)
 	if row.file ~= file then
 		local ok, done = pcall(row.bar.SetStatusBarTexture, row.bar, file)
@@ -738,8 +621,6 @@ local function Paint(row, file, text)
 	row.share:SetTextHeight(text)
 end
 
--- Lays out the enemy's name and n bars, and sizes the window to them. The heights of the text are given each time (Paint); a layout that is
--- already in place is left as it is.
 function T.Layout(n)
 	local width, height = Number("barWidth", 180), Number("barHeight", 16)
 	local text = TextHeight(height)
@@ -764,9 +645,6 @@ function T.Layout(n)
 	T.frame:SetSize(width + 2 * PAD, top + n * height + (n - 1) * GAP + PAD)
 end
 
--- Writes one bar: its colour, its name and its share, the outline of the player's own and its pulse near aggro, or its steady red while he
--- holds aggro. A withheld share goes to the bar and to its text untouched. The bar glides to the share while it shows the same member (his unit
--- token, or the same sample) in a window that shows; else it takes it at once.
 function T.Fill(row, entry)
 	row.mine:SetShown(entry.me == true and Opt("mine") ~= false)
 	row.near:SetShown(T.Others(entry))
@@ -796,9 +674,6 @@ function T.Fill(row, entry)
 	row.bar:Show()
 end
 
--- Puts the window at the spot of its handle: its top left corner at the top left corner of the box, or with Bars stack Up its bottom left corner at
--- the bottom left corner of the box, so more bars push the title up (as Rolls stack has it for the loot rolls, Hud.lua). The bars inside keep
--- their order, the title on top.
 function T.Place()
 	local corner = Opt("grow") == "up" and "BOTTOMLEFT" or "TOPLEFT"
 	local x, y
@@ -821,14 +696,6 @@ function T.Place()
 	end
 end
 
--- Shows the bars of the entries, as many as Number of bars allows, with the name of the enemy (Sample for /flatui threat), or hides the window
--- when there are none. With Always show your bar and 2 bars or more, a player who ranks below the last bar takes the last one, with his place
--- (T.Shown). The step runs while the list of an enemy shows, and also while the target of the target is an enemy nobody is on yet:
--- the game names the enemy whose threat list changed by a token of its own (UNIT_THREAT_LIST_UPDATE, UnitDocumentation.lua:4889-4898; Blizzard
--- hears it for a frame's own unit, CompactUnitFrame.lua:349-350, and draws its target of target in an OnUpdate, Mainline/TargetFrame.lua:893-899),
--- never as the target of the target, and a member who fights another enemy keeps its threat situation, the highest on any enemy
--- (CompactUnitFrame.lua:624-626). So when a healer's tank pulls the next enemy in a fight, with no nameplate on it, no event says so. The
--- player's own target is named in that event, so for it the list waits for the event.
 function T.Draw(mob, entries)
 	local n = math.min(entries and #entries or 0, Number("rows", 5), MOST_ROWS)
 	if n < 1 then
@@ -847,19 +714,17 @@ function T.Draw(mob, entries)
 		end
 	end
 	local who = mob and (Ask(UnitGUID, mob) or mob) or "sample"
-	-- A new enemy: every bar takes its share at once.
 	if T.drawnOn ~= who then
 		T.drawnOn = who
 		for _, row in ipairs(T.rows) do
 			row.who = nil
 		end
 	end
-	T.Lost(own, who)
+	T.Lost(own, who, entries)
 	local shown = T.Shown(entries, n, own, at)
 	for index = 1, n do
 		T.Fill(T.rows[index], shown[index])
 	end
-	-- A bar that hides forgets its member, so it takes its share at once when it shows again (T.Fill).
 	for index = n + 1, #T.rows do
 		T.Pulse(T.rows[index], false)
 		T.rows[index].near:Hide()
@@ -878,8 +743,6 @@ function T.Draw(mob, entries)
 	T.Tick(mob ~= nil)
 end
 
--- The entries the n bars show: the first n, or with Always show your bar, n of 2 or more and the player's entry (own, at its place at) below
--- them, the first n - 1 and then his, his place on it (rank) where the shares are plain. On a boss the order is the group's, so no place.
 function T.Shown(entries, n, own, at)
 	if not own or not at or at <= n or n < 2 or Opt("keepMine") == false then
 		return entries
@@ -893,10 +756,7 @@ function T.Shown(entries, n, own, at)
 	return shown
 end
 
--- Listening ---------------------------------------------------------------------------------------------------------------------------------
-
 function T.OnEvent(event, unit)
-	-- Heard for every unit where the client cannot hear one: only the player's target counts.
 	if event == "UNIT_TARGET" and (IsSecret(unit) or unit ~= "target") then
 		return
 	end
@@ -914,7 +774,6 @@ function T.Listener()
 	return T.listener
 end
 
--- Starts or stops hearing an event, for one unit alone where the client can.
 local function Hear(event, on, unit)
 	on = on == true
 	if on == (T.heard[event] ~= nil) or (not on and not T.listener) then
@@ -944,7 +803,6 @@ local function HearAll(events, on)
 	end
 end
 
--- Draws again a moment later, once for a burst of events.
 function T.Soon()
 	if T.pending then
 		return
@@ -957,9 +815,6 @@ function T.Soon()
 	end
 end
 
--- A step of one second while the list of an enemy shows, or while the target of the target has nobody on its list yet (T.Draw), for what no event
--- announces. A client without NewTicker gets a timer that sets the next one while the token is the step's, as the data panels have it
--- (DataPanels.lua).
 function T.Tick(on)
 	if on and not T.ticker then
 		local token = {}
@@ -992,7 +847,6 @@ function T.Tick(on)
 	end
 end
 
--- What the list shows now, drawn: the target is heard only in a fight Show allows, the threat events only while there is an enemy.
 function T.Update()
 	T.pending = nil
 	local on = ns.Enabled(KEY)
@@ -1021,7 +875,6 @@ function T.Fight(on)
 	T.Update()
 end
 
--- Off, or stopped: the window hides at once, the frame hears nothing and the step ends.
 function T.Off()
 	T.sample, T.fighting, T.pending, T.withheld, T.warned = nil, false, nil, false, nil
 	T.held, T.lostUntil, T.lostOn = nil, nil, nil
@@ -1043,7 +896,6 @@ function T.Refresh()
 	T.Update()
 end
 
--- /flatui threat: the sample bars for a few seconds, out of combat.
 function T.Slash()
 	if not ns.Enabled(KEY) then
 		print("Threat list: turn on Show the threat list first.")
@@ -1081,14 +933,10 @@ function T.Status()
 	return lines
 end
 
--- The movers ----------------------------------------------------------------------------------------------------------------------------------
-
--- True while the list has a handle in the movers: while the module is on, in a fight or not.
 function ns.ThreatListShown()
 	return ns.Enabled(KEY)
 end
 
--- The movers set or put back the spot.
 function ns.ThreatListMoved()
 	T.placed = nil
 	if T.frame and ns.Enabled(KEY) then
@@ -1096,8 +944,6 @@ function ns.ThreatListMoved()
 	end
 end
 
--- Test mode: the sample bars while it is on (T.Update reads T.Testing), each refresh of the page drawing them with its rows, and moved every 2 seconds
--- while the bar's Moving is on. Off, the page refreshes and the bars go.
 local TEST_STEP = 2
 
 ns.Register(KEY, {
@@ -1114,7 +960,6 @@ ns.Register(KEY, {
 		PLAYER_REGEN_ENABLED = function()
 			T.Fight(false)
 		end,
-		-- Out of a fight there is nothing to show; the start of one reads the group.
 		GROUP_ROSTER_UPDATE = function()
 			if T.fighting then
 				T.Soon()

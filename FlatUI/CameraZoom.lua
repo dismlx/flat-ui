@@ -1,30 +1,12 @@
 local _, ns = ...
 
--- Maximum camera distance (general.cameraZoom on the World and cursor page). The game's own Max Camera Distance slider stops at 2.0 on WoW: Forever
--- (Blizzard_SettingsDefinitions_Frame/Camelot/ControlsOverrides.lua:5-14: 1.0 to 2.0 in steps of 0.1), while the variable behind it,
--- cameraDistanceMaxZoomFactor, takes 2.6. The row holds no value of its own, like the rows that show a game setting: it reads the variable and is
--- ticked while it is 2.6 or more, so it is the same in every profile, and a change made with the game's slider shows at once. It is not one of the
--- rows with cvar in Config.lua, which hold the variable itself; this one holds a choice of two values. Ticked, it keeps the text the variable had in
--- FlatUIDB.cameraGame, then writes 2.6, out of combat; a value of 2.6 or more is never lowered, and a write the game does not keep whole is undone.
--- Unticked while the variable is still 2.6 or more, it writes back the kept text, or the client's default when it kept none, and forgets it; a value
--- the game or the player lowered meanwhile is left as it is. C_CVar.GetCVar, GetCVarDefault and SetCVar take a name and plain text
--- (CVarDocumentation.lua:20-33, 66-80, 131-148). Ticked by the player out of a fight, from below the top, once the game keeps 2.6 the camera glides
--- out to it (CameraZoomOut, which the game clamps to the new factor and smooths; not protected: the apis.yaml of wowless for wowf, and the game's
--- own Blizzard_GamepadTargeting/TargetLogic.lua:80 calls it), so the extra room shows at once. Nothing moves the camera at login, at a change of
--- profile, for a choice made in a fight (written as it ends) or when the row is unticked: the game pulls the camera in to its own limit then.
--- This follows the maximum camera zoom of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Settings/Camera.lua:1-29).
-
 local CVAR = "cameraDistanceMaxZoomFactor"
--- The factor the row writes, and how far below it a value read back may be and still count as it.
 local TOP, TOP_TEXT, SLACK = 2.6, "2.6", 1e-4
 local LABEL = "Maximum camera distance"
 
--- How far the camera is asked to zoom out once the row is ticked: more than the farthest distance, which the game clamps it to.
 local ZOOM_OUT = 50
 
--- The value waiting for the end of a fight, or nil.
 local pending = nil
--- How the last change made in this session ended: nil, "ok" or "kept".
 local result = nil
 
 local function Calls()
@@ -35,7 +17,6 @@ local function Calls()
 	return nil
 end
 
--- The text of the variable, or nil when the client has no such variable or withholds it.
 local function Text()
 	local cvar = Calls()
 	if not cvar or type(cvar.GetCVar) ~= "function" then
@@ -48,7 +29,6 @@ local function Text()
 	return nil
 end
 
--- The number in a text of the variable, or nil.
 local function Factor(text)
 	local number = type(text) == "string" and tonumber(text) or nil
 	return ns.Finite(number) and number or nil
@@ -58,7 +38,6 @@ local function AtTop(number)
 	return number ~= nil and number >= TOP - SLACK
 end
 
--- Writes the text and gives the number the variable holds after it, or nil when the client cannot be asked.
 local function Write(text)
 	local cvar = Calls()
 	if not cvar or type(cvar.SetCVar) ~= "function" then
@@ -68,7 +47,6 @@ local function Write(text)
 	return Factor(Text())
 end
 
--- The client's default when it is below the top, else nil.
 local function Default()
 	local cvar = Calls()
 	if not cvar or type(cvar.GetCVarDefault) ~= "function" then
@@ -100,7 +78,6 @@ local function Apply(on)
 			result = "ok"
 			return
 		end
-		-- What the game had is kept before the write.
 		db.cameraGame = before
 		local after = Write(TOP_TEXT)
 		if AtTop(after) then
@@ -131,8 +108,6 @@ local function Apply(on)
 	end
 end
 
--- The row's value: true while the variable is at the top, nil when it cannot be read (the row then shows its default, off). In a fight it is the
--- choice that waits for its end, so the switch follows a click at once and a second click takes the choice back.
 function ns.CameraZoomGet()
 	local number = Factor(Text())
 	if number == nil then
@@ -144,7 +119,6 @@ function ns.CameraZoomGet()
 	return AtTop(number)
 end
 
--- The row was changed. Nothing is written in combat: the last choice made in a fight is written when it ends.
 function ns.CameraZoomSet(_, value)
 	local on = value == true
 	if InCombatLockdown() then
@@ -164,13 +138,11 @@ function ns.CameraZoomSet(_, value)
 	pending = nil
 	local below = on and not AtTop(Factor(Text()))
 	Apply(on)
-	-- Ticked from below the top and kept: the camera glides out to the new farthest distance, so the row is seen to work.
 	if below and result == "ok" and AtTop(Factor(Text())) and type(_G.CameraZoomOut) == "function" then
 		pcall(_G.CameraZoomOut, ZOOM_OUT)
 	end
 end
 
--- The line of /flatui status, or nil when there is nothing to say: the client has no such variable, or the row is off and nothing waits.
 function ns.CameraZoomStatus()
 	local number = Factor(Text())
 	if number == nil then

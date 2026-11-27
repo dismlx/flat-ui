@@ -1,34 +1,20 @@
 local ADDON_NAME, ns = ...
 
--- The level on the portrait of the player, target and focus frames, for the level position On the portrait. The other positions, the colour and the
--- size of the level are in UnitFrames.lua, in the functions that lay out and write the name row; a frame that shows no picture of Flat UI's has its
--- level at the end of the row there. On a round picture the number moves in from the corner of the square onto the circle. This file adds its work after
--- the steps of that file through ns.UnitFrameExtra: a part that stops on errors counts as off here, and every function can run twice with the same result.
--- As you level (PLAYER_LEVEL_UP, read 0.2 seconds later, once the row has written the new level from UnitEffectiveLevel), the level of the player frame
--- pops: the number in the name row, and on the portrait with On the portrait, grows to 180% and settles back over 0.45 seconds while it fades up from
--- 40%, from its own end of the row (the right with End of the name row, the left with Before the name) or the portrait's corner, as the experience bar
--- lights in gold (Hud.lua). It is a Scale and an Alpha animation of a font string of the addon's own, made once, so it plays in a fight too; nothing
--- plays on a level that does not show, and no row of its own turns it on or off.
-
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
 local PART = "Level options"
 local KIND_PART = "Elite and Rare"
--- Where the number sits on the picture, in units from its bottom right corner. A round picture adds the way in from the corner of its square to the
--- circle (ns.UnitFrameExtra.pictureInset, UnitFrames.lua).
 local INSET = 2
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- How far in from the bottom right corner of the picture the number sits, in units.
 local function Inset(rec)
 	local more = type(X.pictureInset) == "function" and X.pictureInset(rec) or 0
 	return INSET + (ns.Finite(more) and more or 0)
 end
 
--- The text on the picture, made once on a frame of the addon's own above the picture, its inner line and its rim. It waits for the end of combat.
 local function Make(rec)
 	local pic = rec.pic
 	if pic.levelText ~= nil then
@@ -57,7 +43,6 @@ end
 
 local Update
 
--- Runs Update once more when the fight is over.
 local function Later(rec)
 	if not rec.levelQueued then
 		rec.levelQueued = true
@@ -68,9 +53,6 @@ local function Later(rec)
 	end
 end
 
--- The level as the name row has it, with the mark of a target's kind after it, in the colour and the font of the row's level with an outline.
--- A level the client withholds is passed on unread and gets no mark. Nothing shows unless the level position is On the portrait and the row shows a level.
--- The number is anchored again, out of combat, when the picture turns round or square or changes size.
 function Update(rec)
 	local pic, row = rec.pic, rec.row
 	if pic == nil or row == nil then
@@ -130,15 +112,9 @@ table.insert(X.after.apply, { part = PART, fn = Update })
 table.insert(X.after.layout, { part = PART, fn = Update })
 table.insert(X.after.picture, { part = PART, fn = Update })
 
--- The pop as you level --------------------------------------------------------------------------------------------------------------------------
-
--- The wait after PLAYER_LEVEL_UP, the size the number pops to, the seconds it settles over and the opacity it fades up from.
 local POP = { wait = 0.2, scale = 1.8, time = 0.45, alpha = 0.4 }
--- The pop of each font string, made once; false where the client will not make it.
 local pops = setmetatable({}, { __mode = "k" })
 
--- A Scale animation from POP.scale back to whole (a font string scales by its vertices, as PlateQuest.lua pops its kill count) and an Alpha one from
--- POP.alpha to full, together. Its origin is set as it plays.
 local function PopOf(text)
 	local pop = pops[text]
 	if pop ~= nil then
@@ -170,7 +146,6 @@ local function PopOf(text)
 	return pop
 end
 
--- Pops a number that shows, from the point origin of it.
 local function Pop(text, origin)
 	if text == nil then
 		return
@@ -188,7 +163,6 @@ local function Pop(text, origin)
 	pcall(pop.group.Play, pop.group)
 end
 
--- The level of the player frame as you level: in the name row, from the end the row puts it at, and on the portrait, from its corner.
 local function LevelUp()
 	local rec = X.known(_G.PlayerFrame)
 	if rec == nil or ns.PartStopped(KEY, PART) then

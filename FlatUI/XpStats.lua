@@ -1,56 +1,16 @@
 local _, ns = ...
 
--- The levelling numbers of Flat UI's own experience bar, which XpBar.lua draws: the experience of this session and the pace, the time to the next
--- level, about how many kills and quests that takes, the time at this level, and the experience of the quests in the log. A helper of the hud
--- module, as XpBar.lua is: its events come with ns.AddEvent and each one runs inside ns.EachPart, so a fault stops this part alone and the bar
--- draws on without its numbers.
---
--- The session starts when the module starts, and goes on when the module starts again within RESUME_GAP seconds of the last save, as after a
--- reload: the gap counts as time away. Every gain of experience counts, rested and group bonuses with it, from two plain reads of UnitLevel,
--- UnitXP and UnitXPMax, the calls the game's own bar reads (ExpBar.lua:18-25): at one level the difference, over a level up what was left of the
--- old level and the new value. A withheld read counts nothing and the next plain one counts the gap. The pace is the experience of the last
--- WINDOW seconds of play, or of the whole session while it is shorter, and is given after MIN_PLAY seconds of play; time flagged away
--- (UnitIsAFK) is left out. A level up starts the time at this level and the kill count again, and leaves the pace alone. With Level up line in
--- chat on (and Flat UI's bar shown) it first prints one line with the new level, the time the old one took where that is known (after a level
--- up seen this session, or a /played at that level) and this session's play, once a level (s.saidLevel, kept over a reload).
--- Kills come from the game's kill line, CHAT_MSG_COMBAT_XP_GAIN in the form of COMBATLOG_XPGAIN_FIRSTPERSON, whose number is the whole gain. The
--- base of a kill is that number without the rested bonus, which the game takes from the rested pool (GetXPExhaustion), up to the base of the kill.
--- Kills to level spends what is left of the pool first. The count starts again at a new level or a new size of group. Quests come from
--- QUEST_TURNED_IN, whose second value is the experience the game gave. The quests ready to hand in are those of the log that C_QuestLog.IsComplete
--- calls done, as the game's own log marks them (QuestMapFrame.lua:2097), each with GetQuestLogRewardXP(questID).
--- The reputation pace is kept for the faction the reputation bar shows (ns.XpRepNow, XpBar.lua, from C_Reputation.GetWatchedFactionData or the
--- faction Errands follows), on the same play clock: a rise of its standing on the faction's own scale is a gain at the drawing of the bar that
--- sees it, and the bar is drawn on UPDATE_FACTION. Its count starts again when the bar shows another faction or the standing falls, so a time to
--- the next standing never mixes two factions or scales. The pace is that of the last WINDOW seconds of play with the faction, given after
--- MIN_PLAY seconds of them; the time to the next standing is what is left of the standing over the pace, none at the top standing. A withheld
--- read counts nothing and the next plain one counts the gap, as for experience.
--- /flatui xp reset and a Ctrl-click on the bar (ns.XpStatsReset) count the session from now, the reputation pace with it.
--- Nothing of the game's is written or hooked and no frame is made here. The played time is never asked for, since RequestTimePlayed prints two
--- lines in every chat window (ChatFrameUtil.lua:184-196): the time at this level is known after a level up, or after a /played of the player's own.
--- These follow EnhanceQoL's experience and reputation bars by Philipp Barth (R41Z0R), adapted with his permission.
-
 local KEY, PART = "hud", "levelling stats"
--- Seconds of play the pace is taken over, and before it is given.
 local WINDOW, MIN_PLAY = 1800, 300
--- Gains closer together than this are one mark of the session; marks kept at most.
 local STEP, MAX_MARKS = 10, 400
--- Seconds from the last save within which a new start goes on with the session.
 local RESUME_GAP = 300
--- Kills and quests averaged, and how many are needed for a guess.
 local KILLS, MIN_KILLS, QUESTS, MIN_QUESTS = 10, 3, 10, 2
--- Lines of the quest log read at most: 20 quests and their headers fit many times over.
 local MAX_ENTRIES = 100
 local VERSION, SAVED = 1, "xpSession"
 
--- s: the session, { v, started, savedAt, away, awaySince, gained, marks = { { play, gained } }, last = { level, value, total }, levelSince,
--- played = { level, at, seconds }, kills = { level, group, list }, quests = { list }, pool, resumed, rep = { id, at, started, gained, marks },
--- saidLevel }.
--- In memory while the module runs, and in FlatUICharDB.xpSession from the logout or reload on, until the next start reads it.
 local s
--- What the last look at the quest log found: { ready, readyXP, all, allXP }, or { missing = true } on a client without the calls.
 local quest
 local queued = false
--- The kill line as a Lua pattern, the place of its number among the captures, and the format both were made from.
 local pattern, numberAt, patternFrom
 
 local Finite, IsSecret = ns.Finite, ns.IsSecret
@@ -59,7 +19,6 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- The first value of a call that may be missing, raise or be withheld; nil then.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -71,7 +30,6 @@ local function Ask(fn, ...)
 	return value
 end
 
--- A field of a table the game gave, or nil when the read raises or the value is withheld.
 local function Field(info, key)
 	if type(info) ~= "table" or IsSecret(info) then
 		return nil
@@ -90,7 +48,6 @@ local function Now()
 	return Finite(now) and now or nil
 end
 
--- Runs fn as this part: a fault is counted by ns.EachPart, and three stop the part alone. fn's first value comes back, or nil.
 local function Safe(fn, ...)
 	local out
 	ns.EachPart(KEY, PART, function(_, ...)
@@ -99,7 +56,6 @@ local function Safe(fn, ...)
 	return out
 end
 
--- The rested pool, 0 when the game does not say, and the rate of a rested kill (2 for the game's 200%).
 local function Rest()
 	local pool = Ask(GetXPExhaustion)
 	local rate
@@ -112,18 +68,12 @@ local function Rest()
 	return Finite(pool) and math.max(pool, 0) or 0, rate or 2
 end
 
--- Session ---------------------------------------------------------------------------------------------------------------------------------
-
 local function Fresh(now)
 	return { v = VERSION, started = now, savedAt = now, away = 0, gained = 0, marks = {}, spent = 0, unseen = 0 }
 end
 
--- What a kill line and the pool update that goes with it leave to each other lasts this many seconds: the game sends them together.
 local SETTLE = 2
 
--- The rested pool as the game shows it now, set against the kill lines: a fall that lines explained is settled (s.spent), a fall no line has
--- explained yet waits for its line (s.unseen), and a rise (resting) settles both. Neither waits longer than SETTLE seconds, so a line that was
--- never read leaves nothing behind.
 local function Pool()
 	local pool, now = Rest(), Now() or 0
 	local was = Finite(s.pool) and s.pool or pool
@@ -154,8 +104,6 @@ local function Count(list)
 	return out
 end
 
--- The saved session when it may go on: well formed, and saved RESUME_GAP seconds ago or less by this computer's clock. The gap, and an away
--- span open at the save, become time away.
 local function Kept(saved, now)
 	if type(saved) ~= "table" or saved.v ~= VERSION then
 		return nil
@@ -196,7 +144,6 @@ local function Kept(saved, now)
 		saved.kills = nil
 	end
 	saved.quests = { list = Count(type(saved.quests) == "table" and saved.quests.list or nil) }
-	-- The reputation count goes on only when it is whole; else it starts again at the next drawing of the bar.
 	local rep = saved.rep
 	local whole = type(rep) == "table" and Finite(rep.id) and Finite(rep.at) and Finite(rep.started) and Finite(rep.gained) and rep.gained >= 0
 		and type(rep.marks) == "table" and #rep.marks <= MAX_MARKS
@@ -213,7 +160,6 @@ local function Kept(saved, now)
 	return saved
 end
 
--- Seconds of play in the session: the time since it started, less the time away.
 local function Play(now)
 	local away = s.away + (s.awaySince and math.max(0, now - s.awaySince) or 0)
 	return math.max(0, now - s.started - away)
@@ -229,7 +175,6 @@ local function Gain(now, amount)
 	else
 		marks[#marks + 1] = { play, s.gained }
 	end
-	-- The last mark at or before the start of the window stays: it holds the experience of the session then.
 	while #marks > 1 and marks[2][1] <= play - WINDOW do
 		table.remove(marks, 1)
 	end
@@ -238,13 +183,9 @@ local function Gain(now, amount)
 	end
 end
 
--- The chat line of a level up (Level up line in chat), set under Words: the new level, what was known of the old one before the read reset it
--- ({ level, since, played }), and now.
 local LevelLine
 
--- A plain read of the level and the experience, and what it adds to the session.
 local function Read()
-	-- A client without the two calls is asked nothing at all, its level included.
 	if not s or type(UnitXP) ~= "function" or type(UnitXPMax) ~= "function" then
 		return
 	end
@@ -256,7 +197,6 @@ local function Read()
 	end
 	local last = s.last
 	if last and ((level > last[1] and value == last[2]) or (level == last[1] and value < last[2])) then
-		-- Half of a level up: the level has turned and the value not yet, or the value has and the level not yet. The next read has both.
 		return
 	end
 	s.last = { level, value, total }
@@ -267,7 +207,6 @@ local function Read()
 	if level == last[1] then
 		gain = value - last[2]
 	elseif level > last[1] then
-		-- What was left of the old level, then the new value. A jump of more than one level leaves the levels between out.
 		gain = math.max(last[3] - last[2], 0) + value
 		local before = { level = last[1], since = s.levelSince, played = s.played }
 		s.levelSince, s.played, s.kills = now, nil, nil
@@ -280,8 +219,6 @@ local function Read()
 	end
 end
 
--- The away flag: a span opens when the game flags the player away and closes when it takes the flag off. A withheld answer (UnitIsAFK is secret
--- in a dungeon, a raid or a battleground) opens nothing and closes a span opened outside: a change of the flags there means the player acted.
 local function Away()
 	local now = Now()
 	local away = Ask(UnitIsAFK, "player")
@@ -306,7 +243,6 @@ local function Begin()
 	end
 	local saved = type(char) == "table" and char[SAVED] or nil
 	s = Kept(saved, now) or Fresh(now)
-	-- The saved copy is read once: the next one is written at the logout or reload.
 	if type(char) == "table" then
 		char[SAVED] = nil
 	end
@@ -315,7 +251,6 @@ local function Begin()
 	Read()
 end
 
--- The session as it stands, kept for the reload. Nothing is written for a session that never read the experience.
 local function Save()
 	local now, char = Now(), ns.Character()
 	if s and now and s.last and type(char) == "table" then
@@ -324,10 +259,6 @@ local function Save()
 	end
 end
 
--- Kills -----------------------------------------------------------------------------------------------------------------------------------
-
--- The game's kill line as a Lua pattern anchored at the start, and the place of its number among the captures. The forms of the line with a
--- bonus or a penalty (rested, group, raid) start with the same sentence, so one pattern finds them all. Nil for a client without the format.
 local function KillPattern()
 	local format = _G.COMBATLOG_XPGAIN_FIRSTPERSON
 	if IsSecret(format) or type(format) ~= "string" or format == "" then
@@ -374,9 +305,6 @@ local function Kill(text)
 	Pool()
 	local _, rate = Rest()
 	local share = total * (rate - 1) / rate
-	-- The pool as it stood before this kill, whichever the game sent first: the pool now, what it lost that no line has explained yet (the
-	-- pool came first), less what earlier lines took that it does not show yet (the lines came first, as after an area pull). The bonus of a
-	-- kill is the base of the kill while the pool lasts, and what was left of the pool for the kill that uses it up: the smaller of the two.
 	local before = math.max(0, s.pool + s.unseen - s.spent)
 	local bonus = math.min(before, share)
 	local explained = math.min(s.unseen, bonus)
@@ -403,8 +331,6 @@ local function Group()
 	return false
 end
 
--- Quests the game said were handed in that the log may still list for a moment (the log update comes after QUEST_TURNED_IN): left out of the
--- quests ready until QUEST_REMOVED names them or a quest is accepted.
 local handedIn = {}
 
 local function TurnedIn(id, xp)
@@ -428,7 +354,6 @@ local function TurnedIn(id, xp)
 	end
 end
 
--- The time at this level from /played, whoever typed it.
 local function Played(_, thisLevel)
 	local now, level = Now(), Ask(UnitLevel, "player")
 	if s and now and Finite(thisLevel) and thisLevel >= 0 and Finite(level) then
@@ -436,22 +361,16 @@ local function Played(_, thisLevel)
 	end
 end
 
--- The quest log ------------------------------------------------------------------------------------------------------------------------------
-
 local function QuestCalls()
 	local log = _G.C_QuestLog
 	return type(log) == "table" and not IsSecret(log) and type(log.GetNumQuestLogEntries) == "function" and type(log.GetInfo) == "function"
 		and type(log.IsComplete) == "function" and type(_G.GetQuestLogRewardXP) == "function"
 end
 
--- True while the game would show an experience bar: below the maximum level, experience not turned off (XpBar.lua, GameRulesUtil.lua:134-140).
 local function Levelling()
 	return ns.XpBarShowsXp == nil or ns.XpBarShowsXp() == true
 end
 
--- The quests of the log, as the game's own log shows them (QuestMapFrame.lua:1575-1592): headers, hidden lines, tasks and bounties are left out,
--- a quest that shows twice counts once, and a quest just handed in is left out until the log lets it go. Collapsed headers keep their quests in
--- the list (QuestMapFrame.lua:1586, 1627-1637).
 local function Scan()
 	queued = false
 	if not (ns.XpOwn and ns.XpOwn()) or not Levelling() then
@@ -484,7 +403,6 @@ local function Scan()
 	quest = found
 end
 
--- Draws the bar again (XpBar.lua) while it is Flat UI's: what the numbers changed shows at once.
 local function Redraw()
 	if ns.XpBarRedraw and ns.Enabled(KEY) then
 		ns.Try(KEY, ns.XpBarRedraw)
@@ -492,13 +410,11 @@ local function Redraw()
 end
 
 local function Look()
-	-- Cleared here as well as in Scan, so that a look the part refused does not keep every later one away.
 	queued = false
 	Safe(Scan)
 	Redraw()
 end
 
--- One look at the log on the next frame however many events come in this one (QUEST_LOG_UPDATE comes often). Without a timer it looks at once.
 local function Queue()
 	if queued or not s or not (ns.XpOwn and ns.XpOwn()) or type(_G.C_QuestLog) ~= "table" then
 		return
@@ -510,23 +426,17 @@ local function Queue()
 	end
 end
 
--- The numbers ------------------------------------------------------------------------------------------------------------------------------
-
 local function Remaining()
 	local last = s and s.last
 	return last and math.max(last[3] - last[2], 0) or nil
 end
 
--- Experience an hour over the last WINDOW seconds of play, or the whole session while it is shorter; nil before MIN_PLAY seconds of play. The
--- seconds of play come second.
 local function Pace(now)
 	local play = Play(now)
 	if play < MIN_PLAY then
 		return nil, play
 	end
 	local from, base = math.max(0, play - WINDOW), 0
-	-- The experience of the session up to the start of a window that is shorter than the session: the last mark at or before it. A window of
-	-- the whole session counts every gain, those of its first seconds too.
 	if from > 0 then
 		for _, mark in ipairs(s.marks) do
 			if mark[1] <= from then
@@ -547,8 +457,6 @@ local function Average(list)
 	return #list > 0 and sum / #list or 0
 end
 
--- About how many kills to the next level, the base of a kill, and whether the rested pool doubles the next ones. What is left of the pool goes
--- first: each kill then gives rate x base and takes (rate - 1) x base from it.
 local function KillsToLevel(remaining)
 	local list = s.kills and s.kills.list
 	if not remaining or remaining <= 0 or type(list) ~= "table" or #list < MIN_KILLS then
@@ -585,7 +493,6 @@ local function QuestsToLevel(remaining)
 	return math.max(1, math.ceil(remaining / each - 1e-9)), each
 end
 
--- Seconds at a level: from /played at that level (played), else from a level up seen in this session (since); nil when not known.
 local function Spent(level, played, since, now)
 	if type(played) == "table" and level and played.level == level then
 		return played.seconds + math.max(0, now - played.at)
@@ -595,7 +502,6 @@ local function Spent(level, played, since, now)
 	return nil
 end
 
--- Seconds at this level, or nil when not known.
 local function LevelTime(now)
 	return Spent(s.last and s.last[1], s.played, s.levelSince, now)
 end
@@ -619,9 +525,6 @@ local function Numbers()
 	return n
 end
 
--- Words ------------------------------------------------------------------------------------------------------------------------------------
-
--- A whole number as the game writes large ones (BreakUpLargeNumbers, as in the game's experience tooltip, ExpBarOverrides.lua:31), or plain.
 local function Grouped(value)
 	value = math.floor(value + 0.5)
 	if type(BreakUpLargeNumbers) == "function" then
@@ -637,7 +540,6 @@ local function Plain(value)
 	return tostring(math.floor(value + 0.5))
 end
 
--- Seconds as 45m, 1h 20m or 2d 3h. up: a time still to come, rounded up to the next minute and at least 1m.
 local function Duration(seconds, up)
 	local minutes = up and math.max(1, math.ceil(seconds / 60 - 1e-9)) or math.floor(seconds / 60)
 	if minutes < 60 then
@@ -659,8 +561,6 @@ local function Quests(count)
 	return count == 1 and "1 quest" or ("%d quests"):format(count)
 end
 
--- One line in chat at each new level, with Level up line in chat on and Flat UI's bar shown: the new level, the time the old one took where it is
--- known, and the play of this session. A level is said once (s.saidLevel), also over a reload.
 LevelLine = function(level, before, now)
 	if Opt("xpLevelLine") ~= true or not (ns.XpOwn and ns.XpOwn()) or (Finite(s.saidLevel) and s.saidLevel >= level) then
 		return
@@ -675,7 +575,6 @@ LevelLine = function(level, before, now)
 	end
 end
 
--- The levelling text of the bar by the row Levelling text, or nil when there is nothing to say yet.
 local function Text(mode)
 	local n = Numbers()
 	if not n or mode == "none" then
@@ -695,7 +594,6 @@ local function Text(mode)
 	return nil
 end
 
--- The lines of the tooltip after the rested line: the quests of the log with Quests ready to hand in, the numbers with Levelling in the tooltip.
 local function Lines(quests, numbers)
 	local lines = {}
 	local n = Numbers()
@@ -744,11 +642,6 @@ local function Lines(quests, numbers)
 	return lines
 end
 
--- Reputation ---------------------------------------------------------------------------------------------------------------------------------
-
--- Looks at the faction the reputation bar shows (ns.XpRepNow) and keeps its count: s.rep is started again for another faction or a fall of the
--- standing, and a rise is a gain at this moment of play, kept in marks as the experience is (Gain). The count, the seconds of play now, the
--- reputation to the next standing (nil at the top) and the faction's name; nil while the bar shows no faction or the session has not begun.
 local function Track()
 	if not s or ns.XpRepNow == nil then
 		return nil
@@ -771,7 +664,6 @@ local function Track()
 		else
 			marks[#marks + 1] = { play, r.gained }
 		end
-		-- The last mark at or before the start of the window stays: it holds the reputation of the count then.
 		while #marks > 1 and marks[2][1] <= play - WINDOW do
 			table.remove(marks, 1)
 		end
@@ -782,8 +674,6 @@ local function Track()
 	return r, play, toGo, name
 end
 
--- Reputation an hour over the last WINDOW seconds of play with the faction, or all of them while fewer; nil before MIN_PLAY seconds of them. The
--- seconds of play with the faction come second.
 local function RepPace(r, play)
 	local span = math.max(0, play - r.started)
 	if span < MIN_PLAY then
@@ -802,7 +692,6 @@ local function RepPace(r, play)
 	return math.max(0, r.gained - base) * 3600 / (play - from), span
 end
 
--- The reputation numbers of the faction shown, or nil; nothing either at its top standing, where there is no next standing to reach.
 local function RepNumbers()
 	local r, play, toGo, name = Track()
 	if not r or not toGo then
@@ -816,8 +705,6 @@ local function RepNumbers()
 	return n
 end
 
--- The text after the reputation bar's own by the row Reputation text, or nil when there is nothing to say yet. It looks at the bar first, so the
--- count follows every drawing of the bar, whatever the row says.
 local function RepText(mode)
 	local n = RepNumbers()
 	if not n or mode == "none" then
@@ -835,7 +722,6 @@ local function RepText(mode)
 	return nil
 end
 
--- The lines of the reputation tooltip with Levelling in the tooltip: the reputation this session, per hour, and the time to the next standing.
 local function RepLines()
 	local lines = {}
 	local n = RepNumbers()
@@ -858,7 +744,6 @@ local function RepLines()
 	return lines
 end
 
--- Lines for /flatui status, while Flat UI's bar is chosen and the session has read the experience.
 local function StatusLines()
 	local lines = {}
 	if not (ns.XpOwn and ns.XpOwn()) or not s or not s.last or not Levelling() then
@@ -886,41 +771,31 @@ local function StatusLines()
 	return lines
 end
 
--- Interface for XpBar.lua ------------------------------------------------------------------------------------------------------------------
-
--- The levelling text by the row Levelling text, or nil.
 function ns.XpStatsText(mode)
 	return Safe(Text, mode)
 end
 
--- The lines of the tooltip: quests with Quests ready to hand in, numbers with Levelling in the tooltip.
 function ns.XpStatsLines(quests, numbers)
 	return Safe(Lines, quests, numbers) or {}
 end
 
--- The text after the reputation bar's own by the row Reputation text, or nil. The count of the faction shown follows each call.
 function ns.XpStatsRepText(mode)
 	return Safe(RepText, mode)
 end
 
--- The reputation lines of the tooltip, for Levelling in the tooltip.
 function ns.XpStatsRepLines()
 	return Safe(RepLines) or {}
 end
 
--- The experience of the quests ready to hand in, 0 when there is none or nothing is known.
 function ns.XpQuestReady()
 	return Safe(function()
 		return quest and not quest.missing and quest.readyXP or 0
 	end) or 0
 end
 
--- The bar was set up or a row changed: the log is read again.
 function ns.XpStatsRefresh()
 	Safe(Queue)
 end
-
--- Events -------------------------------------------------------------------------------------------------------------------------------------
 
 local function ForPlayer(unit)
 	return not IsSecret(unit) and unit == "player"
@@ -933,8 +808,6 @@ local function Listen(event, fn, filter)
 end
 
 Listen("PLAYER_ENTERING_WORLD", function()
-	-- A loading screen can hide a change of the away flag, so it is read again, but only a plain answer: in a dungeon the game withholds it, and
-	-- closing an open span on arrival would count the time still away there as play.
 	if Ask(UnitIsAFK, "player") ~= nil then
 		Away()
 	end
@@ -987,13 +860,10 @@ Listen("PLAYER_FLAGS_CHANGED", function()
 end, ForPlayer)
 Listen("TIME_PLAYED_MSG", Played)
 Listen("PLAYER_LOGOUT", Save)
--- At login with the page on, or when the page is turned on later.
 ns.AddStart(KEY, function()
 	Safe(Begin)
 	Safe(Queue)
 end)
-
--- /flatui xp and its status lines ----------------------------------------------------------------------------------------------------------
 
 local function Reset()
 	local now = Now()
@@ -1014,8 +884,6 @@ local function Say(text)
 	print("Flat UI: " .. text)
 end
 
--- Counts this session from now, the reputation pace with it: /flatui xp reset, and a Ctrl-click on the experience or reputation bar
--- (XpBar.lua). True when it did; false while nothing is counted yet, which then starts with the next login.
 function ns.XpStatsReset()
 	if Safe(Reset) then
 		Redraw()
@@ -1064,7 +932,6 @@ local function Slash(rest)
 	if n.ready and n.ready > 0 then
 		Say(("ready to hand in: %s, %s experience."):format(Quests(n.ready), Plain(n.readyXP)))
 	end
-	-- One line for the faction the reputation bar shows.
 	local rep = Safe(RepNumbers)
 	if rep then
 		local said = rep.gained > 0 and ("%s reputation with %s in %s of play"):format(Plain(rep.gained), rep.name, Elapsed(rep.play))
@@ -1085,7 +952,6 @@ ns.AddStatus(KEY, function()
 	return Safe(StatusLines) or {}
 end)
 
--- For the tests and /flatui xp: the numbers as they stand.
 ns.XpStatsNumbers = function()
 	return Safe(Numbers)
 end

@@ -1,57 +1,5 @@
 local _, ns = ...
 
--- Test mode's unit frames (TestMode.lua, spec Part B): stand-ins for the party and raid frames first, as the owner asked for them by name, then the
--- target, target of target, focus, focus target, pet, boss and totem frames. Each is a TM.StandIn of the unitframes module: a frame of Flat UI's own
--- at the place, scale, strata and level of the game's frame, painted by the drawings of the setup (ns.DrawUnits, SetupDrawUnits.lua) from the live
--- profile, so every row of the Unit frames page changes it at once. Every number shown is fixed (the real ones are secret values). Each picture is a
--- real one (SetupDrawUnits.lua Sample and E.picture): the player's own face on the target of target, which is the player, a class icon on a party
--- member and on a humanoid enemy (a mage's on the target Defias Pillager, a warrior's on the focus target), the hunter's pet family icon on a beast
--- (the pet Wolf, the focus Gruff Swiftbite) and the Voidwalker's icon on the warlock's party pet, in place of a grey silhouette.
---
--- Party (the bar's Party, while the player is in no group): four members, as the game lays its party frames out under PartyFrame (Shared/
--- PartyFrame.xml:3-36, a VerticalLayoutFrame 10 units apart, 26 with showPartyPets; each member 120 by 53, Mainline/PartyFrameTemplates.xml:79-80,
--- its pet at 23,-43, :364-368). With Edit Mode's Raid-Style Party Frames on they are the cells of CompactPartyFrame instead, the player first, a title
--- of 14 units above them and 2 in from PartyFrame's left (Shared/CompactRaidGroup.xml:52-56, PartyFrame.lua:124-143), down a column or, with Display
--- Horizontal Groups, along a row. Raid (Raid 10, 20 or 40, while the player is in no raid): the first 10, 20 or 40 of the roster below at the top left of
--- CompactRaidFrameContainer, at the cell size and in the group layout of the Edit Mode layout in use: separate groups, a column each with its title
--- (14 units), side by side with no gap and 8 units wider and 2 taller with Display Border, or a row each, one under the other, 4 units wider and
--- no taller with it (Shared/CompactRaidGroup.lua:95-160), or all the members in one flow of Row Size per line (Blizzard_EditMode/Shared/
--- EditModeManager.lua:477-503, Blizzard_FrameXMLBase/FlowContainer.lua:125-185).
--- A group starts a line of its own (FlowContainer.lua:161-166).
---
--- What it reads: the layout in use, from C_EditMode.GetLayouts and, for a preset, the game's own table of presets (EditModePresetLayoutManager.
--- presetLayoutInfo, read with rawget; no method is called), its unit frame systems Party and Raid: Frame Width and Frame Height (stored as the
--- difference from 72 and 36, Shared/EditModeSettingDisplayInfo.lua:16-22, 276-299), Raid Group Display Type, Row Size, Display Border, Opacity,
--- Raid-Style Party Frames and Display Horizontal Groups, and of Boss its Cast Bar on Side; anything missing or not finite takes the Modern preset's
--- (Mainline/EditModePresetLayouts.lua:292-356). The raid frame options, read with C_CVar.GetCVarBool and GetCVar and never written:
--- raidFramesDisplayClassColor, raidFramesDisplayPowerBars, raidFramesDisplayOnlyHealerPowerBars, raidFramesHealthText, raidFramesDisplayDebuffs and
--- raidFramesDispelIndicatorType (defaults: Mainline/CompactUnitFrameOptions.lua:2-40), showPartyPets and showTargetOfTarget. Whether a target,
--- focus, pet, boss, group or raid exists (UnitExists, IsInGroup, IsInRaid), the player's class (ns.DrawUnits.Me), whether Edit Mode is open
--- (ns.EditModeOpen) and the shown flag of the game's first party member frame (PartyFrame.MemberFrame1, read with rawget), of CompactPartyFrame and
--- of Boss1TargetFrame, and the effective scale of Boss1TargetFrame against its container's. It writes nothing on any of them. While test mode is on
--- it hears CVAR_UPDATE (TM.Watch), so a change of the raid frame options or showPartyPets in the game's own options paints the samples again
--- (TM.Repaint).
---
--- Shown by (TestMode.lua runs the rules; each also needs the game frame hidden, its own `real` rule saying so, unless named):
---   party     PartyFrame: the bar's Party and no group; real while Edit Mode is open or a party member frame or CompactPartyFrame shows.
---   raid      CompactRaidFrameContainer: the bar's Raid 10, 20 or 40 and no raid; real while Edit Mode is open, in a raid, or while the party
---             stand-in's real frames show (a real party is where the raid frames would be, Mainline/EditModePresetLayouts.lua:292-340).
---   target    TargetFrame: no target. tot: TargetFrameToT, while the target's stand-in shows and showTargetOfTarget is on.
---   focus     FocusFrame: no focus. focustot: FocusFrameToT, while the focus's stand-in shows and showTargetOfTarget is on.
---   pet       PetFrame: no pet, any class. boss: BossTargetFrameContainer, from its top right: no boss1; real while Edit Mode is open or
---             Boss1TargetFrame shows. totem: TotemFrame, a shaman's, while the game shows no totem.
--- Animate (while the bar's Moving is on): Eli's health drifts from 64% to 40% and back over 6 seconds on the party frames, three raid members' drift
--- too, and the totem's time counts down from 2:00 and starts again. It sets fills and words only (ns.DrawUnits.Fill and FillCell), and the low health
--- border that goes with the new health: the first drifting raid member, Bex, goes from 48% down to 18% and back, so with Low health border on at its
--- 20% default the border comes and goes on Bex's cell.
---
--- The roster of the raid (spec 2.4): 8 groups of 5, the first a tank, the second a healer and the rest damage, the classes in turn by role; health
--- 30 + (index * 37) % 71 percent, but 14% on 8 and 27, under the low health border's limit, and power 20 + (index * 53) % 81 percent; leader 1, assistants 6 and 11; markers on the tanks (Skull 1, Cross 6,
--- Square 11, Moon 16, Triangle 21, Diamond 26, Circle 31, Star 36); dead 7 and 24, offline 13 and 33, out of range 4, 18, 29 and 38; a debuff the
--- player can dispel on 3 (magic), 9 (curse), 15 (poison), 22 (disease) and 35 (magic); aggro on each tank; a buff on every third; the player's
--- heals over time on 2, 5 and 12 (UnitHots.lua's colours: a priest's Renew, a druid's Rejuvenation and Regrowth, a shaman's Riptide); the first 10
--- names are the setup's raid (SetupDrawUnits.lua RAID).
-
 local TM = ns.TestMode
 if type(TM) ~= "table" or type(TM.StandIn) ~= "function" then
 	return
@@ -59,11 +7,8 @@ end
 
 local KEY = "unitframes"
 local TAU = 2 * math.pi
--- The friendly colour of the setup's samples (SetupDrawUnits.lua FRIENDLY), and the most health a raid member's health text counts from.
 local FRIENDLY = { 0.18, 0.78, 0.24 }
 local MAX_HEALTH = 5000
-
--- The roster --------------------------------------------------------------------------------------------------------------------------------
 
 local TANKS = { "WARRIOR", "PALADIN", "DRUID" }
 local HEALERS = { "PRIEST", "DRUID", "SHAMAN", "PALADIN" }
@@ -71,17 +16,12 @@ local DAMAGE = { "MAGE", "ROGUE", "HUNTER", "WARLOCK", "WARRIOR", "SHAMAN", "PRI
 local NAMES = { "Aria", "Bex", "Cole", "Dru", "Eli", "Fay", "Gus", "Hale", "Ivo", "Jun", "Kai", "Lena", "Milo", "Nell", "Oren", "Pia", "Quin", "Rhea",
 	"Sol", "Tam", "Uma", "Vic", "Wren", "Xan", "Yara", "Zed", "Ada", "Bram", "Cora", "Dax", "Edda", "Finn", "Gwen", "Hugo", "Iris", "Jory", "Kira",
 	"Lars", "Mae", "Nico" }
--- The raid target index of each marker (1 Star to 8 Skull).
 local MARKERS = { [1] = 8, [6] = 7, [11] = 6, [16] = 5, [21] = 4, [26] = 3, [31] = 2, [36] = 1 }
 local DEAD, OFFLINE, AWAY = { [7] = true, [24] = true }, { [13] = true, [33] = true }, { [4] = true, [18] = true, [29] = true, [38] = true }
 local DISPEL = { [3] = "magic", [9] = "curse", [15] = "poison", [22] = "disease", [35] = "magic" }
 local HOT_ON = { [2] = true, [5] = true, [12] = true }
--- The members whose health drifts, and how far either way.
 local DRIFT, DRIFT_BY = { 2, 10, 17 }, 0.15
--- The power of a class that has no mana; a druid tank is in bear form.
 local POWER = { WARRIOR = "RAGE", ROGUE = "ENERGY" }
--- The colours of the player's heals over time by class (UnitHots.lua HOTS): Renew, Power Word: Shield and Prayer of Mending; Rejuvenation and
--- Regrowth; Riptide and Earth Shield.
 local HOTS = { PRIEST = { { 0.3, 0.9, 0.35 }, { 1, 1, 1 }, { 1, 0.85, 0.2 } }, DRUID = { { 0.75, 0.3, 1 }, { 0.3, 0.9, 0.35 } },
 	SHAMAN = { { 0.25, 0.55, 1 }, { 1, 0.55, 0.1 } } }
 
@@ -104,12 +44,9 @@ do
 			marker = MARKERS[index], dead = DEAD[index], offline = OFFLINE[index], away = AWAY[index], dispel = DISPEL[index], threat = slot == 1,
 			buff = index % 3 == 0, hot = HOT_ON[index], debuffs = DISPEL[index] and { DISPEL[index] } or nil }
 	end
-	-- Two members low on health, under the low health border's limit.
 	ROSTER[8].base, ROSTER[27].base = 0.14, 0.14
 end
 
--- The party (spec 1.3): a leader tank with a marker, a buff and aggro; a healer out of range with a magic debuff and your heals over time; a
--- warlock at 16% after Life Tap, under the low health border's limit, with a curse and a Voidwalker; a dead rogue.
 local PARTY = {
 	{ name = "Mara", class = "PALADIN", role = "tank", base = 0.82, power = 0.64, powerType = "MANA", leader = true, marker = 1, threat = true, buff = true },
 	{ name = "Eli", class = "PRIEST", role = "healer", base = 0.64, power = 0.38, powerType = "MANA", dispel = "magic", away = true, hot = true,
@@ -118,12 +55,8 @@ local PARTY = {
 		pet = { kind = "partypet", name = "Voidwalker", react = FRIENDLY, owner = "WARLOCK", health = 0.9, face = "Interface\\Icons\\Spell_Shadow_SummonVoidWalker" } },
 	{ name = "Fay", class = "ROGUE", role = "damage", base = 0, power = 0, powerType = "ENERGY", dead = true },
 }
--- Eli's drift: from 64% to 40% and back over 6 seconds.
 local ELI, ELI_MID, ELI_BY, ELI_EVERY = 2, 0.52, 0.12, 6
--- The bosses: name, health (a share of 1) and whether dead.
 local BOSSES = { { "Hogger", 1 }, { "Kobold Digger", 0.64 }, { "Defias Overseer", 0.25 }, { "Murloc Lurker", 0, true }, { "Gnoll Brute", 1 } }
-
--- Reads ----------------------------------------------------------------------------------------------------------------------------------------
 
 local function Own(object)
 	ns.Own[object] = true
@@ -137,7 +70,6 @@ local function Plain(ok, value)
 	return nil
 end
 
--- A game variable as true or false, or `default` when the client will not say.
 local function CvarBool(name, default)
 	local api = C_CVar
 	if type(api) == "table" and type(api.GetCVarBool) == "function" then
@@ -158,7 +90,6 @@ local function Cvar(name)
 	return type(value) == "string" and value or nil
 end
 
--- True when the unit exists; a withheld answer counts as one that does, so no stand-in covers it.
 local function Exists(unit)
 	if type(UnitExists) ~= "function" then
 		return false
@@ -186,24 +117,16 @@ local function EditMode()
 	return type(ns.EditModeOpen) == "function" and ns.EditModeOpen() == true
 end
 
--- The player's heals over time, by the class (HOTS), or nil.
 local function Hots()
 	local D = ns.DrawUnits
 	local _, _, class = D.Me()
 	return HOTS[class]
 end
 
--- The layout of Edit Mode ----------------------------------------------------------------------------------------------------------------------
-
--- The settings of the Modern preset (Mainline/EditModePresetLayouts.lua:292-340, Party and Raid), by setting number, and the setting numbers
--- (EditModeManagerConstantsDocumentation.lua:783-812) for a client whose Enum will not say.
 local SETTING = { UseRaidStylePartyFrames = 4, UseHorizontalGroups = 6, CastBarOnSide = 7, FrameWidth = 10, FrameHeight = 11, DisplayBorder = 12,
 	RaidGroupDisplayType = 13, RowSize = 15, Opacity = 20 }
 local PRESET = { [4] = 0, [6] = 0, [7] = 1, [10] = 26, [11] = 8, [12] = 0, [13] = 0, [15] = 5, [20] = 100 }
--- The system numbers: UnitFrame 3, its Party 4, Raid 5 and Boss 6 (EditModeManagerConstantsDocumentation.lua:741, 826-828).
 local SYSTEM = { UnitFrame = 3, Party = 4, Raid = 5, Boss = 6 }
--- The smallest cell (Shared/CompactUnitFrame.lua:11-12), the height of a group's title (Shared/CompactRaidGroup.xml:52-56), and how long a read of
--- the layout is kept.
 local CELL_W, CELL_H, TITLE, KEEP = 72, 36, 14, 1
 local layouts = { at = nil }
 
@@ -213,8 +136,6 @@ local function EnumValue(group, name, fallback)
 	return ns.Finite(value) and value or fallback
 end
 
--- The settings of the unit frame system `index` of the layout in use, { [setting] = value }, or an empty table when the game will not say. Saved
--- layouts follow the presets in the numbering of activeLayout (LayoutSpots.lua Load).
 local function ReadSystem(index)
 	local api = C_EditMode
 	if type(api) ~= "table" or type(api.GetLayouts) ~= "function" then
@@ -254,7 +175,6 @@ local function ReadSystem(index)
 	return {}
 end
 
--- A setting by name, from a system's settings or the preset's.
 local function Setting(settings, name)
 	local number = EnumValue("EditModeUnitFrameSetting", name, SETTING[name])
 	local value = settings[number]
@@ -264,8 +184,6 @@ local function Setting(settings, name)
 	return PRESET[SETTING[name]]
 end
 
--- The party and raid layouts: cell width and height, the display type, row size, border, opacity, raid style and horizontal groups; and whether
--- the boss frames have their cast bars on the side. Read again after KEEP seconds, and at once after Edit Mode was open.
 local function Layouts()
 	local now = GetTime()
 	if layouts.at and now - layouts.at < KEEP then
@@ -286,7 +204,6 @@ local function Layouts()
 	return out.party, out.raid, layouts.side
 end
 
--- The raid frame options (Mainline/CompactUnitFrameOptions.lua:2-40 for their defaults).
 local options = {}
 local function Options()
 	options.classColour = CvarBool("raidFramesDisplayClassColor", true)
@@ -298,7 +215,6 @@ local function Options()
 	return options
 end
 
--- The game's health text on a raid frame for a share of MAX_HEALTH: perc, health, losthealth or none (CompactUnitFrame.lua's healthText).
 local function HealthText(mode, share)
 	local cur = math.floor(MAX_HEALTH * share + 0.5)
 	if mode == "perc" then
@@ -311,9 +227,6 @@ local function HealthText(mode, share)
 	return nil
 end
 
--- Samples --------------------------------------------------------------------------------------------------------------------------------------
-
--- The sample of a raid cell for a member of the roster or the party, kept on the member and filled again at each paint.
 local function CellSample(m, opts)
 	local s = m.cell or {}
 	m.cell = s
@@ -331,7 +244,6 @@ local function CellSample(m, opts)
 	return s
 end
 
--- The sample of a party frame for a member of the party, kept on the member.
 local function UnitSample(m, level)
 	local D = ns.DrawUnits
 	local s = m.unit or { kind = "party", player = true, react = FRIENDLY, auras = {} }
@@ -340,7 +252,6 @@ local function UnitSample(m, level)
 	s.leader, s.marker, s.threat, s.dead, s.away = m.leader, m.marker, m.threat, m.dead, m.away
 	s.health, s.power, s.powerType = m.now or m.base, m.power, m.powerType
 	s.dispel, s.hots = m.dispel, m.hot and Hots() or nil
-	-- The top debuff colours the border of the health bar with Threat border (UnitFrames.lua:1480-1497), as on the setup's party frame.
 	s.debuff = m.dispel and D.TYPE[m.dispel] or nil
 	local auras = s.auras
 	for index = #auras, 1, -1 do
@@ -354,8 +265,6 @@ local function UnitSample(m, level)
 	end
 	return s
 end
-
--- Party ------------------------------------------------------------------------------------------------------------------------------------------
 
 local party = { members = {}, pets = {}, cells = {} }
 
@@ -374,7 +283,6 @@ local function BuildParty(holder)
 	party.me = { name = name, class = class, base = 1, power = 1, powerType = POWER[class] or "MANA" }
 end
 
--- The game's party frames: each member 53 high and 10 apart (26 with showPartyPets), its pet at 23,-43 (see the header). Returns the size.
 local function PaintMembers(holder, g)
 	local D = ns.DrawUnits
 	local pets = CvarBool("showPartyPets", true)
@@ -409,7 +317,6 @@ local function PaintMembers(holder, g)
 	return width, height
 end
 
--- Raid-Style Party Frames: the cells of CompactPartyFrame, the player first, in a column or a row under the title, 2 in from the left.
 local function PaintCells(holder, g, layout)
 	local D = ns.DrawUnits
 	local opts = Options()
@@ -454,14 +361,11 @@ local function AnimateParty(_, _, now)
 	local m = PARTY[ELI]
 	m.now = ELI_MID + ELI_BY * math.cos(TAU * now / ELI_EVERY)
 	if party.style == "cells" then
-		-- The health text of the raid frame options as the last paint read them (Options).
 		D.FillCell(party.cells[ELI + 1], m.now, HealthText(options.healthText, m.now))
 	elseif party.style == "members" then
 		D.Fill(party.members[ELI], m.now)
 	end
 end
-
--- Raid -------------------------------------------------------------------------------------------------------------------------------------------
 
 local raid = { cells = {}, titles = {} }
 
@@ -480,8 +384,6 @@ local function BuildRaid(holder)
 	end
 end
 
--- The top left of member `index` and of its group's title, from the container's top left, by the display type: 0 separate groups in columns, 1
--- separate groups in rows, 2 one flow down columns of Row Size, 3 one flow along rows of Row Size.
 local function Spot(layout, index)
 	local w, h = layout.width, layout.height
 	local group, slot = math.floor((index - 1) / 5) + 1, (index - 1) % 5
@@ -548,9 +450,6 @@ local function AnimateRaid(_, _, now)
 	end
 end
 
--- The other unit frames ------------------------------------------------------------------------------------------------------------------------
-
--- One frame of a kind at the game frame's top left, its health bar on the game's (ns.DrawUnits.Offset). sample(): the sample, made once.
 local function Single(kind, sample)
 	local view = {}
 	local function Build(holder)
@@ -574,13 +473,11 @@ local function Fixed(id)
 	end
 end
 
--- The player as the target of the target, with the player's own face in the picture (me), as the game's frame shows it.
 local function MeAsTarget()
 	local name, level, class = ns.DrawUnits.Me()
 	return { kind = "tot", name = name, level = level, class = class, player = true, me = true, react = FRIENDLY }
 end
 
--- The pet: the setup's, with the happiness face for a hunter only.
 local function PetSample()
 	local s = ns.DrawUnits.Sample("pet")
 	local _, _, class = ns.DrawUnits.Me()
@@ -588,11 +485,6 @@ local function PetSample()
 	return s
 end
 
--- Boss frames: five in a column down from the container's top right, each 232 by 100 at its own scale (Boss1TargetFrame's against the container's:
--- 0.75 small, 1 large, Mainline/TargetFrame.lua:12-13, 1116-1128), as the container lays them out (TargetFrame.xml:607-617, TargetFrame.lua:
--- 1081-1104, Blizzard_SharedXML/LayoutFrame.lua:276-361): 10 apart plus the bottom padding of each, in container units (small: -20 with the cast
--- bar on the side, else 0; large: -50 on the side, else -20), with each right edge 70 less its right padding (30 small, 15 large) right of the
--- container's.
 local boss = { frames = {} }
 
 local function BuildBoss(holder)
@@ -645,7 +537,6 @@ local function PaintBoss(holder)
 	return 232 * scale, height
 end
 
--- The totem: its time counts down from 2:00 and starts again.
 local totem = {}
 local TOTEM_TIME = 120
 
@@ -670,8 +561,6 @@ local function AnimateTotem(_, _, now)
 	end
 end
 
--- The stand-ins ------------------------------------------------------------------------------------------------------------------------------------
-
 local function Group(which)
 	return function()
 		local group = TM.Group()
@@ -682,7 +571,6 @@ local function Group(which)
 	end
 end
 
--- True while the game's party frames show: its first party member frame or CompactPartyFrame.
 local function PartyShows()
 	local frame = rawget(_G, "PartyFrame")
 	local first = type(frame) == "table" and not ns.Forbidden(frame) and rawget(frame, "MemberFrame1") or nil
@@ -743,8 +631,6 @@ TM.StandIn({ id = "totem", module = KEY, game = "TotemFrame", label = "Totem bar
 	end,
 	Build = function(holder) totem.o = ns.DrawUnits.Unit(holder, "totem") end, Paint = PaintTotem, Animate = AnimateTotem })
 
--- The game variables the party and raid samples are drawn from (Options, PaintMembers): a change of one, in the game's own options, paints the
--- shown stand-ins again. Heard only while test mode is on.
 local CVARS = { raidframesdisplayclasscolor = true, raidframesdisplaypowerbars = true, raidframesdisplayonlyhealerpowerbars = true,
 	raidframeshealthtext = true, raidframesdisplaydebuffs = true, raidframesdispelindicatortype = true, showpartypets = true }
 local cvars = CreateFrame("Frame")

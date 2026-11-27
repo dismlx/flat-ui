@@ -1,20 +1,3 @@
--- Provisions: one button for each kind of consumable (healing potion, mana potion, healthstone, food, drink,
--- bandage, buff food), whatever its rank or name. Each kind is a per-character macro of the addon's own
--- ("Prov Heal" and so on) and a secure button of its own (ProvisionsHealButton and so on) that Key Bindings can
--- bind, both kept on the best item in the bags, out of combat only.
---
--- Game calls this file makes, as the client's interface source documents them (build 70938):
---   C_Item.GetItemCount (ItemDocumentation), C_Item.IsUsableItem, C_Item.GetItemIconByID, C_Item.GetItemNameByID
---   GetNumMacros, GetMacroInfo, CreateMacro, EditMacro(index, nil, nil, body) which keeps the name and icon
---   (Blizzard_MacroUI.lua), DeleteMacro; Constants.MacroConsts (MacroConstantsDocumentation: 120 account, 30 per
---   character macros, the character's after the account's).
---   C_SkillInfo.GetSkillLineInfoByID / GetSkillLineInfo (SkillInfoDocumentation; the Camelot SkillsFrame reads them).
---   C_UnitAuras.GetPlayerAuraBySpellID (UnitAuraDocumentation: SecretWhenUnitAuraRestricted, so read out of combat
---   only and a withheld answer is "unknown").
---   SecureActionButtonTemplate with type "macro" and "macrotext" runs C_Macro.RunMacroText (SecureTemplates.lua,
---   SECURE_ACTIONS.macro); a key binding clicks it on key down or up as ActionButtonUseKeyDown says, so it hears both.
--- Every one of them is called under pcall: a call that fails counts as no answer.
-
 local ADDON, ns = ...
 
 local ITEMS = ns.ITEMS or {}
@@ -34,12 +17,8 @@ local INFO = {
 }
 ns.INFO = INFO
 
--- Kinds that a press can use in a fight, where the macro cannot be rewritten: only these get "/use" lines for the
--- items after the best (see Body). Food, drink and buff food cannot be eaten in a fight, and out of one the macro
--- is rewritten as soon as the bags change.
 local IN_COMBAT = { heal = true, mana = true, stone = true }
 
--- The question mark icon (fileID 134400, QUESTION_MARK_ICON); "#showtooltip item:" replaces it with the item's.
 local ICON = 134400
 local MAX_BODY = 255
 local function MacroLimits()
@@ -51,11 +30,8 @@ local function MacroLimits()
 	return account, character
 end
 
--- Classes without mana: their mana potion and drink buttons are off until turned on.
 local NO_MANA = { WARRIOR = true, ROGUE = true }
 
--- Buff food stats: names, and a rough worth of one point of each, to rank buffs of different stats against one
--- another for the "Any" choice (one point of a primary stat = 1).
 local STATS = {
 	{ key = "sta", name = "Stamina", worth = 1 },
 	{ key = "str", name = "Strength", worth = 1 },
@@ -84,7 +60,6 @@ for _, s in ipairs(STATS) do
 end
 ns.STATS, ns.STAT = STATS, STAT
 
--- Auto: the stats each class wants, first ones weighing a little more (see Choose); then the strongest of any.
 local AUTO = {
 	WARRIOR = { "sta", "str", "ap", "agi", "crit", "armor" },
 	PALADIN = { "sta", "str", "int", "healing", "spi", "mp5" },
@@ -98,8 +73,6 @@ local AUTO = {
 }
 ns.AUTO = AUTO
 
--- The items of each kind. A buff food is a kind of its own: Food and Drink never take one, unless the fallback
--- option lets them when the bags hold no plain food or drink. An item that is food and drink is in both lists.
 local LIST = {}
 local FALLBACK = { food = {}, drink = {} }
 for _, kind in ipairs(KINDS) do
@@ -123,8 +96,6 @@ for id, rec in pairs(ITEMS) do
 	end
 end
 
--- Saved variables (ProvisionsDB for the account: the panel's place; ProvisionsCharDB per character: the kinds
--- and options, and the macros the addon made).
 local db, cdb
 local playerClass
 
@@ -147,7 +118,6 @@ function ns.KindOn(kind)
 	return v
 end
 
--- Chat lines said once a session, by key.
 local said = {}
 local function Say(text)
 	if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
@@ -204,8 +174,6 @@ local function PlayerLevel()
 	return nil
 end
 
--- The player's First Aid rank: the highest rank among the skill lines bandages need (and their parent). nil when
--- the game gives no answer, 0 when it answers and the player has none.
 local function FirstAidRank()
 	if not C_SkillInfo then
 		return nil
@@ -237,8 +205,6 @@ local function FirstAidRank()
 	return answered and 0 or nil
 end
 
--- Whether the player can use an item now: its level, its First Aid rank, and for items of some areas only
--- (battleground rations and bandages) the game's own answer.
 local function CanUse(id, rec, level, firstAid)
 	if level and rec.level and rec.level > level then
 		return false
@@ -267,11 +233,6 @@ local function BuffWorth(rec)
 	return worth
 end
 
--- The order of items of a kind: conjured first (option), then the most restored (for buff food: the most of the
--- chosen stat, or the strongest buff), then the lowest item ID, so that two items alike always come in one order
--- whatever the counts in the bags. Conjured first leaves the healing potions out: their conjured ones (the
--- Perishable potions, Lily Root) share the two-minute potion cooldown, so a weak one first would spend that cooldown
--- on a small heal in a fight. Mana gems keep it: they have a cooldown of their own, apart from the potions'.
 local function Sorter(kind, stat)
 	local conjuredFirst = Opt("conjuredFirst") and kind ~= "heal"
 	return function(a, b)
@@ -304,7 +265,6 @@ local function Sorter(kind, stat)
 	end
 end
 
--- The items of a list that the bags hold and the player can use now.
 local function Carried(list, level, firstAid, filter)
 	local out = {}
 	for _, id in ipairs(list) do
@@ -316,7 +276,6 @@ local function Carried(list, level, firstAid, filter)
 	return out
 end
 
--- What a kind uses now: { best = id, rest = { ids in order }, note = text or nil, stat = key or nil }.
 local function Choose(kind, level, firstAid)
 	local state = { rest = {} }
 	local items
@@ -324,9 +283,6 @@ local function Choose(kind, level, firstAid)
 		local choice = Opt("buffChoice") or "auto"
 		local order, score
 		if choice == "auto" then
-			-- Auto weighs every stat of the class's list at once, by its worth a point, the first two counting a
-			-- little more, so +20 Strength beats a +1 Stamina snack for a warrior while Stamina still wins a tie.
-			-- Stamina counts for every class (it is added last when the list lacks it).
 			local weights = {}
 			for i, key in ipairs(AUTO[playerClass or ""] or {}) do
 				weights[key] = (STAT[key] and STAT[key].worth or 0) * (i == 1 and 1.5 or i == 2 and 1.25 or 1)
@@ -346,7 +302,6 @@ local function Choose(kind, level, firstAid)
 			end)
 			if #items > 0 then
 				table.sort(items, Sorter("buff", score))
-				-- The stat to name: the one that gives the chosen item most of its score.
 				local best, top = ITEMS[items[1]], -1
 				for key, amount in pairs(best.buff or {}) do
 					local part = (weights[key] or 0) * amount
@@ -390,8 +345,6 @@ local function Choose(kind, level, firstAid)
 		table.sort(items, Sorter(kind))
 	end
 	state.best = items[1]
-	-- The items after the best, for the "/use" lines of a kind used in a fight: only those of the best one's
-	-- shared cooldown (see Body).
 	local best = state.best and ITEMS[state.best]
 	if best and IN_COMBAT[kind] and best.cd then
 		for i = 2, #items do
@@ -403,31 +356,8 @@ local function Choose(kind, level, firstAid)
 	return state
 end
 
--- The text of a kind's macro (and of its button's macrotext).
---
--- "#showtooltip item:<best>" gives the button the best item's icon, count and tooltip; "/use item:<id>" uses an
--- item by its ID (SlashCommands.lua: /use parses "item:<id>" and calls SecureCmdUseItem, ChatFrameUtil.lua:1228,
--- which calls C_Item.UseItemByName), so it works in every language and for every rank.
---
--- Why the later "/use" lines are safe: they are written only for healing potions, mana potions and healthstones,
--- and only for items that share the best one's cooldown category (the data's cd: ItemEffect.SpellCategoryID, kept
--- only when the category has a cooldown, ItemEffect.CategoryCoolDownMSec or SpellCooldowns.CategoryRecoveryTime:
--- two minutes for potions and healthstones). The game keeps cooldowns by category (C_Spell.
--- GetLastCategoryCooldownSource, "the most recent spellID and itemID that started a cooldown in this category",
--- SpellDocumentation.lua:154-170; SPELL_UPDATE_COOLDOWN names the category, SpellBookDocumentation.lua:925-936).
--- The lines of one press run in order, each a /use (SlashCommands.lua, SLASH_COMMAND.USE, then SecureCmdUseItem,
--- ChatFrameUtil.lua:1228), and each item's spell is instant (the generator keeps cd only for an item whose spell has
--- a cast time of 0, SpellMisc and SpellCastTimes): the best one's use starts the category's cooldown, so the next
--- line's item is "not ready yet" (LE_GAME_ERR_ITEM_COOLDOWN, UIErrorsFrame.lua:72) and nothing more is used. Should
--- the client send the next line's use before it has heard of that cooldown, the server holds the category's cooldown
--- and refuses it there with the same error, so one press uses at most one item of the category. When
--- the best is gone from the bags its line does nothing and the next one fires: that is the point, a press in a
--- fight still works after the best runs out and before the macro can be rewritten. Bandages, food and drink get
--- the best item only (bandages share no cooldown; food and drink cannot be used in a fight).
 local function Body(kind, state)
 	if not state.best then
-		-- Nothing to use: a press clicks the kind's own button, which says so in chat. No #showtooltip, so the
-		-- macro keeps the question mark icon.
 		return "/click " .. INFO[kind].button
 	end
 	local lines = { "#showtooltip item:" .. state.best }
@@ -452,7 +382,6 @@ local function Body(kind, state)
 	return table.concat(lines, "\n")
 end
 
--- A macro body Provisions writes, to know its own macro again when ProvisionsCharDB lost its name.
 local function OurBody(kind, body)
 	if type(body) ~= "string" then
 		return false
@@ -474,9 +403,6 @@ local function OurBody(kind, body)
 	end
 	return not first
 end
-
-------------------------------------------------------------------------------------------------------------------
--- The buttons.
 
 local buttons = {}
 local states = {}
@@ -503,8 +429,6 @@ end
 local function MakeButtons()
 	for _, kind in ipairs(KINDS) do
 		if not buttons[kind] then
-			-- No parent, size or place: the button is never drawn and never under the mouse; a key binding or
-			-- "/click" clicks it.
 			local ok, b = pcall(CreateFrame, "Button", INFO[kind].button, nil, "SecureActionButtonTemplate")
 			if ok and b then
 				b.provisionsKind = kind
@@ -531,9 +455,6 @@ local function SetButton(kind, body)
 	end
 end
 
-------------------------------------------------------------------------------------------------------------------
--- The macros: per character, found by name among the character's macros.
-
 local function FindMacro(name)
 	local account = MacroLimits()
 	local ok, _, numCharacter = Call(GetNumMacros)
@@ -549,7 +470,6 @@ local function FindMacro(name)
 	return nil, nil, numCharacter
 end
 
--- Whether an action slot or the cursor holds the macro (a delete would change that slot inside the addon's call).
 local function OnBar(index, name)
 	local okC, what, value = Call(GetCursorInfo)
 	if okC and what == "macro" and (value == index or value == name) then
@@ -622,7 +542,6 @@ local function RemoveMacro(kind, offBody)
 		return
 	end
 	if OnBar(index, name) then
-		-- Kept for now, but it no longer uses an item: a press clicks the kind's button, which says it is off.
 		if offBody and (current or ""):gsub("%s+$", "") ~= offBody then
 			Call(EditMacro, index, nil, nil, offBody)
 		end
@@ -635,11 +554,6 @@ local function RemoveMacro(kind, offBody)
 	cdb.made[kind] = nil
 end
 
-------------------------------------------------------------------------------------------------------------------
--- The food buff the player has now (out of combat only).
-
--- Returns a table { spell, stats, points, expires } when a food buff of the data is on the player, false when
--- none is, nil when the game withholds the answer.
 local function ActiveBuff()
 	if InCombat() or not (C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID) then
 		return nil
@@ -683,8 +597,6 @@ local function BuffText(stats, amounts)
 end
 ns.BuffText = BuffText
 
--- The buff food row's line about the buff on the player: what it is, its time left, and whether eating the chosen
--- food would replace it, and with something weaker.
 function ns.BuffLine(state)
 	local active = ActiveBuff()
 	if active == nil then
@@ -714,9 +626,6 @@ function ns.BuffLine(state)
 	end
 	return text
 end
-
-------------------------------------------------------------------------------------------------------------------
--- The run: written only out of combat, never while the game's macro window is open.
 
 local pending, scheduled = false, false
 local Run
@@ -758,8 +667,6 @@ Run = function()
 		return
 	end
 	if MacroWindowShown() then
-		-- The macro window loads the text of its macro again on UPDATE_MACROS (Blizzard_MacroUI.lua), which would
-		-- throw away what the player is typing: wait for it to close.
 		Schedule(1)
 		return
 	end
@@ -805,9 +712,6 @@ end
 function ns.IsFull()
 	return full
 end
-
-------------------------------------------------------------------------------------------------------------------
--- Events.
 
 events = CreateFrame("Frame")
 events:RegisterEvent("ADDON_LOADED")
@@ -891,8 +795,6 @@ events:SetScript("OnEvent", function(_, event, arg1)
 			ns.Refresh()
 		end
 	else
-		-- PLAYER_ENTERING_WORLD, BAG_UPDATE_DELAYED, level and skill changes, and while a delete waits, action
-		-- slot and cursor changes: write again (soon, and outside the call that raised the event).
 		Schedule()
 	end
 end)

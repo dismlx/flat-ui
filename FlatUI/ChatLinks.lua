@@ -1,78 +1,22 @@
 local _, ns = ...
 
--- Links in the chat windows: a web address in a chat line becomes a link of Flat UI's own that opens a box to copy it, the tooltip of an item,
--- spell, achievement or quest link shows while the mouse is over it, and your name in other players' lines takes a colour. Runs with the chat module: Chat.lua calls ns.ChatLinksSync at the end of each refresh.
--- Web addresses: a filter in the game's own chat filter registry (ChatFrameUtil.AddMessageEventFilter, Blizzard_ChatFrameBase/Shared/
--- ChatFrameFilters.lua:112-124 and 202-215) reads the text of the lines players write and of the game's system lines. The registry calls it securely
--- and only with a line whose every value an addon may read (canaccessvalue), so a line of the chat lockdown is passed on untouched, and the filter
--- leaves a withheld text alone too. Only plain text is looked at: a link, a texture, an atlas, a Battle.net name and the code of a colour are passed
--- over whole. A web address there (http:// or https://, www., or a name with a dot and a path) is written as a link of the game's addon type,
--- |Haddon:FlatUI:url:<address>|h[<address>]|h; the rest of the line and every other value of the event stay as they were. A click on any link of a
--- chat window goes to SetItemRef (ChatFrameMixin:OnHyperlinkClick, Shared/ChatFrame.lua:19-25, Blizzard_UIPanels_Game/Mainline/ItemRef.lua:6-27),
--- whose handler for addon links (Shared/ItemRefHandlersShared.lua:279-282) fires EventRegistry's SetItemRef and counts the click as handled, so the
--- ItemRef tooltip stays shut. Flat UI listens to that callback: no function of the game is hooked or replaced, nothing is written in its link
--- handlers, and a click on any other link takes the game's own path. The click opens a small box of Flat UI's own at the cursor, with the address
--- selected; Enter or Escape closes it, and so does the loss of its focus or the start of a fight. Typing in it puts the address back, and Ctrl+C
--- (Cmd+C on a Mac) turns its line of help to "Copied." (0.5.41, ns.ChatCopyKey, which the copy box of ChatHistory.lua asks too). A click in a
--- fight opens none: the box takes the keyboard, and in a fight the keys stay with the game; chat says so once a fight (0.5.41, WORDS.LINK_FIGHT),
--- and the box does not open by itself when the fight ends.
--- Link tooltips: every chat window fires ChatFrame.OnHyperlinkEnter and ChatFrame.OnHyperlinkLeave through EventRegistry (Shared/ChatFrame.lua:27-33,
--- the scripts of ChatFrameTemplate, Mainline/ChatFrame.xml:16-18), so no script of a chat window is hooked, and a window the game opens later counts
--- too. GameTooltip gets a frame of Flat UI's own as its owner, at the cursor, and is filled from the link with SetHyperlink, a secure accessor of the
--- game's tooltip data (Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:488-519, 590), as OwnPaint.lua fills it with SetAction; Chat.lua's
--- lines and border apply to it as to any tooltip. It is hidden when the mouse leaves the link, the window hides or a fight starts, and only while
--- that frame still owns it. None is shown in a fight, nor while the game restricts addons (C_RestrictedActions, every restriction but the map's).
--- Channel names (chat.channelNames, 0.5.35; Number and name by default): a second filter in the same registry, for the lines of numbered channels
--- alone (CHAT_MSG_CHANNEL), puts the label "2. Trade" in place of "2. Trade - City" (the event's fourth value), from which the game writes the
--- label of the line (Mainline/ChatFrameOverrides.lua:667-668); the text and every other value stay as they came. A window takes a channel line
--- only while its label is longer than the name of the channel of the window's list that it matches (ChatFrameOverrides.lua:346-360), so a label
--- is made short in a window only where it still is (Fits, which reads the window's channelList and zoneChannelList, never writes them). As the
--- game has it gives the long names back.
--- Your name in chat (chat.mentions, 0.5.36; on): a third filter in the same registry, for what players say, yell and emote and the party, raid,
--- instance, guild, officer and numbered channel lines (not whispers, not the game's own lines), colours each whole-word match of the player's own
--- name (UnitName, case aside) in the plain text of a line another player wrote, in Your name colour. Links, textures and colour codes are passed
--- over whole, as for the addresses, and so is a web address; a line of the chat lockdown never comes. With Sound when you are named, the sound
--- plays once for each line (its lineID), at most one a second (ns.PlayKit); picking it in the options window plays it once, as every sound row
--- of Panel.lua's AddChoice does (0.5.36; the row's own handler of 0.5.37 played it again and on an undo, and went in 0.5.39). The text alone
--- changes; the filters chain, each rewriting what the last gave. With Light the tab that names you (chat.mentionTab, 0.5.39; on), each window
--- that takes such a line (a numbered channel's only when a channel of its list matches, Takes) goes to Chat.lua's ns.ChatTabNamed, which lights
--- the tab of a window that does not show.
--- Other words to colour (0.5.37): /flatui words add, remove and list (ns.AddSlash) keep up to 20 more words for the account
--- (ns.Account().chatWords, lower case, 2 to 24 bytes, no space), each coloured and sounded as your name is, whole words only, each look on what
--- the last gave; the row Other words to colour lists them and a pick takes one off (ns.ChatWordLines, ns.ChatWordPick). Its first line, Add a
--- word (0.5.39; at 20 words a line that says the list is full), opens the copy box empty as a word box over the options window: Enter adds the
--- word typed as /flatui words add does and closes it with the usual line in chat, a refusal shows in red in the box, Escape closes it; never
--- in a fight. /flatui words remove with no list yet says the word is not in it.
--- These follow the clickable addresses and the link tooltips of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission
--- (EnhanceQoLChatSocial/ChatIcons.lua). Left out: its item and currency icons and the item levels in links.
-
 local KEY = "chat"
 local LINKS, TIPS, CHANNELS, MENTIONS = "web links", "link tooltips", "channel names", "name in chat"
 local ROW = { [LINKS] = "webLinks", [TIPS] = "linkTips", [MENTIONS] = "mentions" }
--- What comes after |H in a link this file makes: the game's addon link type, then Flat UI's own name and kind.
 local PREFIX = "addon:FlatUI:url:"
 local LINK_COLOUR = "ff6cb8ff"
--- The chat events of what players write, and the game's system lines (Blizzard_ChatFrameBase/Shared/ChatTypeInfoConstants.lua).
 local EVENTS = { "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_EMOTE", "CHAT_MSG_WHISPER", "CHAT_MSG_WHISPER_INFORM", "CHAT_MSG_AFK", "CHAT_MSG_DND",
 	"CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER", "CHAT_MSG_RAID_WARNING", "CHAT_MSG_INSTANCE_CHAT",
 	"CHAT_MSG_INSTANCE_CHAT_LEADER", "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER", "CHAT_MSG_GUILD_DISCORD", "CHAT_MSG_CHANNEL", "CHAT_MSG_COMMUNITIES_CHANNEL",
 	"CHAT_MSG_BN_WHISPER", "CHAT_MSG_BN_WHISPER_INFORM", "CHAT_MSG_BN_INLINE_TOAST_BROADCAST", "CHAT_MSG_SYSTEM" }
--- The kinds of link that show a tooltip: an enchant link is the spell of a profession; a quest link (0.5.35) has no handler of its own and goes to
--- the same SetHyperlink as the ItemRef tooltip a click on it opens (Blizzard_UIPanels_Game/Mainline/ItemRef.lua:21-25, 390-392).
 local TIP_KINDS = { item = true, spell = true, enchant = true, achievement = true, quest = true }
--- An escape whose end is a closing code of its own: a texture, an atlas, a Battle.net name.
 local CLOSING = { T = "|t", A = "|a", K = "|k" }
 local BOX_WIDTH, BOX_HEIGHT, FIELD_HEIGHT = 380, 50, 20
--- Seconds between two looks at a link tooltip that is up.
 local WATCH = 0.1
--- The lines your name is looked for in: what players say, yell and emote, and the party, raid, instance, guild, officer and numbered channel
--- lines. Not whispers, which are to you anyway, nor the game's own lines.
 local MENTION_EVENTS = { "CHAT_MSG_SAY", "CHAT_MSG_YELL", "CHAT_MSG_EMOTE", "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER", "CHAT_MSG_RAID",
 	"CHAT_MSG_RAID_LEADER", "CHAT_MSG_RAID_WARNING", "CHAT_MSG_INSTANCE_CHAT", "CHAT_MSG_INSTANCE_CHAT_LEADER", "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER",
 	"CHAT_MSG_CHANNEL" }
--- The sound choices of Sound when you are named, as ns.SOUNDS (IconRow.lua) numbers them.
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
--- Other words to colour (0.5.37): the shortest and longest word in bytes, and how many the list holds at most; the lines of /flatui words.
 local WORDS = { SHORT = 2, LONG = 24, MOST = 20,
 	ADDED = "Flat UI: \"%s\" is coloured in chat now, as your name is.",
 	OFF = " Turn on Your name in chat (Chat text) for it to show.",
@@ -84,18 +28,13 @@ local WORDS = { SHORT = 2, LONG = 24, MOST = 20,
 	LIST = "Flat UI: other words coloured in chat: %s.",
 	NONE = "Flat UI: no other words are coloured in chat; /flatui words add tank adds one.",
 	HELP = "/flatui words - the other words coloured in chat as your name is; words add <word>, words remove <word>",
-	-- The row's first line and the word box (0.5.39).
 	ADD_LINE = "Add a word...", FULL_LINE = "At most 20 other words: choose one to stop colouring it",
 	TYPE = "Type a word and press Enter. Escape closes this.",
 	FIGHT = "Flat UI: words are added out of a fight.",
-	-- A web address clicked in a fight (0.5.41), once a fight, and the line of help once Ctrl+C was pressed in the copy box.
 	LINK_FIGHT = "Flat UI: web addresses open their copy box out of a fight. Click it again then.",
 	COPIED = "Copied. Enter or Escape closes this.",
 }
 
--- The state of the file: whether the filter is in the registry, whether each callback was given (true) or refused (false), the last line
--- rewritten (the same line comes once for each window that shows it), the lines with a link made, the lines that named you, the copy box and
--- the tooltip's owner.
 local S = { filtering = false, made = 0, waited = 0, mentioned = 0 }
 
 local function Opt(key)
@@ -106,13 +45,10 @@ local function Plain(value, kind)
 	return not ns.IsSecret(value) and type(value) == kind
 end
 
--- True while a part is to work: the module on, its row on, the part not stopped.
 local function Wanted(part)
 	return ns.Enabled(KEY) and Opt(ROW[part]) == true and not ns.PartStopped(KEY, part)
 end
 
--- A part run as ChatText.lua runs one: with the module on and the part not stopped, a failure counts toward stopping the part alone; otherwise a
--- failure is let go, since the part is only putting things away or opening the copy box of an address made before.
 local function Part(part, fn, ...)
 	if ns.Enabled(KEY) and not ns.PartStopped(KEY, part) then
 		ns.EachPart(KEY, part, fn, ...)
@@ -129,8 +65,6 @@ local function Fighting()
 	return ok and (ns.IsSecret(fighting) or fighting == true)
 end
 
--- True in a fight, and while the game restricts addons in any way but on the map (RestrictedActionsConstantsDocumentation.lua). An answer the
--- game withholds counts as a restriction.
 local function Restricted()
 	if Fighting() then
 		return true
@@ -160,10 +94,6 @@ local function Restricted()
 	return false
 end
 
--- Web addresses ------------------------------------------------------------------------------
-
--- Splits a word into what comes before an address, the address, and the punctuation after it. A closing bracket stays in the address while it
--- closes one of its own, as in a wiki address.
 local function Split(word)
 	local lead, core = word:match("^([%(%[{<\"']*)(.*)$")
 	local trail = ""
@@ -184,7 +114,6 @@ local function Split(word)
 	return lead, core, trail
 end
 
--- True for a web address: a scheme of the web, www., or a name with a dot and a path whose last part before the path is letters.
 local function IsAddress(core)
 	local lower = core:lower()
 	return lower:find("^https?://[%w%-]") ~= nil or lower:find("^www%.[%w%-]+%.%a") ~= nil or lower:find("^[%w%-]+%.[%w%.%-]*%a%a/.") ~= nil
@@ -194,7 +123,6 @@ local function Link(address)
 	return "|c" .. LINK_COLOUR .. "|H" .. PREFIX .. address .. "|h[" .. address .. "]|h|r"
 end
 
--- The words of a run of plain text (no escape in it), with each address made a link, and how many were.
 local function Words(text)
 	local made = 0
 	local out = text:gsub("%S+", function(word)
@@ -208,9 +136,6 @@ local function Words(text)
 	return out, made
 end
 
--- Where the escape that starts at `at` ends. A link runs to the end of its text, a texture, an atlas and a name to their closing code, a colour
--- over its eight digits (or its name up to the colon), and any other escape (|r, ||, |n and the rest) is two characters. An escape that does
--- not end runs to the end of the line.
 local function EscapeEnd(msg, at)
 	local size, code = #msg, msg:sub(at + 1, at + 1)
 	if code == "H" then
@@ -229,7 +154,6 @@ local function EscapeEnd(msg, at)
 	return math.min(at + 1, size)
 end
 
--- The line with every address in its plain text made a link, or nil when it has none.
 local function Rewrite(msg)
 	if not (msg:find("/", 1, true) or msg:find("[Ww][Ww][Ww]%.")) then
 		return nil
@@ -256,8 +180,6 @@ local function Rewrite(msg)
 	return table.concat(parts)
 end
 
--- One line of one window: S.out is the line to show in its place, or nil to leave it. The game gives the same line to each window that shows
--- it, so the last answer is kept, and a line with a link made is counted once by its lineID.
 local function Line(_, msg, lineID)
 	if not Wanted(LINKS) or not Plain(msg, "string") or msg == "" then
 		return
@@ -275,14 +197,11 @@ local function Line(_, msg, lineID)
 	S.out = S.lastOut
 end
 
--- The game's registry calls it with the window, the event and the values of the event (the line first, lineID eleventh). False alone leaves the
--- line; false and the values put the line in their place, every other value as it came.
 local function Filter(frame, event, msg, ...)
 	if not Wanted(LINKS) then
 		return false
 	end
 	S.out = nil
-	-- A part that fails is counted once for each window it fails on.
 	ns.EachPart(KEY, LINKS, Line, Plain(frame, "table") and frame or Filter, msg, (select(10, ...)))
 	local out = S.out
 	S.out = nil
@@ -292,7 +211,6 @@ local function Filter(frame, event, msg, ...)
 	return false
 end
 
--- The game's own chat filter registry: ChatFrameUtil on this client, ChatFrame_AddMessageEventFilter on an older one, or nil.
 local function Registry()
 	local util = ChatFrameUtil
 	if Plain(util, "table") and type(util.AddMessageEventFilter) == "function" and type(util.RemoveMessageEventFilter) == "function" then
@@ -304,8 +222,6 @@ local function Registry()
 	return nil
 end
 
--- The filter is given once for each event and taken back with the same function value. An address is made a link only while the click on it
--- is heard.
 local function SyncLinks()
 	local add, remove = Registry()
 	S.noRegistry = add == nil
@@ -327,15 +243,10 @@ local function SyncLinks()
 	end
 end
 
--- Channel names ------------------------------------------------------------------------------
-
--- True while channel names are to be short: the module on, Channel names at Number and name, the part not stopped.
 local function ShortNames()
 	return ns.Enabled(KEY) and Opt("channelNames") == "short" and not ns.PartStopped(KEY, CHANNELS)
 end
 
--- The label of a channel line without its zone, "2. Trade" for "2. Trade - City" and "1. General" for "1. General - Elwynn Forest", or nil for a
--- name with no " - " after its number and name (a channel a player made, or the game's own text as it comes).
 local function ShortName(name)
 	if not Plain(name, "string") then
 		return nil
@@ -348,11 +259,6 @@ local function ShortName(name)
 	return short
 end
 
--- True when this window still takes the line with the short name. The game's window match (Mainline/ChatFrameOverrides.lua:346-360) looks at a
--- channel of the window's list (its channelList, by the zoneChannelList of the same index or by name) only while the line's name is longer than
--- that channel's, and drops a line no channel of the list takes; so every channel of the list the line matches, by its zone channel (arg7) or by
--- its name (arg9), must be shorter than the short name. Both lists are read only; a list the window does not have, or a value withheld, keeps the
--- line as it is.
 local function Fits(frame, short, zone, base)
 	local list, zones = rawget(frame, "channelList"), rawget(frame, "zoneChannelList")
 	if not Plain(list, "table") then
@@ -373,7 +279,6 @@ local function Fits(frame, short, zone, base)
 	return true
 end
 
--- One channel line of one window: S.short is its short label, or nil to leave it.
 local function Shorten(frame, name, zone, base)
 	local short = Plain(frame, "table") and ShortName(name) or nil
 	if short and Fits(frame, short, zone, base) then
@@ -381,16 +286,11 @@ local function Shorten(frame, name, zone, base)
 	end
 end
 
--- The game's registry calls it with the window, the event and the values of a channel line: the text first, the channel's label fourth
--- ("2. Trade - City"), its zone channel seventh, its number eighth and its name ninth. The label alone is put in its place, every other value as
--- it came; the game builds the line's channel link from the number (Mainline/ChatFrameOverrides.lua:667-668), so a click on the label still
--- opens the channel.
 local function Channels(frame, event, msg, a2, a3, a4, ...)
 	if not ShortNames() or not Plain(msg, "string") then
 		return false
 	end
 	S.short = nil
-	-- A part that fails is counted once for each window it fails on.
 	ns.EachPart(KEY, CHANNELS, Shorten, Plain(frame, "table") and frame or Channels, a4, (select(3, ...)), (select(5, ...)))
 	local short = S.short
 	S.short = nil
@@ -400,14 +300,10 @@ local function Channels(frame, event, msg, a2, a3, a4, ...)
 	return false
 end
 
--- The label of a channel as the chat windows show it now: short while Channel names is at Number and name, else as it came. ChatHistory.lua
--- writes the channel lines it shows again after a reload with it, so they read as the lines around them.
 function ns.ChatChannelLabel(name)
 	return ShortNames() and ShortName(name) or name
 end
 
--- The filter of channel names is given for the lines of numbered channels alone (CHAT_MSG_CHANNEL; their notices, as "Joined Channel", and
--- community channels keep the game's names), and taken back with the same function value.
 local function SyncChannels()
 	local add, remove = Registry()
 	if not add then
@@ -424,9 +320,6 @@ local function SyncChannels()
 	end
 end
 
--- Your name in chat --------------------------------------------------------------------------
-
--- The player's own name, read once it is plain, or nil before the game gives it.
 local function MyName()
 	if S.name == nil and type(UnitName) == "function" then
 		local ok, name = pcall(UnitName, "player")
@@ -437,7 +330,6 @@ local function MyName()
 	return S.name
 end
 
--- The code of Your name colour, |c and its eight digits.
 local function MentionColour()
 	local hex = Opt("mentionColour")
 	if Plain(hex, "string") and hex:find("^%x%x%x%x%x%x%x%x$") then
@@ -446,14 +338,10 @@ local function MentionColour()
 	return "|cffff9933"
 end
 
--- A letter, a digit or a byte of a letter outside ASCII touches a name, so "Jonny" and "Jöna" do not name Jon; a space, punctuation and the end
--- of a word do.
 local function Touches(char)
 	return char ~= "" and char:find("[%w\128-\255]") ~= nil
 end
 
--- One word of plain text with each whole match of the name (lower case, `lower`) wrapped in the colour, or nil when it has none. A web address
--- is passed over, so its link is still made whichever filter comes first.
 local function MarkWord(word, lower, colour)
 	local _, core = Split(word)
 	if core ~= "" and IsAddress(core) then
@@ -479,9 +367,6 @@ local function MarkWord(word, lower, colour)
 	return table.concat(parts)
 end
 
--- The line with the name coloured in its plain text, or nil when it is not named there. Links, textures, names and colour codes are passed
--- over whole, as Rewrite passes them. MarkAll looks for each word on what the last look gave: the words differ and match whole, so no word
--- is wrapped twice.
 local function MarkLine(msg, lower, colour)
 	if not msg:lower():find(lower, 1, true) then
 		return nil
@@ -513,7 +398,6 @@ local function MarkLine(msg, lower, colour)
 	return table.concat(parts)
 end
 
--- Other words to colour: the list kept for the account (ns.Account().chatWords), or nil before the saved variables load; make makes it.
 local function WordList(make)
 	local db = ns.Account()
 	if type(db) ~= "table" then
@@ -528,12 +412,10 @@ local function WordList(make)
 	return db.chatWords
 end
 
--- A word fit for the list: a plain string in lower case of SHORT to LONG bytes, with no space and no escape bar.
 local function Fit(word)
 	return type(word) == "string" and #word >= WORDS.SHORT and #word <= WORDS.LONG and word == word:lower() and not word:find("[%s|]")
 end
 
--- The words a line is looked at for, lower case, each once: your name first, then the other words (at most MOST of them).
 local function Targets(name)
 	local list, seen = { name:lower() }, { [name:lower()] = true }
 	for _, word in ipairs(WordList(false) or {}) do
@@ -545,7 +427,6 @@ local function Targets(name)
 	return list
 end
 
--- The line with your name and each other word coloured, each look on what the last gave, or nil when none is there.
 local function MarkAll(msg, name)
 	local colour, out = MentionColour(), nil
 	for _, lower in ipairs(Targets(name)) do
@@ -554,9 +435,6 @@ local function MarkAll(msg, name)
 	return out
 end
 
--- True when the window takes the line: any line but a numbered channel's, which the game gives a window only when a channel of its list matches
--- it (by its zone channel, arg7, or its name, arg9) and is shorter than its label (Mainline/ChatFrameOverrides.lua:346-360), after the filters
--- ran. Both lists are read only; a list or a value withheld does not take it.
 local function Takes(frame, event, label, zone, base)
 	if event ~= "CHAT_MSG_CHANNEL" then
 		return true
@@ -578,9 +456,6 @@ local function Takes(frame, event, label, zone, base)
 	return false
 end
 
--- One line of one window: S.marked is the line to show in its place, or nil to leave it. A line you wrote is left. The same line comes once for
--- each window that shows it, so the last answer is kept and the sound plays once for each lineID. With Light the tab that names you (0.5.39),
--- each window that takes the line is handed to Chat.lua (ns.ChatTabNamed), which lights its tab while the window does not show.
 local function Mark(frame, msg, author, lineID, event, label, zone, base)
 	local name = MyName()
 	if not name then
@@ -600,7 +475,6 @@ local function Mark(frame, msg, author, lineID, event, label, zone, base)
 		S.mentioned = S.mentioned + 1
 		local sound = ns.SOUNDS and ns.SOUNDS[KITS[Opt("mentionSound")] or 0]
 		if sound then
-			-- At most one a second (ns.PlayKit), so a line with no lineID shown in several windows plays once too.
 			ns.PlayKit(sound[1], KEY)
 		end
 	end
@@ -611,15 +485,11 @@ local function Mark(frame, msg, author, lineID, event, label, zone, base)
 	end
 end
 
--- The game's registry calls it with the window, the event and the values of the line: the text first, its author second ("Name" or
--- "Name-Realm"), a channel's label fourth, its zone channel seventh, its name ninth, lineID eleventh. The text alone is put in its place; every
--- other value stays as it came. It chains with the address filter, each rewriting what the other gave.
 local function Mentions(frame, event, msg, author, ...)
 	if not Wanted(MENTIONS) or not Plain(msg, "string") or msg == "" then
 		return false
 	end
 	S.marked = nil
-	-- A part that fails is counted once for each window it fails on.
 	ns.EachPart(KEY, MENTIONS, Mark, Plain(frame, "table") and frame or Mentions, msg, author, (select(9, ...)), event, (select(2, ...)),
 		(select(5, ...)), (select(7, ...)))
 	local out = S.marked
@@ -630,8 +500,6 @@ local function Mentions(frame, event, msg, author, ...)
 	return false
 end
 
--- The filter is given once for each event and taken back with the same function value. A change of a row forgets the last line, so a new
--- colour shows on the next.
 local function SyncMentions()
 	S.mentionIn, S.mentionOut = nil, nil
 	local add, remove = Registry()
@@ -653,7 +521,6 @@ local function SyncMentions()
 	end
 end
 
--- /flatui words (0.5.37): add a word, remove one, or list them. A change forgets the last line, so the next shows it.
 local function EditWord(verb, typed)
 	local word = type(typed) == "string" and typed:lower() or ""
 	if not Fit(word) then
@@ -706,9 +573,6 @@ end
 
 ns.AddSlash(KEY, "words", WordsSlash, { WORDS.HELP })
 
--- The row Other words to colour (Config.lua): Add a word (0.5.39; at MOST words a line that says so in its place) and the words of the list, and a
--- pick that opens the word box or stops colouring one, as Items always sold does (ErrandsMerchant.lua's ErrandsSellLines and ErrandsSellPick)
--- and Make a new section opens its name box (BagsCustom.lua).
 function ns.ChatWordLines()
 	local rows = {}
 	for index, word in ipairs(WordList(false) or {}) do
@@ -743,9 +607,6 @@ function ns.ChatWordPick(id)
 	return true, EditWord("remove", word)
 end
 
--- The copy box --------------------------------------------------------------------------------
-
--- The colour of the box's line of help as it was made (read back from it), and Enter in the word box (below).
 local HELP_COLOUR = { 1, 0.82, 0 }
 local WordEntered
 
@@ -777,8 +638,6 @@ local function Help()
 	return ("Press %s to copy it. Enter or Escape closes this."):format(Mac() and "Cmd+C" or "Ctrl+C")
 end
 
--- True for the key that copies in a box of text (0.5.41): C with Ctrl held, or with Cmd (IsMetaKeyDown) on a Mac client, as the help line names
--- it. The copy box of Copy recent chat (ChatHistory.lua) asks it too.
 function ns.ChatCopyKey(key)
 	if key ~= "C" then
 		return false
@@ -794,8 +653,6 @@ function ns.ChatCopyKey(key)
 	return down("IsControlKeyDown") or (Mac() and down("IsMetaKeyDown"))
 end
 
--- Built the first time an address is clicked: a frame of Flat UI's own on UIParent, its look from the chat page, a line of help and the box. Its
--- outlines name that page, since a click on an address made before can build the box outside ns.EachPart (see Clicked).
 local function BuildBox()
 	local frame = CreateFrame("Frame", nil, UIParent)
 	ns.Own[frame] = true
@@ -823,13 +680,11 @@ local function BuildBox()
 	edit:SetAutoFocus(false)
 	edit:SetFontObject("ChatFontNormal")
 	edit:SetTextInsets(6, 6, 0, 0)
-	-- No limit, so a long address is never cut.
 	pcall(edit.SetMaxLetters, edit, 0)
 	pcall(edit.SetMaxBytes, edit, 0)
 	ns.SetOutlineFill(ns.SetOutlineArea(ns.Outline(edit, edit, true), KEY), 0, 0, 0, 0.5)
 	local box = { frame = frame, edit = edit, help = help }
 	edit:SetScript("OnEscapePressed", CloseBox)
-	-- Enter closes the copy box; in the word box it adds the word typed (WordEntered).
 	edit:SetScript("OnEnterPressed", function()
 		if box.mode == "word" then
 			WordEntered(box)
@@ -838,7 +693,6 @@ local function BuildBox()
 		end
 	end)
 	edit:SetScript("OnEditFocusLost", CloseBox)
-	-- What is typed over the address is taken back: the box is for copying. In the word box, typing again takes a refusal's red line away.
 	edit:SetScript("OnTextChanged", function(self, typed)
 		if typed and box.address ~= nil then
 			pcall(self.SetText, self, box.address)
@@ -849,21 +703,18 @@ local function BuildBox()
 			help:SetTextColor(HELP_COLOUR[1], HELP_COLOUR[2], HELP_COLOUR[3])
 		end
 	end)
-	-- Ctrl+C (Cmd+C on a Mac) in the copy box says it was taken, as the export box of Profiles does (Panel.lua's CopyField).
 	edit:SetScript("OnKeyDown", function(_, key)
 		if box.mode == "copy" and box.address ~= nil and box.address ~= "" and help and ns.ChatCopyKey(key) then
 			help:SetText(WORDS.COPIED)
 			help:SetTextColor(HELP_COLOUR[1], HELP_COLOUR[2], HELP_COLOUR[3])
 		end
 	end)
-	-- The keyboard goes back to the game when a fight starts.
 	pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_DISABLED")
 	frame:SetScript("OnEvent", CloseBox)
 	frame:Hide()
 	return box
 end
 
--- The box goes above the cursor, where the address was clicked, or above the middle of the screen when the cursor cannot be read.
 local function Place(frame)
 	frame:ClearAllPoints()
 	local okScale, scale = pcall(UIParent.GetEffectiveScale, UIParent)
@@ -878,7 +729,6 @@ local function Place(frame)
 	end
 end
 
--- The line of help over the box: its text in the colour it was made with, or in red for a refusal of the word box.
 local function SayInBox(box, text, refused)
 	local help = box.help
 	box.refused = refused and true or nil
@@ -893,8 +743,6 @@ local function SayInBox(box, text, refused)
 end
 
 local function OpenBox(_, address)
-	-- None opens in a fight: the box would hold the keyboard, which goes back to the game when a fight starts. Chat says so once a fight (0.5.41),
-	-- and the box does not open by itself as the fight ends, since it would take the keyboard while the player moves.
 	if Fighting() then
 		if not S.linkFightSaid then
 			S.linkFightSaid = true
@@ -915,13 +763,11 @@ local function OpenBox(_, address)
 	Place(box.frame)
 	box.frame:Show()
 	Select(box.edit)
-	-- The box is only up while it has the keyboard, so Enter or Escape always closes it.
 	local ok, focus = pcall(box.edit.HasFocus, box.edit)
 	if ok and not ns.IsSecret(focus) and focus == false then
 		CloseBox()
 		return
 	end
-	-- The game may move the selection as the box gets the keyboard, so it is made again on the next frame.
 	if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
 		pcall(C_Timer.After, 0, function()
 			local ok, shown = pcall(box.frame.IsShown, box.frame)
@@ -932,9 +778,6 @@ local function OpenBox(_, address)
 	end
 end
 
--- The word box (0.5.39): the same box, empty, for Add a word of the row Other words to colour. Enter adds the word typed (EditWord, as /flatui
--- words add): the line of chat it gives is printed and the box closes, or a refusal shows in red in the box, which stays open with the word
--- selected. What is typed stays (box.address is nil). Never in a fight, as the copy box.
 function WordEntered(box)
 	local ok, typed = pcall(box.edit.GetText, box.edit)
 	local word = ok and Plain(typed, "string") and typed:match("^%s*(.-)%s*$") or ""
@@ -968,9 +811,6 @@ function OpenWordBox()
 	end
 end
 
--- EventRegistry's SetItemRef: the game fires it for every addon link clicked, with the link, its text, the mouse button and the window. A link
--- that is not one of Flat UI's addresses is left to whoever made it. An address made before stays a link in its window, and the game counts a
--- click on it as handled, so it still opens with its row or the module off, and with the module or this part stopped.
 local function Clicked(_, link, _, _, frame)
 	if not Plain(link, "string") or link:sub(1, #PREFIX) ~= PREFIX then
 		return
@@ -981,8 +821,6 @@ local function Clicked(_, link, _, _, frame)
 	end
 end
 
--- Link tooltips -------------------------------------------------------------------------------
-
 local function Tooltip()
 	local tip = GameTooltip
 	if Plain(tip, "table") and not ns.Forbidden(tip) then
@@ -991,7 +829,6 @@ local function Tooltip()
 	return nil
 end
 
--- True while GameTooltip's owner is the frame of this file. An owner that cannot be read is not.
 local function Owns(tip)
 	local ok, owner = pcall(tip.GetOwner, tip)
 	return ok and S.owner ~= nil and not ns.IsSecret(owner) and rawequal(owner, S.owner)
@@ -999,8 +836,6 @@ end
 
 local Watch
 
--- Takes the tooltip of a link away: hidden only while the frame of this file owns it. A leave from another window than the one shown for is not this
--- tooltip's.
 local function HideTip(frame)
 	if S.tipFrom == nil or (frame ~= nil and not rawequal(frame, S.tipFrom)) then
 		return
@@ -1013,7 +848,6 @@ local function HideTip(frame)
 	Watch(false)
 end
 
--- True while the window is shown and under the mouse. An answer that cannot be read keeps the tooltip; the leave of the link takes it away.
 local function Over(frame)
 	if not Plain(frame, "table") or ns.Forbidden(frame) then
 		return false
@@ -1029,7 +863,6 @@ end
 local function Look()
 	local tip = Tooltip()
 	if S.tipFrom == nil or not tip or not Owns(tip) then
-		-- Another frame has the tooltip now: nothing of this file is up.
 		S.tipFrom = nil
 		Watch(false)
 		return
@@ -1043,7 +876,6 @@ local function Look()
 	end
 end
 
--- The owner frame: one of Flat UI's own, shown only while a link tooltip is up, and looking at it a few times a second.
 function Watch(on)
 	local owner = S.owner
 	if not owner then
@@ -1058,7 +890,6 @@ function Watch(on)
 			S.waited = S.waited + (type(elapsed) == "number" and elapsed or 0)
 			if S.waited >= WATCH then
 				S.waited = 0
-				-- A look that fails takes the tooltip away, so the watch never runs on.
 				if ns.IsStopped(KEY) or ns.PartStopped(KEY, TIPS) or not ns.EachPart(KEY, TIPS, Look) then
 					pcall(HideTip)
 					S.tipFrom = nil
@@ -1093,14 +924,12 @@ local function ShowTip(frame, link)
 	end
 end
 
--- EventRegistry's ChatFrame.OnHyperlinkEnter and ChatFrame.OnHyperlinkLeave: the window, then for the enter the link and its text.
 local function Entered(_, frame, link)
 	if Wanted(TIPS) and Plain(frame, "table") then
 		ns.EachPart(KEY, TIPS, ShowTip, frame, link)
 	end
 end
 
--- A window that cannot be read is taken for the one shown for.
 local function Left(_, frame)
 	if S.tipFrom ~= nil then
 		Part(TIPS, HideTip, Plain(frame, "table") and frame or nil)
@@ -1113,10 +942,6 @@ local function SyncTips()
 	end
 end
 
--- Hooks and the pass of the module ------------------------------------------------------------
-
--- The three callbacks are given once, the first time the module is on with a row of this file on, and each asks its row when it comes. S.click
--- and S.hover are false when EventRegistry refused them.
 local function Listen()
 	local registry = EventRegistry
 	if S.listened or not Plain(registry, "table") or type(registry.RegisterCallback) ~= "function" then
@@ -1130,7 +955,6 @@ local function Listen()
 	end)
 end
 
--- Called by Chat.lua at the end of every refresh of the module: at its start, at a change of a row, when it goes off and when it stops.
 function ns.ChatLinksSync()
 	if ns.Enabled(KEY) and (Opt(ROW[LINKS]) == true or Opt(ROW[TIPS]) == true) then
 		Listen()
@@ -1144,7 +968,6 @@ function ns.ChatLinksSync()
 	end
 end
 
--- True when the game has made a chat window: without one there is nothing to say about the links in it.
 local function Windows()
 	local list = CHAT_FRAMES
 	return Plain(list, "table") and list[1] ~= nil

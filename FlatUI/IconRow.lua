@@ -1,18 +1,5 @@
 local _, ns = ...
 
--- A row of flat square icons with a sweep, for the modules that show cooldowns and buffs: the icon, its sweep, its border, a
--- flash and a sound when the sweep ends. This file is no module of its own. An icon is made as Cooldowns.lua makes one (three
--- frames and six textures, all in ns.Own), without a count. A number of seconds goes to the sweep as a start and a length; a
--- duration object goes to the sweep and is never read, compared or kept as a key. The flash is a white square that fades from full
--- to nothing in half a second and hides itself as its fade ends (OnFinished, with the final opacity kept, so it never blinks back
--- before it hides); a new flash on the same icon starts the fade again from full, and the half-second timer that backs it up hides
--- only its own flash (icon.flashes), so an older one never cuts a newer one short.
--- ns.IconFader is the Fade until you point at it of Group tools and the Ping bar: the icons of a row of buttons of the addon's own (never
--- its secure buttons or its frame, so in a fight too) stay at 30% until held() says they must be full (the mouse over one of them, a
--- ready check, a countdown or a waiting ping), come back to full at once and fade again over a quarter of a second, a second after
--- the last reason to be full went (a C_Timer.After wait, then a short C_Timer.NewTicker). ns.IconCountdownHeight sizes the countdown numbers of
--- an icon with the icon, for the rows whose numbers follow Icon size (Defensives on you, Your buffs).
-
 local I = {}
 
 local CROP = 0.08
@@ -21,7 +8,6 @@ local SOUND_GAP = 1
 local NO_SOUND = "%s: the game plays no sound, so there is the flash only."
 local IsSecret = ns.IsSecret
 
--- The sounds the modules offer, in the order of their pickers: the sound kit and its name.
 ns.SOUNDS = {
 	{ 23287, "Spell alert" },
 	{ 316736, "Chimes" },
@@ -32,11 +18,8 @@ ns.SOUNDS = {
 	{ 37666, "Whisper warning" },
 }
 
--- The fonts of the Countdown number size choices (game is the font the game draws with).
 local COUNT_FONTS = { small = "NumberFontNormalSmall", normal = "NumberFontNormal", large = "NumberFontNormalLarge", huge = "NumberFontNormalHuge" }
 
--- Sets the font of the countdown numbers of an icon (a table with a cooldown, or any table with the Cooldown frame as `frame`) to a choice of Countdown number size. The game's font is read once,
--- before the first change, and game puts it back.
 function ns.IconCountdownFont(icon, choice, frame)
 	local name, cooldown = COUNT_FONTS[choice], frame or icon.cooldown
 	if icon.cdFont == name then
@@ -60,10 +43,6 @@ function ns.IconCountdownFont(icon, choice, frame)
 	end
 end
 
--- The numbers on an icon follow its size. ns.IconFontHeight gives the height of a font object of the game by its name, read once (fallback
--- where it cannot be read); ns.IconNumberHeight a height that is `height` at the row's default Icon size `base`, grown and shrunk with `size`,
--- 8 to 24; and ns.IconCountdownHeight sets the countdown numbers of an icon of this file to that, from the game's own height of them, read
--- once, so a row at its default size keeps the numbers it had.
 I.fontHeights = {}
 function ns.IconFontHeight(name, fallback)
 	local height = I.fontHeights[name]
@@ -105,9 +84,6 @@ function ns.IconCountdownHeight(icon, size, base)
 	end
 end
 
--- Sound settings of an older build become the one list of sounds. t holds saved values by path. Sound when ready was on or off and played
--- Sound of Trackers. When it is ready again was none, flash or sound, with Ready sound (alert and horn are now spell and warhorn). With
--- legacy true, a Ready sound saved without the old row was never played and becomes none.
 local RENAMED = { alert = "spell", horn = "warhorn" }
 function ns.MigrateSounds(t, legacy)
 	local ready, sound, own = t["enemycd.ready"], t["enemycd.sound"], t["cooldowns.readySound"]
@@ -124,7 +100,6 @@ function ns.MigrateSounds(t, legacy)
 	end
 end
 
--- The colour of the border of each kind of ability (CooldownData.lua: ns.COOLDOWN_KINDS). Crowd control shares the violet of its breaks.
 local COLOURS = {
 	{ 1, 0.65, 0.1 },
 	{ 0.3, 0.6, 1 },
@@ -137,10 +112,8 @@ local COLOURS = {
 	{ 1, 0.84, 0.3 },
 }
 
--- The icons and times of the three samples that /flatui test icons and test mode show.
 local SAMPLES = { { 135940, 3 }, { 135964, 3 }, { 136089, 3 } }
 
--- The red, green and blue of a kind (1 to 9), or nothing for any other value.
 function ns.KindColour(kind)
 	local colour = type(kind) == "number" and not IsSecret(kind) and COLOURS[kind]
 	if colour then
@@ -148,7 +121,6 @@ function ns.KindColour(kind)
 	end
 end
 
--- True when a frame may be made on this parent now. In combat only a frame of this addon's own or UIParent is safe.
 function I.CanMake(parent)
 	if not InCombatLockdown() then
 		return true
@@ -165,7 +137,6 @@ local function Own(object)
 	return object
 end
 
--- A new icon on `parent`, or nil when the game would not allow it now. Its frame is hidden until IconSet.
 function ns.IconNew(parent)
 	if type(parent) ~= "table" or not I.CanMake(parent) then
 		return nil
@@ -179,7 +150,6 @@ function ns.IconNew(parent)
 	cooldown:SetDrawBling(false)
 	cooldown:SetSwipeColor(0, 0, 0, 0.7)
 	local icon = { frame = frame, texture = texture, cooldown = cooldown, outline = ns.Outline(frame, frame), done = 0 }
-	-- The game says when a sweep has ended through this script and no event.
 	cooldown:SetScript("OnCooldownDone", function()
 		I.Done(icon)
 	end)
@@ -187,7 +157,6 @@ function ns.IconNew(parent)
 	return icon
 end
 
--- The sweep of an icon has ended: the flash and the sound its look asks for, then its own callback.
 function I.Done(icon)
 	icon.done = icon.done + 1
 	local look = icon.look or {}
@@ -202,9 +171,6 @@ function I.Done(icon)
 	end
 end
 
--- Puts a picture and a sweep on an icon and shows it. texture: a file or a number. seconds: a number of seconds that starts at
--- `start`, or a duration object (then start is not used). look: { numbers = false hides the countdown numbers, font = a Countdown number
--- size choice, kind = 1 to 9 for the colour of the border, border = false for none, flash and sound for the end of the sweep, key the module a note goes to }.
 function ns.IconSet(icon, texture, start, seconds, look)
 	look = look or {}
 	icon.look = look
@@ -222,20 +188,16 @@ function ns.IconSet(icon, texture, start, seconds, look)
 		pcall(cooldown.SetCooldownFromDurationObject, cooldown, seconds)
 	end
 	ns.SetOutlineColour(icon.outline, ns.KindColour(look.kind))
-	-- look.border false: no border and no dark background, as Icon border on Cooldowns.
 	ns.SetOutline(icon.outline, look.border ~= false, look.border ~= false)
 	icon.frame:Show()
 	return true
 end
 
--- Takes the sweep and the icon away.
 function ns.IconClear(icon)
 	pcall(icon.cooldown.Clear, icon.cooldown)
 	icon.frame:Hide()
 end
 
--- Puts icons in a row from the holder: direction "right" grows to the right from its bottom left corner, "left" to the left from
--- its bottom right corner, "center" both ways from the middle of its bottom edge. Returns the width of the row.
 function ns.IconLayout(list, holder, size, spacing, direction)
 	local count = #list
 	local width = count > 0 and (count * size + (count - 1) * spacing) or 0
@@ -254,15 +216,11 @@ function ns.IconLayout(list, holder, size, spacing, direction)
 	return width
 end
 
--- The box of `count` icons, and `extra` more units of height, for a handle that is drawn with no icon shown.
 function ns.IconExtent(count, size, spacing, extra)
 	local width = count > 0 and (count * size + (count - 1) * spacing) or 0
 	return width, size + (extra or 0)
 end
 
--- The flash: a white square over the icon that fades in half a second and hides as its fade ends. Made with the first flash. A
--- flash while one plays starts it again from full. The timer hides the square where the client made no fade, and backs the fade up
--- a moment after its end, only while no newer flash (icon.flashes) has started and the fade is not playing.
 function ns.IconFlash(icon)
 	local flash = icon.flash
 	if not flash then
@@ -304,15 +262,8 @@ function ns.IconFlash(icon)
 	end
 end
 
--- Fade until you point at it: the faint opacity of the icons, how long they wait at full once nothing holds them, how long they take to
--- fade, in how many steps.
 local FAINT, FAINT_WAIT, FAINT_TIME, FAINT_STEPS = 0.3, 1, 0.25, 5
 
--- A fader of the icons of a row of buttons of the addon's own (Group tools, the Ping bar). list() gives the entries, each with its icon as
--- `frame`; held() is true while the icons must be full (the row off, the mouse over one, what the row is doing). Wake brings them to full
--- at once and drops a fade under way; Faint fades them FAINT_WAIT after the call while held() stays false, held() asked again as the wait
--- ends; Settle puts them at full or faint at once as held() says, but leaves a wait or a fade under way to end. Only the icons' opacity
--- changes, so every call is safe in a fight.
 function ns.IconFader(list, held)
 	local fader = { alpha = 1 }
 	local function Set(alpha)
@@ -390,8 +341,6 @@ function ns.IconFader(list, held)
 	return fader
 end
 
--- Plays a sound kit, at most once a second. True when the game said it will play. A client without PlaySound, or a call that
--- fails, gives false and one note on the module `key`.
 local lastPlay
 I.sound = nil
 function ns.PlayKit(id, key)
@@ -416,9 +365,6 @@ function ns.PlayKit(id, key)
 	return true
 end
 
--- Puts sample `index` (1 to 3) on an icon, with a flash and a sound at the end of its sweep. look, when given, is the row's own cue
--- ({ flash = false for none, sound = false for none or the sound kit of the row's own choice }), so /flatui test icons follows Flash when ready
--- and Sound of Party cooldowns and Enemy cooldowns; without it the flash and Spell alert play.
 function ns.IconSample(icon, index, start, seconds, key, look)
 	local sample = SAMPLES[index]
 	if not sample then
@@ -436,19 +382,11 @@ function ns.IconSample(icon, index, start, seconds, key, look)
 	return ns.IconSet(icon, sample[1], start, seconds, { kind = sample[2], flash = flash, sound = sound, key = key })
 end
 
--- The picture of sample `index` (1 to 3), for a row that draws its own icons (Cooldowns.lua), or nil.
 function ns.IconSamplePicture(index)
 	local sample = SAMPLES[index]
 	return sample and sample[1] or nil
 end
 
--- Test mode (TestMode.lua) ------------------------------------------------------------------------------------------------------------------------
--- The samples the rows of Defensives on you, Your buffs, Party cooldowns and Enemy cooldowns hold while test mode is on. Each sweep starts when
--- the sample is first put on the icon; putting the same sample on again (a Refresh) keeps the sweep and takes the look the row has now. Its end
--- flashes unless the look says not, and only the first end since test mode came on sounds, unless the look has no sound: the sound is asked of
--- TM.Sound once, with the module's key, as the sweep starts. ns.IconSampleLoop starts an ended sweep again, from the ticker of test mode, so with
--- Moving off a sweep ends and stays ended.
--- HELD: the length of the sweep of samples 1 to 3, staggered so the row never ends all at once.
 local HELD = { 6, 10, 15 }
 
 local function Copy(look)
@@ -459,9 +397,6 @@ local function Copy(look)
 	return copy
 end
 
--- Holds sample `index` (1 to 3) on an icon. look: the row's look of its own icons (numbers, font, border, kind; kind true is the sample's kind;
--- flash false for none; sound false for none, or the sound kit of the row's own choice), else the sample's kind colour with the flash and the
--- sound; texture: another picture than the sample's; seconds: another length than HELD's.
 function ns.IconSampleHeld(icon, index, key, look, texture, seconds)
 	local sample = SAMPLES[index]
 	if not sample then
@@ -478,7 +413,6 @@ function ns.IconSampleHeld(icon, index, key, look, texture, seconds)
 	local held = icon.held
 	if held and held.index == index and held.file == file and icon.frame:IsShown() then
 		held.look = look
-		-- No start and no length: the sweep that runs stays as it is, and so does its sound.
 		local kept = Copy(look)
 		kept.sound = held.kit
 		return ns.IconSet(icon, file, nil, nil, kept)
@@ -496,7 +430,6 @@ function ns.IconSampleHeld(icon, index, key, look, texture, seconds)
 	return ns.IconSet(icon, file, now, length, first)
 end
 
--- Starts again, from now, the sweep of each held sample in a list of icons whose sweep has ended. The look has no sound.
 function ns.IconSampleLoop(list, now)
 	for _, icon in ipairs(list or {}) do
 		local held = icon.held
@@ -507,7 +440,6 @@ function ns.IconSampleLoop(list, now)
 	end
 end
 
--- Lets go of a held sample: the sweep and the icon go. True when the icon held one.
 function ns.IconSampleDrop(icon)
 	if not icon.held then
 		return false

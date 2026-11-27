@@ -1,60 +1,25 @@
 local _, ns = ...
 
--- Party cooldowns: a row of icons beside each member of the party on the game's party frames, and one of the player's own above
--- the first, each icon an ability of the member's class with the time left on its cooldown. Ready icons are bright and used ones
--- dark with a sweep. A use is seen from the player's own casts, from the casts of the members where the game does not hide them,
--- and from the buffs of defensives where it does not hide buffs (Tracking.lua keeps the timers and listens). The rows are frames
--- of this addon's own under UIParent, never children of the game's member buttons, which are secure. Frames are made and anchored
--- out of combat; in combat only the picture, the dimming, the sweep and show or hide of icons that exist are touched. Where the game
--- shows its party as raid-style frames the rows hang from those frames, the unit read from each frame. In a raid group the game shows
--- no party member frames, so the player's own row and the rows of the subgroup stack in a holder of their own with a handle in
--- /flatui move, each row labelled with the member's name in his class colour (RAID_CLASS_COLORS, plain answers only, else white), right-aligned
--- on one line and cut at the room of the label. The row of a member who is dead, a ghost or offline (UnitIsDeadOrGhost, UnitIsConnected, plain
--- answers only: a withheld one changes nothing) fades to 35% with its label, also in a fight, as both are frames of the addon's own, and comes
--- back as he is up again; its tooltips say Dead or Offline. With Dim members out of range (on by default) the row of a member the game says is
--- out of range fades to 45% with its label, also in a fight, as Healer mana's bars do (P.Range: UnitInRange's answer goes unread to
--- SetAlphaFromBoolean); dead or offline wins, and test mode shows it on the sample Fay. The abilities an account adds or hides, by name or spell ID, are kept in
--- the account (/flatui party). A member who also runs Flat UI sends his cooldowns as addon messages (PartySync.lua), which start his
--- timers here and show his ready icons. Pointing at an icon writes the ability with its class, in its kind's colour, the member's name, Ready or
--- the time left, and whether he shares by Flat UI, in GameTooltip (Icon tooltips: On, Out of combat only or Off), written again each second
--- while the mouse stays, so the time counts down and turns to Ready (P.TipTick); the icon takes the mouse's
--- motion only, never a click, so clicks go through to the party frame below (SetMouseClickEnabled false, as Your buffs does). The border of an
--- icon takes the colour of its ability's kind (Border colour by kind), and with Flash when ready a white flash plays as its sweep ends
--- (IconRow.lua's flash); with Show on Only while on cooldown the row waits that half second before the ready icon goes. Sound (None by
--- default, the eight sounds of Enemy cooldowns) plays as an icon's sweep ends, through ns.PlayKit, so at most once a second, only for a cooldown
--- at least Shortest cooldown that sounds long (0 by default: every one), so a short interrupt can end quietly. Picking a Sound in the options
--- window plays it once, out of a fight (Panel.lua plays every sound row as it is picked), and /flatui test icons follows Flash when ready and
--- Sound. The helpers are in one table, P.
-
 local KEY = "partycd"
 local SPACING = 2
--- Units between a member frame and its row, and under a frame when the row hangs below it.
 local GAP, BELOW = 4, -1
 local LOOK = 0.5
 local TEST_TIME = 8
 local DARK = 0.6
 local UNKNOWN_ICON = 134400
--- The colours of a tooltip's lines: Ready, and the text-dim of the windows (PanelLook.lua).
 local READY = { 0.4, 0.9, 0.4 }
 local DIM = { 0.66, 0.68, 0.62 }
--- The opacity of the row of a member who is dead or offline, and of one out of range (Dim members out of range), as Healer mana's FAR.
 local GONE = 0.35
 local FAR = 0.45
--- The places of the Sound choices in ns.SOUNDS (IconRow.lua), as Enemy cooldowns has them.
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
--- How long the flash of Flash when ready plays (IconRow.lua: FLASH), which a row waits before a ready icon leaves it.
 local FLASH = 0.5
--- The kinds each switch shows (CooldownData.lua: ns.COOLDOWN_KINDS), in the order of the rows.
 local SWITCHES = { { "interrupts", { 1 } }, { "defensives", { 2, 6 } }, { "externals", { 3 } }, { "breaks", { 5 } }, { "group", { 9 } } }
 local LINE_ROSTER = "Party cooldowns: your subgroup is read from the raid roster here."
 local LINE_CASTS = "Party cooldowns: the game hides party members' casts here."
 local LINE_RANGE = "Party cooldowns: the game refused to fade a row by its answer about range, so members out of range stay bright."
--- The handle of the raid group stack (Movers.lua), the room its labels take, its box, and the rows it holds at most.
 local MOVER = "FlatUIPartyRaid"
 local LABEL_W, MOST_ROWS, STACK_X, STACK_Y = 70, 5, -420, 0
--- The states in which rows are shown.
 local LIVE = { standard = true, style = true, raid = true }
--- The abilities added by hand at most, and the longest cooldown that can be typed.
 local MOST_ADDED, MOST_SECONDS, MOST_ID = 30, 86400, 9999999
 local HELP = {
 	"/flatui party add Pummel 12 - an ability, a spell ID or a shift-clicked spell, and its cooldown in seconds",
@@ -65,8 +30,6 @@ local HELP = {
 local IsSecret = ns.IsSecret
 local T = ns.Tracking
 local TM = ns.TestMode
--- The sample party of test mode (TestMode.lua) for a player in no group, by name and class: a paladin, a priest, a warlock and a rogue. The
--- warlock is shown dead, so the fade of a dead member's row can be seen, and the rogue out of range (far), for Dim members out of range.
 local SAMPLE_PARTY = { { "Mara", "PALADIN" }, { "Eli", "PRIEST" }, { "Ivo", "WARLOCK", "Dead" }, { "Fay", "ROGUE", far = true } }
 local P = { assigned = {}, pool = {}, known = {}, level = {}, never = {}, tex = {}, last = {}, frames = {}, raidUnits = {} }
 
@@ -83,15 +46,11 @@ local function Plain(value, kind)
 	return not IsSecret(value) and type(value) == kind
 end
 
--- A game call that answers a plain string, or nil.
 local function Text(fn, ...)
 	local answer = T.Ask(fn, ...)
 	return Plain(answer, "string") and answer ~= "" and answer or nil
 end
 
--- The players ------------------------------------------------------------------------------------------------------------------
-
--- True when a frame of the game is shown.
 local function Shown(frame)
 	if frame == nil or IsSecret(frame) or type(frame) ~= "table" then
 		return false
@@ -100,8 +59,6 @@ local function Shown(frame)
 	return ok and not IsSecret(shown) and shown == true
 end
 
--- The party member frames of the game now that are shown, as { frame, unit } in the order of the party. The game makes four and hides the
--- ones with no member and all of them with raid-style frames.
 function P.Members()
 	local list = {}
 	local pool = type(_G.PartyFrame) == "table" and not IsSecret(_G.PartyFrame) and _G.PartyFrame.PartyMemberFramePool or nil
@@ -125,13 +82,10 @@ function P.Members()
 	return list
 end
 
--- True for the token of the player or of a member of the party.
 local function Token(unit)
 	return Plain(unit, "string") and (unit == "player" or unit:match("^party%d$") ~= nil)
 end
 
--- The raid-style party frames of the game that are shown, as { frame, unit } in the order of the frames. The unit is read from the frame
--- (unit, else displayedUnit): the frame index and the party index differ, and the player has a frame among them.
 function P.StyleMembers()
 	local list, seen = {}, {}
 	for index = 1, 5 do
@@ -152,11 +106,8 @@ function P.StyleMembers()
 	return list
 end
 
--- Shared with CombatText.lua, which finds the frame of a party member to draw numbers over.
 ns.PartyMembers, ns.PartyStyleMembers = P.Members, P.StyleMembers
 
--- The members of the player's subgroup in a raid group, as { unit }: party1 to party4 where the game has them, else the raid tokens of the
--- roster entries in the player's own subgroup (P.via says which).
 function P.RaidMembers()
 	local list = {}
 	for index = 1, 4 do
@@ -196,8 +147,6 @@ function P.RaidMembers()
 	return list
 end
 
--- What the module does now: "off", "raidoff" (a raid group with In a raid group off), "raid" (a raid group, with its members), "none"
--- (no party, or no frames to hang rows from), "style" (raid-style frames, with their members) or "standard" (the member frames).
 function P.Look()
 	if not ns.Enabled(KEY) then
 		return "off"
@@ -220,7 +169,6 @@ function P.Look()
 	return "none"
 end
 
--- The owner of a unit's timers: its GUID, or its member frame when the game hides the GUID.
 function P.Owner(unit, frame)
 	local guid = Text(UnitGUID, unit)
 	if guid then
@@ -229,7 +177,6 @@ function P.Owner(unit, frame)
 	return frame
 end
 
--- The race of a unit: its name and its file name, or nothing.
 function P.Race(unit)
 	if type(UnitRace) ~= "function" then
 		return nil
@@ -246,7 +193,6 @@ function P.RaceIs(row, race)
 	return name == race or (file ~= nil and (file == race:gsub("%s", "") or (file == "Scourge" and race == "Undead")))
 end
 
--- Who a unit token is for the timers: owner and class. A pet is its player; a token that is no one of the party gives nothing.
 function P.Who(unit)
 	if unit == "pet" then
 		unit = "player"
@@ -258,8 +204,6 @@ function P.Who(unit)
 	return P.Owner(unit, frame) or (unit == "player" and "player" or nil), Text(UnitClassBase, unit)
 end
 
--- The abilities ------------------------------------------------------------------------------------------------------------------
-
 function P.Kinds()
 	local on = {}
 	for _, switch in ipairs(SWITCHES) do
@@ -270,7 +214,6 @@ function P.Kinds()
 	return on
 end
 
--- The rank of a kind in a row: interrupts, defensives, defensives cast on others, crowd control breaks, group cooldowns.
 local function Rank(kind)
 	for rank, switch in ipairs(SWITCHES) do
 		for _, number in ipairs(switch[2]) do
@@ -282,7 +225,6 @@ local function Rank(kind)
 	return #SWITCHES + 1
 end
 
--- True when a spell of the ability is in the player's book. nil when the game cannot say.
 function P.Knows(a)
 	local known = P.known[a.key]
 	if known ~= nil then
@@ -304,12 +246,10 @@ function P.Knows(a)
 	return known
 end
 
--- Whether an ability of the data is shown by the switches and the lists: not hidden, and either its kind is on or it was added.
 function P.Listed(a, on, lists)
 	return not lists.hidden[a.key] and (a.custom == true or on[a.kind] == true or lists.added[a.key] == true)
 end
 
--- True when the ability of a row is shown for the member: his class and race, and what he has or was seen to use.
 function P.Fits(row, a)
 	if a.race and not P.RaceIs(row, a.race) then
 		return false
@@ -323,12 +263,9 @@ function P.Fits(row, a)
 		end
 		return known or seen
 	end
-	-- An item (an Insignia) is shown from its first use, like a talent.
 	return seen or (not (talent or a.flags:find("p", 1, true)) and (a.lvl == nil or not Plain(row.level, "number") or row.level <= 0 or row.level >= a.lvl))
 end
 
--- The abilities of a row, in order, at most as many as the setting allows. A member has the abilities of his class that are neither
--- talent nor rune, and any that was seen used; the player has what is in his book. What was added by name or spell ID comes first.
 function P.Candidates(row)
 	local list = {}
 	if type(ns.ABILITIES) ~= "table" or not row.class then
@@ -372,7 +309,6 @@ function P.Candidates(row)
 	return abilities
 end
 
--- True when the game never hides the cast of a spell: from GetSpellCastSecrecy, kept.
 function P.CastNever(id)
 	local level = P.level[id]
 	if level == nil then
@@ -392,15 +328,12 @@ function P.BuffNever(id)
 	return never
 end
 
--- True when the module listens to a unit for casts or buffs.
 function P.Hears(unit, what)
 	local rec = T.units[unit]
 	local want = rec and rec.want[KEY]
 	return want ~= nil and want[what] == true
 end
 
--- True when a use of the ability by this member can be seen at this moment: his casts are open to addons, or the buff of a defensive
--- is readable. A ready icon is drawn only then.
 function P.CanSee(row, a)
 	if row.own then
 		return true
@@ -433,7 +366,6 @@ function P.CanSee(row, a)
 	return false
 end
 
--- The icons a row shows now, in order: { a, start, seconds }. A ready one has no start.
 function P.Visible(row)
 	local list = {}
 	local always = Opt("show") == "always"
@@ -446,7 +378,6 @@ function P.Visible(row)
 	return list
 end
 
--- The picture of an ability: the texture of its first spell the game knows.
 function P.Texture(a)
 	local file = P.tex[a.key]
 	if file then
@@ -463,9 +394,6 @@ function P.Texture(a)
 	return UNKNOWN_ICON
 end
 
--- The icons ----------------------------------------------------------------------------------------------------------------------
-
--- A duration object for the sweep of the player's own ability, handed on unread; nil when the game gives none.
 function P.Sweep(a)
 	local spell = P.last[a.key] or a.casts[1]
 	local call = type(C_Spell) == "table" and C_Spell.GetSpellCooldownDuration or nil
@@ -479,9 +407,6 @@ function P.Sweep(a)
 	return nil
 end
 
--- The sound of Sound (ns.SOUNDS, IconRow.lua) that plays as an icon's sweep ends, or nil for None. IconRow.lua plays it through ns.PlayKit, at most
--- once a second however many icons end together. seconds: the plain length of the cooldown; one shorter than Shortest cooldown that sounds
--- gets none, so a short interrupt ends quietly. No length (test mode) always gets the sound.
 function P.Kit(seconds)
 	local least = Opt("soundMinimum")
 	if ns.Finite(seconds) and ns.Finite(least) and seconds < least then
@@ -491,7 +416,6 @@ function P.Kit(seconds)
 	return sound and sound[1] or nil
 end
 
--- Puts what a slot shows on its icon, when it is not what the icon already shows.
 function P.Draw(row, slot, item)
 	local icon = row.icons[slot]
 	local key = "none"
@@ -518,7 +442,6 @@ function P.Draw(row, slot, item)
 	if not used then
 		pcall(icon.cooldown.Clear, icon.cooldown)
 	end
-	-- item.seconds is the plain length Tracking.lua keeps, also on the own row, whose sweep is a duration object that is never read.
 	local kit = used and P.Kit(item.seconds) or nil
 	ns.IconSet(icon, P.Texture(item.a), item.start, seconds, { kind = Opt("kindBorder") ~= false and item.a.kind or nil, numbers = Opt("seconds") == true,
 		font = Opt("numbersFont"), border = Opt("iconBorder"), flash = Opt("flash") == true and used, sound = kit, key = KEY })
@@ -527,8 +450,6 @@ function P.Draw(row, slot, item)
 	icon.texture:SetVertexColor(level, level, level)
 end
 
--- Fades a row and its label while its member is dead or offline (word "Dead" or "Offline", P.Gone), and brings them back with nil. Written only
--- when it changes.
 function P.Fade(row, word)
 	word = word or nil
 	if row.gone == word then
@@ -542,9 +463,6 @@ function P.Fade(row, word)
 	end
 end
 
--- Offline or Dead for the member of a row (Offline first, as Healer mana says it), from plain answers; false while he is up, and nil while the
--- game withholds whether he is dead, which leaves the row as it was. A sample row has no member: it says what the sample party gives it
--- (row.sampleGone, P.SyncSample), else up. A row of a real member that holds samples keeps his real state.
 function P.Gone(row)
 	local unit = row.unit
 	if not unit then
@@ -562,7 +480,6 @@ function P.Gone(row)
 	return false
 end
 
--- The row and its label back at full opacity, where Dim members out of range wrote them (row.ranged).
 function P.Unrange(row)
 	if row.ranged then
 		row.ranged = nil
@@ -573,12 +490,6 @@ function P.Unrange(row)
 	end
 end
 
--- Dim members out of range (on by default): the row of a member who is not the player, and its label, fade to FAR while UnitInRange says he is
--- out of range, its answer, withheld or not, going unread to SetAlphaFromBoolean (SimpleRegionAPIDocumentation.lua:134-145), as Healer
--- mana's bars do, so in a fight too: both are frames of the addon's own. A dead or offline member's GONE wins (P.Fade). Written on every render
--- while it applies, since P.Fade writes only on a change; row.ranged marks a row whose opacity this wrote, which goes back to full once it no
--- longer applies. A sample row is far by its sample's far field (row.sampleFar, P.SyncSample). A client that refuses leaves the row full and
--- is noted for the status.
 function P.Range(row)
 	if row.gone then
 		row.ranged = nil
@@ -631,7 +542,6 @@ function P.RenderRow(row)
 	if row.testing then
 		return
 	end
-	-- The flash of a ready icon plays its half second before the row lets the icon go and moves the others along (P.Done).
 	if row.flashEnd then
 		if T.Now() < row.flashEnd then
 			return
@@ -650,8 +560,6 @@ function P.Render()
 	end
 end
 
--- The sweep of an icon ended: the row is drawn again, and the player's own timer ends with the game's sweep. A sample's sweep (a test) ends no
--- timer.
 function P.Done(row, icon)
 	if row.testing then
 		return
@@ -673,7 +581,6 @@ function P.Done(row, icon)
 	P.RenderRow(row)
 end
 
--- A row of a player: the holder and as many icons as the setting allows. Made out of combat only.
 function P.Take(owner)
 	local row = P.assigned[owner]
 	if row then
@@ -712,7 +619,6 @@ function P.Release(row)
 	P.pool[#P.pool + 1] = row
 end
 
--- Makes the icons of a row and puts each in its place: slot by slot from the holder, to the right or, for the left side, to the left.
 function P.Fit(row, size, count, side)
 	local key = ("%s:%s:%s"):format(size, count, side)
 	while #row.icons < count do
@@ -743,8 +649,6 @@ function P.Fit(row, size, count, side)
 	row.holder:SetSize(math.max(width, 1), size)
 end
 
--- Tooltips -------------------------------------------------------------------------------------------------------------------------
-
 local function Tooltip()
 	local tip = _G.GameTooltip
 	if tip == nil or ns.Forbidden(tip) then
@@ -753,7 +657,6 @@ local function Tooltip()
 	return tip
 end
 
--- Whether GameTooltip is the icon's.
 local function Owned(icon)
 	local tip = Tooltip()
 	if not tip then
@@ -763,8 +666,6 @@ local function Owned(icon)
 	return ok and not IsSecret(owned) and owned == true
 end
 
--- An icon takes the mouse's motion while Icon tooltips is On or Out of combat only, never a click. Its own frame, so in a fight too; only
--- when the row changed.
 function P.Mouse(icon)
 	local tips = Opt("tooltips") or "on"
 	if icon.tips == tips then
@@ -787,15 +688,11 @@ function P.MouseAll()
 	end
 end
 
--- The time left as 1:42.
 local function Clock(seconds)
 	seconds = math.max(0, math.ceil(seconds))
 	return ("%d:%02d"):format(math.floor(seconds / 60), seconds % 60)
 end
 
--- The tooltip of an icon: the ability with its class in its kind's colour, the member, Ready or the time left from the timer (plain numbers of
--- Tracking.lua), and whether the member shares by Flat UI. A sample of test mode says so. Out of combat only shows nothing in a fight. True
--- when it wrote the tooltip.
 function P.Tip(row, icon)
 	local tips = Opt("tooltips") or "on"
 	local tip = Tooltip()
@@ -846,9 +743,6 @@ function P.Tip(row, icon)
 	return true
 end
 
--- While the mouse stays on an icon, its tooltip is written again each second (C_Timer.NewTicker), so the time counts down, turns to Ready as
--- the sweep ends and follows the ability that moves into the slot. The step ends, and the tooltip hides, once GameTooltip is no longer the
--- icon's, the icon hides, Icon tooltips no longer allows it (Out of combat only in a fight) or the slot is empty.
 function P.TipTick(row, icon)
 	if icon.tipTicker or type(C_Timer) ~= "table" or type(C_Timer.NewTicker) ~= "function" then
 		return
@@ -877,7 +771,6 @@ function P.Untip(icon)
 	end
 end
 
--- Hangs a row beside, or under, a member frame.
 function P.Anchor(row, frame, side)
 	if row.frame == frame and row.side == side and row.anchored then
 		return
@@ -898,7 +791,6 @@ function P.Anchor(row, frame, side)
 	end
 end
 
--- Hangs the player's own row one row above another row.
 function P.Above(row, other, side)
 	local frame = side == "below" and other.frame or nil
 	if row.above == other and row.side == side and row.aboveFrame == frame then
@@ -907,7 +799,6 @@ function P.Above(row, other, side)
 	local holder = row.holder
 	holder:ClearAllPoints()
 	if frame then
-		-- Under the first member's frame the first row hangs, so the own row goes above that frame instead.
 		holder:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, SPACING)
 	elseif side == "left" then
 		holder:SetPoint("BOTTOMRIGHT", other.holder, "TOPRIGHT", 0, SPACING)
@@ -920,7 +811,6 @@ function P.Above(row, other, side)
 	end
 end
 
--- The raid group stack: one holder of the addon's own under UIParent, with a box that /flatui move places.
 function P.Stack()
 	if not P.stack then
 		local frame = Own(CreateFrame("Frame", nil, UIParent))
@@ -930,30 +820,34 @@ function P.Stack()
 	return P.stack
 end
 
--- Puts the stack at the spot of its handle.
 function P.PlaceStack(stack)
 	stack:ClearAllPoints()
-	local x, y = ns.MoverSpot(MOVER, "TOPLEFT")
+	local corner = Opt("grow") == "up" and "BOTTOMLEFT" or "TOPLEFT"
+	local x, y = ns.MoverSpot(MOVER, corner)
 	if x then
-		stack:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+		stack:SetPoint(corner, UIParent, "BOTTOMLEFT", x, y)
 	else
 		stack:SetPoint("CENTER", UIParent, "CENTER", STACK_X, STACK_Y)
 	end
 end
 
--- Hangs a row in its place in the stack, below the rows before it, with the room for its label to the left.
-function P.Stacked(row, stack, position, size)
-	if row.stackAt == position and row.stackSize == size and row.anchored then
+function P.Stacked(row, stack, position, size, total)
+	local up = Opt("grow") == "up"
+	total = total or position
+	if row.stackAt == position and row.stackSize == size and row.stackTotal == total and row.stackUp == up and row.anchored then
 		return
 	end
 	local holder = row.holder
 	holder:ClearAllPoints()
-	holder:SetPoint("TOPLEFT", stack, "TOPLEFT", LABEL_W, -(position - 1) * (size + SPACING))
-	row.stackAt, row.stackSize = position, size
+	if up then
+		holder:SetPoint("BOTTOMLEFT", stack, "BOTTOMLEFT", LABEL_W, (total - position) * (size + SPACING))
+	else
+		holder:SetPoint("TOPLEFT", stack, "TOPLEFT", LABEL_W, -(position - 1) * (size + SPACING))
+	end
+	row.stackAt, row.stackSize, row.stackTotal, row.stackUp = position, size, total, up
 	row.frame, row.side, row.above, row.aboveFrame, row.anchored = nil, nil, nil, nil, true
 end
 
--- Red, green and blue of a class by its file name, from plain values only, or nil.
 local function ClassRGB(class)
 	local colours = RAID_CLASS_COLORS
 	if not Plain(class, "string") or type(colours) ~= "table" or IsSecret(colours) then
@@ -970,8 +864,6 @@ local function ClassRGB(class)
 	return nil
 end
 
--- The name of the member to the left of his row in the stack, in his class colour (class, a file name such as "MAGE"; white where it is
--- unknown), right-aligned on one line and cut at the room of the label. The colour is written only when the class changes.
 function P.Label(row, stack, text, class)
 	local label = row.label
 	if not label then
@@ -999,8 +891,6 @@ function P.Label(row, stack, text, class)
 	label:Show()
 end
 
--- Listening --------------------------------------------------------------------------------------------------------------------------
-
 function P.Listen(members)
 	local own = Opt("ownRow")
 	T.Hear(KEY, "player", own, true)
@@ -1023,7 +913,6 @@ function P.Listen(members)
 	end
 end
 
--- A cast of a unit that the game let through: the ability it is starts its timers.
 function P.Cast(unit, spell)
 	local owner, class = P.Who(unit)
 	if not owner then
@@ -1045,7 +934,6 @@ function P.Cast(unit, spell)
 	end
 end
 
--- The cooldown typed for an ability replaces the length of a timer that has just started.
 function P.Seconds(owner, a, at)
 	local seconds = P.Lists().seconds[a.key]
 	local book = seconds and T.Book(owner)
@@ -1055,8 +943,6 @@ function P.Seconds(owner, a, at)
 	end
 end
 
--- A buff of a unit seen in a pass. The caster of the ability is the owner of its timer: the unit itself for a buff of his own, and
--- the unit named by sourceUnit for a defensive cast on another. A buff whose caster is hidden or empty counts only as the unit's own.
 function P.Aura(unit, id, start, seconds, source)
 	local by = ns.ABILITY_BY_BUFF
 	if type(by) ~= "table" then
@@ -1085,8 +971,6 @@ function P.Aura(unit, id, start, seconds, source)
 	end
 end
 
--- Putting it in place ----------------------------------------------------------------------------------------------------------------
-
 function P.ReleaseAll()
 	for _, row in pairs(P.assigned) do
 		P.Release(row)
@@ -1096,7 +980,6 @@ function P.ReleaseAll()
 	end
 end
 
--- The rows of the party on the member frames of the game, standard or raid-style. A raid-style frame of the player holds his own row.
 function P.SyncFrames(members)
 	local side, size, count = Opt("side"), Opt("size"), Opt("count")
 	local own = Opt("ownRow")
@@ -1142,7 +1025,6 @@ function P.SyncFrames(members)
 	return wanted
 end
 
--- The rows of a raid group: the player's own row and the subgroup's, one under the other in the stack, each with the member's name.
 function P.SyncRaid(members)
 	local stack = P.Stack()
 	P.PlaceStack(stack)
@@ -1156,22 +1038,24 @@ function P.SyncRaid(members)
 		list[#list + 1] = member
 		P.raidUnits[member.unit] = true
 	end
-	local wanted, position = {}, 0
+	local wanted, rows = {}, {}
 	for _, member in ipairs(list) do
 		local unit = member.unit
 		local owner = Text(UnitGUID, unit) or (member.own and "player" or nil)
 		local row = owner and P.Take(owner)
 		if row then
-			position = position + 1
+			rows[#rows + 1] = row
 			wanted[owner] = true
 			row.unit, row.class, row.own = unit, Text(UnitClassBase, unit), member.own
 			row.level = T.Ask(UnitLevel, unit)
 			row.race, row.raceFile = P.Race(unit)
 			P.Fit(row, size, count, "right")
-			P.Stacked(row, stack, position, size)
 			P.Label(row, stack, Text(UnitName, unit), row.class)
 			row.holder:Show()
 		end
+	end
+	for position, row in ipairs(rows) do
+		P.Stacked(row, stack, position, size, #rows)
 	end
 	stack:Show()
 	return wanted
@@ -1213,9 +1097,6 @@ function P.Sync()
 	P.Arm()
 end
 
--- Out of combat, or when combat ends.
--- What the game flags as never hidden does not change while the player plays, so what was asked is kept until the player enters the world
--- or the group changes.
 function P.Forget()
 	P.level, P.never, P.known = {}, {}, {}
 	P.Refresh()
@@ -1239,7 +1120,6 @@ function P.Refresh()
 	P.Sync()
 end
 
--- A look every half second while in a party: out of combat the rows are found and anchored again, in combat the icons are drawn.
 function P.Tick()
 	P.armed = false
 	if not LIVE[P.state] or not ns.Enabled(KEY) then
@@ -1247,7 +1127,6 @@ function P.Tick()
 	end
 	if InCombatLockdown() then
 		P.Render()
-		-- A change of the party frames, or of the group, is seen now and answered when combat ends.
 		if P.Look() ~= P.state and not P.queued then
 			P.queued = true
 			ns.OutOfCombat(function()
@@ -1297,7 +1176,6 @@ function P.Start()
 	P.Refresh()
 end
 
--- The group changes, the player enters the world or his spells change: the abilities he has go out to the party again.
 function P.Roster()
 	P.Forget()
 	if ns.PartySync then
@@ -1317,10 +1195,6 @@ function P.Cooldown()
 	end
 end
 
--- The lists ------------------------------------------------------------------------------------------------------------------------
-
--- What the account keeps: the abilities added, the abilities hidden (maps by key), the cooldowns typed for abilities (by key) and the
--- spells added by ID that the data lacks (by spell ID, with a name and a cooldown). Damaged entries are dropped.
 function P.Saved()
 	local account = ns.Account()
 	if type(account) ~= "table" then
@@ -1361,8 +1235,6 @@ function P.Saved()
 	return saved
 end
 
--- The lists as the rows use them: maps added, hidden and seconds, the abilities made from the spells added by ID (custom, by ID), and
--- those by cast ID. Kept until a list changes.
 function P.Lists()
 	local lists = P.lists
 	if lists then
@@ -1391,7 +1263,6 @@ function P.Lists()
 	return lists
 end
 
--- A list changed: what the rows read is made again, and the rows are drawn. Both work in a fight and with the page off.
 function P.Changed()
 	P.lists = nil
 	P.Render()
@@ -1401,7 +1272,6 @@ local function Capital(class)
 	return class:sub(1, 1) .. class:sub(2):lower()
 end
 
--- An ability by name, with its class in brackets for a class's.
 function P.Name(a)
 	if a.class and a.class ~= "ALL" then
 		return ("%s (%s)"):format(a.name, Capital(a.class))
@@ -1409,7 +1279,6 @@ function P.Name(a)
 	return a.name
 end
 
--- The abilities of the data and the custom ones, as one list.
 function P.Every()
 	local list = {}
 	for _, a in ipairs(type(ns.ABILITIES) == "table" and ns.ABILITIES or {}) do
@@ -1421,7 +1290,6 @@ function P.Every()
 	return list
 end
 
--- The lines of a list as { key, text, ability }, by name; two with one name get the spell ID beside it.
 function P.Lines(abilities)
 	local rows, count = {}, {}
 	for _, a in ipairs(abilities) do
@@ -1444,12 +1312,10 @@ function P.Lines(abilities)
 	return rows
 end
 
--- True when the ability is shown by the switches and the lists.
 function P.IsShown(a)
 	return not a.flags:find("n", 1, true) and P.Listed(a, P.Kinds(), P.Lists())
 end
 
--- The abilities of the data that the switches and the lists do not show now, by name.
 function ns.PartyAbilityCandidates()
 	local out = {}
 	for _, a in ipairs(type(ns.ABILITIES) == "table" and ns.ABILITIES or {}) do
@@ -1460,7 +1326,6 @@ function ns.PartyAbilityCandidates()
 	return P.Lines(out)
 end
 
--- The abilities shown now, by name.
 function ns.PartyAbilityShown()
 	local out = {}
 	for _, a in ipairs(P.Every()) do
@@ -1471,7 +1336,6 @@ function ns.PartyAbilityShown()
 	return P.Lines(out)
 end
 
--- The ability of a key, or nil.
 function P.ByKey(key)
 	if type(key) ~= "string" then
 		return nil
@@ -1484,7 +1348,6 @@ function P.ByKey(key)
 	return nil
 end
 
--- The abilities that have a spell ID among their casts.
 function P.ByCast(id)
 	local found = {}
 	for _, a in ipairs(P.Every()) do
@@ -1498,7 +1361,6 @@ function P.ByCast(id)
 	return found
 end
 
--- The abilities with a name, in any capitals, with or without the class in brackets.
 function P.ByName(text)
 	local found, wanted = {}, text:lower()
 	for _, a in ipairs(P.Every()) do
@@ -1509,7 +1371,6 @@ function P.ByName(text)
 	return found
 end
 
--- How many abilities were added by hand.
 function P.Added(saved)
 	local count = 0
 	for _ in pairs(saved.added) do
@@ -1521,7 +1382,6 @@ function P.Added(saved)
 	return count
 end
 
--- Shows an ability whatever its kind. With seconds the cooldown of its timers is that. Returns true or false and what to tell.
 function P.Add(a, seconds)
 	local saved = P.Saved()
 	if not saved then
@@ -1558,7 +1418,6 @@ function P.Add(a, seconds)
 	return true, ("Added %s."):format(P.Name(a))
 end
 
--- A spell the data lacks, by ID, with its cooldown in seconds. False and what to tell when the game knows no spell by the ID.
 function P.AddSpell(id, seconds)
 	local saved = P.Saved()
 	if not saved then
@@ -1576,7 +1435,6 @@ function P.AddSpell(id, seconds)
 	return true, ("Added %s, %d seconds."):format(name, seconds)
 end
 
--- Takes an ability off the rows.
 function P.Hide(a)
 	local saved = P.Saved()
 	if not saved then
@@ -1598,7 +1456,6 @@ function P.Hide(a)
 	return true, ("Hid %s."):format(P.Name(a))
 end
 
--- The two dropdowns of the page: each is called with the key of the line chosen.
 function ns.PartyAbilityAdd(key)
 	local a = P.ByKey(key)
 	if not a then
@@ -1615,7 +1472,6 @@ function ns.PartyAbilityHide(key)
 	return P.Hide(a)
 end
 
--- The words typed after add: a link or a number is a spell ID, anything else a name, and a number last is the cooldown in seconds.
 function P.Parse(text)
 	local id = tonumber(text:match("|Hspell:(%d+)"))
 	local rest = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|H[^|]*|h[^|]*|h", " "):gsub("|r", " ")
@@ -1639,8 +1495,6 @@ function P.Parse(text)
 	return { name = text }
 end
 
--- The one ability a word names. nil when there is none, and nil with a message when more than one has the name or the ID: then nothing
--- is changed.
 function P.Resolve(parsed, text)
 	local found = parsed.id and P.ByCast(parsed.id) or P.ByName(parsed.name or text)
 	if #found == 1 then
@@ -1694,7 +1548,6 @@ function P.SlashHide(text)
 	end
 end
 
--- /flatui party list: the abilities shown, a line for each class, and for each member whether his cooldowns come in by message.
 function P.SlashList()
 	local classes, order = {}, {}
 	for _, row in ipairs(ns.PartyAbilityShown()) do
@@ -1751,15 +1604,10 @@ function P.Slash(rest)
 	end
 end
 
--- The raid group stack -------------------------------------------------------------------------------------------------------------
-
--- True while the stack has a handle in the movers: in a raid group, with the module on and In a raid group on Own position; and while it holds
--- the sample rows of test mode.
 function ns.PartyRaidShown()
 	return ns.Enabled(KEY) and ((Opt("raid") == "own" and T.Ask(IsInRaid) == true) or (P.state == "sample" and TM.IsOn()))
 end
 
--- The movers set or put back the spot.
 function ns.PartyRaidMoved()
 	if P.stack and ns.Enabled(KEY) then
 		ns.OutOfCombat(function()
@@ -1768,22 +1616,12 @@ function ns.PartyRaidMoved()
 	end
 end
 
--- Test mode (TestMode.lua) -------------------------------------------------------------------------------------------------------------------
--- While it is on, out of combat, with the page on: in a party or a raid group each row the module shows holds samples in place of its timers, and
--- with no group the raid group stack holds sample rows, the player's own (with Your own row on) and, unless the bar's Group is Solo, one for each
--- member of the sample party, each with its name, Ivo's faded as a dead member's with Dead in his tooltips. A row holds up to three icons: with
--- Show on Always the first ready and bright, and the others used, dark, with a sweep that the ticker of test mode starts again (IconRow.lua:
--- ns.IconSampleHeld, ns.IconSampleLoop), with the flash of Flash when ready and, for the first end since test mode came on, the sound of Sound,
--- in the pictures of the row's own abilities (by class, P.Candidates) or of the samples. Each Sync draws them again with the page's look and
--- size, so a change shows at once; Off, a fight and the page going off give the rows their own icons back or take the sample rows away. A row
--- of a real member that holds samples keeps his real state, faded while he is dead or offline.
 P.HELD = {}
 
 function P.Holding()
 	return TM.IsOn() and ns.Enabled(KEY) and not InCombatLockdown()
 end
 
--- The samples of one row, with its look now.
 function P.Hold(row)
 	row.testing = P.HELD
 	local abilities = P.Candidates(row)
@@ -1793,7 +1631,6 @@ function P.Hold(row)
 		local a = abilities[slot]
 		icon.key = a and a.key or nil
 		if slot <= count then
-			-- The kind of the row's ability colours the border, else the sample's (kind true, IconRow.lua).
 			local look = { kind = Opt("kindBorder") ~= false and a and a.kind or nil, numbers = Opt("seconds") == true, font = Opt("numbersFont"),
 				border = Opt("iconBorder") }
 			local texture = a and P.Texture(a) or ns.IconSamplePicture(slot)
@@ -1803,7 +1640,6 @@ function P.Hold(row)
 				pcall(icon.cooldown.Clear, icon.cooldown)
 				ns.IconSet(icon, texture, nil, nil, look)
 			else
-				-- The sound of Sound, or none for None: the first sample's end since test mode came on plays it once (TM.Sound).
 				look.kind, look.flash, look.sound = look.kind or (Opt("kindBorder") ~= false or nil), Opt("flash") == true, P.Kit() or false
 				ns.IconSampleHeld(icon, slot, KEY, look, texture)
 			end
@@ -1817,7 +1653,6 @@ function P.Hold(row)
 	end
 end
 
--- A row gives its samples up: it is drawn again from its timers at the next Render.
 function P.Unhold(row)
 	row.testing = nil
 	for slot, icon in ipairs(row.icons) do
@@ -1826,7 +1661,6 @@ function P.Unhold(row)
 	end
 end
 
--- The rows of a party or a raid group: samples while test mode holds them, else their own icons again. The 8-second test keeps its rows.
 function P.HoldRows()
 	if P.testing then
 		return
@@ -1842,7 +1676,6 @@ function P.HoldRows()
 	end
 end
 
--- The sample rows of a player in no group, in the raid group stack.
 function P.SyncSample()
 	local stack = P.Stack()
 	P.PlaceStack(stack)
@@ -1857,22 +1690,24 @@ function P.SyncSample()
 			list[#list + 1] = { owner = "test:" .. index, class = member[2], name = member[1], gone = member[3], far = member.far }
 		end
 	end
-	local wanted, position = {}, 0
+	local wanted, rows = {}, {}
 	for _, member in ipairs(list) do
 		local row = P.Take(member.owner)
 		if row then
-			position = position + 1
+			rows[#rows + 1] = row
 			wanted[member.owner] = true
 			row.unit, row.class, row.own, row.level, row.race, row.raceFile = nil, member.class, nil, nil, nil, nil
 			row.sampleGone, row.sampleFar = member.gone, member.far
 			P.Fit(row, size, count, "right")
-			P.Stacked(row, stack, position, size)
 			P.Label(row, stack, member.name, member.class)
 			P.Hold(row)
 			P.Fade(row, member.gone)
 			P.Range(row)
 			row.holder:Show()
 		end
+	end
+	for position, row in ipairs(rows) do
+		P.Stacked(row, stack, position, size, #rows)
 	end
 	for owner, row in pairs(P.assigned) do
 		if not wanted[owner] then
@@ -1883,7 +1718,6 @@ function P.SyncSample()
 	stack:Show()
 end
 
--- Off and the start of a fight: the samples go at once, before the Sync that follows (P.Refresh waits for the end of a fight).
 function P.TestStop()
 	for _, row in pairs(P.assigned) do
 		if row.testing == P.HELD then
@@ -1907,9 +1741,6 @@ function P.TestTick(now)
 	end
 end
 
--- The test and the status -----------------------------------------------------------------------------------------------------------------
-
--- /flatui test icons: three sample icons on every row, for a few seconds, flashing and sounding at their end as Flash when ready and Sound say.
 function ns.PartyTest()
 	if not ns.Enabled(KEY) or InCombatLockdown() or not LIVE[P.state] then
 		if ns.Enabled(KEY) then
@@ -1981,7 +1812,6 @@ function P.Status()
 	return lines
 end
 
--- The group changes: the names the GUIDs of hellos gave are forgotten too.
 function P.Group()
 	if ns.PartySync then
 		ns.PartySync.senders = {}

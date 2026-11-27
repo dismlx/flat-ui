@@ -1,27 +1,11 @@
 local _, ns = ...
 
--- Flat UI setup as a walk round the player's own screen: the stops of ns.SETUP_STOPS (SetupStops.lua), one screen each, then Your screen, which shows
--- every stop as it will be before Finish. Setup.lua gives this file the right column of the setup window (S.right), lists the stops with what each
--- has picked (Walk.Stops, Walk.Summary, Walk.Changed) and calls the functions of the table Walk (ns.SetupWalk), each only when it is a function.
--- The draft is read through S.Value, S.StartValue and S.view, and written only through S.Set, S.Queue and S.Unqueue and in its own fields seen,
--- name and saveNew, so nothing reaches a profile, a game setting or a list before Finish, which Setup.lua runs.
--- A stop has parts: cards (one of them, each a drawing of that part of the screen under a view of its own: the card's values over the draft, in the
--- player's name and class), chips (one of them, a small button each, shown on the cards while pointed at) and ticks (each on or off). A part owns
--- its paths and every card sets each of them, so cards never fight. The table is checked the first time it is read, as Setup.lua checks the
--- ready-made profiles (Walk.Stops). Every frame, texture and text here is Flat UI's own (ns.PanelKit, ns.Outline): no frame of the game is
--- touched, no hook is set and nothing here is protected, so it all works in a fight. Every question to the game goes through S.Ask or pcall, with
--- a withheld (secret) answer dropped and never compared. Everything is in the table Walk, so that the file keeps few locals.
-
 local kit = ns.PanelKit
 local S = ns.Setup
 local Walk = { screens = {} }
 ns.SetupWalk = Walk
 
--- The measures of the walk, in units of the options window: the margin, the gap between cards, the room a part's heading takes and the room left
--- under a part, the tallest card, and how many levels above a card the frame that takes its mouse and holds its tag sits: over the frames of its
--- drawing, and under the shade and the questions of the window (Panel.lua), 40 levels above the window.
 Walk.PAD, Walk.GAP, Walk.HEAD, Walk.AFTER, Walk.TALL, Walk.OVER = 16, 12, 22, 12, 220, 30
--- The ground behind every drawing while SetupDraw.lua does not give one: the sand of the world, so that a backdrop at 85% reads as it does there.
 Walk.GROUND = { 0.32, 0.27, 0.20 }
 Walk.MIX = "Your own mix from More settings. Pick one to replace it."
 
@@ -29,8 +13,6 @@ local function IsText(value)
 	return not ns.IsSecret(value) and type(value) == "string"
 end
 
--- The width of a text as the game draws it, or a guess of `per` units a letter while the game gives none (a font not loaded yet), as the chips of
--- the options window guess.
 function Walk.TextWidth(text, per)
 	local ok, width = pcall(text.GetStringWidth, text)
 	if ok and ns.Finite(width) and width > 0 then
@@ -40,7 +22,6 @@ function Walk.TextWidth(text, per)
 	return per * (okText and IsText(shown) and #shown or 0)
 end
 
--- Labels in a sentence, each once: "A", "A and B", "A, B and C", "A, B, C and 2 more". Nil when there is none.
 function Walk.Join(labels)
 	local list, seen = {}, {}
 	for _, label in ipairs(labels) do
@@ -60,9 +41,6 @@ function Walk.Join(labels)
 	return ("%s, %s, %s and %d more"):format(list[1], list[2], list[3], count - 3)
 end
 
--- The check ------------------------------------------------------------------------------------------------------------------------------------
-
--- Why a value cannot be in the walk, or nil when it can: the tests the ready-made profiles pass (Setup.lua, S.Presets).
 function Walk.Refused(path, value)
 	local def = IsText(path) and S.Defs()[path] or nil
 	if not def then
@@ -79,7 +57,6 @@ function Walk.Refused(path, value)
 	return nil
 end
 
--- The order of a part's paths: the order the steps list them in, which is the order the options show them.
 function Walk.Before(a, b)
 	local x, y = S.where[a], S.where[b]
 	local xs, ys = x and tonumber(x.step) or 0, y and tonumber(y.step) or 0
@@ -93,8 +70,6 @@ function Walk.Before(a, b)
 	return a < b
 end
 
--- A card of the table, checked: the values that no earlier part claimed and that pass (each is then the part's), and its action while ns has the
--- function it names. A claimed path is left out without a word: that part is meant to give way.
 function Walk.CheckCard(raw, owned, claimed, say)
 	local card = { id = raw.id, label = IsText(raw.label) and raw.label or tostring(raw.id), line = IsText(raw.line) and raw.line or "",
 		suggest = type(raw.suggest) == "table" and raw.suggest or {}, icon = raw.icon, values = {} }
@@ -116,7 +91,6 @@ function Walk.CheckCard(raw, owned, claimed, say)
 	return card
 end
 
--- A part of the table, checked (see Walk.Stops), or nil when it keeps too few cards. A part that stays claims its paths from the parts after it.
 function Walk.CheckPart(raw, claimed, say)
 	local kind = raw.kind
 	if kind ~= "cards" and kind ~= "chips" and kind ~= "ticks" then
@@ -135,7 +109,6 @@ function Walk.CheckPart(raw, claimed, say)
 			end
 		end
 	end
-	-- With styles, the cards are copies of the frame styles of Config.lua while it has any; the first is the one a new character is offered.
 	local source = type(raw.cards) == "table" and raw.cards or {}
 	local styles = ns.SETUP_FRAME_STYLES
 	if raw.styles and type(styles) == "table" and #styles > 0 then
@@ -159,8 +132,6 @@ function Walk.CheckPart(raw, claimed, say)
 	table.sort(list, Walk.Before)
 	local part = { id = raw.id, label = IsText(raw.label) and raw.label or "", note = IsText(raw.note) and raw.note or nil, kind = kind, cards = {},
 		owned = owned, list = list }
-	-- Each card gives every path of the part a value: its own, else the setting's default. A card that would give the same values as one before it is
-	-- left out; a tick needs a value or an action.
 	local seen = {}
 	for _, card in ipairs(cards) do
 		local expect, parts = {}, {}
@@ -189,18 +160,10 @@ function Walk.CheckPart(raw, claimed, say)
 	for path in pairs(owned) do
 		claimed[path] = true
 	end
-	-- As it is now: what the profile in use has on the part's paths. It is offered while no card of the part has that.
 	part.nowCard = { id = "now", label = "As it is now", line = "What you have now.", now = true, suggest = {}, values = {}, expect = {} }
 	return part
 end
 
--- The stops as the walk shows them, in order: each { id, title, line, draw, spot, more, pages, parts }, a part { id, label, note, kind, cards, owned,
--- list, nowCard } (owned the set of its paths, list the same in step order) and a card { id, label, line, values, expect, suggest, icon, action }.
--- A value stays when its setting exists, a profile holds it and may set it, a step lists it and the setting takes it as it is; a path an earlier part
--- claimed is left out of a later one (Picture under the frame styles); a part stays with two cards (ticks: one) and then claims its paths; a stop
--- stays with one part. pages are the built steps of more, which More settings opens. Each value left out for another reason is said once. The
--- lists of the choice rows are complete once the modules have started: the stops are checked and kept from then; before, they are checked each time
--- they are read and nothing is said.
 function Walk.Stops()
 	if Walk.stops then
 		return Walk.stops
@@ -251,7 +214,6 @@ function Walk.Stops()
 	return list
 end
 
--- One stop by id, or nil.
 function Walk.Stop(id)
 	for _, stop in ipairs(Walk.Stops()) do
 		if stop.id == id then
@@ -261,11 +223,6 @@ function Walk.Stop(id)
 	return nil
 end
 
--- Facts about the character -------------------------------------------------------------------------------------------------------------------
-
--- The role setup suggests for ("tank", "healer" or "damage") and the sentence that says why: the player's role as Flat UI reads it (Core.lua,
--- ns.PlayerRole: the role the group gave, a tank stance, form or aura as nameplate threat reads it, the talent tree with the most points, the
--- class), which the hit table at For tanks and damage dealers shows by as well, so the two always agree.
 function Walk.Role()
 	local role, why = nil, nil
 	if type(ns.PlayerRole) == "function" then
@@ -277,9 +234,6 @@ function Walk.Role()
 	return role, IsText(why) and why or nil
 end
 
--- What the walk knows of the character, read once each time the window opens (Walk.Begin): role and why, and the role itself as a fact (tank,
--- healer or damage); small, a screen under 900 pixels tall or the Classic experience; large, text or interface made larger; levelling, under level
--- 60; notrackers, no tracker yet; and else, which is always true. Each is false when the client does not say.
 function Walk.Facts()
 	if Walk.facts then
 		return Walk.facts
@@ -308,8 +262,6 @@ function Walk.Facts()
 	return facts
 end
 
--- The card a part of cards or chips suggests for this character: the first whose suggest names a fact that is true, else the first that names
--- else, else none.
 function Walk.Suggested(part)
 	local facts = Walk.Facts()
 	local fallback
@@ -325,7 +277,6 @@ function Walk.Suggested(part)
 	return fallback
 end
 
--- True for a tick that suits this character: its suggest names a fact that is true. Any number of ticks can be.
 function Walk.TickSuggested(card)
 	local facts = Walk.Facts()
 	for _, key in ipairs(card.suggest or {}) do
@@ -336,9 +287,6 @@ function Walk.TickSuggested(card)
 	return false
 end
 
--- Values ---------------------------------------------------------------------------------------------------------------------------------------
-
--- The value a card gives a path of its part: its own, else the setting's default. As it is now gives what the profile in use has.
 function Walk.Expected(card, path)
 	if card.now then
 		return S.StartValue(path)
@@ -346,8 +294,6 @@ function Walk.Expected(card, path)
 	return card.expect[path]
 end
 
--- What the profile in use has on a path, else the setting's default, read from the profile itself: the drawing of As it is now reads it while ns.Get
--- reads the card's view.
 function Walk.Start(path)
 	local start = S.StartProfile()
 	local value
@@ -363,7 +309,6 @@ function Walk.Start(path)
 	return value
 end
 
--- True when every path of the part reads the card's value: in the draft, or with read = S.StartValue in the profile in use.
 function Walk.Holds(part, card, read)
 	read = read or S.Value
 	for _, path in ipairs(part.list) do
@@ -374,8 +319,6 @@ function Walk.Holds(part, card, read)
 	return true
 end
 
--- The card of a part the draft has: one of its cards, else As it is now while the draft leaves the part as the profile in use has it, else nil (a
--- mix made in More settings).
 function Walk.Picked(part)
 	for _, card in ipairs(part.cards) do
 		if Walk.Holds(part, card) then
@@ -388,7 +331,6 @@ function Walk.Picked(part)
 	return nil
 end
 
--- True while no card of a part of cards or chips is what the profile in use has: As it is now is offered then, first and tagged Now.
 function Walk.NowShown(part)
 	if part.kind == "ticks" then
 		return false
@@ -401,7 +343,6 @@ function Walk.NowShown(part)
 	return true
 end
 
--- True for a tick that is on: the draft has its values (so a module already on is ticked), or its action is queued for Finish.
 function Walk.Ticked(card)
 	if card.action then
 		return type(S.Queued) == "function" and S.Queued(card.action.pick, card.action.id) and true or false
@@ -417,14 +358,12 @@ function Walk.Ticked(card)
 	return true
 end
 
--- Gives each path of a part the card's value in the draft. As it is now gives each the profile in use's value, which takes the draft's value away.
 function Walk.Apply(part, card)
 	for _, path in ipairs(part.list) do
 		S.Set(path, Walk.Expected(card, path))
 	end
 end
 
--- The sentence of the strip for a card pointed at: the settings it would change in the draft, or nothing when it changes none.
 function Walk.ChangesLine(part, card)
 	local defs = S.Defs()
 	local labels = {}
@@ -438,7 +377,6 @@ function Walk.ChangesLine(part, card)
 	return joined and ("Changes: %s."):format(joined) or ""
 end
 
--- A click on a card or a chip, or an arrow key: the card is picked, and everything shown follows.
 function Walk.Pick(part, card)
 	if not S.draft then
 		return
@@ -453,7 +391,6 @@ function Walk.Pick(part, card)
 	end
 end
 
--- A click on a tick: its values go into the draft or come out of it, or its action is queued for Finish or taken off.
 function Walk.Toggle(card)
 	if not S.draft then
 		return
@@ -484,9 +421,6 @@ function Walk.Toggle(card)
 	kit.Refresh()
 end
 
--- The parts of a screen ------------------------------------------------------------------------------------------------------------------------
-
--- The ground behind a drawing: SetupDraw.lua's, else the same sand.
 function Walk.Ground(frame)
 	local D = ns.SetupDraw
 	local colour = type(D) == "table" and type(D.GROUND) == "table" and D.GROUND or Walk.GROUND
@@ -496,7 +430,6 @@ function Walk.Ground(frame)
 	return ground
 end
 
--- A context of the drawings (SetupDraw.lua, D.Context) on a box, reading `view`, or nil without the drawings.
 function Walk.Context(box, view)
 	local D = ns.SetupDraw
 	if type(D) == "table" and type(D.Context) == "function" then
@@ -505,9 +438,6 @@ function Walk.Context(box, view)
 	return nil
 end
 
--- Paints drawing `id` on the context of a card or picture (`tile.ctx`) into a box of w by h units with D.PaintIn (SetupDraw.lua), at most `most` times
--- its size. A drawing that is missing leaves the ground; one that fails is said by D.PaintIn once for the card and tried again at the next paint, so a
--- card whose drawing failed under one view draws under the next. An error of D.PaintIn's own is said once and the card keeps its ground from then.
 function Walk.PaintIn(tile, id, w, h, most)
 	local D = ns.SetupDraw
 	if tile.broken or not tile.ctx or not IsText(id) or type(D) ~= "table" or type(D.PaintIn) ~= "function" then
@@ -520,7 +450,6 @@ function Walk.PaintIn(tile, id, w, h, most)
 	end
 end
 
--- A tag (Now, Suggested) on a frame of its own, in the window colour.
 function Walk.NewTag(parent)
 	local frame = kit.Frame(parent)
 	frame:SetHeight(16)
@@ -535,7 +464,6 @@ function Walk.NewTag(parent)
 	return { frame = frame, text = text }
 end
 
--- Shows a tag with its text, as wide as the text and 12 more, or hides it for nil.
 function Walk.SetTag(tag, text)
 	tag.frame:SetShown(text ~= nil)
 	if text then
@@ -544,9 +472,6 @@ function Walk.SetTag(tag, text)
 	end
 end
 
--- The view a card's drawing reads (ns.Viewing). In order: while a chip of the card's stop is pointed at, that chip's value on each path the chip's
--- part owns; the card's value on each path its own part owns (As it is now: the profile in use's); the draft, then the profile in use, on every other
--- path (S.view). A card keeps its view for life, since an outline follows the view it was made under.
 function Walk.CardView(stop, part, card)
 	return setmetatable({ spots = S.noSpots or {} }, { __index = function(_, path)
 		local preview = Walk.preview
@@ -566,7 +491,6 @@ function Walk.CardView(stop, part, card)
 	end })
 end
 
--- The edge of a card: raised, lighter while pointed at, and in the accent while it is the card picked.
 function Walk.PaintEdge(tile)
 	local tone = tile.hover and "hover" or "raised"
 	if tile.selected then
@@ -576,9 +500,6 @@ function Walk.PaintEdge(tile)
 	end
 end
 
--- A card of a cards part: its stop's drawing in a box of the ground colour, under the card's view; its name and line under the box; the tag (Now,
--- else Suggested) and the tick of the card picked over the box. Above it all is the frame that takes the mouse: pointing says in the strip what the
--- card would change, and a click picks it.
 function Walk.NewCard(view, part, card)
 	local frame = kit.Frame(view.frame)
 	local tile = { card = card, part = part, frame = frame, edge = ns.Outline(frame, frame, true) }
@@ -630,7 +551,6 @@ function Walk.NewCard(view, part, card)
 	return tile
 end
 
--- Puts a card at x, y of its screen, w by h units: the box over all but the last 50 units, which hold the name and two lines of text.
 function Walk.PlaceCard(tile, parent, x, y, w, h)
 	local frame = tile.frame
 	frame:ClearAllPoints()
@@ -647,7 +567,6 @@ function Walk.PlaceCard(tile, parent, x, y, w, h)
 	frame:Show()
 end
 
--- A chip: raised, in the accent with the text on it while it is the one picked.
 function Walk.PaintChip(chip)
 	local tone
 	if chip.selected then
@@ -659,7 +578,6 @@ function Walk.PaintChip(chip)
 	kit.Tint(chip.text, chip.selected and "on-accent" or "text")
 end
 
--- A chip of a chips part: a small button with its label. While it is pointed at, every card of its stop shows it.
 function Walk.NewChip(view, part, card)
 	local frame = kit.Frame(view.frame)
 	frame:SetHeight(26)
@@ -686,12 +604,10 @@ function Walk.NewChip(view, part, card)
 	return chip
 end
 
--- The width of a chip: its text and 28 more, at least 90.
 function Walk.ChipWidth(chip)
 	return math.max(90, math.ceil(Walk.TextWidth(chip.text, 7.2) + 28))
 end
 
--- Shows a chip on every card of its stop while it is pointed at, or takes it off for nil. The cards are drawn again on the next frame (S.dirty).
 function Walk.Preview(stop, part, card)
 	Walk.preview = stop and { stop = stop.id, part = part, card = card } or nil
 	S.dirty = true
@@ -701,8 +617,6 @@ function Walk.PaintTick(tick)
 	kit.Backing(tick.edge, tick.hover and "hover" or "raised")
 end
 
--- A tick of a ticks part: a row with the icon of its page in the sidebar, its name with the Suggested tag after it, its line and the box. The whole
--- row toggles.
 function Walk.NewTick(view, part, card)
 	local frame = kit.Frame(view.frame)
 	frame:SetSize(393, 64)
@@ -749,13 +663,8 @@ function Walk.NewTick(view, part, card)
 	return tick
 end
 
--- A stop ---------------------------------------------------------------------------------------------------------------------------------------
-
--- The screen of a stop, made the first time the stop shows: a heading for each part (its label, then its note 12 units on). Its cards, chips and
--- ticks are made when they first show.
 function Walk.StopView(stop)
 	local view = Walk.screens[stop.id]
-	-- A stop read before the modules started is the same stop once they have; a screen is made again only for the stops kept then.
 	if view and (view.stop == stop or not Walk.stops) then
 		return view
 	end
@@ -776,7 +685,6 @@ function Walk.StopView(stop)
 	return view
 end
 
--- Which parts of a stop offer As it is now: the screen is laid out again when that changes (the profile in use changed).
 function Walk.Signature(view)
 	local marks = {}
 	for index, entry in ipairs(view.parts) do
@@ -785,9 +693,6 @@ function Walk.Signature(view)
 	return table.concat(marks)
 end
 
--- Lays a stop's screen out from the top, each part under its heading. Chips take a row and ticks two columns of rows; a cards part takes the height
--- the others leave, in two columns for two or four cards and three for any other number, the width shared out, at most 220 units tall. As it is now
--- comes first while the part offers it.
 function Walk.Layout(view)
 	local height = Walk.Height()
 	local used, shares = 16, 0
@@ -870,7 +775,6 @@ function Walk.Layout(view)
 	view.sig = table.concat(marks)
 end
 
--- Reads a stop's screen again: the card or chip picked, the tags, the ticks and the notes of the headings.
 function Walk.UpdateStop(view)
 	for _, entry in ipairs(view.parts) do
 		local part = entry.part
@@ -904,7 +808,6 @@ function Walk.UpdateStop(view)
 	end
 end
 
--- Draws every card of a stop's screen again, each under its own view.
 function Walk.PaintStop(view)
 	for _, entry in ipairs(view.parts) do
 		if entry.part.kind == "cards" then
@@ -918,9 +821,6 @@ function Walk.PaintStop(view)
 	end
 end
 
--- The first visit of a stop: it is marked seen, and each part of cards or chips takes the card it suggests while the profile in use has every path of
--- the part at its default (a new character on Default, or a part never changed) and the draft holds none of them: a choice made in More settings or
--- Every setting before the stop was seen, or kept from an older setup, stays. Only the draft is written. Ticks are only tagged.
 function Walk.FirstVisit(stop)
 	local draft = S.draft
 	if type(draft) ~= "table" then
@@ -952,10 +852,6 @@ function Walk.FirstVisit(stop)
 	end
 end
 
--- Your screen ----------------------------------------------------------------------------------------------------------------------------------
-
--- A picture of a stop on Your screen: its drawing under the draft (S.view) in a box of the ground colour, or for a stop with no drawing the names of
--- what is ticked; its title, what is picked, and an accent dot while the draft changes the stop. A click opens the stop.
 function Walk.NewPicture(view, stop, index)
 	local frame = kit.Frame(view.frame)
 	frame:SetSize(258, 128)
@@ -1002,8 +898,6 @@ function Walk.NewPicture(view, stop, index)
 	return tile
 end
 
--- The two rows of the save, over the bar: where Finish saves, with the tick Save as a new profile off Default; and the name of the new profile with
--- why it cannot be used, shown while Finish makes a new profile.
 function Walk.BuildSave(view)
 	local frame = view.frame
 	view.saveLine = kit.Label(frame, "GameFontHighlight", "LEFT", 490, true)
@@ -1057,7 +951,6 @@ function Walk.BuildSave(view)
 	view.why:SetPoint("LEFT", frame, "TOPLEFT", 372, -(472 + 18))
 end
 
--- Your screen, made the first time it shows: a picture of each stop, three to a row, the notes in a scroller under them, and the two rows of the save.
 function Walk.YoursView()
 	local view = Walk.yours
 	if not view then
@@ -1081,8 +974,6 @@ function Walk.YoursView()
 	return view
 end
 
--- The notes of Your screen: the settings changed in More settings that no stop shows, each list action waiting for Finish (with Undo), the game
--- settings in the draft, and each reload Finish will need.
 function Walk.Notes()
 	local notes = {}
 	local owned = {}
@@ -1124,7 +1015,6 @@ function Walk.Notes()
 	return notes
 end
 
--- Writes the notes into their scroller, one line each (wrapped at 700 units), with Undo at the right of each action.
 function Walk.LayoutNotes(view, notes)
 	local child = view.scroller.child
 	local y = 4
@@ -1171,19 +1061,16 @@ function Walk.LayoutNotes(view, notes)
 	view.scroller.SetContent(y)
 end
 
--- True when the draft holds a value or an action queued for Finish: Finish then saves (S.Has in Setup.lua).
 function Walk.Chosen()
 	local draft = S.draft
 	return type(draft) == "table" and ((type(draft.values) == "table" and next(draft.values) ~= nil)
 		or (type(draft.actions) == "table" and #draft.actions > 0)) or false
 end
 
--- Reads the save rows again: where Finish saves, the tick, the name and why it cannot be used. They show only while something is chosen.
 function Walk.UpdateSave(view)
 	local draft = S.draft
 	local using = ns.Profile()
 	local default = using == "Default"
-	-- With nothing chosen Finish only closes setup and saves nothing (Setup.lua, S.Finish), so the rows of the save would say what does not happen.
 	local chosen = Walk.Chosen()
 	view.saveLine:SetShown(chosen)
 	if default then
@@ -1219,8 +1106,6 @@ function Walk.UpdateSave(view)
 	view.why:SetText(IsText(why) and why or "")
 end
 
--- Reads Your screen again: the line under its title, what each stop has picked and its dot, the notes, the save rows, and Finish (S.Buttons dims it
--- in a fight and while the name is refused).
 function Walk.UpdateYours(view)
 	if S.sub then
 		S.sub:SetText(Walk.Chosen() and "Nothing has changed yet. Finish puts this on your screen." or "Nothing is chosen yet. Finish closes setup.")
@@ -1255,26 +1140,20 @@ function Walk.UpdateYours(view)
 	end
 end
 
--- Draws every picture of Your screen again under the draft.
 function Walk.PaintYours(view)
 	for _, tile in ipairs(view.tiles) do
 		Walk.PaintIn(tile, tile.stop.draw, 250, 88, 1.2)
 	end
 end
 
--- What Setup.lua calls -------------------------------------------------------------------------------------------------------------------------
-
--- The height of the body of the setup window, between its header and its bar.
 function Walk.Height()
 	return ns.Finite(S.BODY_H) and S.BODY_H or 512
 end
 
--- Forgets what the walk read of the character and the chip pointed at. Setup.lua calls it each time the window opens and on Start over.
 function Walk.Begin()
 	Walk.facts, Walk.preview = nil, nil
 end
 
--- Makes the frame of the stops and the frame of Your screen under the header of the right column, both hidden. Once.
 function Walk.Build(parent)
 	if Walk.stopFrame then
 		return
@@ -1289,8 +1168,6 @@ function Walk.Build(parent)
 	end
 end
 
--- Shows a screen: { kind = "stop", id = <stop id> } or { kind = "yours" }. Its title and line go in S.title and S.sub (Your target and party says on a
--- second line why its card is suggested); a stop seen for the first time takes its suggestions; then it is laid out, read and drawn. True when shown.
 function Walk.Show(screen)
 	if type(screen) ~= "table" or not Walk.stopFrame then
 		return false
@@ -1338,7 +1215,6 @@ function Walk.Show(screen)
 	return true
 end
 
--- Hides the stops and Your screen and clears the strip: a page or nothing shows now.
 function Walk.Hide()
 	Walk.shown, Walk.preview, Walk.hovered = nil, nil, nil
 	if Walk.stopFrame then
@@ -1348,8 +1224,6 @@ function Walk.Hide()
 	kit.Tip("")
 end
 
--- Reads the screen shown again: the picked cards, chips and ticks, the tags, and on Your screen the notes, the save rows and Finish. Setup.lua calls it
--- every half second and after a change.
 function Walk.Update()
 	local screen = Walk.shown
 	if not screen or not S.draft or not Walk.stopFrame then
@@ -1372,7 +1246,6 @@ function Walk.Update()
 	Walk.UpdateStop(view)
 end
 
--- Draws the cards of the stop shown, or the pictures of Your screen, again. Setup.lua calls it on the frame after S.dirty is set.
 function Walk.Paint()
 	local screen = Walk.shown
 	if not screen then
@@ -1390,8 +1263,6 @@ function Walk.Paint()
 	end
 end
 
--- Left and Right on a stop: the card before or after the one picked in its cards part, from the far end when none is picked. True when the key was the
--- walk's, so that Setup.lua keeps it from the game.
 function Walk.Key(key)
 	local screen = Walk.shown
 	if (key ~= "LEFT" and key ~= "RIGHT") or not screen or screen.kind ~= "stop" or not S.draft then
@@ -1422,8 +1293,6 @@ function Walk.Key(key)
 	return false
 end
 
--- What a stop has picked, for the list and Your screen: the card or chip of each part ("As it is now", or "Your own mix" when none is), and for ticks
--- the names of those that are on, or "None"; joined with commas.
 function Walk.Summary(id)
 	local stop = Walk.Stop(id)
 	if not stop then
@@ -1447,7 +1316,6 @@ function Walk.Summary(id)
 	return table.concat(texts, ", ")
 end
 
--- True when the draft holds a value on a path the stop owns, or an action of its ticks waits for Finish.
 function Walk.Changed(id)
 	local stop = Walk.Stop(id)
 	local draft = S.draft
@@ -1472,7 +1340,6 @@ function Walk.Changed(id)
 	return false
 end
 
--- Puts the cursor in the profile name of Your screen, when it shows: Finish refused the name.
 function Walk.FocusName()
 	local view = Walk.yours
 	if view and view.field:IsVisible() then

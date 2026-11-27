@@ -1,26 +1,15 @@
 local ADDON_NAME, ns = ...
 
--- The cell of a raid frame, and of a party frame in raid style: a thin power bar under the health bar, and a grey health bar for a unit that is dead or offline.
--- It also hangs the power bar of the player frame from the bottom of the health bar, in a secure snippet: in One frame by the frame's one gap, in
--- Separate parts by the two borders.
--- The border of the power bar, its flat fill and the switch of the look are in UnitFrames.lua, which outlines the game's power bar like any other bar. This
--- file adds its work after the steps of that file through ns.UnitFrameExtra: a part that stops on errors counts as off here, and every function can run
--- twice with the same result. It never writes a field of the game's frame; it only moves the bottom edge of the health bar, which leaves the rest of the
--- cell to the power bar (the game anchors the power bar under the health bar and to the bottom of the frame).
-
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
 local PART, BARS = "Raid cells", "Player bars"
--- The height of the power bar in units, and the height the game gives it (CompactUnitFrame.lua:1904-1908).
 local THIN, GAME = 4, 8
--- The grey the game gives the health bar of an offline unit and of a dead unit that is not a player (CompactUnitFrame.lua:656-658).
 local GREY = 0.5
 
 local function On(rec)
 	return rec.kind == "raid" and X.opt("raidCells") == true and not ns.PartStopped(KEY, PART)
 end
 
--- The BOTTOMRIGHT point of the health bar: its relative frame and point and its two offsets, or nil.
 local function Corner(bar)
 	local ok, count = pcall(bar.GetNumPoints, bar)
 	if not ok or not X.number(count) then
@@ -35,8 +24,6 @@ local function Corner(bar)
 	return nil
 end
 
--- Puts the bottom edge of the health bar 1 unit plus the height the power bar takes above the bottom of the cell. Waits for the end of combat, when the
--- frame is protected, and leaves the bars as the game laid them until then.
 local Place
 function Place(rec, on)
 	if rec.kind ~= "raid" then
@@ -50,7 +37,6 @@ function Place(rec, on)
 	shown = ok and shown == true
 	local want = shown and (on and On(rec) and THIN or rec.cellThin and GAME) or nil
 	if want == nil then
-		-- No bar to make room for: the game's own anchors are right, and the next set-up writes them again.
 		rec.cellThin = nil
 		return
 	end
@@ -60,7 +46,6 @@ function Place(rec, on)
 		return
 	end
 	if InCombatLockdown() then
-		-- What the bars are now, for the status and for putting the game's anchors back when the look goes in combat.
 		rec.cellThin = relative ~= nil and y == 1 + THIN or nil
 		if not rec.cellQueued then
 			rec.cellQueued = true
@@ -79,7 +64,6 @@ function Place(rec, on)
 	end
 end
 
--- The TOPLEFT point of the player's power bar: its relative frame and point and its two offsets, or nil.
 local function Home(bar)
 	local ok, count = pcall(bar.GetNumPoints, bar)
 	if not ok or not X.number(count) then
@@ -94,12 +78,6 @@ local function Home(bar)
 	return nil
 end
 
--- The space between the two bars in units. In One frame (Frame style One frame; any other value, or none, is Separate parts) it is the frame's one gap:
--- Border thickness and Space between parts in screen pixels, as between every cell of the frame (UnitFrames.lua, FRAME.gap). In Separate parts it is
--- the two edges of the borders (each ns.Pixels(bar, thickness) outside its bar), and at least 1 unit. The
--- game's own layout has none: the 15 unit slot of the health bar ends where the power bar starts, and the health bar, 20 units tall from 3 above the
--- top of the slot, hangs 2 units over the power bar (Camelot/PlayerFrame.lua:79-84, 94-96). At about 2 pixels per unit and a border of 1 pixel
--- this is that 1 unit.
 local function Gap(power)
 	local thickness = ns.Get("general.thickness")
 	if X.opt("frameStyle") == "one" then
@@ -108,7 +86,6 @@ local function Gap(power)
 	return math.max(1, ns.Pixels(power, 2 * thickness))
 end
 
--- How far the bottom of the health bar is below the top of the power bar, in tenths of a unit, or nil.
 local function Overlap(health, power)
 	local ok, _, bottom = pcall(health.GetRect, health)
 	local fine, _, low, _, height = pcall(power.GetRect, power)
@@ -118,10 +95,6 @@ local function Overlap(health, power)
 	return nil
 end
 
--- Hangs the power bar of the player frame from the bottom of the health bar while the look is on, and gives the game's point back when it is off. Both
--- bars are protected, so the point is written in a secure snippet and never in combat. The game writes the point again with each art
--- (Mainline/PlayerFrame.lua:599, 671 call Camelot/PlayerFrame.lua:96), and this runs after that and before the picture is sized from the bars: the
--- point it finds that is not its own is the game's, kept for giving back.
 local function Hang(rec)
 	if rec.kind ~= "player" then
 		return
@@ -146,7 +119,6 @@ local function Hang(rec)
 		return
 	end
 	if not want and not mine then
-		-- The game laid the bar out again since: its point is already back.
 		rec.barHung = nil
 		return
 	end
@@ -167,7 +139,6 @@ local function Hang(rec)
 	end
 end
 
--- The line of /flatui status about the player's bars: the gap, and the overlap the game's own layout had.
 function ns.PlayerBarStatus()
 	for _, rec in pairs(X.records) do
 		if rec.kind == "player" and rec.made then
@@ -189,7 +160,6 @@ function ns.PlayerBarStatus()
 	return nil
 end
 
--- Grey for a unit that is offline or dead, the dead player too. The game's own colour comes back with its next update of the colour.
 local function Grey(rec, on)
 	if not on or not On(rec) or rec.parts.health == nil then
 		return
@@ -205,7 +175,6 @@ local function Grey(rec, on)
 	end
 end
 
--- The line of /flatui status: the frames whose health bar was moved, and the ones that wait for the end of combat.
 function ns.RaidCellStatus()
 	local made, moved, waiting = 0, 0, 0
 	for _, rec in pairs(X.records) do

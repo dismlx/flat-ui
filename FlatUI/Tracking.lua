@@ -1,10 +1,5 @@
 local _, ns = ...
 
--- What the game lets an addon see right now, and /flatui check, which prints it. This file is no module of its own and has no
--- events but the ones it asks for (the kind of the last interrupt of the player's own cast, and the answer to the check's test
--- message). Every probe is a call in pcall: a call the client lacks, a call that raises and a withheld answer all give nil. The
--- helpers live in one table, T, so that no function holds many upvalues and the file stays far from the limit of locals.
-
 local T = { neverCache = {} }
 ns.Tracking = T
 
@@ -12,13 +7,10 @@ local IsSecret = ns.IsSecret
 local KEEP = 10
 local PREFIX = "FlatUI"
 local WAIT = 1.5
--- The restriction types of the game, by number (RestrictedActionsConstantsDocumentation.lua:26-31).
 local RESTRICTIONS = { [0] = "Combat", "Encounter", "Challenge mode", "PvP match", "Map", "Chat" }
 local PLACES = { none = "open world", party = "dungeon", raid = "raid", pvp = "battleground", arena = "arena", scenario = "scenario" }
 local UNAVAILABLE = "not available"
 
--- The answer of a game call, or nil with the reason: "missing" when the client lacks the call, "refused" when it raises,
--- "hidden" when the answer is withheld.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil, "missing"
@@ -42,7 +34,6 @@ local function Secrets(name)
 	return type(C_Secrets) == "table" and C_Secrets[name] or nil
 end
 
--- What the game says about one thing it may hide: true, false, or nil when it cannot say.
 local function Hides(name, ...)
 	local answer = Ask(Secrets(name), ...)
 	if answer == true or answer == false then
@@ -52,8 +43,6 @@ local function Hides(name, ...)
 end
 T.Hides = Hides
 
--- True when the game says buffs are open to addon code: the answer is plainly false. Without the call, out of combat. Not kept,
--- as TrackerSlots.lua does it.
 function T.Open()
 	local call = Secrets("ShouldAurasBeSecret")
 	if type(call) == "function" then
@@ -63,7 +52,6 @@ function T.Open()
 	return not InCombatLockdown()
 end
 
--- True when buffs can be read, false when they are hidden, nil when the game cannot say.
 function ns.AurasReadable()
 	local hidden = Hides("ShouldAurasBeSecret")
 	if hidden == nil then
@@ -72,7 +60,6 @@ function ns.AurasReadable()
 	return not hidden
 end
 
--- The secrecy level the game gives the casts of a spell, or nil. Enum.SecrecyLevel: 0 never, 1 always, 2 when restricted.
 function ns.CastLevel(spellID)
 	if not Plain(spellID, "number") then
 		return nil
@@ -81,7 +68,6 @@ function ns.CastLevel(spellID)
 	return Plain(level, "number") and level or nil
 end
 
--- True when the casts of a unit can be seen, false when they are hidden, nil when the game cannot say.
 function ns.CanSeeCasts(unit)
 	if not Plain(unit, "string") then
 		return nil
@@ -93,7 +79,6 @@ function ns.CanSeeCasts(unit)
 	return not hidden
 end
 
--- True when addon messages can be sent, false in a chat lockdown, nil when the game cannot say.
 function ns.MessagesOpen()
 	local info = type(C_ChatInfo) == "table" and C_ChatInfo.InChatMessagingLockdown or nil
 	local locked = Ask(info)
@@ -103,8 +88,6 @@ function ns.MessagesOpen()
 	return nil
 end
 
--- A buff of a unit by spell ID: its table when the call did not raise, the answer is not withheld and the end time and length are
--- plain numbers. Otherwise nil and a reason: "hidden", "refused" or "none".
 function ns.UnitBuff(unit, spellID)
 	if not (Plain(unit, "string") and Plain(spellID, "number")) then
 		return nil, "refused"
@@ -135,8 +118,6 @@ function ns.UnitBuff(unit, spellID)
 	return aura
 end
 
--- The buff IDs that Defensives on you lists: the abilities other players cast on someone (defensives and wards) and Blessing of
--- Freedom. A set, spell ID to true. Nil when the list of abilities is not loaded.
 local listed
 function T.Listed()
 	if listed then
@@ -160,7 +141,6 @@ function T.Listed()
 	return set
 end
 
--- The listed IDs, in order of their numbers.
 function T.ListedIDs()
 	local set, ids = T.Listed(), {}
 	for id in pairs(set or {}) do
@@ -170,14 +150,9 @@ function T.ListedIDs()
 	return ids
 end
 
--- The last interrupt of the player's own cast -------------------------------------------------------------------------------
-
--- "readable" when interruptedBy is a plain name of a unit, "hidden" when it is withheld, "empty" when there is none; nil before any.
 T.lastInterrupt = nil
 local watcher
 
--- The class of a player by GUID: its file name, or nil. The game's own cast bar reads the second answer (CastingBarFrame.lua:618-622);
--- the answer is tested for secrecy first.
 local function ClassOf(guid)
 	if type(UnitClassFromGUID) ~= "function" then
 		return nil
@@ -190,7 +165,6 @@ local function ClassOf(guid)
 	return class and ns.ABILITIES_BY_CLASS and ns.ABILITIES_BY_CLASS[class] and class or nil
 end
 
--- The first interrupt of a class that a player casts himself: not a pet's, and with a cooldown.
 local function KickOf(class)
 	for _, index in ipairs(ns.ABILITIES_BY_CLASS[class] or {}) do
 		local a = ns.ABILITIES[index]
@@ -201,9 +175,6 @@ local function KickOf(class)
 	return nil
 end
 
--- A kick that stopped the player's own cast, by a player: starts that player's interrupt timer, and those of the abilities that share
--- its category. A pet or a creature (a GUID that is not a player's) starts nothing. Enemy cooldowns shows the timer, and starts it too
--- on a plate of that player that keeps his timers by its frame (ns.EnemyKicked).
 function T.Interrupted(by)
 	if type(ns.ABILITIES) ~= "table" or not ns.Enabled("enemycd") or by:sub(1, 7) ~= "Player-" then
 		return
@@ -234,8 +205,6 @@ local function OnInterrupt(by)
 	end
 end
 
--- Starts listening for the two events, for the player and the pet. A client without RegisterUnitEvent hears every unit and the
--- handler keeps only these two.
 function T.Listen()
 	if watcher then
 		return
@@ -267,7 +236,6 @@ function T.Listen()
 				OnInterrupt(by)
 			end
 		elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
-			-- The payload has the flag complete before interruptedBy (UnitDocumentation.lua:4740-4753).
 			local unit, _, _, _, by = ...
 			if not IsSecret(unit) and (unit == "player" or unit == "pet") then
 				OnInterrupt(by)
@@ -275,12 +243,6 @@ function T.Listen()
 		end
 	end)
 end
-
--- Timers of other players, and their casts and buffs ----------------------------------------------------------------------------
--- A timer is { start, seconds } in the numbers of GetTime(), kept for one player in his book, by the key of the ability. The book
--- of a player is found by his GUID; for a unit whose GUID the game hides it is found by the unit frame, in a table that forgets a
--- frame the game no longer has. At most 100 players are kept, the oldest dropped first, and the books are cleared on entering or
--- leaving an instance. A use reported twice within a second is one use.
 
 local MOST_PLAYERS = 100
 local SAME_USE = 1
@@ -295,7 +257,6 @@ function T.Now()
 	return type(GetTime) == "function" and GetTime() or 0
 end
 
--- The book of a player: by GUID (a string) or by unit frame (a table). Made when `make` is true, else nil when there is none.
 function T.Book(owner, make)
 	if owner == nil or IsSecret(owner) then
 		return nil
@@ -324,12 +285,10 @@ function T.Book(owner, make)
 	return nil
 end
 
--- Forgets every book: the player left or entered an instance.
 function T.Clear()
 	T.books, T.order, T.frames = {}, {}, setmetatable({}, { __mode = "k" })
 end
 
--- The timer of an ability of a player: its start and length, or nothing. An ended timer is dropped here.
 function T.Timer(owner, key)
 	local book = T.Book(owner)
 	local timer = book and book.timers[key]
@@ -355,12 +314,10 @@ function T.Drop(owner, key)
 	end
 end
 
--- An ability of the same class that shares a category with `a`.
 local function Mate(a, m)
 	return m ~= a and a.cat ~= 0 and (m.cat == a.cat or (a.cat2 ~= nil and m.cat == a.cat2) or (m.cat2 ~= nil and m.cat2 == a.cat))
 end
 
--- Starts the timers of the abilities that share a category with `a`, each with the length of the category, unless one runs longer.
 function T.Mates(book, class, a, at)
 	local seconds = a.catcd
 	if a.cat == 0 or type(seconds) ~= "number" then
@@ -379,8 +336,6 @@ function T.Mates(book, class, a, at)
 	end
 end
 
--- A use of ability `a` of a player of class `class`, at the time `at`. Starts its timer and those of its category mates and clears
--- the timers it resets. False when it is the same use as the one already kept.
 function T.Use(owner, class, a, at, cast)
 	local book = T.Book(owner, true)
 	if not book or not Plain(at, "number") or type(a) ~= "table" then
@@ -404,7 +359,6 @@ function T.Use(owner, class, a, at, cast)
 	return true
 end
 
--- The abilities that a cast of an unlisted category mate starts, by cast ID.
 function T.Triggers()
 	if not T.triggerMap then
 		local map = {}
@@ -419,7 +373,6 @@ function T.Triggers()
 	return T.triggerMap
 end
 
--- A cast of a spell by a player: the ability it is, if it is one in the list, after its timers are started. nil for a spell that is none.
 function T.Cast(owner, class, spellID, at)
 	local by = ns.ABILITY_BY_CAST
 	if type(by) ~= "table" or not Plain(spellID, "number") then
@@ -445,7 +398,6 @@ function T.Cast(owner, class, spellID, at)
 	return found
 end
 
--- Every buff ID of the list, as a set.
 function T.Buffs()
 	if not T.buffSet then
 		local set = {}
@@ -459,7 +411,6 @@ function T.Buffs()
 	return T.buffSet
 end
 
--- True when the game never hides the buff of this spell.
 function T.NeverHidden(id)
 	local cached = T.neverCache[id]
 	if cached ~= nil then
@@ -472,7 +423,6 @@ function T.NeverHidden(id)
 	return answer
 end
 
--- True when at least one buff of the list is never hidden.
 function T.NeverTracked()
 	for id in pairs(T.Buffs()) do
 		if T.NeverHidden(id) then
@@ -481,11 +431,6 @@ function T.NeverTracked()
 	end
 	return false
 end
-
--- The listener frames ---------------------------------------------------------------------------------------------------------------
--- One small frame for each unit token, made when first wanted, hears the cast and the buffs of that unit alone. `key` names the
--- module that wants them. A module sets what it does with them in T.Subscribe: cast(unit, spellID) for a cast whose unit and spell
--- are plain, aura(unit, spellID, start, seconds, source) for each buff of a pass.
 
 function T.Subscribe(key, cast, aura)
 	T.subs[key] = { cast = cast, aura = aura }
@@ -512,7 +457,6 @@ local function Register(rec, event, on)
 	rec.events[event] = on
 end
 
--- Registers the events the modules want of a unit: the casts, and the buffs unless the game hides them all.
 function T.Tune(rec)
 	local cast, aura = false, false
 	for _, want in pairs(rec.want) do
@@ -560,7 +504,6 @@ function T.DeafenAll(key)
 	end
 end
 
--- The units a module hears, as a list.
 function T.Heard(key)
 	local list = {}
 	for unit, rec in pairs(T.units) do
@@ -590,7 +533,6 @@ function T.OnUnitEvent(rec, event, who, ...)
 			end
 		end
 	elseif event == "UNIT_AURA" then
-		-- The payload is not read where the event is registered for this unit alone.
 		if rec.all and (IsSecret(who) or who ~= rec.unit) then
 			return
 		end
@@ -598,7 +540,6 @@ function T.OnUnitEvent(rec, event, who, ...)
 	end
 end
 
--- One pass for each unit in 0.2 seconds, however many events come.
 function T.Queue(rec)
 	if rec.queued then
 		return
@@ -613,7 +554,6 @@ function T.Queue(rec)
 	end
 end
 
--- The buffs of a unit, from one call. While the game hides buffs only a buff it never hides is passed on.
 function T.Pass(rec)
 	rec.queued = false
 	if T.paused or not rec.events or not rec.events.UNIT_AURA then
@@ -657,7 +597,6 @@ function T.Pass(rec)
 	end
 end
 
--- The two events that keep the listeners right: a restriction that hides buffs starts or ends, and the player enters a place.
 function T.Control()
 	if T.control then
 		return
@@ -685,9 +624,6 @@ function T.Control()
 	T.inside = Ask(IsInInstance)
 end
 
--- A restriction of the four that hide buffs (Combat, Encounter, Challenge mode, PvP match) starts or ends. While one is on and no
--- buff of the list is never hidden, the buff events are not listened for. When the last ends, the buffs of every unit heard are read
--- once: a buff that came while they were hidden and still runs starts its timer now, not at the next change of that unit's buffs.
 function T.OnRestriction(kind, state)
 	if not (Plain(kind, "number") and Plain(state, "number") and kind >= 0 and kind <= 3) then
 		return
@@ -713,7 +649,6 @@ function T.OnRestriction(kind, state)
 	end
 end
 
--- The books are cleared when the player enters or leaves an instance.
 function T.OnWorld()
 	T.neverCache = {}
 	local inside = Ask(IsInInstance)
@@ -723,8 +658,6 @@ function T.OnWorld()
 	T.inside = inside
 end
 
--- The check -------------------------------------------------------------------------------------------------------------------
-
 local function Yes(value)
 	if value == nil then
 		return UNAVAILABLE
@@ -732,7 +665,6 @@ local function Yes(value)
 	return value and "yes" or "no"
 end
 
--- "readable", "hidden" or "empty" for the first answer of a unit call.
 local function Kind(fn, unit)
 	local answer, why = Ask(fn, unit)
 	if why == "hidden" then
@@ -752,7 +684,6 @@ local function WhoLine(label, unit)
 	return ("%s: GUID %s, class %s, name %s."):format(label, guid, class == "readable" and tostring(value) or class, name)
 end
 
--- The restrictions in force, by name.
 local function Restrictions()
 	local call = type(C_RestrictedActions) == "table" and C_RestrictedActions.IsAddOnRestrictionActive or nil
 	if type(call) ~= "function" then
@@ -794,7 +725,6 @@ local function GroupText()
 	return "not in a group"
 end
 
--- How many of the listed buffs the game never hides, from GetSpellAuraSecrecy.
 local function NeverHidden()
 	local call = Secrets("GetSpellAuraSecrecy")
 	local never = type(Enum) == "table" and type(Enum.SecrecyLevel) == "table" and Enum.SecrecyLevel.NeverSecret or nil
@@ -812,7 +742,6 @@ local function NeverHidden()
 	return ("%d of %d"):format(count, #ids)
 end
 
--- The listed buffs of a unit: how many were read, or why none was.
 local function TargetBuffs(unit)
 	local exists = Ask(UnitExists, unit)
 	if exists == false or (exists == nil and type(UnitExists) == "function") then
@@ -848,7 +777,6 @@ local function ResultName(result)
 	return tostring(result)
 end
 
--- Sends one test message: to the party in a group, else by whisper to the player. Returns the text of the line.
 local function TestMessage()
 	local info = type(C_ChatInfo) == "table" and C_ChatInfo or nil
 	if not (info and type(info.SendAddonMessage) == "function") then
@@ -874,7 +802,6 @@ local function TestMessage()
 	return ("Test message: sent to %s, result %s."):format(to, ResultName(result)), result
 end
 
--- The test message comes back as CHAT_MSG_ADDON, if the game lets it through. Watches for a short while and says what happened.
 local function WatchReply(record, sent)
 	if not sent or type(C_Timer) ~= "table" or type(C_Timer.After) ~= "function" then
 		return
@@ -908,7 +835,6 @@ local function WatchReply(record, sent)
 	end)
 end
 
--- The lines of /flatui check, kept as the last of ten in the account's record. The test message goes out once for each call.
 function ns.CheckLines()
 	T.Listen()
 	local lines = {}
@@ -987,7 +913,6 @@ function ns.CheckLines()
 	return lines
 end
 
--- The lines of the last check, or nil.
 function ns.CheckLast()
 	local account = ns.Account()
 	local list = account and account.checks

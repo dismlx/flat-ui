@@ -1,105 +1,43 @@
 local _, ns = ...
 
--- The chat windows, the chat input box and the look of tooltips. The game fades the plates of a chat window with SetAlpha, so those are
--- hidden; art whose alpha the game leaves alone is made transparent. The flat boxes are textures of the addon's own. What the game sets again
--- is followed on a global function of the game through ns.FollowGlobal (Core.lua's one hooksecurefunc for each global), with HookScript on
--- GameTooltip, and with EventRegistry for the input box; no
--- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
--- from the lines the kind of a unit, an item level, the hint that Shift compares, an ID (and a creature's NPC ID, 0.5.39, a quest's or a currency's ID, 0.5.41) and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
--- and the hit table lines of HitTableTip.lua (called from the post call after them, on an enemy's GameTooltip), and nothing is created on one in
--- combat. The size of a tooltip, the height of its health bar and the place of the input box are changed out of combat only. With Arrow keys
--- without Alt (on by default) each input box gets the widget method SetAltArrowKeyMode(false), so the arrow keys edit the text (Arrows below).
--- With Health text on the bar (Percent by default) a frame of the addon's own on GameTooltip's health bar, made out of combat, writes the health
--- of the tooltip's unit on it every 0.1 s while the bar shows, the game's withheld values passed straight to the text (BT, Health bar below).
--- With Health bar colour (Class colour for players, reaction for the rest, by default) the bar takes its unit's colour (SetStatusBarColor), set again
--- after each change of its value through one HookScript of its OnValueChanged (BT.Hook), and the game's green goes back at Green.
--- The fade of GameTooltip is seen as a fall of its alpha in a frame of the
--- addon's own (the game starts it in C++, GameTooltip:FadeOut in UnitFrame_OnLeave, Mainline/UnitFrame.lua:393 and the world cursor, GameTooltip.lua:1017);
--- Hide and SetAlpha are called from that frame, never inside a call of the game, and no method of GameTooltip is hooked.
--- ChatLinks.lua (called at the end of each refresh) also fills GameTooltip from a chat link under the mouse: SetOwner on a frame of its own,
--- SetHyperlink and Hide, never in a fight. With Light the tab that names you (0.5.39) it hands this file each chat window a line that names you
--- goes to (ns.ChatTabNamed): the tab of a window that does not show then takes Your name colour on its box (SetOutlineColour), its label
--- (SetTextColor, the game's colour back once it is chosen) and a slow pulse of a texture and an animation of Flat UI's own, until it is chosen;
--- a small count of Flat UI's own at the tab's top right corner (0.5.41) says how many lines named you in that window since (up to 9+).
--- ItemCompare.lua (called at the start of each refresh) writes the game's alwaysCompareItems.
--- ChatHistory.lua (called at the end of each refresh) keeps recent chat lines for this character and prints them after a reload.
--- SpellLines.lua and GearLines.lua (called from the post call after ChatTips.lua) add the spell and gear lines to GameTooltip and ItemRefTooltip
--- (AddLine, AddDoubleLine), from SpellModel.lua and GearModel.lua and the data of SpellData.lua, and GearWindow.lua is the Gear comparison window;
--- the three are synced at the end of each refresh, each through ns.Each. GearWindow.lua also fills GameTooltip for its rows, its switch and its
--- item: SetOwner on a frame of its own, SetSpellByID, SetHyperlink, AddLine, Show, and Hide only while one of its frames owns it, never in a fight.
--- It puts its name in UISpecialFrames, so Escape closes it, and gives an item dropped on it back to the bag, bank or worn slot it was lifted from
--- (ClearCursor); any other item, and a spell, stays on the cursor. SpellModel.lua, GearModel.lua, GearLines.lua and GearWindow.lua ask the game to
--- load an item the client has not loaded yet (C_Item.RequestLoadItemDataByID).
--- Tooltips hidden by their kind, by hostility and place, and by the party and raid frames that own them follow the tooltip and the group frames of
--- EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLTooltip/EnhanceQoLTooltip.lua:226-233, 973-977, 1420-1440, 1590-1594,
--- 1633-1636; EnhanceQoLUnitFrames/UF_GroupFrames.lua:6507-6536). They are hidden as the rows of Tooltips in combat are, with Hide on the tooltip
--- from the post call and from the OnShow of GameTooltip, so nothing more is hooked.
-
 local KEY = "chat"
 
--- The alpha the game fades a chat window up to when the mouse is over it, whatever opacity the window has (FCF_FadeInChatFrame).
 local HOVER_ALPHA = 0.25
--- Height of the box behind the label of a chat tab, in the units of the tab.
 local PLATE_HEIGHT = 22
 local COMPARE_PLATE = "tooltip-compare-label"
 local BAR_FILE = "Interface\\TargetingFrame\\UI-TargetingFrame-BarFill"
 
--- The border pieces of a bordered chat frame, after the name of the frame or of its button frame.
 local BORDER = { "TopLeftTexture", "BottomLeftTexture", "TopRightTexture", "BottomRightTexture", "LeftTexture", "RightTexture", "BottomTexture", "TopTexture" }
--- The art of a chat tab: the game shows and hides the selected pieces and tints the highlight, and sets the alpha of the tab alone.
 local TAB_FADED = { "Left", "Middle", "Right", "ActiveLeft", "ActiveMiddle", "ActiveRight" }
 local TAB_HIGHLIGHT = { "HighlightLeft", "HighlightMiddle", "HighlightRight" }
--- The art of the input box: three pieces the game never touches, and three it shows, hides and tints.
 local BOX_ART = { "Left", "Mid", "Right" }
 local BOX_FOCUS = { "focusLeft", "focusMid", "focusRight" }
 local PIECES = { "TopLeftCorner", "TopRightCorner", "BottomLeftCorner", "BottomRightCorner", "TopEdge", "BottomEdge", "LeftEdge", "RightEdge", "Center" }
--- The height of the health bar of a tooltip (GameTooltipStatusBar, 8 in the game's XML) and the opacity the game gives an idle input box
--- (ChatFrameEditBoxMixin:Deactivate, ChatFrameEditBox.lua:573).
 local BAR_HEIGHT, IDLE_ALPHA = 8, 35
--- The font objects the game draws a tooltip with: the title line, and the other lines.
 local TIP_TITLE, TIP_TEXT = { "GameTooltipHeaderText" }, { "GameTooltipText", "GameTooltipTextSmall" }
 local TOOLTIPS = { "GameTooltip", "ItemRefTooltip", "ShoppingTooltip1", "ShoppingTooltip2", "ItemRefShoppingTooltip1", "ItemRefShoppingTooltip2" }
--- The colours of the tooltip background, red, green and blue from 0 to 1. Near black is the colour the general background has by default.
 local TIP_COLOURS = {
 	nearblack = { 15 / 255, 15 / 255, 15 / 255 },
 	black = { 0, 0, 0 },
 	darkblue = { 10 / 255, 20 / 255, 46 / 255 },
 	darkbrown = { 32 / 255, 22 / 255, 14 / 255 },
 }
--- The setup drawing of tooltips (SetupDrawChat.lua) paints with the same colours and shades.
 ns.TipColours = TIP_COLOURS
--- A shaded tooltip goes from one colour at the top to another at the bottom. Lighter at the top is the chosen colour at the bottom and a
--- share (LIFT) of the way to white at the top. Darker at the bottom is the chosen colour at the top and a share (SINK) of it at the bottom.
--- A colour whose brightest channel is under DARK has too little to lose for that to show (Black, Near black), so its top gets a share (HINT)
--- of the way to white and the shade shows.
 local LIFT, HINT, SINK, DARK = 0.12, 0.08, 0.3, 20 / 255
 local SHADE_NOTE = "Chat and tooltips: the game cannot draw a gradient, so the tooltip background stays one colour."
--- The tooltips whose shade the client refused. The line for /flatui status stays while there is one.
 local shadeRefused = setmetatable({}, { __mode = "k" })
 
--- Per chat frame: { outline, hovered, plates = true while the button plates are hidden }
 local windows = setmetatable({}, { __mode = "k" })
--- Per chat tab: { outline, hover, selected }
 local tabs = setmetatable({}, { __mode = "k" })
--- Per input box: { outline, parts, active = true while the game shows the focus art, r, g, b = the colour it tints it }
 local boxes = setmetatable({}, { __mode = "k" })
--- Per tooltip: { outline, header = outline of the compare label, plate = its picture, byKind = true while the border has the colour of a unit,
--- kindData, kindLines = the data the kind line was added for and the number of lines after it }
 local tips = setmetatable({}, { __mode = "k" })
 local queued = setmetatable({}, { __mode = "k" })
--- Per input box: { points = the two points the game gave it, placed = true while it is above the window, idleSet = true while its idle opacity is set here }
--- Per tooltip: { base = the scale the game gave it }. Per font object of a tooltip: { base = its height, set = the height set here }.
--- Per tooltip: { data, lines } of the ID and count lines, and built = what its last build was: { owner = its owner then (true when it could not
--- be read), unit = true for the data of a unit, kind = "spell", "aura" or "item" (only with the owner read), hostile = whether you can attack the
--- unit (nil when the game will not say or no row asks), group = true when the owner is one of the game's party or raid frames }.
 local X = { seats = setmetatable({}, { __mode = "k" }), scales = setmetatable({}, { __mode = "k" }), fonts = setmetatable({}, { __mode = "k" }),
 	extras = setmetatable({}, { __mode = "k" }), built = setmetatable({}, { __mode = "k" }), bar = {}, levels = setmetatable({}, { __mode = "k" }),
 	arrows = setmetatable({}, { __mode = "k" }) }
 local hooked = {}
 local postCall = false
 local barOutline
--- Health text on the bar (below): its functions; X.barText is its frame and string, X.barUnit the unit of the unit tooltip that shows.
--- The text takes (height + 1) * 10 percent of its font for the bar's height (Health bar height), within SIZE, and shows on bars of LEAST px and more.
 local BT = { PART = "tooltip health text", EVERY = 0.1, FORMATS = { curmax = "%s / %s", pct = "%.0f%%", curpct = "%s (%.0f%%)" },
 	SIZE = { 70, 130 }, LEAST = 5 }
 
@@ -119,7 +57,6 @@ local function IsNumber(value)
 	return not ns.IsSecret(value) and type(value) == "number"
 end
 
--- A global frame or region.
 local function Global(name)
 	local value = _G[name]
 	return Usable(value) and value or nil
@@ -133,9 +70,6 @@ local function IsShown(region)
 	return ok and not ns.IsSecret(shown) and shown == true
 end
 
--- Chat windows ------------------------------------------------------------------------------
-
--- The background and border pieces of a bordered frame. The game fades them with SetAlpha and never shows or hides them.
 local function Plate(prefix, hidden)
 	ns.SetHidden(Global(prefix .. "Background"), hidden)
 	for _, part in ipairs(BORDER) do
@@ -143,7 +77,6 @@ local function Plate(prefix, hidden)
 	end
 end
 
--- The panel has the chosen opacity, and the game's rule for a window the mouse is over: never fainter than a quarter.
 local function PaintWindow(record)
 	local on = On("frames")
 	local r, g, b = ns.Colour("general.backdrop")
@@ -191,9 +124,6 @@ local function Hover(frame, hovered)
 	end
 end
 
--- Tabs --------------------------------------------------------------------------------------
-
--- A whisper tab has its own colour; the others take the highlight colour of the window skins.
 local function SelectedColour(tab)
 	local colours = tab.selectedColorTable
 	if Usable(colours) then
@@ -205,8 +135,6 @@ local function SelectedColour(tab)
 	return ns.Colour("windows.accent")
 end
 
--- The alpha of a tab that is not selected, for each choice of Chat tab opacity. The game's own mouse-over value for a normal tab is 0.6
--- (Mainline/FloatingChatFrame.lua:19). The game's alpha for the tab, its stored pair and ChatFrameUtil.SetTabAlphas are left alone.
 local TAB_OTHER = { clear = 0.6, full = 1 }
 
 local function Bright(region, alpha)
@@ -226,8 +154,6 @@ local function Alerting(tab)
 	return ok and not ns.IsSecret(alerting) and alerting == true
 end
 
--- The label and the flat box (its edges and fill are textures of the tab) take their own alpha, so the game's 0.4 and 0.2 do not dim them. A
--- tab that names you (record.named) is at full alpha whatever Chat tab opacity is, as the game keeps a flashing tab.
 local function BrightTab(tab, record, on)
 	local other = on and TAB_OTHER[Opt("tabOpacity")]
 	local alpha = other and ((record.selected or Alerting(tab)) and 1 or other) or nil
@@ -249,17 +175,12 @@ local function BrightTab(tab, record, on)
 	end
 end
 
--- Light the tab that names you (chat.mentionTab, 0.5.39): the alpha of the pulse over the plate at its top and its bottom, and the seconds of
--- one way. While a tab is lit, its box, its label and a pulse of its own over the plate take Your name colour (chat.mentionColour).
--- The count of lines that named you (0.5.41) sits this far from the plate's top right corner, and shows MOST at most, then MOST+.
 local NAMED = { HIGH = 0.45, LOW = 0.12, PULSE = 1.2, COUNT_X = -5, COUNT_Y = 0, MOST = 9 }
 
--- True while a mention may light a tab: Chat tabs, Your name in chat and Light the tab that names you on.
 local function NamedWanted()
 	return On("tabs") and Opt("mentions") == true and Opt("mentionTab") == true
 end
 
--- Your name colour, as ChatLinks.lua colours the name with it; orange when the saved value is not a colour.
 local function NamedColour()
 	local hex = Opt("mentionColour")
 	if type(hex) == "string" and hex:find("^%x%x%x%x%x%x%x%x$") then
@@ -268,8 +189,6 @@ local function NamedColour()
 	return 1, 0.6, 0.2
 end
 
--- The colour the game gives a tab's label (FCFTab_UpdateColors, Mainline/FloatingChatFrame.lua:1465-1471): its own colour for a whisper tab,
--- else the normal font colour. Read only.
 local function LabelColour(tab)
 	local colours = tab.selectedColorTable
 	if Usable(colours) and IsNumber(colours.r) and IsNumber(colours.g) and IsNumber(colours.b) then
@@ -282,8 +201,6 @@ local function LabelColour(tab)
 	return 1, 0.82, 0
 end
 
--- The pulse of a lit tab: a texture of Flat UI's own on the tab, just above the box's fill, at full alpha whatever the game fades the tab to, and
--- an Alpha animation of its own that goes slowly between HIGH and LOW. The label takes the colour while lit and the game's colour after.
 local function PaintNamed(tab, record, r, g, b)
 	local glow = record.glow
 	if record.named and not glow and record.plate then
@@ -301,8 +218,6 @@ local function PaintNamed(tab, record, r, g, b)
 		glow = { texture = texture, group = group }
 		record.glow = glow
 	end
-	-- The count of lines (0.5.41): a font string of Flat UI's own on the plate, its centre on the plate's top right corner, so it clears the label,
-	-- at full alpha as the pulse.
 	local count = record.count
 	if record.named and not count and record.plate then
 		count = ns.OwnText(record.plate, "OVERLAY", "GameFontHighlightSmall")
@@ -350,7 +265,6 @@ end
 
 local function PaintTab(tab, record)
 	local on = On("tabs")
-	-- A lit tab goes out once it is chosen, and with any of its rows off.
 	if record.named and (record.selected or not NamedWanted()) then
 		record.named = nil
 	end
@@ -375,7 +289,6 @@ local function PaintTab(tab, record)
 	PaintNamed(tab, record, r, g, b)
 end
 
--- A tab is styled when the window is, and when the game colours it, which it does for a tab made later too.
 local function StyleTab(tab, selected)
 	if not Usable(tab) or ns.Forbidden(tab) then
 		return
@@ -405,8 +318,6 @@ local function StyleTab(tab, selected)
 	PaintTab(tab, record)
 end
 
--- Input box ---------------------------------------------------------------------------------
-
 local function PaintBox(record)
 	local on = On("editbox")
 	for _, part in ipairs(record.parts) do
@@ -425,9 +336,6 @@ local function PaintBox(record)
 	ns.SetOutlineColour(record.outline, r, g, b)
 end
 
--- The game shows the focus art and tints it by chat type. Its state is read from the art itself, so nothing follows the game's own calls:
--- the passes below run a frame after the box gains or loses the focus, is shown or hidden, or the tint may have changed.
--- Whether the input box has the keyboard focus, which the game gives it while it is open.
 local function Typing(box)
 	local ok, focus = pcall(box.HasFocus, box)
 	return ok and not ns.IsSecret(focus) and focus == true
@@ -481,8 +389,6 @@ local function StyleBox(box, name)
 	ReadFocus(box)
 end
 
--- Runs one part of the module that calls the client on something the module did not make: fn(object, restore, ...). With the module off, or the
--- part stopped after enough refusals, the part is run to put the game's value back, and a refusal then is let go.
 local function Part(part, fn, object, ...)
 	if ns.Enabled(KEY) and not ns.PartStopped(KEY, part) then
 		ns.EachPart(KEY, part, fn, object, false, ...)
@@ -491,7 +397,6 @@ local function Part(part, fn, object, ...)
 	end
 end
 
--- One anchor of the input box as the game gave it: { point, frame, point of the frame, x, y }.
 local function ReadPoint(box, index)
 	local ok, point, relative, relativePoint, x, y = pcall(box.GetPoint, box, index)
 	if not ok or ns.IsSecret(point) or type(point) ~= "string" or not Usable(relative) or ns.IsSecret(relativePoint) or type(relativePoint) ~= "string"
@@ -508,8 +413,6 @@ local function Anchors(box, points)
 	end
 end
 
--- The input box above its window: its left corner on the window's top left, and the point on its right the game gave it. Below puts the two
--- points the game gave it back. Nothing in Blizzard_ChatFrameBase anchors the box again.
 local function PlaceBox(box, record, frame, above)
 	if above and not record.placed then
 		if record.points == nil then
@@ -543,8 +446,6 @@ local function PlaceBox(box, record, frame, above)
 	end
 end
 
--- The game sets an idle box to 0.35 in Deactivate and to 1 when it opens. The row sets it on the frame after the box loses the focus or is hidden
--- (EventRegistry, below), and puts the game's value back when it goes back to the game's. A box with the focus keeps the opacity the game gave it.
 local function IdleBox(box, record, on)
 	local gm = box.isGM
 	if ns.IsSecret(gm) or gm == true then
@@ -582,12 +483,6 @@ local function SeatBox(box, restore, frame)
 	IdleBox(box, record, not restore)
 end
 
--- Arrow keys without Alt (chat.arrows, 0.5.35): the game makes every input box with ignoreArrows (Blizzard_ChatFrameBase/Mainline/
--- ChatFrameEditBox.xml:3), so the arrow keys move the character while one has the focus and edit the text only with Alt held. With the row on, the
--- widget method SetAltArrowKeyMode(false) of the box lets the arrow keys move the cursor, and Up and Down bring back the lines sent (its
--- historyLines, 32). Only a box Flat UI changed gets the game's mode (true) back, as the row, the part or the module goes off, so a box another addon
--- set is left as it set it. The game's name completion keeps and gives back a box's mode around its list (Blizzard_AutoComplete/AutoComplete.lua:
--- 171-174, 236-240).
 local function Arrows(box, restore)
 	if ns.Forbidden(box) or type(box.SetAltArrowKeyMode) ~= "function" then
 		return
@@ -603,20 +498,13 @@ local function Arrows(box, restore)
 	end
 end
 
--- The passes of an input box. The game calls EventRegistry for the four moments a box changes (Blizzard_ChatFrameBase/Shared/ChatFrameEditBox.lua:389,
--- 394, 407, 415): the callbacks only queue a pass for the next frame, because Deactivate, ActivateChat and the tint run inside the game's own calls.
--- No method of an input box is hooked (EllesmereUIChat/EllesmereUIChat.lua:4410-4417, 4236-4260 and the same callbacks).
 local settling = setmetatable({}, { __mode = "k" })
 local watcher, watchWait
 
--- The game has closed a box when it is hidden or its focus art is hidden (Deactivate hides the art, ChatFrameEditBox.lua:586; ActivateChat shows
--- it, ChatFrameUtil.lua:554). An empty box is closed when it loses the focus; a box with text stays open, and keeps what the game gave it.
 local function Closed(box)
 	return not IsShown(box) or not IsShown(box.focusLeft)
 end
 
--- The game calls Deactivate with no moment of its own in two places (Mainline/FloatingChatFrame.lua:270-271, ChatFrameUtil.lua:598-601), so every box with a
--- seat is settled on any moment.
 local function Pass(box)
 	settling[box] = nil
 	if ns.IsStopped(KEY) then
@@ -642,8 +530,6 @@ local function Settle(box)
 	end
 end
 
--- The game tints the focus art again when the chat type changes while the box is open, with no moment of its own to follow, so the tint is read
--- about ten times a second while a box has the focus.
 function Watch(box, on)
 	typing[box] = on or nil
 	if on and not watcher and type(CreateFrame) == "function" then
@@ -688,7 +574,6 @@ local function BoxMoment(gained)
 	end
 end
 
--- Every chat window the game has made, with its tab and input box.
 local function Chat()
 	if not Usable(CHAT_FRAMES) then
 		return
@@ -713,8 +598,6 @@ local function Chat()
 	end
 end
 
--- Tooltips ----------------------------------------------------------------------------------
-
 local function Pieces(tooltip, faded)
 	local slice = tooltip.NineSlice
 	if Usable(slice) then
@@ -724,7 +607,6 @@ local function Pieces(tooltip, faded)
 	end
 end
 
--- The colour at the top and the colour at the bottom of a shaded tooltip, or nothing for one colour.
 function ns.TipShades(colour, shading)
 	local r, g, b = colour[1], colour[2], colour[3]
 	if shading == "lighter" then
@@ -738,9 +620,6 @@ function ns.TipShades(colour, shading)
 	end
 end
 
--- The background of a tooltip, or of the label above a comparison tooltip: the colour chosen at the opacity chosen, and for the tooltip
--- itself the shading chosen. Texture calls only, so it can change while a tooltip is up in combat. With the tooltips off the box is
--- hidden and the game's art is back, so there is nothing to paint. Returns false when the shading was refused.
 local function PaintFill(outline, on, label)
 	if not on then
 		return nil
@@ -782,7 +661,6 @@ local function PaintTooltip(tooltip, record)
 	end
 end
 
--- Made out of combat, since it puts textures and a frame on a tooltip. The game's art stays until then.
 local function BuildTooltip(tooltip)
 	if tips[tooltip] or ns.Forbidden(tooltip) or not On("tooltips") or not Usable(tooltip.NineSlice) then
 		return
@@ -817,7 +695,6 @@ local function Tooltip(tooltip)
 	end
 end
 
--- The game draws its art again whenever it sets the backdrop style, and clears the style when a tooltip is hidden.
 local function Backdrop(tooltip, style)
 	local record = Usable(tooltip) and tips[tooltip]
 	if record then
@@ -828,7 +705,6 @@ local function Backdrop(tooltip, style)
 	end
 end
 
--- Whether the data is of a kind of the game's tooltip data: "Item" or "Unit".
 local function IsData(data, name)
 	if not Usable(data) or type(Enum) ~= "table" or type(Enum.TooltipDataType) ~= "table" then
 		return false
@@ -837,7 +713,6 @@ local function IsData(data, name)
 	return not ns.IsSecret(kind) and kind ~= nil and kind == Enum.TooltipDataType[name]
 end
 
--- The game colours the name of an item by its quality and leaves the border alone. Grey and white names keep the plain border.
 local function NameColour(tooltip)
 	local line = tooltip.TextLeft1
 	if not Usable(line) then
@@ -850,8 +725,6 @@ local function NameColour(tooltip)
 	return r, g, b
 end
 
--- The word and the colour of the kind of the unit in the data, found as the game finds the unit of a tooltip (TooltipUtil.GetDisplayedUnit):
--- the token of its guid. A token or classification the client withholds gives no kind.
 local function UnitKind(data)
 	local guid = data.guid
 	if ns.IsSecret(guid) or type(guid) ~= "string" or type(UnitTokenFromGUID) ~= "function" then
@@ -861,8 +734,6 @@ local function UnitKind(data)
 	return kind and ns.KINDS[kind] or nil
 end
 
--- The kind of the unit a unit tooltip shows. Nothing for any other data, for a unit that is not an elite, a rare or a boss, and when the
--- client withholds or refuses anything on the way.
 local function TooltipKind(tooltip, data)
 	if not IsData(data, "Unit") or ns.Forbidden(tooltip) then
 		return nil
@@ -871,8 +742,6 @@ local function TooltipKind(tooltip, data)
 	return ok and kind or nil
 end
 
--- The word goes at the end of the tooltip, once for each build of it. The game fetches new data for each build, and the post calls may run
--- more than once for one, so the same data with the lines of the first call still there is the same build.
 local function AddKind(tooltip, record, data, kind)
 	local ok, lines = pcall(tooltip.NumLines, tooltip)
 	if not ok or not IsNumber(lines) or (record.kindData == data and lines >= record.kindLines) then
@@ -883,7 +752,6 @@ local function AddKind(tooltip, record, data, kind)
 	end
 end
 
--- Called by the game after it has filled a tooltip from data, for every kind of tooltip.
 local function Filled(tooltip, data)
 	local record = Usable(tooltip) and tips[tooltip]
 	if not (record and On("tooltips")) then
@@ -918,9 +786,6 @@ local function Filled(tooltip, data)
 	end
 end
 
--- Extra lines: the ID of an item or a spell, and how many of an item the player has, after the lines the game made. The same data with the
--- lines of the first call still there is the same build. A buff or debuff counts as a spell: the id of its data is the spell's, and the game
--- withholds it while it restricts auras (C_TooltipInfo.GetUnitAura is SecretWhenUnitAuraRestricted, TooltipInfoDocumentation.lua:1197-1216).
 local function Extras(tooltip, data)
 	if not ns.Enabled(KEY) or not (Opt("ids") or Opt("count")) or not Usable(tooltip) or ns.Forbidden(tooltip) then
 		return
@@ -929,7 +794,6 @@ local function Extras(tooltip, data)
 	local id = (item or spell) and data.id
 	local lines = {}
 	if IsNumber(id) then
-		-- The ID lines, with Show IDs and the temporary enchant, come from ChatTips.lua.
 		ns.ChatTipIds(lines, data, item, id)
 		if item and Opt("count") and type(C_Item) == "table" and type(C_Item.GetItemCount) == "function" then
 			local okBags, bags = pcall(C_Item.GetItemCount, id)
@@ -939,10 +803,8 @@ local function Extras(tooltip, data)
 			end
 		end
 	elseif not (item or spell) and IsData(data, "Unit") and type(ns.ChatTipNpcId) == "function" then
-		-- The NPC ID of a creature or a vehicle (ChatTips.lua, 0.5.39), once for each build as the other lines here.
 		ns.ChatTipNpcId(lines, data)
 	elseif not (item or spell) and type(ns.ChatTipOtherId) == "function" then
-		-- The ID of a quest (a chat link's tooltip) or a currency (ChatTips.lua, 0.5.41), once for each build too.
 		local kind = (IsData(data, "Quest") and "Quest") or (IsData(data, "Currency") and "Currency") or nil
 		if kind then
 			ns.ChatTipOtherId(lines, data, kind)
@@ -962,8 +824,6 @@ local function Extras(tooltip, data)
 	X.extras[tooltip] = { data = data, lines = shown }
 end
 
--- True when the data already has a line of the kind ItemLevel (Enum.TooltipDataLineType, 31 in TooltipInfoSharedDocumentation.lua:65), which a
--- client that writes its own item level line gives; a kind the game does not say counts as none.
 local function HasLevelLine(data)
 	local kinds, list = type(Enum) == "table" and Enum.TooltipDataLineType, data.lines
 	local kind = Usable(kinds) and kinds.ItemLevel or nil
@@ -978,12 +838,6 @@ local function HasLevelLine(data)
 	return false
 end
 
--- Item level (chat.itemLevel, 0.5.35): a line "Item level 63" in the game's gold (NORMAL_FONT_COLOR) after the game's own lines of a weapon or a
--- piece of armour and before the spell, gear and ID lines, on every tooltip the game builds from data, so the comparison beside it
--- (ShoppingTooltip1 and 2) says its level too. The level is ns.Items.LevelOf's (Items.lua: weapons and armour only, C_Item.GetItemInfoInstant and
--- C_Item.GetDetailedItemLevelInfo) of the data's hyperlink, else of its id; an item the client has not loaded yet gets none, and so does data that
--- already has the game's own item level line (HasLevelLine). Once for each build, as Extras: the same data with the line still there is the same
--- build.
 local function ItemLevelLine(tooltip, data)
 	if not ns.Enabled(KEY) or Opt("itemLevel") ~= true or not IsData(data, "Item") or not Usable(tooltip) or ns.Forbidden(tooltip) then
 		return
@@ -1007,9 +861,6 @@ local function ItemLevelLine(tooltip, data)
 	end
 end
 
--- The colour of a unit tooltip's border and of the name on its first line. Called by the game for the name line of a unit, after it is added
--- (TooltipDataHandler.lua:329-334); the game set the line's colour before that (TooltipDataRules.lua:7-16). Reaction takes that colour, class
--- takes the class colour of a player and the reaction colour of any other unit, and a token or class the client withholds changes nothing.
 local function UnitLine(tooltip, lineData)
 	if not ns.Enabled(KEY) or not Usable(tooltip) or not Usable(lineData) then
 		return
@@ -1052,7 +903,6 @@ local function UnitLine(tooltip, lineData)
 	end
 end
 
--- True while the chosen key is down: Shift, Ctrl or Alt. A key the game does not say is down counts as up.
 local function KeyDown(key)
 	local down = key == "shift" and IsShiftKeyDown or key == "ctrl" and IsControlKeyDown or key == "alt" and IsAltKeyDown
 	if type(down) ~= "function" then
@@ -1062,7 +912,6 @@ local function KeyDown(key)
 	return ok and not ns.IsSecret(pressed) and pressed == true
 end
 
--- The owner of a tooltip, or nil when it cannot be read.
 local function OwnerOf(tooltip)
 	local ok, owner = pcall(tooltip.GetOwner, tooltip)
 	if ok and Usable(owner) then
@@ -1071,7 +920,6 @@ local function OwnerOf(tooltip)
 	return nil
 end
 
--- True in a fight. An answer the game does not give counts as none, so nothing is hidden for it.
 local function Fighting()
 	if type(InCombatLockdown) ~= "function" then
 		return false
@@ -1080,7 +928,6 @@ local function Fighting()
 	return ok and not ns.IsSecret(fighting) and fighting == true
 end
 
--- True in a dungeon or a raid: the game says the player is in an instance of the party or the raid kind (IsInInstance, InstanceDocumentation.lua:170-178).
 local function InDungeon()
 	if type(IsInInstance) ~= "function" then
 		return false
@@ -1089,8 +936,6 @@ local function InDungeon()
 	return ok and not ns.IsSecret(inside) and inside == true and not ns.IsSecret(kind) and (kind == "party" or kind == "raid")
 end
 
--- The kinds of tooltip with a row of their own, by the type of the data (Enum.TooltipDataType: Spell 1, PetAction 11 and Macro 25 are spells, UnitAura 7
--- a buff or a debuff, Item 0 an item). A type the client withholds gives none (FOREVER.md, fact 24).
 local KIND_OF = { Spell = "spell", PetAction = "spell", Macro = "spell", UnitAura = "aura", Item = "item" }
 local KIND_ROW = { spell = "spellTips", aura = "auraTips", item = "itemTips" }
 
@@ -1103,9 +948,6 @@ local function KindOf(data)
 	return nil
 end
 
--- Whether you can attack the unit of a unit tooltip (UnitCanAttack, UnitDocumentation.lua:763-777): true or false, nil when the game will not say. The
--- token of the guid of the data comes first, as the game finds the unit of a tooltip (TooltipUtil.lua:34-42), since a tooltip of a frame need not be
--- the unit under the mouse; "mouseover" only when there is no such token.
 local function Hostile(data)
 	local token, guid = nil, nil
 	if Usable(data) then
@@ -1137,7 +979,6 @@ local function Hostile(data)
 	return can
 end
 
--- True when the owner of a tooltip is one of the game's party or raid frames (UnitFrames.lua reads only their names and the pool of the party frame).
 local function GroupOwned(owner)
 	local extra = ns.UnitFrameExtra
 	local test = type(extra) == "table" and extra.isGroupFrame or nil
@@ -1148,21 +989,10 @@ local function GroupOwned(owner)
 	return ok and yes == true
 end
 
--- True while a row can hold a tooltip back. At the defaults none can, and a tooltip is never looked at.
 local function Rules()
 	return Opt("combat") ~= "show" or Opt("groupTips") ~= "other" or Opt("spellTips") ~= "show" or Opt("auraTips") ~= "show" or Opt("itemTips") ~= "show"
 end
 
--- In this order: the row of the party and raid frames for a unit tooltip they own (Off, Out of combat only, Only with a key); then the key of Show
--- anyway while holding, which shows every other tooltip; then the row of the kind of a spell, aura or item tooltip (in combat, in dungeons and raids,
--- always); then Tooltips in combat, in combat and with Where also in a dungeon or a raid. A frame's tooltip the row of the group frames lets through,
--- its key held among them, still meets Tooltips in combat, as EnhanceQoL's group frames leave theirs to its tooltip rules (UF_GroupFrames.lua:6514-6536,
--- EnhanceQoLTooltip.lua:1420-1440). The rows of a kind and of the group frames are for GameTooltip, the tooltip of what is under the mouse: your own
--- buffs (Blizzard_BuffFrame/BuffFrame.lua:1211-1219) and those of the party and raid frames (Shared/PartyMemberFrame.lua:191-208,
--- Shared/CompactUnitFrame.lua:2056-2087) show there, while the target and focus frames show theirs in AuraButtonTooltip (Blizzard_AuraButton.lua:
--- 185-199), which is forbidden and out of the global names (Blizzard_AuraContainer/Mainline/Blizzard_AuraButtonTooltip.xml:3-4) and so is left as it
--- is. Hide unit tooltips holds back the tooltip of a unit's data, and one the game owns by the screen itself (a unit under the cursor), by Unit
--- tooltips hidden: every one, or only those of a unit you can attack (Enemies) or cannot (Friendly units). A unit the game will not say about is shown.
 local function Withheld(tooltip)
 	if not Rules() or not ns.Enabled(KEY) or ns.Forbidden(tooltip) then
 		return false
@@ -1170,7 +1000,6 @@ local function Withheld(tooltip)
 	local owner = OwnerOf(tooltip)
 	local built = X.built[tooltip]
 	if built ~= nil and built.owner ~= true and owner ~= nil and not rawequal(built.owner, owner) then
-		-- Another owner has the tooltip since its build: what was built is not this tooltip. A nil owner is a hidden tooltip, not another owner.
 		X.built[tooltip] = nil
 		built = nil
 	end
@@ -1211,7 +1040,6 @@ local function Withheld(tooltip)
 	if unit then
 		hostile = built.hostile
 	else
-		-- A tooltip the game owns by the screen with no unit's data built for it: the unit under the cursor, if there is one.
 		hostile = Hostile(nil)
 	end
 	if which == "enemies" then
@@ -1226,8 +1054,6 @@ local function Shown(tooltip)
 	end
 end
 
--- Notes what the data of a build is, then holds the tooltip back if it is to be. The owner is the owner of the build, or true when it cannot be
--- read: then any later tooltip is held back as a unit's, and no kind is noted, so a tooltip of a kind is shown.
 local function Combat(tooltip, data)
 	if Usable(tooltip) and not ns.Forbidden(tooltip) then
 		local owner = OwnerOf(tooltip)
@@ -1254,30 +1080,21 @@ local function Combat(tooltip, data)
 	end
 end
 
--- Fade out ----------------------------------------------------------------------------------
--- The game fades GameTooltip out when the mouse leaves a unit (UnitFrame_OnLeave, Mainline/UnitFrame.lua:393) or the world (GameTooltip.lua:1017): a call in C++
--- that lowers the alpha. EllesmereUI hooks the method (EllesmereUIBlizzardSkin.lua:2841); here the fall is seen in a frame of the addon's own while the
--- tooltip is up. Fast brings the alpha down in FADE_FAST seconds and hides the tooltip, At once hides it on the first frame of the fade. A tooltip built
--- again (the post calls) or shown again (OnShow) is not faded.
 local FADE_FAST = 0.2
--- A fall of alpha this large is a fade.
 local FADE_STEP = 0.02
 local fadeDriver
--- The highest alpha seen on the tooltip while it was up, the seconds since a fade was seen (nil while there is none), and the owner the tooltip had when the fade was seen.
 local fadeTop, fadeFor, fadeOwner
 
 local function FadeEnd(tooltip, hide)
 	if hide then
 		pcall(tooltip.Hide, tooltip)
 	end
-	-- The alpha the addon lowered is put back, so the next tooltip starts as the game makes it.
 	if fadeFor ~= nil and fadeTop ~= nil then
 		pcall(tooltip.SetAlpha, tooltip, fadeTop)
 	end
 	fadeTop, fadeFor, fadeOwner = nil, nil, nil
 end
 
--- True when the tooltip has an owner other than the one it had when the fade was seen. An owner that cannot be read is no change.
 local function Reowned(tooltip)
 	local now = OwnerOf(tooltip)
 	return fadeOwner ~= nil and now ~= nil and not rawequal(now, fadeOwner)
@@ -1305,11 +1122,9 @@ local function FadeStep(elapsed)
 		fadeFor = 0
 		fadeOwner = OwnerOf(tooltip)
 	elseif alpha >= fadeTop - FADE_STEP then
-		-- The game put the alpha back (a tooltip shown again): no fade is going on.
 		FadeEnd(tooltip, false)
 		return
 	elseif Reowned(tooltip) then
-		-- Another owner has the tooltip now (a tooltip of text shown over the fading one): the fade was the last tooltip's.
 		FadeEnd(tooltip, false)
 		return
 	end
@@ -1321,7 +1136,6 @@ local function FadeStep(elapsed)
 	end
 end
 
--- The tooltip is shown or built again: a fade that was seen is over and the alpha goes back.
 local function FadeCancel(tooltip)
 	if fadeFor ~= nil and Usable(tooltip) and not ns.Forbidden(tooltip) then
 		FadeEnd(tooltip, false)
@@ -1329,7 +1143,6 @@ local function FadeCancel(tooltip)
 	fadeTop, fadeFor = nil, nil
 end
 
--- The tooltip is shown: the alpha it starts with is the one a fade is measured from.
 local function FadeShown(tooltip)
 	FadeCancel(tooltip)
 	if fadeDriver and Opt("fadeOut") ~= "game" then
@@ -1340,10 +1153,8 @@ local function FadeShown(tooltip)
 	end
 end
 
--- The frame runs while GameTooltip is up and the row is not As the game has it.
 local function FadeWatch()
 	local tooltip = Global("GameTooltip")
-	-- A forbidden GameTooltip stays forbidden, so it is tested here and never in a frame.
 	if Opt("fadeOut") == "game" or not ns.Enabled(KEY) or not tooltip or ns.Forbidden(tooltip) then
 		fadeTop, fadeFor = nil, nil
 		if fadeDriver then
@@ -1367,14 +1178,6 @@ local function FadeWatch()
 	fadeDriver:SetShown(IsShown(tooltip))
 end
 
--- Hint while Shift is up (chat.compareHint, 0.5.36): while Compare items only while holding Shift stands (ns.ItemCompareHeld, ItemCompare.lua), the
--- tooltip of an item the player could wear (C_Item.IsEquippableItem) on GameTooltip or ItemRefTooltip ends its game lines with one dim line saying
--- that Shift compares it with what the player wears, and on GameTooltip, while the gear lines wait for the game's comparison (chat.gear with
--- chat.gearWhen at With the game's comparison) and the item is of a kind they take (ns.GearLinesFor, GearLines.lua: not a tabard, shirt or relic;
--- 0.5.37), with the spells too. Not on a bag, a quiver or an item the game cannot equip (its itemEquipLoc, C_Item.GetItemInfoInstant's fourth
--- answer, NO_HINT; 0.5.37), which Shift compares with nothing; not while Shift is down, not on an item the player wears (its data.guid in a
--- slot, C_Item.GetItemLocation, as on the Character window, which compares nothing), and not on the comparison tooltips. Once for each build, as
--- ItemLevelLine: the bag slots build their tooltip again every 0.2 s, so there the hint goes as Shift goes down and the comparison comes.
 X.hints = setmetatable({}, { __mode = "k" })
 local HINT, HINT_SPELLS, HINT_COLOUR = "Shift: compare with what you wear", " and your spells", { 0.66, 0.68, 0.62 }
 X.NO_HINT = { INVTYPE_BAG = true, INVTYPE_QUIVER = true, INVTYPE_NON_EQUIP = true, INVTYPE_NON_EQUIP_IGNORE = true }
@@ -1434,21 +1237,15 @@ local function FollowData()
 	postCall = true
 	TooltipDataProcessor.AddTooltipPostCall(TooltipDataProcessor.AllTypes, function(tooltip, data)
 		if not ns.IsStopped(KEY) then
-			-- ChatTips.lua: the target line, the class line and the icons, before the kind word so that it stays the last line.
 			ns.Each(KEY, ns.ChatTipLines, tooltip, data)
-			-- The item level of a weapon or a piece of armour, right under the game's own lines (ItemLevelLine).
 			ns.Each(KEY, ItemLevelLine, tooltip, data)
-			-- The dim line that Shift compares, while Flat UI holds the comparison for Shift (CompareHint).
 			ns.Each(KEY, CompareHint, tooltip, data)
-			-- SpellLines.lua and GearLines.lua: the spell and the gear lines, after the game's own and before the ID and count lines (Extras), so that
-			-- the ID line stays after them. Each runs its work inside ns.EachPart, so a fault there stops that part alone.
 			if type(ns.SpellTipLines) == "function" then
 				ns.Each(KEY, ns.SpellTipLines, tooltip, data)
 			end
 			if type(ns.GearTipLines) == "function" then
 				ns.Each(KEY, ns.GearTipLines, tooltip, data)
 			end
-			-- HitTableTip.lua: the hit table against an enemy, on its tooltip, as its row on the Hit table page asks.
 			if type(ns.HitTableTipLines) == "function" then
 				ns.Each(KEY, ns.HitTableTipLines, tooltip, data)
 			end
@@ -1470,9 +1267,6 @@ local function FollowData()
 	end
 end
 
--- Size and text of tooltips ------------------------------------------------------------------
-
--- The scale of a tooltip: the row's share of 1, and the scale the game gave it back at 100.
 local function SizeTooltip(tooltip, restore)
 	if ns.Forbidden(tooltip) then
 		return
@@ -1494,8 +1288,6 @@ local function SizeTooltip(tooltip, restore)
 	X.scales[tooltip] = want ~= 100 and record or nil
 end
 
--- The height of a font object of the game: the row's share of the height it had, and that height back at 100. A height set by another
--- addon or by the game since is the height to go back to.
 local function SizeFont(object, restore, percent)
 	local ok, _, height = pcall(object.GetFont, object)
 	if not ok or not IsNumber(height) or height <= 0 then
@@ -1523,8 +1315,6 @@ local function SizeFont(object, restore, percent)
 	record.set = math.abs(target - record.base) > 0.01 and target or nil
 end
 
--- The health bar of GameTooltip: faded for Hide the health bar (the game shows and hides it), and the row's height in place of the 8 of the
--- game's XML.
 local function SizeBar(bar, restore)
 	local state = X.bar
 	local hide = not restore and Opt("barHide") == true
@@ -1552,8 +1342,6 @@ local function SizeBar(bar, restore)
 	end
 end
 
--- The share of the height of a tooltip font that this module's rows give: 1 with the module or the part off. Fonts.lua multiplies its height by it
--- while it holds the object, so one module writes each font object.
 function ns.TipTextShare(name)
 	if not ns.Enabled(KEY) or ns.PartStopped(KEY, "tooltip text size") then
 		return 1
@@ -1571,7 +1359,6 @@ local function Fonts()
 			local object = Global(name)
 			if object then
 				if type(ns.FontsHolds) == "function" and ns.FontsHolds(object) then
-					-- Fonts.lua sets this height. A height set here before goes back first, and Fonts.lua takes the game's from the object.
 					if X.fonts[object] then
 						pcall(SizeFont, object, true, 100)
 						X.fonts[object] = nil
@@ -1588,8 +1375,6 @@ local function Fonts()
 	end
 end
 
--- Health bar --------------------------------------------------------------------------------
-
 local function PaintBar(bar)
 	local on = On("health")
 	local shown = on and not (X.bar.hidden == true)
@@ -1598,7 +1383,7 @@ local function PaintBar(bar)
 		local id = ns.Get(KEY .. ".barTexture")
 		local file = nil
 		if id ~= "default" then
-			file = ns.BarTexture(id) or false -- Flat has no file: false is a solid fill, nil the texture of the Flat UI page
+			file = ns.BarTexture(id) or false
 		end
 		local flat, refused = ns.FlatFill(bar, 1, 1, 1, BAR_FILE, true, file)
 		if flat == false then
@@ -1619,16 +1404,6 @@ local function BuildBar(bar)
 	PaintBar(bar)
 end
 
--- Health text on the bar: a frame of the addon's own on the health bar of GameTooltip, made out of combat, with one outlined font string centred
--- on it, so it shows and hides with the bar. The post call keeps the unit of a unit tooltip's data (BT.Unit); every 0.1 s while the bar shows, the
--- unit's health goes to the string as the game gives it (UnitHealth, UnitHealthMax, UnitHealthPercent, AbbreviateNumbers), withheld values
--- too, never read, compared or added, as UnitText.lua writes the health text of the unit frames. Its part stops alone after three refusals.
--- Since 0.5.35 the text grows and shrinks with Health bar height (BT.Size) and shows on bars of 5 px and more; a unit the game plainly says is
--- dead or a ghost (UnitIsDeadOrGhost) reads Dead (the game's DEAD); and once the unit is gone, as the mouseover is the moment the mouse leaves it,
--- the last text stays while the bar fades with its tooltip, as the game's bar keeps its last value, and goes as the bar hides.
-
--- The format Health text on the bar asks for, or nil for None, with Hide the health bar on, a bar under LEAST px, the module off or the part
--- stopped.
 function BT.Mode()
 	local mode, height = Opt("barText"), Opt("barHeight")
 	if not ns.Enabled(KEY) or ns.PartStopped(KEY, BT.PART) or Opt("barHide") == true or BT.FORMATS[mode] == nil
@@ -1638,8 +1413,6 @@ function BT.Mode()
 	return mode
 end
 
--- The size of the string for the bar's height: (height + 1) * 10 percent of its font (GameFontHighlightSmall, 10 px), so 90% on the game's 8 px
--- bar, within SIZE, outlined. A font call on Flat UI's own string, so it can change in a fight.
 function BT.Size(text)
 	local height = Opt("barHeight")
 	if not IsNumber(height) then
@@ -1648,7 +1421,6 @@ function BT.Size(text)
 	ns.TextStyle(text, { percent = math.max(BT.SIZE[1], math.min(BT.SIZE[2], (height + 1) * 10)), flags = "OUTLINE" })
 end
 
--- The unit of a unit tooltip's data, by the guid the bar watches or the data's guid (UnitTokenFromGUID), else the mouseover, or nil.
 function BT.Token(data)
 	local token
 	for _, field in ipairs({ "healthGUID", "guid" }) do
@@ -1669,7 +1441,6 @@ function BT.Token(data)
 	return token
 end
 
--- The unit of GameTooltip's health bar: of a unit tooltip's data (BT.Token); nil for any other tooltip.
 function BT.Unit(tooltip, data)
 	if not rawequal(tooltip, Global("GameTooltip")) then
 		return
@@ -1679,14 +1450,11 @@ function BT.Unit(tooltip, data)
 		return
 	end
 	X.barUnit = BT.Token(data)
-	-- The next pass of the frame writes the new unit's health at once.
 	if X.barText then
 		X.barText.wait = BT.EVERY
 	end
 end
 
--- One write. job is new for each call, so each refused call counts as a failure of its own. No unit leaves the string empty; a unit that is gone
--- keeps the last text until the bar hides (its OnHide empties it); a dead one reads Dead.
 function BT.Fill(_)
 	local own, mode, unit = X.barText, BT.Mode(), X.barUnit
 	if not (own and mode) then
@@ -1721,7 +1489,6 @@ function BT.Fill(_)
 	end
 end
 
--- The frame and its string on the bar, made out of combat, once.
 function BT.Build(bar)
 	if X.barText or ns.Forbidden(bar) or BT.Mode() == nil then
 		return
@@ -1753,7 +1520,6 @@ function BT.Build(bar)
 			pcall(frame.Hide, frame)
 		end
 	end)
-	-- The bar hides with its tooltip, and the next unit tooltip names its unit again: the last text goes with it, so it never shows on the next.
 	frame:SetScript("OnHide", function()
 		X.barUnit = nil
 		pcall(text.SetText, text, "")
@@ -1761,7 +1527,6 @@ function BT.Build(bar)
 	BT.Show(bar)
 end
 
--- Shows the string while a format is chosen, at the size of the bar's height, or makes it out of combat; hides it for None.
 function BT.Show(bar)
 	local own, mode = X.barText, BT.Mode()
 	if own then
@@ -1780,20 +1545,10 @@ function BT.Show(bar)
 	end
 end
 
--- Health bar colour (chat.barColour, 0.5.36; Class colour for players, reaction for the rest, by default): the game colours GameTooltip's health
--- bar green at every change of its value (HealthBar_OnValueChanged, Blizzard_GameTooltip/HealthBar.lua:2-30, from the bar's OnValueChanged,
--- Mainline/GameTooltip.xml:18-20). The post call picks the colour for each build of GameTooltip (BT.Pick): a player's class colour
--- (ns.ClassColourOf), else the unit's reaction colour (ns.ReactionColour, as the unit frames have it), and none for any other tooltip or a colour
--- the game withholds. It is set on the bar at once and again after each change of its value, through one HookScript of the bar's OnValueChanged that
--- reads nothing of the call (BT.Hook); SetStatusBarColor is the one write, and the game's green (0, 1, 0) is put back when the row is at Green, the
--- bar is hidden, the module goes off or a tooltip has no colour. PaintBar keeps the game's colour on the flat fill, so a texture file takes it.
-
--- True while the bar takes the colour of its unit.
 function BT.Tinted()
 	return ns.Enabled(KEY) and Opt("barColour") == "class" and Opt("barHide") ~= true
 end
 
--- The bar of GameTooltip, or nil.
 function BT.Bar()
 	local tooltip = Global("GameTooltip")
 	local bar = tooltip and not ns.Forbidden(tooltip) and tooltip.StatusBar
@@ -1803,7 +1558,6 @@ function BT.Bar()
 	return nil
 end
 
--- Sets the colour picked on the bar, or the game's green once where a colour was set before.
 function BT.Tint()
 	local bar, colour = BT.Bar(), X.barColour
 	if not bar then
@@ -1817,7 +1571,6 @@ function BT.Tint()
 	X.barTinted = colour ~= nil
 end
 
--- The colour of the unit of a build of GameTooltip, kept in X.barColour and set on the bar. Every other build clears it.
 function BT.Pick(tooltip, data)
 	if not rawequal(tooltip, Global("GameTooltip")) then
 		return
@@ -1843,7 +1596,6 @@ function BT.Pick(tooltip, data)
 	BT.Tint()
 end
 
--- The one hook of the bar: after the game's green, the colour picked goes back on. The value of the call is never read.
 function BT.Hook(bar)
 	if X.barHooked or not BT.Tinted() or type(bar.HookScript) ~= "function" then
 		return
@@ -1872,7 +1624,6 @@ local function HealthBar()
 		end)
 	end
 	BT.Show(bar)
-	-- Health bar colour, after the fill: the game's green while the bar does not take the colour of its unit.
 	BT.Hook(bar)
 	if not BT.Tinted() then
 		X.barColour = nil
@@ -1880,7 +1631,6 @@ local function HealthBar()
 	BT.Tint()
 end
 
--- Done out of combat: a tooltip and its bar are frames the game uses in secure code.
 local function Sizes()
 	X.queued = nil
 	for _, name in ipairs(TOOLTIPS) do
@@ -1899,10 +1649,6 @@ local function Sizes()
 	end
 end
 
--- Hooks -------------------------------------------------------------------------------------
-
--- A hook on a global function of the game, put on once and only when the function exists, through ns.FollowGlobal (Core.lua), which runs each
--- follower of a global under pcall, so a fault here stops no other follower of it (0.5.35).
 local function Follow(name, fn)
 	if hooked[name] or type(_G[name]) ~= "function" then
 		return
@@ -1916,7 +1662,6 @@ local function Follow(name, fn)
 	end
 end
 
--- The game colours a tab with the state it is in: true for the selected tab.
 local function TabColours(tab, selected)
 	local state
 	if not ns.IsSecret(selected) then
@@ -1925,7 +1670,6 @@ local function TabColours(tab, selected)
 	StyleTab(tab, state)
 end
 
--- The game starts and stops the flash of a tab with the chat frame as the argument; the tab is the frame's name and Tab.
 local function TabAlert(frame)
 	local ok, name = false, nil
 	if Usable(frame) and not ns.Forbidden(frame) then
@@ -1937,10 +1681,6 @@ local function TabAlert(frame)
 	end
 end
 
--- Light the tab that names you (0.5.39): ChatLinks.lua calls this with the window a line that names you (or one of the other words) goes to.
--- Only a window that does not show now (a docked window whose tab is not chosen) lights its tab, and only a tab Chat tabs styles; the tab is
--- painted on the frame after, outside the game's chat call. It goes out when the tab is chosen (FCFTab_UpdateColors, TabColours). Each line that
--- names you while the tab is lit adds one to its count (0.5.41, record.namedCount, drawn by PaintNamed).
 local namedQueue = {}
 function ns.ChatTabNamed(frame)
 	if not NamedWanted() or not Usable(frame) or ns.Forbidden(frame) then
@@ -1980,7 +1720,6 @@ function ns.ChatTabNamed(frame)
 	end
 end
 
--- The game opens a temporary window (a whisper, a pet battle log) inside its own call, so the window is styled on the frame after.
 local pendingChat = false
 local function ChatLater()
 	if pendingChat then
@@ -2031,7 +1770,6 @@ local function Hooks()
 end
 
 local function Refresh()
-	-- First: it touches no frame, so a failure further on does not keep the game's own value from coming back when the module stops.
 	if type(ns.ItemCompareSync) == "function" then
 		ns.ItemCompareSync()
 	end
@@ -2056,9 +1794,6 @@ local function Refresh()
 	if type(ns.ChatHistorySync) == "function" then
 		ns.ChatHistorySync()
 	end
-	-- The spell lines, the gear lines, the Gear comparison window and its Compare gear button on the Character window follow the rows just applied,
-	-- also as the module goes off: the window and the button hide then, and take the look of the Windows page after a change of it (READERS,
-	-- Core.lua). Each runs through ns.Each, so an error in one of them cannot stop this refresh, which runs under ns.Try, nor the module with it.
 	if type(ns.SpellLinesSync) == "function" then
 		ns.Each(KEY, ns.SpellLinesSync)
 	end
@@ -2073,7 +1808,6 @@ local function Refresh()
 	end
 end
 
--- The words of the choice a row holds, as the page shows them.
 local function Word(path)
 	local def, value = ns.Def(path), ns.Get(path)
 	for _, choice in ipairs(def and ns.Choices(def) or {}) do
@@ -2084,11 +1818,8 @@ local function Word(path)
 	return tostring(value)
 end
 
--- What a row of a kind of tooltip says when it hides them.
 local HIDDEN = { combat = "hidden in combat", instance = "hidden in dungeons and raids", always = "always hidden" }
 
--- The lines of /flatui status: what Tooltips in combat holds, the units it hides and where, and the key that shows them anyway; the kinds of
--- tooltip hidden and when; and the rule of the party and raid frames.
 local function Status()
 	if not ns.Enabled(KEY) or ns.IsStopped(KEY) then
 		return {}
@@ -2106,7 +1837,6 @@ local function Status()
 	end
 	local lines = { line }
 	local kinds = {}
-	-- The buffs and debuffs of the target and focus frames are in a tooltip of the game's own, which stays (see Withheld).
 	for _, kind in ipairs({ { "spellTips", "spell" }, { "auraTips", "buff and debuff", " (not on the target and focus frames)" }, { "itemTips", "item" } }) do
 		local phrase = HIDDEN[Opt(kind[1])]
 		if phrase then

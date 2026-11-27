@@ -1,38 +1,12 @@
 local _, ns = ...
 
--- Your buffs: a row of icons for the short buffs the player casts, each with its time left, at the personal resource display. The game
--- draws the row: one aura container of the game's own holds the buffs that pass its filters, also while the game hides buffs from addon code
--- in a fight. The class group matches the spell IDs of ns.ClassShortBuffs, the time group every buff the player casts that is not longer than
--- the time limit. The game compares the length of a buff with the limit, and its own parts draw the sweep, the time and the thin bar from the
--- length of each buff, so Flat UI never reads a time. The parts of each icon are made inside the function the game calls while it builds the
--- button, because from then on the game closes the button to addon code while it hides buffs. A change to those parts, and Icon size on the
--- buttons already shown, waits until the game says buffs are open; a change to the container itself (its groups, their filters and their
--- layout of Icon size and Spacing) is allowed at any time. Where the game
--- will not make the container, the same icons show out of combat from a read of the player's buffs. Nothing may anchor to the container: the
--- other rows of the display hang from the holder (ns.OwnBuffsHolder), which keeps its height when no buff is up. The samples of test mode
--- and /flatui test icons show Time left as the row draws it: under the icon, as a thin bar under it, on the icon or not at all (B.SampleTime).
--- The time left under or on an icon turns amber in its last 5 seconds: the game colours its text by a colour curve (B.TimeOptions), so also
--- in a fight, and the samples do the same. Out of combat with test mode off and none of the row's buffs up, a change of Time left, Icon size,
--- Spacing, Icon border, Flash when one lands, Bar texture, Place, X offset or Y offset shows the samples for 4 seconds in the new look where the
--- row now sits, with no line in the chat (ns.OwnBuffsLookChanged); a further step of a slider redraws them with their countdowns running on.
--- Flash when one lands (on by default) gives each icon a quick white flash as its buff comes: on the game's buttons an animation the game plays
--- itself as the button shows (AddAuraShownAnimation), so also in a fight, and not for a buff cast again while it shows; on the icons of a read,
--- a flash of IconRow.lua for a buff that was not in the last read. The samples of the test, of test mode and of the preview flash as they appear.
--- The numbers on an icon, the time left on it and the charges, follow Icon size: today's heights at the default of 40, grown and shrunk with
--- it (B.SizeText), on the game's buttons, the icons of a read and the samples; the time under the icon keeps its height.
-
 local KEY = "ownbuffs"
--- The name of the row among the saved spots of the movers.
 local MOVER = "FlatUIOwnBuffs"
--- SPACING is the default of Spacing, for a value that is not a number.
 local SPACING, GAP, CROP = 3, 4, 0.08
--- Room under the icon for the time as text, and for the thin bar and its gap.
 local ROOM_TEXT, ROOM_BAR, BAR_HEIGHT = 14, 5, 3
 local WIDTH = 120
 local MOST_CLASS, MOST_TIME = 8, 6
 local REREAD, TEST_TIME = 0.2, 8
--- How long the samples a change of the look shows stay after the last change. The time left is amber under LOW seconds, in the amber of the
--- trackers' low.
 local PREVIEW = 4
 local LOW, AMBER = 5, { 1, 0.7, 0.2 }
 local BARS = { "HealthBarsContainer", "PowerBar", "AlternatePowerBar" }
@@ -53,14 +27,12 @@ local IsSecret = ns.IsSecret
 local T = ns.Tracking
 local TM = ns.TestMode
 local B = { list = {}, pending = {}, refused = {}, icons = {}, groups = {} }
--- The flash of a buff that comes: from this opacity to none in FLASH seconds, as on Defensives on you.
 B.FLASH_FROM, B.FLASH = 0.8, 0.5
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- The room between the icons: Spacing.
 local function Spacing()
 	local value = Opt("spacing")
 	return ns.Finite(value) and value or SPACING
@@ -75,7 +47,6 @@ local function Plain(value, kind)
 	return not IsSecret(value) and type(value) == kind
 end
 
--- A field of a frame, or nil when it is missing, cannot be read or is withheld.
 local function Field(frame, key)
 	local ok, value = pcall(function()
 		return frame[key]
@@ -90,11 +61,7 @@ local function Whole(value)
 	return Plain(value, "number") and value > 0 and value == math.floor(value)
 end
 
--- The class lists ---------------------------------------------------------------------------------------------------------------------
-
--- The spell IDs of the short buffs of the player's class, as a map. A class with no data gives an empty map.
 function B.ClassMap()
-	-- The class does not change, so the game is asked once.
 	local class = B.class or T.Ask(UnitClassBase, "player")
 	if Plain(class, "string") then
 		B.class = class
@@ -121,8 +88,6 @@ local function Merge(into, from)
 	return into
 end
 
--- The buffs the rows of other pages already show: the trackers that are on, with Buffs that have a tracker set to Leave out, and the
--- defensives of Defensives on you while Your own defensives is on.
 function B.Left()
 	local set = {}
 	if Opt("trackers") == "leave" and ns.Enabled("trackers") and type(ns.TrackerSpellIDs) == "function" then
@@ -135,8 +100,6 @@ function B.Left()
 	return set
 end
 
--- The candidate filters of the two groups. The class group matches the class list; the time group takes every buff the player casts, and
--- leaves the class list out when both groups are on, so that no buff shows twice.
 function B.ClassFilters()
 	return { includeSpellIDs = B.ClassMap(), excludeSpellIDs = B.Left(), maxDuration = Opt("limit") }
 end
@@ -149,7 +112,6 @@ function B.TimeFilters()
 	return { excludeSpellIDs = exclude, isFromPlayerOrPlayerPet = true, maxDuration = Opt("limit") }
 end
 
--- The ID lists as one text, to tell whether the container has to hear of a change.
 local function Signature(set)
 	local ids = {}
 	for id in pairs(set) do
@@ -159,9 +121,6 @@ local function Signature(set)
 	return table.concat(ids, ",")
 end
 
--- The row's place ---------------------------------------------------------------------------------------------------------------------
-
--- The room under the icon: the text of the time, the thin bar, or none.
 function B.Room()
 	local time = Opt("time")
 	return time == "under" and ROOM_TEXT or (time == "bar" and ROOM_BAR or 0)
@@ -180,7 +139,6 @@ function B.Holder()
 	return B.holder
 end
 
--- The highest and the lowest bar of the personal resource display that is shown, or the display itself.
 function B.Bar(display, last)
 	local from, to, step = 1, #BARS, 1
 	if last then
@@ -198,13 +156,11 @@ function B.Bar(display, last)
 	return display
 end
 
--- True when a frame anchored to something has a rectangle. A client that cannot say is taken to have one.
 local function Anchored(frame)
 	local ok, left = pcall(frame.GetLeft, frame)
 	return not ok or IsSecret(left) or left ~= nil
 end
 
--- Hangs the holder by two points, so that it is as wide as the frame it hangs from. above: over the top of it, else under the bottom.
 local function Hang(holder, frame, above, x, y)
 	if above then
 		holder:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", x, GAP + y)
@@ -215,8 +171,6 @@ local function Hang(holder, frame, above, x, y)
 	end
 end
 
--- Hangs the holder at its place. Sets B.side to "above" or "below" when the other rows of the display may hang from it, and B.where to the
--- words of the check. Returns where it hangs: "above", "below", "swing", "own" or "player".
 function B.Place()
 	local holder = B.Holder()
 	local place, x, y = Opt("place"), Opt("x"), Opt("y")
@@ -272,7 +226,6 @@ function B.Place()
 	return "player"
 end
 
--- The holder that the other rows of the display hang from, when the row is on and hangs over the bars ("above") or under them ("below").
 function ns.OwnBuffsHolder(side)
 	if B.holder and B.on and B.side == side then
 		return B.holder
@@ -280,19 +233,16 @@ function ns.OwnBuffsHolder(side)
 	return nil
 end
 
--- True while the Own spot has a handle in the movers.
 function ns.OwnBuffsOwnShown()
 	return ns.Enabled(KEY) and Opt("place") == "own"
 end
 
--- The movers set or put back the spot.
 function ns.OwnBuffsMoved()
 	if B.holder and ns.Enabled(KEY) then
 		ns.OutOfCombat(B.Refresh)
 	end
 end
 
--- The rows that hang from the holder are told when it starts or stops being their anchor.
 function B.Tell()
 	local key = tostring(B.on and B.side) .. ":" .. tostring(B.on and B.Height())
 	if key == B.told then
@@ -309,8 +259,6 @@ function B.Tell()
 		pcall(ns.DefensivesMoved)
 	end
 end
-
--- The parts of a button ---------------------------------------------------------------------------------------------------------------
 
 local function EdgeColour()
 	if ns.Borderless() or not Opt("iconBorder") then
@@ -329,7 +277,6 @@ local function EdgeKey()
 	return ("%s,%s,%s,%s,%s"):format(Thick(), r, g, b, a)
 end
 
--- The four edges of the thin border, just inside the button.
 function B.PaintEdges(parts)
 	local button, edges = parts.button, parts.edges
 	local thick = Thick()
@@ -352,15 +299,12 @@ function B.PaintEdges(parts)
 	parts.borderKey = EdgeKey()
 end
 
--- The options of a bar filled by the time left (SimpleStatusBarConstantsDocumentation.lua).
 local function BarOptions()
 	local direction = type(Enum) == "table" and type(Enum.StatusBarTimerDirection) == "table" and Enum.StatusBarTimerDirection.RemainingTime
 	local interpolation = type(Enum) == "table" and type(Enum.StatusBarInterpolation) == "table" and Enum.StatusBarInterpolation.Immediate
 	return { interpolation = interpolation or 0, direction = direction or 1 }
 end
 
--- The options of the game's time text: white, amber in the last LOW seconds. The game colours the text by a step curve of the time left
--- (DurationTextBindingProperty.RemainingDuration), so also in a fight. Made once; nil where the game has no colour curve.
 function B.TimeOptions()
 	if B.timeOptions == nil then
 		local ok, options = pcall(function()
@@ -375,8 +319,6 @@ function B.TimeOptions()
 	return B.timeOptions or nil
 end
 
--- Binds the time of the buffs to the string, the bar or nothing, as Time left says, the string amber in its last seconds where the game
--- takes the colour, else white. Raises when the game refuses a binding.
 function B.Bind(parts, want)
 	if parts.bound == want then
 		return
@@ -407,14 +349,11 @@ function B.Bind(parts, want)
 	parts.bound = want
 end
 
--- The game's tooltip on hover and never a click, as Blizzard_CooldownViewer/CooldownViewer.lua:326-328 does it. Out of combat only keeps the
--- hover and hides the tooltip in a fight (Blizzard_AuraButton.lua:177-183).
 local function Mouse(parts)
 	local button, tips = parts.button, Opt("tooltips")
 	local ok = pcall(button.SetMouseClickEnabled, button, false)
 	ok = pcall(button.SetMouseMotionEnabled, button, tips ~= "off") and ok
 	ok = pcall(button.SetHideTooltipInCombat, button, tips ~= "on") and ok
-	-- A refused call leaves parts.tips empty so ApplyTips tries again, and the status names it.
 	parts.tips = ok and tips or nil
 	if not ok then
 		B.refused.tips = true
@@ -428,9 +367,6 @@ local function Mouse(parts)
 	end
 end
 
--- The numbers on an icon follow Icon size: the time left on the icon (NumberFontNormal) and the charges (NumberFontNormalSmall) at their own
--- heights at the default Icon size of BASE, grown and shrunk with it, 8 to 24 (IconRow.lua). The time under the icon keeps its height, in the
--- room under the row. True when the game took them.
 B.BASE = 40
 function B.SizeText(parts, size)
 	local time = ns.IconNumberHeight(ns.IconFontHeight("NumberFontNormal", 14), size, B.BASE)
@@ -448,8 +384,6 @@ function B.SizeText(parts, size)
 	return ok
 end
 
--- Makes the parts of one button. Run by the game inside AddAuraGroup while the button is still open; nothing here may raise, and a part the
--- game refuses is left out and named in the status.
 function B.Init(button)
 	local parts = { button = button }
 	B.list[#B.list + 1] = parts
@@ -526,8 +460,6 @@ function B.Init(button)
 		parts.edges = edges
 		B.PaintEdges(parts)
 	end)
-	-- A white square over the button, at no opacity but while its fade plays: the game plays the fade as the button shows, as a buff comes,
-	-- and not when a buff already shown is cast again. The square is a child of the button, as the game asks of the regions of such an animation.
 	Part("flash", function()
 		local flash = Own(top:CreateTexture(nil, "OVERLAY", nil, 7))
 		flash:SetAllPoints(button)
@@ -547,9 +479,6 @@ function B.Init(button)
 	pcall(B.SizeText, parts, Opt("size"))
 end
 
--- Changes that wait for the game to open its buttons ------------------------------------------------------------------------------------
-
--- Time left on every button: the string under the icon, the string on it, the thin bar or none.
 function B.ApplyTime()
 	local want = Opt("time")
 	local file = ns.BarTexture(Opt("barTexture")) or WHITE
@@ -566,7 +495,6 @@ function B.ApplyTime()
 	end
 end
 
--- The border again where its thickness or colour has changed.
 function B.ApplyBorder()
 	for _, parts in ipairs(B.list) do
 		if parts.edges and parts.borderKey ~= EdgeKey() then
@@ -577,7 +505,6 @@ function B.ApplyBorder()
 	end
 end
 
--- Tooltips again where the setting has changed.
 function B.ApplyTips()
 	for _, parts in ipairs(B.list) do
 		if parts.tips ~= Opt("tooltips") then
@@ -586,8 +513,6 @@ function B.ApplyTips()
 	end
 end
 
--- Icon size on every button already made (its parts are set on all its points and follow); a button that refuses keeps its size, is tried
--- again at the next change and is named in the status.
 function B.ApplySize()
 	local size, refused = Opt("size"), nil
 	for _, parts in ipairs(B.list) do
@@ -598,7 +523,6 @@ function B.ApplySize()
 				refused = true
 			end
 		end
-		-- The numbers on the icon grow and shrink with it; refused, they are tried again at the next change.
 		if parts.textSize ~= size then
 			B.SizeText(parts, size)
 		end
@@ -606,7 +530,6 @@ function B.ApplySize()
 	B.refused.size = refused
 end
 
--- Flash when one lands again where it has changed: the square shows or hides, and the fade the game plays stays registered.
 function B.ApplyFlash()
 	local want = Opt("flash") ~= false
 	for _, parts in ipairs(B.list) do
@@ -622,7 +545,6 @@ end
 
 B.apply = { time = B.ApplyTime, border = B.ApplyBorder, tips = B.ApplyTips, size = B.ApplySize, flash = B.ApplyFlash }
 
--- Runs what waited, once the game says buffs are open.
 function B.Flush()
 	if next(B.pending) == nil or not T.Open() then
 		return
@@ -634,7 +556,6 @@ function B.Flush()
 	end
 end
 
--- Does a change to the buttons now when the game says they are open, else when the game says so (a restriction that ends).
 function B.Change(kind)
 	if T.Open() then
 		pcall(B.apply[kind])
@@ -651,8 +572,6 @@ function B.OnRestriction()
 		end
 	end
 end
-
--- The game's container -----------------------------------------------------------------------------------------------------------------
 
 local function Layout()
 	local size = Opt("size")
@@ -674,8 +593,6 @@ function B.InitCall(button)
 	end
 end
 
--- Two groups of buttons on one container for the player, both for the buffs the player casts: the class list, and every buff that is not
--- longer than the limit. The buff that ends first is first.
 function B.Build()
 	B.tried = true
 	local holder = B.Holder()
@@ -704,7 +621,6 @@ function B.Build()
 	B.path = "reading"
 end
 
--- Turns the groups on or off by Buffs shown. A container call, allowed at any time.
 function B.Groups(on)
 	local container = B.container
 	if not container then
@@ -715,7 +631,6 @@ function B.Groups(on)
 	pcall(container.SetAuraGroupEnabled, container, "time", on and (which == "every" or which == "both"))
 end
 
--- Gives both groups their filters again where a list or the limit has changed. A container call, allowed at any time.
 function B.Lists()
 	local container = B.container
 	if not container then
@@ -732,7 +647,6 @@ function B.Lists()
 	pcall(container.SetAuraGroupCandidateFilters, container, "time", time)
 end
 
--- The size of the icons and the room between them, as the layout of the groups. A container call, allowed at any time.
 function B.Sizes()
 	local container = B.container
 	if not container then
@@ -747,16 +661,12 @@ function B.Sizes()
 	pcall(container.SetAuraGroupLayout, container, "time", Layout())
 end
 
--- Called by Trackers.lua when its list changes: Leave out hears of the new IDs.
 function ns.OwnBuffsTrackers()
 	if B.container and B.on then
 		B.Lists()
 	end
 end
 
--- The reading path ----------------------------------------------------------------------------------------------------------------------
-
--- The buffs of the player that the groups would show, from one read: plain tables only. Nothing when the game hides buffs.
 function B.Read()
 	if not T.Open() then
 		return nil
@@ -804,7 +714,6 @@ function B.Icon(index)
 	return icon
 end
 
--- Puts icons in a row from the middle of the top of the holder.
 function B.Row(list)
 	local size, spacing = Opt("size"), Spacing()
 	local count = #list
@@ -816,7 +725,6 @@ function B.Row(list)
 	end
 end
 
--- One pass of the reading path: the icons that match what was read, and none when nothing could be read.
 function B.Pass()
 	B.scheduled = false
 	if B.path ~= "reading" or not ns.Enabled(KEY) or B.testing or B.Holding() then
@@ -825,8 +733,6 @@ function B.Pass()
 	local read = B.Read()
 	local found = read or {}
 	local shown = {}
-	-- A buff that was not in the last read flashes as it comes; by its spell alone, so a buff cast again while it shows does not, as on the
-	-- game's row. None at the first read, nor at the first after the game hid buffs.
 	local before, now = B.landed, {}
 	B.landed = read and now or nil
 	for index = 1, #found do
@@ -869,7 +775,6 @@ function B.StartReading()
 			return
 		end
 		B.watcher = Own(frame)
-		-- The payload is not read where the game sends the event for the player alone: it may be withheld.
 		frame:SetScript("OnEvent", function(_, _, unit)
 			if B.path == "reading" and (B.playerOnly or (Plain(unit, "string") and unit == "player")) then
 				B.Queue()
@@ -894,9 +799,6 @@ function B.StopReading()
 	end
 end
 
--- Putting it all in place -------------------------------------------------------------------------------------------------------------------
-
--- True when the game has the call that reads a unit's buffs. Without it the module makes nothing.
 function B.Capable()
 	return type(C_UnitAuras) == "table" and type(C_UnitAuras.GetUnitAuras) == "function"
 end
@@ -947,8 +849,6 @@ function B.Start()
 	end
 	B.Sync()
 end
-
--- The check and the test ---------------------------------------------------------------------------------------------------------------------
 
 function B.PathText()
 	if not B.Capable() then
@@ -1004,13 +904,6 @@ local function Now()
 	return type(GetTime) == "function" and GetTime() or 0
 end
 
--- Ends a test: the sweeps are cleared and the icons hidden.
--- The time of a sample as Time left shows it on the game's buttons: Under the icon as whole seconds in the row's small font, Thin bar as a bar
--- of BAR_HEIGHT under it in the row's blue and Bar texture that runs down with the sweep, On the icon as the sweep's own countdown (the look's
--- numbers) and Off as the sweep alone. The text and the bar are made once on the sample's frame, and one OnUpdate of their own runs only while
--- one of them or the countdown shows: it reads the end and the length of a sample of test mode from icon.held, which ns.IconSampleLoop starts
--- again, else the start and the length given here. The text under the icon and the countdown on it turn amber in the last LOW seconds, as the
--- game colours them on its buttons.
 function B.SampleTime(icon, start, seconds)
 	local parts = icon.time
 	if parts == nil then
@@ -1065,7 +958,6 @@ function B.SampleTime(icon, start, seconds)
 	parts.clock:SetShown(want == "under" or want == "bar" or want == "on")
 end
 
--- The countdown on a sample with Time left On the icon: amber while low, else white. The cooldown is the sample's own.
 function B.SampleTint(icon, low)
 	if icon.tint == low then
 		return
@@ -1077,7 +969,6 @@ function B.SampleTint(icon, low)
 	end
 end
 
--- The time of a sample goes with the sample.
 function B.SampleTimeOff(icon)
 	if icon.time then
 		icon.time.clock:Hide()
@@ -1100,9 +991,6 @@ function B.EndTest(token)
 	B.Pass()
 end
 
--- Three sample icons, run by /flatui test icons with the samples of the other rows, each flashing as it appears with Flash when one lands on.
--- quiet: for PREVIEW seconds and with no line in the chat (ns.OwnBuffsLookChanged). A quiet test over one that runs keeps its start, so the
--- countdowns run on, and the samples flash again only for path Flash when one lands: a slider drag does not strobe.
 function ns.OwnBuffsTest(quiet, path)
 	quiet = quiet == true
 	if not B.Capable() then
@@ -1124,7 +1012,6 @@ function ns.OwnBuffsTest(quiet, path)
 	if B.testing then
 		B.EndTest()
 	end
-	-- The icons of the reading path wait while the samples show.
 	for _, icon in ipairs(B.icons) do
 		ns.IconClear(icon)
 	end
@@ -1132,7 +1019,6 @@ function ns.OwnBuffsTest(quiet, path)
 	B.Place()
 	holder:Show()
 	local list, now = {}, Now()
-	-- The countdowns run 4, 6 and 8 seconds: once the longest has run out, a further step starts them again, still with no flash.
 	if again and again.start and now - again.start < 8 then
 		now = again.start
 	end
@@ -1165,11 +1051,6 @@ function ns.OwnBuffsTest(quiet, path)
 	end
 end
 
--- A row of the look or the place changed (Time left, Icon size, Spacing, Icon border, Flash when one lands, Bar texture, Place, X offset, Y
--- offset): the row is refreshed, as without a changed function of the row (Core.lua's Changed), and out of combat with test mode off (its own
--- samples show then), no test of /flatui test icons under way and none of the row's buffs up, the three samples show for PREVIEW seconds in the
--- new look where the row now sits, with no line in the chat. Each change keeps them up again, so a slider dragged keeps them up until PREVIEW
--- after its last step, with their countdowns running on (ns.OwnBuffsTest).
 function ns.OwnBuffsLookChanged(path)
 	ns.Try(KEY, B.Refresh)
 	if InCombatLockdown() or TM.IsOn() or not (B.Capable() and B.on and ns.Enabled(KEY)) then
@@ -1182,11 +1063,6 @@ function ns.OwnBuffsLookChanged(path)
 	ns.Try(KEY, ns.OwnBuffsTest, true, path)
 end
 
--- Test mode (TestMode.lua): while it is on, out of combat, with the page on, the holder shows three sample icons of its own, apart from those of
--- /flatui test icons, with the look of Time left and Icon border, a flash as each appears (Flash when one lands) and no sound; a sweep that
--- starts again does not flash, as a buff cast again while it shows does not. Each Sync lays them out again (B.Row), so a
--- change of Icon size shows at once, and the ticker of test mode starts their sweeps again (IconRow.lua: ns.IconSampleHeld, ns.IconSampleLoop). The
--- icons of the reading path wait while they show, as for the 8-second test. Off, a fight and the page going off take them away.
 function B.Holding()
 	return TM.IsOn() and B.on == true and not InCombatLockdown()
 end
@@ -1211,7 +1087,6 @@ function B.Held()
 	for _, icon in ipairs(B.icons) do
 		ns.IconClear(icon)
 	end
-	-- The countdown on the icon only with Time left On the icon; Under the icon and Thin bar draw their own (B.SampleTime).
 	local look = { numbers = Opt("time") == "on", border = Opt("iconBorder"), flash = false, sound = false }
 	local flash = Opt("flash") ~= false
 	for index, icon in ipairs(list) do
@@ -1226,7 +1101,6 @@ function B.Held()
 	B.Row(list)
 end
 
--- True when a sample was shown.
 function B.Drop()
 	local had = false
 	for _, icon in ipairs(B.held or {}) do
@@ -1278,7 +1152,6 @@ ns.Register(KEY, {
 				B.Queue()
 			end
 		end,
-		-- Icons read out of combat hide when the fight starts and the game withholds the buffs.
 		PLAYER_REGEN_DISABLED = function()
 			if B.path == "reading" then
 				B.Queue()
@@ -1293,7 +1166,6 @@ ns.Register(KEY, {
 	Status = B.Status,
 })
 
--- The samples of test mode go at once at Off and at the start of a fight; the Refresh after it waits for the end of a fight (B.Refresh).
 TM.Register(KEY, {
 	module = KEY,
 	label = "Your buffs",

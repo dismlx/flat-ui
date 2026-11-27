@@ -1,8 +1,5 @@
 local ADDON_NAME, ns = ...
 
--- Samples in the choice lists of the options window: a bar texture as a short bar, a font as letters in its own face and a row direction as an
--- arrow, 48 by 12 at the left of a line and of the button of its list. The setting Samples in lists turns them off.
-
 local Samples = {}
 ns.PanelSamples = Samples
 
@@ -14,16 +11,13 @@ Samples.WIDTH, Samples.GAP = WIDTH, GAP
 
 local FILLED = 34
 local FACES = { sans = true, friz = true, arial = true, morpheus = true, skurri = true }
--- Where the arrow of a row direction points: its head at the left end, at the right end, and the tick at its start.
 local HEADS = { center = { true, true }, right = { false, true }, left = { true, false } }
--- A vertical direction: its head at the top (up) or at the bottom (down).
 local VHEADS = { up = 1, down = 2 }
 
 function Samples.On()
 	return Look.Get("samples") == "on"
 end
 
--- The kind of sample a row has: "texture", "font" or "grow", or nil. A row with sample = false has none.
 function Samples.Kind(item)
 	local choices = item.choices
 	if item.sample == false or choices == nil then
@@ -51,7 +45,6 @@ function Samples.Kind(item)
 	return nil
 end
 
--- The file a font id draws in, or nil for the game font.
 function Samples.Face(id)
 	if id == "sans" then
 		return Look.SansFile
@@ -59,7 +52,6 @@ function Samples.Face(id)
 	return ns.FontFile(id)
 end
 
--- A sample on parent. Set(kind, id) draws the sample of one line; frame is the frame to place.
 function Samples.New(parent)
 	local frame = kit.Frame(parent)
 	frame:SetSize(WIDTH, HEIGHT)

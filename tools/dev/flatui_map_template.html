@@ -144,7 +144,6 @@ var KIND={local:'Local function',ns:'ns function',table:'Table function',field:'
 var VIA={RegisterEvent:'RegisterEvent call',RegisterUnitEvent:'RegisterUnitEvent call','events table':'Events table of the module','event list':'List of event names',pcall:'Called through pcall',compared:'Compared with the event','handler key':'Handler table key','event call':'Passed to an event call','name string':'Named in a string',_G:'Read from _G','setting row':'Setting row'};
 function viaText(v){return v?(VIA[v]||('Through '+v)):''}
 
-/* helpers */
 function n(x){return Number(x).toLocaleString('en-US')}
 function plural(c,w,ws){return n(c)+' '+(c===1?w:(ws||w+'s'))}
 function add(e,c){
@@ -202,7 +201,6 @@ function examples(lines,code,fns,mod){
       code&&code[i]?h('div',{class:'code'},code[i]):null))});
   return box}
 
-/* derived data */
 var linkIndex={};
 D.links.forEach(function(l){(linkIndex[l.from+'>'+l.to]=linkIndex[l.from+'>'+l.to]||[]).push(l)});
 var ROW={},OWNER={},PAGE={},PAGEROWS={},PAGEOWNERS={};
@@ -231,7 +229,6 @@ function neededLabel(s){
   var pre=s.path.split('.')[0],r=ROW[pre+'.'+s.needs]||ROW[s.needs];
   return r?r.label:s.needs}
 
-/* search index */
 var IDX=[];
 (function(){
   D.modules.forEach(function(m){
@@ -289,7 +286,6 @@ input.addEventListener('keydown',function(ev){
   else if(ev.key==='Enter'){if(cur.length){ev.preventDefault();pick(cur[act<0?0:act])}}
   else if(ev.key==='Escape'){ev.stopPropagation();if(!resBox.hidden)closeRes();else{input.value='';input.blur()}}});
 
-/* theme */
 var themeBtn=document.getElementById('theme');
 function applyTheme(t){
   if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);
@@ -299,7 +295,6 @@ var theme=lsGet('flatui-map-theme')||'auto';applyTheme(theme);
 themeBtn.addEventListener('click',function(){
   theme=theme==='auto'?'light':theme==='light'?'dark':'auto';lsSet('flatui-map-theme',theme);applyTheme(theme)});
 
-/* routing */
 var main=document.getElementById('main'),crumbs=document.getElementById('crumbs'),pending=null,first=true;
 function parse(){
   var t='';try{t=decodeURIComponent(location.hash.slice(1))}catch(e){}
@@ -326,7 +321,6 @@ function setCrumbs(parts){
     if(p.token!==undefined)crumbs.appendChild(link(p.text,p.token));
     else crumbs.appendChild(h('span',{'aria-current':'page'},p.text))})}
 
-/* link detail list, shared by every view */
 function linkDetail(title,lists){
   var rows=[];
   lists.forEach(function(l){rows=rows.concat(l)});
@@ -361,7 +355,6 @@ function clientPanel(anchor){
     h('div',{class:'scroll'},h('table',null,h('thead',null,h('tr',null,h('th',null,'Area'),GROUPS.map(function(g){return h('th',{class:'num'},g[1])}))),h('tbody',null,rows))));
   showDetail(panel,anchor)}
 
-/* overview */
 function overview(){
   document.title='Flat UI map';
   document.getElementById('ttl').textContent='Flat UI map';
@@ -371,8 +364,6 @@ function overview(){
   var size={};
   areaOrder.forEach(function(id){var w=Math.max(150,Math.sqrt(A[id].lines)*2.3);size[id]=[w,Math.max(Math.round(w*0.56),96)]});
   size.client=[380,64];
-  /* the core in the middle and the other areas round it in their order, from the left and clockwise; the ring
-     grows until no two boxes touch, the game client's box under it */
   var ring=areaOrder.filter(function(id){return id!=='core'}),pos={},rx=400,ry=255;
   function place(){pos={core:[cx,cy]};
     ring.forEach(function(id,i){var a=(180+i*360/ring.length)*Math.PI/180;pos[id]=[cx+Math.cos(a)*rx,cy+Math.sin(a)*ry]});
@@ -474,7 +465,6 @@ function overview(){
   frag.appendChild(nc);
   return frag}
 
-/* area view with a force layout */
 var layouts={};
 function layoutArea(id){
   if(layouts[id])return layouts[id];
@@ -506,7 +496,6 @@ function layoutArea(id){
       if(ox>0&&oy>0){
         if(ox<oy){var s=(dx<0?-1:1)*ox/2;P[i].x-=s;P[j].x+=s}else{var s2=(dy<0?-1:1)*oy/2;P[i].y-=s2;P[j].y+=s2}}}}
   var cxm=0,cym=0;P.forEach(function(p){cxm+=p.x;cym+=p.y});cxm/=N;cym/=N;
-  /* stubs: calls to and from other areas, one chip per module and area */
   var stubs=[],cnt={};
   D.links.forEach(function(l){
     var fi=idx[l.from],ti=idx[l.to];
@@ -618,7 +607,6 @@ function areaView(id){
     h('th',null,'Module'),h('th',{class:'num'},'TOC'),h('th',{class:'num'},'Lines'),h('th',{class:'num'},'Functions'),h('th',{class:'num'},'Settings owned'),h('th',{class:'num'},'Calls out'),h('th',{class:'num'},'Calls in'))),h('tbody',null,rows))));
   return frag}
 
-/* module view */
 function fmtDefault(s){
   var v=s.default;
   if(s.kind==='bool')return v?'On':'Off';
@@ -665,7 +653,6 @@ function moduleView(id,opts){
   frag.appendChild(h('div',{class:'panel',id:'sec-about'},h('h2',null,'Description'),
     m.description.split(/\n+/).map(function(p){return h('p',{class:'p'},p)})));
 
-  /* functions */
   var fnRows=m.functions.map(function(f){return{name:f.name,kind:f.kind,line:f.line,end:f.end||f.line,args:f.args||'',doc:f.doc||''}});
   m.ns_functions.forEach(function(f){if(f.kind!=='function')fnRows.push({name:f.name,kind:'ns '+(f.kind==='declare'?'table':f.kind),line:f.line,end:f.line,args:'',doc:''})});
   fnRows.sort(function(x,y){return x.line-y.line});
@@ -707,7 +694,6 @@ function moduleView(id,opts){
     drawF()}
   frag.appendChild(fp);
 
-  /* settings */
   var sp=h('section',{class:'panel',id:'sec-settings'},h('h2',null,'Settings'));
   if(isConfig){
     sp.appendChild(h('p',{class:'p'},'Config.lua defines '+plural(S.settings,'setting')+' on '+plural(S.settings_pages,'page')+'. Each setting is listed under the module that owns it. ',link('Settings pages','pages'),' lists them by page.'))}
@@ -738,7 +724,6 @@ function moduleView(id,opts){
     drawS()}
   frag.appendChild(sp);
 
-  /* game */
   var gp=h('section',{class:'panel',id:'sec-game'},h('h2',null,'Game parts'));
   if(!gameTotal)gp.appendChild(h('p',{class:'muted'},'No game parts found.'));
   GROUPS.forEach(function(gr){
@@ -759,7 +744,6 @@ function moduleView(id,opts){
   if(m.events_dynamic)gp.appendChild(h('p',{class:'muted small'},plural(m.events_dynamic,'event')+' registered by a name built while the game runs.'));
   frag.appendChild(gp);
 
-  /* calls */
   var lp=h('section',{class:'panel',id:'sec-links'},h('h2',null,'Calls'));
   function linkTable(title,list,dir){
     var det=h('div',{style:'margin-top:8px'},h('h3',null,title,h('span',{class:'muted',style:'font-weight:400'},' '+plural(list.length,'module')+', '+plural(list.reduce(function(s,l){return s+l.count},0),'call'))));
@@ -775,7 +759,6 @@ function moduleView(id,opts){
   lp.appendChild(linkTable('Calls into '+id,m.links_in,'in'));
   frag.appendChild(lp);
 
-  /* tests */
   var tp=h('section',{class:'panel',id:'sec-tests'},h('h2',null,'Tests'));
   var t=m.tests||{};
   var tl=(t.key_labels||[]).map(function(i){return{i:i,why:'Prefix names this module'}}).concat((t.ref_labels||[]).map(function(i){return{i:i,why:'Calls a function of this module'}}));
@@ -802,7 +785,6 @@ function moduleView(id,opts){
   frag.appendChild(tp);
   return{node:frag,section:opts&&opts.section,jump:jump}}
 
-/* settings pages */
 function pagesView(){
   document.getElementById('ttl').textContent='Settings pages';
   setCrumbs([{text:'Flat UI',token:''},{text:'Settings pages'}]);
@@ -839,7 +821,6 @@ function pageView(key){
   q.addEventListener('input',draw);draw();
   return frag}
 
-/* render */
 function render(){
   var r=parse();main.textContent='';
   var out,after=null;

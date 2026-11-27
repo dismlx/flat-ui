@@ -1,19 +1,7 @@
 local _, ns = ...
 
--- What the game's click on an action button reads, checked for values an add-on changed. A call the game refuses (ADDON_ACTION_FORBIDDEN,
--- ADDON_ACTION_BLOCKED) names the function but not the value that made the call insecure; issecurevariable(table, key) names the add-on that
--- changed a value. Only issecurevariable is asked about a value; no game value is compared or kept (a table is read only to test its type, a key
--- only by rawget or pairs) and nothing is written to a game table. It cannot see a frame attribute (type, action, pressAndHoldAction, useOnKeyDown
--- and the modifier attributes, read through GetAttribute) or what the engine holds of a frame.
--- The values are the ones the press reads before UseAction: Blizzard_FrameXML/SecureTemplates.lua:343-357, 671-685, 350 (popup), 129 (bar),
--- 675 and 677 (isExtra, buttonType); Blizzard_ActionBar/Shared/ActionButton.lua:109-130 (TryUseActionButton), 146-159 (ActionButtonDown),
--- 1396-1427 (OnClick); Shared/MultiActionBars.lua:35-51; Shared/ActionBar.lua:7-8, 202-223, 274-281 (the bar's fields and its Show and Hide).
--- The mouse path reads the globals of OnClick (ActionButton.lua:1397-1412), SecureTemplates.lua:101-139, 346-357 and 791-806.
-
 local KEEP = 3
--- Tainted values kept for one scan, and shown for one scan.
 local STORE, SHOW = 100, 12
--- A second call of the same name within this many seconds is counted by Core and not scanned again.
 local REPEAT_SECONDS = 5
 local MIXIN_KEYS = 400
 local SETTINGS_KEYS = 5000
@@ -26,26 +14,18 @@ local BAR_METHODS = { "GetAttribute", "UpdateShownButtons", "UpdateDividers", "S
 local GLOBALS = { "ActionButtonDown", "ActionButtonUp", "MultiActionButtonDown", "MultiActionButtonUp", "TryUseActionButton", "GetActionButtonForID",
 	"SecureActionButton_OnClick", "SpellFlyout", "OverrideActionBar", "PetBattleFrame", "ACTION_HIGHLIGHT_MARKS", "ON_BAR_HIGHLIGHT_MARKS",
 	"MacroFrame_SaveMacro", "ActionBarActionButtonDerivedMixin_OnClick",
-	-- The mouse path: ActionButton.lua:1397-1412.
 	"KeybindFrames_InQuickKeybindMode", "C_ActionBar", "Settings", "IsModifiedClick", "GetCursorInfo",
-	-- SecureTemplates.lua:101-139, 791-806 (BUTTON_LOOKUP_TABLE is a local there), 346-357.
 	"SecureButton_GetModifiedAttribute", "SecureButton_GetModifierPrefix", "SecureButton_GetButtonSuffix", "ATTRIBUTE_NOOP", "SecureButton_GetAttribute",
 	"SecureActionButton_ShouldUseOnKeyDown", "GetCVarBool", "securecallfunction", "SaveMacro", "GetActionInfo", "UseAction" }
--- Keys of a global table the path calls: ActionButton.lua:1404 and 1409.
 local TABLE_KEYS = { { "C_ActionBar", { "IsAutoCastPetAction" } }, { "Settings", { "GetValue" } } }
--- Keys of the clicked button that are read by pairs, as many as this.
 local BUTTON_KEYS = 400
 local MIXINS = { "ActionBarActionButtonMixin", "ActionBarActionButtonDerivedMixin", "SecureActionButtonMixin" }
--- The methods of the mixins the press runs; every other key of a mixin is checked as well.
 local MIXIN_METHODS = { "OnClick", "CalculateAction", "GetID", "GetAttribute", "GetButtonState", "SetButtonState", "UpdateState", "UpdateHighlightMark",
 	"Update", "UpdateAction", "UpdateFlyout", "UpdatePressAndHoldAction", "TriggerSecureClick" }
--- Button names and the frame each bar is, for the bars where the button has no field to say.
 local BARS = { { "ActionButton", "MainActionBar" }, { "MultiBarBottomLeftButton", "MultiBarBottomLeft" },
 	{ "MultiBarBottomRightButton", "MultiBarBottomRight" }, { "MultiBarLeftButton", "MultiBarLeft" }, { "MultiBarRightButton", "MultiBarRight" },
 	{ "MultiBar5Button", "MultiBar5" }, { "MultiBar6Button", "MultiBar6" }, { "MultiBar7Button", "MultiBar7" } }
 
--- Flat UI's own buttons (OwnBars.lua) are made from SecureActionButtonTemplate, and a click on one reads these fields (SecureTemplates.lua:127-132,
--- 350, 675-679). Flat UI writes none of them, so a value that is not secure is a write the game did under Flat UI's code, or Flat UI's own.
 local OWN_FIELDS = { "popup", "bar", "isExtra", "buttonType", "action" }
 local OWN_BAR_FIELDS = { "actionButtons", "isShownExternal", "flyoutDirection", "showAllButtons" }
 
@@ -55,7 +35,6 @@ local function Plain(value)
 	return not ns.IsSecret(value)
 end
 
--- Flat UI's own buttons, from the contract of OwnBars.lua, and the bar frame (FlatUIBar<n>) of each.
 local function OwnButtons()
 	if type(ns.OwnButtons) ~= "function" then
 		return {}
@@ -69,13 +48,11 @@ local function NameOf(frame)
 	return ok and Plain(name) and type(name) == "string" and name or nil
 end
 
--- True when the click handler of one of Flat UI's buttons is the template's own.
 local function ClicksSecurely(button)
 	local ok, handler = pcall(button.GetScript, button, "OnClick")
 	return ok and handler == _G.SecureActionButton_OnClick
 end
 
--- The add-on that changed owner[key], "unknown" when the game names none, or nil when the value is the game's own or the check cannot be made.
 local function ChangedBy(owner, key)
 	local check = _G.issecurevariable
 	if type(check) ~= "function" then
@@ -98,7 +75,6 @@ local function Table(name)
 	return nil
 end
 
--- A field of a table that holds a table, read without its methods.
 local function Field(owner, key)
 	local ok, value = pcall(rawget, owner, key)
 	if ok and Plain(value) and type(value) == "table" then
@@ -149,7 +125,6 @@ local function Scan(hovered)
 			end
 		end
 	end
-	-- The listed fields and methods of every button, and every key of the button under the cursor when there is one (read before the scan).
 	local chosen
 	if hovered then
 		for _, entry in ipairs(entries) do
@@ -159,7 +134,6 @@ local function Scan(hovered)
 			end
 		end
 	end
-	-- Flat UI's own buttons: the five fields a click reads, the click handler, and the fields of the bar frame of each.
 	local ownBars = {}
 	for _, button in ipairs(OwnButtons()) do
 		local name = NameOf(button)
@@ -248,7 +222,6 @@ local function Scan(hovered)
 			Each(name, mixin, keys)
 		end
 	end
-	-- The keys of the settings table are counted and checked; their values are not read.
 	local panel = Table("SettingsPanel")
 	local settings = panel and Field(panel, "settings")
 	if settings then
@@ -283,7 +256,6 @@ local function Clock(at)
 	return ok and type(text) == "string" and text or tostring(at)
 end
 
--- The lines of one scan: what is tainted, one line each, and what was checked.
 local function Format(record, title)
 	local lines = { title }
 	if #record.tainted == 0 then
@@ -325,7 +297,6 @@ local function Kept()
 end
 
 local lastCall, lastAt
--- Calls whose scan waits for the next frame.
 local waiting = {}
 
 local function Now()
@@ -335,7 +306,6 @@ local function Now()
 	return got and Plain(now) and type(now) == "number" and now or nil
 end
 
--- The button under the cursor when the game reports one: the frame or the first of its parents that is a button of the bars.
 local function Hovered()
 	if type(_G.GetMouseFoci) ~= "function" then
 		return nil
@@ -387,8 +357,6 @@ local function Keep(event, name, hovered)
 	end
 end
 
--- Called by Core for a call of this add-on that the game refused: scans and keeps the last three results. The event is raised from inside the
--- refused call, so the scan waits for the next frame; the button under the cursor is read now.
 function ns.TaintRecord(event, call)
 	if type(_G.issecurevariable) ~= "function" then
 		return
@@ -411,8 +379,6 @@ function ns.TaintRecord(event, call)
 	Keep(event, name, hovered)
 end
 
--- One line for /flatui status: a field of Flat UI's own buttons that the click reads and that was written outside secure code. Nil when none is, or
--- when the game has no issecurevariable or Flat UI has no buttons of its own.
 function ns.TaintOwnLine()
 	if type(_G.issecurevariable) ~= "function" then
 		return nil
@@ -430,7 +396,6 @@ function ns.TaintOwnLine()
 	return nil
 end
 
--- The lines /flatui status shows under the blocked calls.
 function ns.TaintLines()
 	local lines = {}
 	for _, record in ipairs(Kept()) do
@@ -443,7 +408,6 @@ function ns.TaintLines()
 	return lines
 end
 
--- /flatui taint: the scan now, printed and not kept.
 function ns.TaintCommand()
 	if type(_G.issecurevariable) ~= "function" then
 		print("Taint scan: this game has no issecurevariable.")

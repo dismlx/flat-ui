@@ -1,121 +1,56 @@
 local _, ns = ...
 
--- The nameplate drawings of Flat UI setup: mock-nameplate, mock-nameplate-cast, mock-nameplate-auras, mock-nameplate-marks, mock-nameplate-threat,
--- mock-nameplate-stack and mock-nameplate-walk, the cards of the nameplate stop of setup's walk round the screen, whose draw returns the size of a
--- canvas of its own for the card to fit.
--- A drawing is { build(stage), draw(stage), parts = { [path] = region } }. build makes the frames of the drawing once for a stage, all marked ns.Own, so no
--- module restyles them. draw reads the settings through ns.Get only (the caller runs it inside ns.Viewing, so it draws the draft) and paints every part again.
--- parts maps a saved path to the region that setting changes, for the bracket that follows the row under the mouse; parts.of(stage) gives the parts of one
--- stage, since a drawing is built once for each stage it is shown on.
--- If stage.view is a table, the outlines follow it (ns.SetOutlineView) when the client of this build has that function.
--- What a plate is made of is the game's own layout for the nameplate style and size chosen: the sizes are Camelot's
--- (Blizzard_NamePlates/Camelot/Blizzard_NamePlateConstants.lua:33-60, 62-68), the anchors those of NamePlateUnitFrameMixin:UpdateAnchors
--- (Blizzard_NamePlates/Blizzard_NamePlateUnitFrame.lua:678-890) and of the cast bar (Blizzard_NamePlateCastingBar.lua:26-130). What each row changes is what
--- Nameplates.lua, PlateText.lua, PlateColours.lua, HealthColour.lua, PlateQuest.lua (the quest mark and its kill count of a sample with quest),
--- PlateOverpower.lua (the Overpower icon of a sample with overpower, a hunter's Mongoose Bite, moved by its offsets, whose swipe drains over its 5
--- seconds and starts again) and PlateCombo.lua (the row of combo points of a sample with combo, under the cast bar's room at Combo point size and
--- moved by its vertical offset, in a rogue's or a druid's drawing) do to a plate with the same row. The numbers are fixed samples: the game withholds the health, the cast times and the aura times of a
--- unit (UnitDocumentation.lua:1526-1529).
--- A sample's threat (threatGood, threatTransition or threatBad) colours its health bar as PlateColours.lua orders it and, as PlateThreatLook.lua,
--- PlateText.lua and PlateThreatText.lua draw it (P.Threat), gives it the threat ring at Threat ring thickness (flashing as it turns to threatBad), a
--- sample threat value (under the combo points at Below), the threat colour on its name, health text, border and background as their rows ask, the
--- name of the enemy's target and the fade of an enemy held for you or changing hands. Its colours and its fade are the rows of the player's role, as
--- a live plate's (PlateThreat.lua's PT.Colour, PlateThreatLook.lua's FadeRow): with Same colours for both roles or Same opacity for both roles off,
--- a player whom Your role, or at Automatic nameplate threat, reads as damage or healer gets the damage rows (P.ThreatRow, P.FadeRow). Setup's step of nameplate colours and threat draws
--- mock-nameplate-threat: an enemy, an enemy player, the mouseover and low health, and with Threat on nameplates four samples: threat you want
--- (faded), changing hands, threat you do not want (its ring flashes as the drawing opens and as Flash the ring when threat goes wrong turns on) and
--- your target changing hands, which never fades and carries the name of the enemy's target with Only on your target.
--- Test mode's sample plate (TestHud.lua) is P.NewPlate and P.Plate on a frame of its own, which takes the threat states in turn; P.CastProgress,
--- P.Health, P.Combo and P.Threat change only its fills, time, ring, colours, texts, squares and alpha. A stage whose state has still (test mode's,
--- true while Moving is off) pauses the sample's Overpower swipe with it (P.SwipeStill), and a sample with questHave counts that many of 8 kills,
--- pops its count as it goes up, turns it green at 8/8 and fades the mark and its count once that pop settles, as PlateQuest.lua does (P.QuestFade),
--- fading them back in as the count starts again. On that stage the sample moves as a live plate does: its ring eases in and out
--- (ns.PlateRingEase), it eases to each round's opacity over P.EASE_SECONDS (P.Alpha), its newest combo point pops (every square, in Full points
--- colour, as the count reaches 5 with Full points stand out), and its Overpower icon pops in as
--- each round after the first starts and fades over the round's last P.OP_FADE seconds, on its own round clock whatever Time left on the Overpower
--- icon says (P.OverpowerClock); all of it holds still with Moving off, and setup's drawings snap.
--- A threat value at Above stands over the sample's auras, and an Above quest mark and the Overpower icon over it (the mark over the icon too).
-
 local KEY = "nameplates"
 local P = {}
 ns.SetupDrawings = ns.SetupDrawings or {}
 
--- Plate sizes at size 2 (the game's Medium), by nameplate size 1 to 5: horizontal and vertical scale (Camelot constants :62-68).
 P.SCALES = { { 0.75, 0.8 }, { 1, 1 }, { 1.25, 1.25 }, { 1.4, 1.4 }, { 1.6, 1.6 } }
--- Per nameplate style: the health bar height and the cast bar height at size 2, whether the name is inside the health bar and whether
--- the spell name is inside the cast bar (Blizzard_NamePlates.lua:354-380, 452-500).
 P.STYLES = {
 	thin = { health = 13, cast = 6, inside = false, spellInside = false },
 	modern = { health = 20, cast = 6, inside = true, spellInside = false },
 	block = { health = 20, cast = 16, inside = true, spellInside = true },
 	castfocus = { health = 13, cast = 16, inside = false, spellInside = true },
 }
--- Plate width, the gap at each side of it, the font heights, the spell icon, the level box width and the gap before it, the aura icon (Camelot constants).
--- The game's level box hangs from the health bar 5 past its end, 3 above it and 2 below it, and the game keeps no room for it in the row
--- (Camelot/Blizzard_NamePlateLevelFrame.xml:5-8, Blizzard_NamePlateUnitFrame.lua:683-708).
 P.WIDTH, P.INSET, P.FONT, P.CAST_FONT, P.LEVEL_FONT = 190, 12, 14, 10, 10
 P.ICON, P.LEVEL_W, P.LEVEL_GAP, P.LEVEL_ABOVE, P.LEVEL_BELOW, P.AURA = 10, 28, 5, 3, 2, 25
--- The game's icon of an elite, a rare and a rare elite, 20 by 20 at the left end of the bar where the raid marker would be, which an enemy plate
--- shows since 70707 unless the game's Rarity icon option is off (Blizzard_NamePlateClassificationFrame.lua:68-75, 117-127; Blizzard_NamePlates.xml:196-199).
 P.RARITY = { elite = "nameplates-icon-elite-gold", boss = "nameplates-icon-elite-gold", rare = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star",
 	rareelite = "nameplates-icon-elite-silver" }
 P.RARITY_SIZE, P.RARITY_INDEX = 20, 3
--- The quest mark of PlateQuest.lua: its atlas, else its file, and the units between it and what it stands beside; its sample kill count, the count's
--- size as a share of the mark's, and the units between the two.
 P.QUEST_ATLAS, P.QUEST_FILE, P.QUEST_GAP = "QuestNormal", "Interface\\GossipFrame\\AvailableQuestIcon", 2
 P.QUEST_COUNT, P.QUEST_COUNT_SIZE, P.QUEST_COUNT_GAP = "3/8", 0.8, 1
--- The pop of a kill count that goes up, as PlateQuest.lua's: from P.QUEST_POP of its size back to whole over P.QUEST_POP_SECONDS, white until it ends.
 P.QUEST_POP, P.QUEST_POP_SECONDS = 1.6, 0.3
--- The count's colour once the objective is done, and the seconds the mark and its count fade in as they come and out once done (after the pop), as
--- PlateQuest.lua's K.GREEN, K.FADE_IN and K.FADE_OUT.
 P.QUEST_GREEN, P.QUEST_FADE_IN, P.QUEST_FADE_OUT = { 0.3, 0.9, 0.35 }, 0.15, 0.3
--- The threat of test mode's sample plate: the sample value of each state, the units between the value and what it sits beside (PlateThreatText.lua's
--- GAP), and the ring's thickness when Threat ring thickness cannot be read and its gap past the border in pixels (PlateThreatLook.lua's RING_PX and
--- GAP_PX).
-P.THREAT_VALUES = { threatGood = "40%", threatTransition = "92%", threatBad = "110%" }
+P.THREAT_VALUES = { threatGood = "40%", threatTransition = "92%", threatBad = "110%", threatTank = "60%" }
 P.THREAT_GAP, P.RING_PX, P.RING_GAP = 4, 2, 2
--- The name of the enemy's target on the sample (PlateThreatText.lua's TargetPart): a warrior who holds it, and you while it attacks you; the share of
--- the threat colour the background takes (PlateThreatLook.lua's BACK_SHARE).
 P.THREAT_HOLDER, P.THREAT_HOLDER_CLASS, P.BACK_SHARE = "Gorvak", "WARRIOR", 0.3
--- The Overpower icon of PlateOverpower.lua: the spell of each class that has one (Overpower for a warrior, Mongoose Bite for a hunter), its file
--- when the client gives none and its name, the crop of each edge, the units over the name and its window in seconds; its pop as a round starts (a
--- fade in over P.OP_POP_IN seconds and a shrink from P.OP_POP_FROM of its size over P.OP_POP_SCALE) and its fade over the round's last P.OP_FADE
--- seconds, as PlateOverpower.lua's.
-P.OP_SPELLS = { WARRIOR = 7384, HUNTER = 1495 }
-P.OP_FILES = { WARRIOR = "Interface\\Icons\\Ability_MeleeDamage", HUNTER = "Interface\\Icons\\Ability_Hunter_SwiftStrike" }
-P.OP_NAMES = { WARRIOR = "Overpower", HUNTER = "Mongoose Bite" }
+P.OP_SPELLS = { WARRIOR = 7384, HUNTER = 1495, ROGUE = 14251 }
+P.OP_FILES = { WARRIOR = "Interface\\Icons\\Ability_MeleeDamage", HUNTER = "Interface\\Icons\\Ability_Hunter_SwiftStrike",
+	ROGUE = "Interface\\Icons\\Ability_Warrior_Challange" }
+P.OP_NAMES = { WARRIOR = "Overpower", HUNTER = "Mongoose Bite", ROGUE = "Riposte" }
+P.OP_TARGET = { HUNTER = true, ROGUE = true }
 P.OP_CROP, P.OP_GAP, P.OP_WINDOW = 0.08, 2, 5
 P.OP_POP_FROM, P.OP_POP_IN, P.OP_POP_SCALE, P.OP_FADE = 1.3, 0.12, 0.15, 0.25
--- Test mode's sample eases to a new opacity over P.EASE_SECONDS, as a live plate's fade (PlateThreatLook.lua's EASE_SECONDS).
 P.EASE_SECONDS = 0.2
--- The row of combo points of PlateCombo.lua: the squares, each square and the units between two when Combo point size cannot be read, the units
--- under the cast bar, the opacity of a square not lit, and the pop of the newest point (from P.COMBO_POP_FROM of its size back to whole over
--- P.COMBO_POP_SECONDS).
 P.COMBO_MAX, P.COMBO_SIZE, P.COMBO_SPACE, P.COMBO_DROP, P.COMBO_DIM = 5, 7, 3, 2, 0.25
 P.COMBO_POP_FROM, P.COMBO_POP_SECONDS = 1.4, 0.15
 P.SPACING = 2
--- The gap between a class icon and the row, and the border of an elite, a rare and a boss in screen pixels (Nameplates.lua:30, 46).
 P.GAP, P.KIND_PX = 3, 2
--- The colours the game gives a hostile and a friendly unit when no row changes them, the level number, the dimming of a plate that is not the target.
+P.FLASH_GROW = 2
 P.HOSTILE, P.FRIENDLY, P.LEVEL_COLOUR = { 0.77, 0.23, 0.23 }, { 0.24, 0.77, 0.35 }, { 1, 0.82, 0 }
 P.SHARE, P.DIM = 0.7, 0.5
 P.GOLD, P.SILVER = { 1, 0.82, 0 }, { 0.78, 0.8, 0.84 }
--- The atlases of the game's own art, used when the client has them.
 P.ATLAS = { bar = "UI-HUD-CoolDownManager-Bar", level = "ui-hud-nameplates-levelindicator", cast = "ui-castingbar-filling-standard", pip = "ui-castingbar-pip",
 	shield = "nameplates-InterruptShield" }
 P.RAID = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 P.SPELLS = { 135940, 135964, 136089, 136096, 135987 }
 P.AX = { LEFT = 0, TOPLEFT = 0, BOTTOMLEFT = 0, CENTER = 0.5, TOP = 0.5, BOTTOM = 0.5, RIGHT = 1, TOPRIGHT = 1, BOTTOMRIGHT = 1 }
 P.AY = { BOTTOM = 0, BOTTOMLEFT = 0, BOTTOMRIGHT = 0, CENTER = 0.5, LEFT = 0.5, RIGHT = 0.5, TOP = 1, TOPLEFT = 1, TOPRIGHT = 1 }
--- The canvas every drawing is laid out on, and the room kept round it.
 P.CANVAS_W, P.CANVAS_H, P.MARGIN = 658, 204, 10
 P.states = setmetatable({}, { __mode = "k" })
 
 local function Get(key)
 	return ns.Get(KEY .. "." .. key)
 end
-
--- Frames, textures and texts of a drawing --------------------------------------------------------------------
 
 local function Frame(parent)
 	local frame = CreateFrame("Frame", nil, parent)
@@ -135,7 +70,6 @@ local function Txt(parent, layer)
 	return text
 end
 
--- An atlas on a texture, with the picture's own corners put back (SetAtlas takes the atlas, whether to use its size, the filter and whether to reset them).
 function P.SetAtlas(texture, name)
 	texture:SetAtlas(name, false, nil, true)
 end
@@ -154,7 +88,6 @@ function P.AtlasExists(name)
 	return false
 end
 
--- The file of the plate's font: the one the game gives its nameplate text.
 function P.Face()
 	if P.face == nil then
 		P.face = "Fonts\\FRIZQT__.TTF"
@@ -169,19 +102,16 @@ function P.Face()
 	return P.face
 end
 
--- The font string at `base` height times `percent`, in the outline of a row (game draws the game's thin outline) and a colour, in the face of Text font.
 function P.Text(text, base, percent, outline, colour, face)
 	text:SetFont(face or P.Face(), base, outline == "game" and "OUTLINE" or ns.OUTLINE_FLAGS[outline])
 	ns.TextStyle(text, { percent = percent, r = colour[1], g = colour[2], b = colour[3] })
 end
 
--- Hex of a row to a colour table.
 local function Rgb(path)
 	local r, g, b = ns.Colour(path)
 	return { r, g, b }
 end
 
--- The name of the player and the token of the class, from plain values for "player" (client.md 1.1), or fixed samples.
 function P.Player()
 	local name, token = "Brennan", "MAGE"
 	if type(UnitName) == "function" then
@@ -199,7 +129,6 @@ function P.Player()
 	return name, token
 end
 
--- Short numbers as the game writes them, from a plain sample, or in full with Number style.
 function P.Abbreviate(number)
 	if ns.Get("unitframes.numberStyle") == "full" and type(BreakUpLargeNumbers) == "function" then
 		local ok, text = pcall(BreakUpLargeNumbers, math.floor(number + 0.5))
@@ -216,10 +145,6 @@ function P.Abbreviate(number)
 	return number >= 1000 and ("%.1fK"):format(number / 1000) or tostring(number)
 end
 
--- The look of a plate from the rows ---------------------------------------------------------------------------
-
--- What Nameplates.lua, PlateText.lua and the files after it make of each row for one plate. A plate the module leaves as the game draws it (the module
--- off, or a friendly plate with Restyle friendly nameplates off) has the game's own look, which is what a row at its default gives too.
 function P.Look(friend)
 	local styled = Get("enabled") == true and (not friend or Get("friendly") == true)
 	local o = { styled = styled }
@@ -245,7 +170,6 @@ function P.Look(friend)
 	o.textColour = (styled and Get("healthTextColour") ~= "ffffffff") and Rgb(KEY .. ".healthTextColour") or { 1, 1, 1 }
 	o.textFormat = Row("healthFormat", "game")
 	o.level, o.levelSize = Row("level", "default"), Row("levelSize", 100)
-	-- The square box and its gap apply to Thin border and Text only (Hidden keeps the game's layout), as LevelBox of Nameplates.lua does.
 	o.levelSquare = o.level ~= "default" and o.level ~= "hidden" and Get("levelShape") == "square"
 	o.levelGap = Get("levelGap")
 	o.kindMark = styled and Get("kindMark") == true
@@ -269,7 +193,6 @@ function P.Look(friend)
 	o.marker = Row("raidMarker", true)
 	o.markerSize = Row("raidMarkerSize", 22)
 	o.markerX, o.markerY = Row("raidMarkerX", 0), Row("raidMarkerY", 0)
-	-- No mark while the marks are left to Questie (PlateQuest.lua's ns.PlateQuestYields), as in the game.
 	o.quest = Get("enabled") == true and Get("questMark") == true and not (type(ns.PlateQuestYields) == "function" and ns.PlateQuestYields())
 	return o
 end
@@ -285,7 +208,6 @@ function P.Sets()
 	return { style = style, size = size }
 end
 
--- The colour of the border of a kind of unit: the row's, or the game's own colour of the kind while the row is at its default (Nameplates.lua:276-288).
 function P.KindColour(kind)
 	local look = ns.KINDS[kind]
 	local rows = { elite = "eliteColour", rare = "rareColour", rareelite = "rareColour", boss = "bossColour" }
@@ -300,7 +222,6 @@ function P.KindColour(kind)
 	return Rgb(KEY .. "." .. row)
 end
 
--- The colour the game gives a unit's reaction: the Colours page's row with Custom reaction colours, else the game's own colour.
 function P.Reaction(friend)
 	if ns.Get("general.reactionOwn") == true then
 		return Rgb(friend and "general.reactionFriendly" or "general.reactionHostile")
@@ -308,25 +229,25 @@ function P.Reaction(friend)
 	return friend and P.FRIENDLY or P.HOSTILE
 end
 
--- True while threat reads the player as damage or healer: Your role as the draft has it, and at Automatic the role nameplate threat works out
--- (ns.PlateThreat.Role, PlateThreat.lua), so the samples take the rows of the player's role as a live plate does (PT.Colour).
 function P.Damage()
 	local choice = Get("threatRole")
 	if choice == "tank" or choice == "damage" then
 		return choice == "damage"
 	end
 	local threat = ns.PlateThreat
-	if type(threat) == "table" and type(threat.Role) == "function" then
-		local ok, kind = pcall(threat.Role)
+	local ask = type(threat) == "table" and (type(threat.AutoRole) == "function" and threat.AutoRole or threat.Role) or nil
+	if type(ask) == "function" then
+		local ok, kind = pcall(ask)
 		return not (ok and kind == "tank")
 	end
 	return true
 end
 
--- The colour row of a sample's threat state (threatGood, threatTransition or threatBad): the damage and healer's row while Same colours for both
--- roles is off and the player counts as damage or healer, else the row both roles share. The samples' threat stays named by the shared rows.
 P.DAMAGE_ROWS = { threatGood = "threatDamageGood", threatTransition = "threatDamageTransition", threatBad = "threatDamageBad" }
 function P.ThreatRow(threat)
+	if threat == "threatTank" then
+		return "threatTankColour"
+	end
 	local row = P.DAMAGE_ROWS[threat]
 	if row and Get("threatSameColours") == false and P.Damage() then
 		return row
@@ -334,11 +255,8 @@ function P.ThreatRow(threat)
 	return threat
 end
 
--- The opacity row of a sample's threat state, as PlateThreatLook.lua's FadeRow: Opacity as damage or healer for threat you want while Same opacity
--- for both roles is off and the player counts as damage or healer, else Opacity of enemies held for you; Opacity of enemies changing hands for threat
--- changing hands; none for threat you do not want.
 function P.FadeRow(threat)
-	if threat == "threatGood" then
+	if threat == "threatGood" or threat == "threatTank" then
 		if Get("threatFadeSame") == false and P.Damage() then
 			return "threatFadeDamage"
 		end
@@ -349,7 +267,6 @@ function P.FadeRow(threat)
 	return nil
 end
 
--- The colour of a plate's health bar, in the order PlateColours.lua answers: the target's colour, a reaction colour, the colour by health left, the game's.
 function P.BarColour(spec, o)
 	local gameColour = spec.friendly and P.FRIENDLY or P.HOSTILE
 	if spec.player and not spec.friendly then
@@ -364,8 +281,6 @@ function P.BarColour(spec, o)
 	if Get("targetBar") == true and spec.target then
 		return Rgb(KEY .. ".targetBarColour")
 	end
-	-- A sample in a threat state (spec.threat: threatGood, threatTransition or threatBad) takes its colour while Threat on nameplates and Colour
-	-- health bars by threat are on, after the target's colour and before a reaction colour, as PlateColours.lua orders them.
 	if spec.threat and Get("threat") == true and Get("threatBar") == true then
 		return Rgb(KEY .. "." .. P.ThreatRow(spec.threat))
 	end
@@ -379,9 +294,6 @@ function P.BarColour(spec, o)
 	return gameColour
 end
 
--- A plate -----------------------------------------------------------------------------------------------------------
-
--- An outline of the addon's own frame, for the page of the nameplates and for the view of the stage.
 function P.Outline(S, owner, target)
 	local outline = ns.SetOutlineArea(ns.Outline(owner, target), KEY)
 	if outline then
@@ -396,7 +308,6 @@ end
 function P.NewIcon(S, parent)
 	local made, icon = pcall(ns.IconNew, parent)
 	if not (made and type(icon) == "table") then
-		-- A client without cooldown frames: a square icon with a border.
 		local frame = Frame(parent)
 		local texture = Tex(frame, "ARTWORK", 0)
 		texture:SetAllPoints(frame)
@@ -411,8 +322,6 @@ function P.NewIcon(S, parent)
 	return icon
 end
 
--- The pop of the sample kill count (P.QuestMark), a Scale animation of the font string from its middle that gives it its gold back as it ends (its
--- green while its count is done, p.questDone); nil when the client will not make it.
 function P.CountPop(p, text)
 	local ok, group = pcall(function()
 		local modes = Enum and Enum.FontStringScaleAnimationMode
@@ -437,8 +346,6 @@ function P.CountPop(p, text)
 	return ok and type(group) == "table" and group or nil
 end
 
--- The pop of a combo point of the sample (P.Combo), a Scale animation of its square from its middle, as PlateCombo.lua's; nil when the client will
--- not make it.
 function P.ComboPop(texture)
 	local ok, group = pcall(function()
 		local made = texture:CreateAnimationGroup()
@@ -469,7 +376,6 @@ function P.NewPlate(S, parent)
 	p.low = P.Outline(S, p.lowFrame, p.lowFrame)
 	ns.SetOutline(p.low, true, false)
 	p.row = Tex(p.f, "BACKGROUND", -6)
-	-- The name is drawn over the health bar when the style puts it inside: its frame is made after the bar, so it is above it.
 	p.words = Frame(p.f)
 	p.words:SetAllPoints(p.f)
 	p.name = Txt(p.words, "OVERLAY")
@@ -493,13 +399,11 @@ function P.NewPlate(S, parent)
 	p.quest = Tex(p.f, "OVERLAY", 4)
 	p.questCount = Txt(p.f, "OVERLAY")
 	p.questPop = P.CountPop(p, p.questCount)
-	-- The threat ring round the bar, and the threat value.
 	p.ring = Frame(p.f)
 	p.ringOutline = P.Outline(S, p.ring, p.ring)
 	ns.KeepOutline(p.ringOutline)
 	ns.SetOutline(p.ringOutline, false, false)
 	p.ringFlash = type(ns.PlateRingFlash) == "function" and ns.PlateRingFlash(p.ring) or nil
-	-- The ring's ease in and out, as a live ring's (ns.PlateRingEase); the outline goes once the ease out ends.
 	if type(ns.PlateRingEase) == "function" then
 		p.ringIn, p.ringOut = ns.PlateRingEase(p.ring, function()
 			if not p.ringShown then
@@ -510,7 +414,6 @@ function P.NewPlate(S, parent)
 	p.tvalue = Txt(p.f, "OVERLAY")
 	p.ttarget = Txt(p.f, "OVERLAY")
 	p.ttarget:Hide()
-	-- The Overpower icon, its border and its swipe, a Cooldown frame of the drawing's own set up as PlateOverpower.lua's MakeSwipe sets its own.
 	p.opFrame = Frame(p.f)
 	p.op = Tex(p.opFrame, "ARTWORK", 0)
 	p.op:SetAllPoints(p.opFrame)
@@ -525,12 +428,10 @@ function P.NewPlate(S, parent)
 		pcall(swipe.SetDrawBling, swipe, false)
 		pcall(swipe.SetHideCountdownNumbers, swipe, true)
 		swipe:SetScript("OnCooldownDone", function()
-			-- A swipe cleared on purpose (its row off, the icon hidden) ends no round.
 			if not p.opSwiping then
 				return
 			end
 			p.opSwiping = nil
-			-- A round that ends while the stage holds still starts again once it moves.
 			if P.Still(p) then
 				p.opDone = true
 				return
@@ -540,23 +441,18 @@ function P.NewPlate(S, parent)
 		p.opSwipe = swipe
 	end
 	if type(S.still) == "function" then
-		-- A stage that can hold still (test mode's Moving off, S.still) pauses the swipe with it and lets it run on where it stopped, fades the icon
-		-- over each round's last P.OP_FADE seconds and starts the next round as one ends while no swipe runs (Time left on the Overpower icon off,
-		-- or a client without Cooldown frames); the frame's OnUpdate runs only while the icon shows.
 		p.opFrame:SetScript("OnUpdate", function()
 			P.SwipeStill(p)
 			P.OverpowerFade(p)
 			P.OverpowerClock(p)
 		end)
 		P.OverpowerMotion(p)
-		-- Test mode's sample eases to a new opacity (P.Alpha), one step a frame while it is on its way, and its quest mark fades in and out.
 		p.alphaStep = function(_, elapsed)
 			P.AlphaStep(p, elapsed)
 		end
 		P.QuestFades(p)
 	end
 	p.opFrame:Hide()
-	-- The row of combo points under the cast bar (PlateCombo.lua's): its squares, each in Flat UI's thin border and with its pop.
 	p.combo = Frame(p.f)
 	p.comboSquares = {}
 	for index = 1, P.COMBO_MAX do
@@ -577,7 +473,6 @@ function P.NewPlate(S, parent)
 	return p
 end
 
--- Anchors a region by `point` at x, y from the bottom left corner of the plate, gives it a size, and widens the box the plate takes up.
 function P.Put(p, region, point, x, y, w, h)
 	region:ClearAllPoints()
 	region:SetPoint(point, p.f, "BOTTOMLEFT", x, y)
@@ -590,7 +485,25 @@ function P.Put(p, region, point, x, y, w, h)
 	end
 end
 
--- The sizes of the parts of a plate, from the style and size chosen and the rows that change a size.
+function P.AurasSeen(spec, o)
+	local when = Get("aurasWhen")
+	if not o.styled or (when ~= "target" and when ~= "focus") then
+		return true
+	end
+	return spec.target == true or (when == "focus" and spec.focus == true)
+end
+
+function P.HealthSeen(spec, o)
+	if not o.textShow then
+		return false
+	end
+	local when = Get("healthTextWhen")
+	if not o.styled or (when ~= "target" and when ~= "focus") then
+		return true
+	end
+	return spec.target == true or (when == "focus" and spec.focus == true)
+end
+
 function P.Measure(o, spec, sets)
 	local scale = P.SCALES[sets.size]
 	local style = P.STYLES[sets.style]
@@ -607,7 +520,6 @@ function P.Measure(o, spec, sets)
 		m.CC = m.CB + (style.spellInside and 0 or P.ICON * v)
 		m.healthY = m.CC + P.SPACING * v
 	end
-	-- The level box, from its bottom left corner: the game's past the end of the full row, or the square of Flat UI at the end of a shorter bar.
 	m.LW, m.LH = P.LEVEL_W * v, m.HH + P.LEVEL_ABOVE + P.LEVEL_BELOW
 	m.HW = m.BW
 	m.LX, m.LY = m.BW + P.LEVEL_GAP, m.healthY - P.LEVEL_BELOW
@@ -621,7 +533,7 @@ function P.Measure(o, spec, sets)
 	m.center = m.healthY + m.HH / 2
 	m.nameAbove = not style.inside
 	m.top = m.healthY + m.HH + (m.nameAbove and (m.sp + m.NH) or 0)
-	if spec.auras then
+	if spec.auras and P.AurasSeen(spec, o) then
 		m.AS = P.AURA * h
 		m.auraY = m.top + m.sp
 		m.top = m.auraY + m.AS
@@ -629,7 +541,6 @@ function P.Measure(o, spec, sets)
 	return m
 end
 
--- A fill of `share` of a bar's width: the image file of the bar texture tinted, or one colour.
 function P.Fill(texture, bar, width, file, share, colour)
 	texture:ClearAllPoints()
 	texture:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
@@ -646,7 +557,6 @@ function P.Fill(texture, bar, width, file, share, colour)
 	end
 end
 
--- The game's own fill: its atlas tinted, or a plain version when the client has no such art.
 function P.GameFill(texture, bar, width, share, colour, atlas)
 	texture:ClearAllPoints()
 	texture:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
@@ -662,7 +572,6 @@ function P.GameFill(texture, bar, width, share, colour, atlas)
 	end
 end
 
--- A piece of a bar from one share of its width to another, in one colour.
 function P.Segment(texture, bar, width, from, to, r, g, b, a)
 	texture:ClearAllPoints()
 	texture:SetPoint("TOPLEFT", bar, "TOPLEFT", width * from, 0)
@@ -677,7 +586,6 @@ function P.Raid(texture, index)
 	texture:SetTexCoord(column * 0.25, column * 0.25 + 0.25, row * 0.25, row * 0.25 + 0.25)
 end
 
--- The health text, in the format the row says. The game's own is the percent.
 function P.HealthText(o, share)
 	local formats = ns.PLATE_HEALTH_FORMATS
 	local value, missing = P.Abbreviate(10000 * share), P.Abbreviate(10000 * (1 - share))
@@ -694,7 +602,6 @@ function P.HealthText(o, share)
 	return formats.percent:format(share * 100)
 end
 
--- The colour of the name by the rows: the game's, white, the class of a player (the reaction colour of any other unit), by reaction, or the custom one.
 function P.NameColour(spec, o)
 	local mode = o.nameColour
 	if mode == "white" then
@@ -713,7 +620,6 @@ function P.NameColour(spec, o)
 	return { 1, 1, 1 }
 end
 
--- The border of the health bar: the target's or focus's colour, else the mouseover colour, else the colour of the kind of unit.
 function P.Border(p, spec, o)
 	local r, g, b, px
 	local mark = o.targetOn and (spec.target and "targetColour" or spec.focus and "focusColour")
@@ -726,8 +632,6 @@ function P.Border(p, spec, o)
 	if r == nil and o.hover and spec.hover then
 		r, g, b = ns.Colour(KEY .. ".hoverColour")
 	end
-	-- A sample in a threat state (test mode's) takes the threat colour with Threat colour on the health bar border, after the target, the focus and
-	-- the mouseover and before the kind of unit, KIND_PX thick, as Nameplates.lua's Mark orders ns.PlateThreatBorder.
 	if r == nil and spec.threat and P.THREAT_VALUES[spec.threat] and o.styled and Get("threat") == true and Get("threatBorder") == true then
 		r, g, b = ns.Colour(KEY .. "." .. P.ThreatRow(spec.threat))
 		px = P.KIND_PX
@@ -741,7 +645,6 @@ function P.Border(p, spec, o)
 	ns.SetOutlineColour(p.outline, r, g, b)
 	ns.SetOutlineThickness(p.outline, px)
 	ns.SetOutline(p.outline, o.border, o.backdrop)
-	-- The game's own marker round the bar stays while the border of the rows is not drawn for the target and the focus.
 	local game = (spec.target or spec.focus) and not o.targetOn
 	local colour = spec.target and { 1, 1, 1 } or { 1, 0.49, 0.04 }
 	local bar = p.bar
@@ -769,7 +672,40 @@ function P.Border(p, spec, o)
 	end
 end
 
--- The level number, its box and the mark after it.
+function P.TargetFlash(p, spec, o)
+	local mark = o.targetOn and (spec.target and "targetColour" or spec.focus and "focusColour") or nil
+	local on = mark ~= nil and Get("targetFlash") == true
+	local was = p.tflashWas
+	p.tflashWas = on
+	if not on then
+		if p.tflashFrame then
+			if p.tflash then
+				pcall(p.tflash.Stop, p.tflash)
+			end
+			p.tflashFrame:SetAlpha(0)
+		end
+		return
+	end
+	if p.tflashFrame == nil then
+		p.tflashFrame = Frame(p.bar)
+		p.tflashFrame:SetAllPoints(p.bar)
+		p.tflashFrame:SetFrameLevel(p.bar:GetFrameLevel() + 8)
+		p.tflashFrame:SetAlpha(0)
+		p.tflashOutline = P.Outline(p.S, p.tflashFrame, p.tflashFrame)
+		ns.KeepOutline(p.tflashOutline)
+		ns.SetOutline(p.tflashOutline, true, false)
+		p.tflash = type(ns.PlateTargetFlash) == "function" and ns.PlateTargetFlash(p.tflashFrame) or nil
+	end
+	local px = Get("targetThickness")
+	px = ns.Finite(px) and px >= 1 and math.floor(px + 0.5) or 1
+	ns.SetOutlineThickness(p.tflashOutline, px + P.FLASH_GROW)
+	ns.SetOutlineColour(p.tflashOutline, ns.Colour(KEY .. "." .. mark))
+	if was ~= true and p.tflash then
+		pcall(p.tflash.Stop, p.tflash)
+		pcall(p.tflash.Play, p.tflash)
+	end
+end
+
 function P.Level(p, spec, o, m)
 	P.Put(p, p.lvl, "BOTTOMLEFT", m.LX, m.LY, m.LW, m.LH)
 	local style = o.level
@@ -810,7 +746,6 @@ function P.Level(p, spec, o, m)
 	end
 end
 
--- The icon of the class beside the row, where PlaceIcon of Nameplates.lua puts it.
 function P.ClassIcon(p, spec, o, m)
 	local row = spec.friendly and "classFriendly" or "classEnemy"
 	local _, token = P.Player()
@@ -825,7 +760,6 @@ function P.ClassIcon(p, spec, o, m)
 	if o.classFit == "bar" then
 		size = m.HH
 	end
-	-- A class icon on the left takes the slot beside the bar, and the raid marker and the flag move out past it.
 	m.iconShift = position == "left" and size + gap or 0
 	local atlas = ns.ClassAtlas(token)
 	if atlas then
@@ -843,7 +777,6 @@ function P.ClassIcon(p, spec, o, m)
 	elseif position == "below" then
 		P.Put(p, p.iconFrame, "TOP", m.BW / 2 + x, y - P.GAP, size, size)
 	else
-		-- The game's level box hangs past the row, so the icon goes after it while it shows, as PlaceIcon of Nameplates.lua does.
 		local edge = (m.levelOut and o.level ~= "hidden") and m.LX + m.LW or m.BW
 		P.Put(p, p.iconFrame, "LEFT", edge + x + gap, m.center + y, size, size)
 	end
@@ -852,8 +785,6 @@ function P.ClassIcon(p, spec, o, m)
 	ns.SetOutlineRound(p.iconOutline, p.iconArt, o.classRound)
 end
 
--- The flag and the two buffs the game hangs at the left end of an enemy player: the flag at the left edge of the icon, the buffs
--- after it (Blizzard_NamePlates.xml:196-199, 228-236). The marker never shows on an enemy player.
 function P.LeftEnd(p, spec, o, m)
 	local shown = spec.leftEnd and true or false
 	for _, region in ipairs({ p.flag, p.buffA, p.buffB }) do
@@ -871,8 +802,6 @@ function P.LeftEnd(p, spec, o, m)
 	p.buffB:SetColorTexture(0.35, 0.5, 0.8, 1)
 end
 
--- True when the game shows its icon of an elite or a rare on an enemy plate: its option table asks for it (true since 70707 on this game,
--- Camelot/Blizzard_NamePlateFrameOptionsOverrides.lua) and the Rarity icon bit of the nameplateInfoDisplay CVar is on.
 function P.RarityShown()
 	local options = NamePlateEnemyFrameOptions
 	if type(options) ~= "table" or ns.IsSecret(options) then
@@ -897,8 +826,6 @@ function P.RarityShown()
 	return on ~= false
 end
 
--- The game's icon of an elite or a rare at the left end of an enemy plate, where the raid marker hangs (Flat UI's offsets of the marker move
--- it too). A unit with a raid marker shows the marker instead (Blizzard_NamePlateClassificationFrame.lua:95-98).
 function P.Rarity(p, spec, o, m)
 	local atlas = not spec.friendly and spec.kind and not (spec.marker and o.marker) and P.RARITY[spec.kind]
 	if not (atlas and P.RarityShown()) then
@@ -916,8 +843,6 @@ function P.Rarity(p, spec, o, m)
 	p.rarity:Show()
 end
 
--- The left end of what hangs left of the bar: the raid marker or the game's elite or rare icon, else the place of the hidden marker, which still
--- carries Flat UI's offsets of the marker (the game keeps no room for a hidden one, Blizzard_NamePlates.xml:186-199).
 function P.LeftEdge(p, o, m)
 	local edge = o.markerX - m.iconShift
 	if p.marker:IsShown() then
@@ -928,13 +853,6 @@ function P.LeftEdge(p, o, m)
 	return edge
 end
 
--- The quest mark of an enemy a quest needs (spec.quest), where PlateQuest.lua puts it: Left past the threat value on the left, else past the raid
--- marker or the game's elite or rare icon (at the marker's height); Right past the threat value on the right, else past the level box while it shows;
--- Above over the Overpower icon while it shows, else over a threat value above the sample, else over the sample's auras, else over the name (over the
--- bar while the name is inside it); then moved by Quest mark horizontal and vertical offset. With Kill count beside the quest mark a sample count
--- sits beside it, left of it at Left and right of it at Right and Above; test mode's sample counts up with its threat rounds to 8/8 and pops as
--- it goes up (not as it drops back), turns green at 8/8, and its mark and count fade out once that pop settles and fade back in as the next round
--- starts again at 3/8 (P.QuestFade); setup's drawings and a still stage show it whole.
 function P.QuestMark(p, spec, o, m)
 	if not (spec.quest and o.quest and not spec.friendly and not spec.player) then
 		p.quest:Hide()
@@ -956,13 +874,11 @@ function P.QuestMark(p, spec, o, m)
 		if side == "right" then
 			x, y = p.tvalueR, p.tvalueY
 		end
-		-- The name of the enemy's target sits after the value on the right, so the mark goes past it.
 		if p.ttarget:IsShown() and ns.Finite(p.ttargetR) then
 			x, y = p.ttargetR, m.center
 		end
 		x = x + gap
 	elseif place == "above" then
-		-- Over the sample's auras while it has them (m.top), as the live mark stands over the debuff row, and over the value or the icon there.
 		local top, middle = m.top, m.BW / 2
 		if p.opFrame:IsShown() and ns.Finite(p.opT) then
 			top, middle = p.opT, ns.Finite(p.opX) and p.opX or middle
@@ -981,7 +897,6 @@ function P.QuestMark(p, spec, o, m)
 	x, y = x + (ns.Finite(ox) and ox or 0), y + (ns.Finite(oy) and oy or 0)
 	P.Put(p, p.quest, point, x, y, size, size)
 	p.quest:Show()
-	-- Test mode's sample counts up with its threat rounds (spec.questHave); setup's drawings keep the fixed count.
 	local have = spec.questHave
 	P.QuestFade(p, have)
 	local count = p.questCount
@@ -1002,7 +917,6 @@ function P.QuestMark(p, spec, o, m)
 		P.Put(p, count, "LEFT", x + size * (1 - P.AX[point]) + P.QUEST_COUNT_GAP, middle, width, height)
 	end
 	count:Show()
-	-- A count that went up pops, white until it settles, as a live one does as a kill counts; one that drops back to the start does not.
 	local pop = p.questPop
 	if pop and ns.Finite(have) and ns.Finite(p.questHave) and have > p.questHave then
 		pcall(pop.Stop, pop)
@@ -1012,8 +926,6 @@ function P.QuestMark(p, spec, o, m)
 	p.questHave = have
 end
 
--- The size of a square and the units between two, from Combo point size as PlateCombo.lua's Size reads it (P.COMBO_SIZE when it cannot be read),
--- and Combo points vertical offset.
 function P.ComboSize()
 	local size, oy = Get("comboSize"), Get("comboY")
 	size = ns.Finite(size) and size >= 1 and math.floor(size + 0.5) or P.COMBO_SIZE
@@ -1021,12 +933,6 @@ function P.ComboSize()
 	return size, math.max(2, math.floor(size * P.COMBO_SPACE / P.COMBO_SIZE + 0.5)), oy
 end
 
--- The row of combo points of a sample on a rogue's or a druid's target (spec.combo, lit of P.COMBO_MAX), where PlateCombo.lua puts it while Combo
--- points on your target's nameplate is on: centred just under the cast bar (the bottom of the sample, where the game keeps the cast bar's room) and
--- moved by Combo points vertical offset, squares at Combo point size, lit squares in Combo point colour and the rest in it at P.COMBO_DIM, each in
--- its thin border; at P.COMBO_MAX with Full points stand out every square takes Full points colour. p.comboB is the row's bottom, which a threat
--- value at Below hangs under. Test mode's sample pops the newest point as its count goes up, and every lit one as it reaches P.COMBO_MAX with Full
--- points stand out; setup's drawings and a still stage do not.
 function P.Combo(p, spec, o, m)
 	local count = spec.combo
 	p.comboB = nil
@@ -1057,7 +963,11 @@ function P.Combo(p, spec, o, m)
 	end
 	p.combo:SetFrameLevel(p.f:GetFrameLevel() + 5)
 	p.combo:Show()
-	if ns.Finite(p.comboHave) and count > p.comboHave and not P.Snaps(p) then
+	local fullWas = p.comboFullWas
+	if count >= P.COMBO_MAX then
+		p.comboFullWas = Get("comboFull") == true
+	end
+	if ns.Finite(p.comboHave) and count > p.comboHave and not P.Snaps(p) or (full and fullWas == false) then
 		for index, square in ipairs(p.comboSquares) do
 			if square.pop and (index == count or (full and index < count)) then
 				pcall(square.pop.Stop, square.pop)
@@ -1068,9 +978,6 @@ function P.Combo(p, spec, o, m)
 	p.comboHave = count
 end
 
--- The fades of test mode's sample quest mark and its count, as PlateQuest.lua's: in over P.QUEST_FADE_IN as the mark comes back, and out over
--- P.QUEST_FADE_OUT once a finished count's pop has settled (a start delay of P.QUEST_POP_SECONDS), keeping its end. Alpha animations of the mark's
--- texture and of the count's font string; none on a client without them, nor on setup's drawings, whose stage has no still.
 function P.QuestFades(p)
 	local ins, outs = {}, {}
 	local ok = pcall(function()
@@ -1099,7 +1006,6 @@ function P.QuestFades(p)
 	end
 end
 
--- The mark and its count whole: their fades stop. A mark that is hidden, and a stage that snaps (setup's drawings, test mode's with Moving off).
 function P.QuestRest(p)
 	for _, list in ipairs({ p.questIns or {}, p.questOuts or {} }) do
 		for _, group in ipairs(list) do
@@ -1111,8 +1017,6 @@ function P.QuestRest(p)
 	p.questFaded = nil
 end
 
--- The sample's count reaching 8/8 (have, of 8) turns it done (p.questDone, green): the mark and its count fade out once its pop settles; a count that
--- drops back from it fades them in again. On a stage that snaps they stay whole.
 function P.QuestFade(p, have)
 	local done = ns.Finite(have) and have >= 8
 	local was = p.questDone
@@ -1141,18 +1045,11 @@ function P.QuestFade(p, have)
 	end
 end
 
--- The threat of test mode's sample plate (spec.threat), as a live plate has it: the ring in the threat colour round the bar (and Flat UI's square
--- level box at its end) while Threat glow asks for one (When the enemy needs you: changing hands and threat you do not want; Every threat state:
--- all three), the sample value of the state while Threat value is not Off, at Threat value position and its offsets, in Threat value size of the
--- health text, Threat value outline and the threat colour or Threat value colour, laid out as PlateThreatText.lua's PlaceValue lays it out, and the
--- fade of Fade enemies held for you (Opacity of enemies held for you on threat you want, Opacity of enemies changing hands on threat changing
--- hands), which never fades the target or the focus. A plate with no threat has none of them and keeps its own alpha.
 function P.Threat(p, spec, o, m)
 	local threat = spec.threat
 	local on = threat ~= nil and P.THREAT_VALUES[threat] ~= nil and o.styled and Get("threat") == true
 	local glow = on and Get("threatGlow") or "off"
-	if glow == "all" or (glow == "needs" and threat ~= "threatGood") then
-		-- The general border thickness and RING_GAP more, in screen pixels as the live ring has it (PlateThreatLook.lua's Gap).
+	if glow == "all" or (glow == "needs" and (threat == "threatTransition" or threat == "threatBad")) then
 		local thickness = ns.Get("general.thickness")
 		local d = ns.Pixels(p.ring, (ns.Finite(thickness) and thickness or 1) + P.RING_GAP)
 		local right = o.levelSquare and p.lvl or p.bar
@@ -1162,7 +1059,6 @@ function P.Threat(p, spec, o, m)
 		p.ring:SetPoint("BOTTOM", p.bar, "BOTTOM", 0, -d)
 		p.ring:SetPoint("RIGHT", right, "RIGHT", d, 0)
 		local r, g, b = ns.Colour(KEY .. "." .. P.ThreatRow(threat))
-		-- Threat ring thickness, as the live ring has it; its edges lie outside the ring's frame, so it grows outward.
 		local px = Get("threatRingPx")
 		ns.SetOutlineThickness(p.ringOutline, ns.Finite(px) and px >= 1 and math.floor(px + 0.5) or P.RING_PX)
 		ns.SetOutlineColour(p.ringOutline, r, g, b)
@@ -1170,8 +1066,6 @@ function P.Threat(p, spec, o, m)
 		p.ring:Show()
 		local first = not p.ringShown
 		p.ringShown = true
-		-- A sample that has just turned to threat you do not want flashes its ring, with Flash the ring when threat goes wrong, and so does one
-		-- that has it as that row turns on (setup's drawing of the threat rows shows the flash then); a ring that comes otherwise eases in.
 		local flash, flashed = p.ringFlash, false
 		local flashOn = Get("threatFlash") == true
 		if flashOn and p.flashWas == false then
@@ -1190,7 +1084,6 @@ function P.Threat(p, spec, o, m)
 		if p.ringFlash then
 			pcall(p.ringFlash.Stop, p.ringFlash)
 		end
-		-- A ring that goes eases out, and its outline goes once that ends; a repaint leaves an ease out on its way.
 		local was = p.ringShown
 		p.ringShown = nil
 		if not (was and P.RingOut(p)) and not P.Playing(p.ringOut) then
@@ -1220,12 +1113,9 @@ function P.Threat(p, spec, o, m)
 			P.Put(p, text, "LEFT", edge, m.center + y, width, height)
 			p.tvalueL, p.tvalueR, p.tvalueY = edge, edge + width, m.center + y
 		elseif place == "above" then
-			-- Over the sample's auras (m.top), as the live value stands over the debuff row; p.tvalueT is its top, which an Above quest mark and the
-			-- Overpower icon stand over.
 			P.Put(p, text, "BOTTOM", m.BW / 2 + x, m.top + gap + y, width, height)
 			p.tvalueT = m.top + gap + y + height
 		elseif place == "below" then
-			-- Under the row of combo points while it shows (P.Combo), else under the cast bar, as the live value hangs.
 			local under = ns.Finite(p.comboB) and p.comboB or 0
 			P.Put(p, text, "TOP", m.BW / 2 + x, under + y - gap, width, height)
 		else
@@ -1249,7 +1139,6 @@ function P.Threat(p, spec, o, m)
 	P.Alpha(p, alpha)
 end
 
--- True while an animation group plays.
 function P.Playing(group)
 	if not group then
 		return false
@@ -1258,13 +1147,10 @@ function P.Playing(group)
 	return ok and playing == true
 end
 
--- True while the sample's motion holds still or its stage has none: setup's drawings, and test mode's while Moving is off.
 function P.Snaps(p)
 	return not p.alphaStep or P.Still(p)
 end
 
--- The ring's ease in and out (ns.PlateRingEase), as a live ring comes and goes; setup's drawings and a still stage show and hide it at once.
--- P.RingOut is true when the ease out plays, and the outline then goes as it ends (P.RingGone).
 function P.RingStill(p)
 	for _, group in ipairs({ p.ringIn or false, p.ringOut or false }) do
 		if group then
@@ -1295,8 +1181,6 @@ function P.RingGone(p)
 	p.ring:Hide()
 end
 
--- The sample's opacity: at once on setup's drawings and while test mode's stage holds still, else it eases there over P.EASE_SECONDS on an OnUpdate
--- of the plate's frame that runs only while it is on its way (P.AlphaStep), as a live plate's threat fade does.
 function P.Alpha(p, alpha)
 	local now = p.f:GetAlpha()
 	if P.Snaps(p) or not p.f:IsVisible() or not ns.Finite(now) or math.abs(now - alpha) < 0.001 then
@@ -1327,17 +1211,11 @@ function P.AlphaStep(p, elapsed)
 	p.f:SetAlpha(now + (goal > now and step or -step))
 end
 
--- The rest of the threat look of the sample, from its state while the threat is on (on), else the look without threat: the name in the threat colour
--- with Threat colour on the name and the health text with it with Health text in the name's colour (PlateText.lua's ThreatColour), the border with
--- Threat colour on the health bar border (P.Border), and a dark shade of the threat colour behind the bar with Health bar background in the threat
--- colour while threat colours the bar and Health bar background is on, and not on a target that keeps the target's colour (PlateThreatLook.lua's
--- Back). Only colours and the fill: P.Plate laid them out.
 function P.ThreatLooks(p, spec, o, on)
 	local r, g, b
 	if on then
 		r, g, b = ns.Colour(KEY .. "." .. P.ThreatRow(spec.threat))
 	end
-	-- Through ns.TextStyle at the size P.Text gave them, which keeps the colour it last set.
 	local named = on and Get("threatName") == true
 	local name = named and { r, g, b } or P.NameColour(spec, o)
 	ns.TextStyle(p.name, { percent = o.nameSize, r = name[1], g = name[2], b = name[3] })
@@ -1354,10 +1232,6 @@ function P.ThreatLooks(p, spec, o, on)
 	end
 end
 
--- The name of the enemy's target right of the sample (PlateThreatText.lua's TargetPart) while Name of the enemy's target is on, and only on your
--- target with Only on your target: a warrior who holds it in the warrior colour, and your own name in your class colour while it attacks you, hidden
--- then with Not when it attacks you. In brackets, in the health text's font at Threat value size, after the value on the right, else after the end
--- of the bar or the level box. p.ttargetR is its right end, which a quest mark on the right goes past.
 function P.ThreatTarget(p, spec, o, m, on)
 	local text = p.ttarget
 	local mine = spec.threat == "threatBad"
@@ -1389,13 +1263,24 @@ function P.ThreatTarget(p, spec, o, m, on)
 	text:Show()
 end
 
--- The class whose spell the Overpower icon shows: the player's when it has one (a hunter's Mongoose Bite), else the warrior's Overpower.
+function P.Knows(id)
+	local book = type(C_SpellBook) == "table" and C_SpellBook or {}
+	for _, call in ipairs({ book.IsSpellKnownOrInSpellBook, book.IsSpellKnown, IsSpellKnown }) do
+		if type(call) == "function" then
+			local ok, known = pcall(call, id)
+			if ok and not ns.IsSecret(known) and type(known) == "boolean" then
+				return known
+			end
+		end
+	end
+	return false
+end
+
 function P.OverpowerClass()
 	local _, class = P.Player()
 	return P.OP_SPELLS[class] and class or "WARRIOR"
 end
 
--- The icon of that spell (C_Spell.GetSpellTexture), else its file, asked once for each class.
 function P.OverpowerIcon()
 	local class = P.OverpowerClass()
 	P.opIcons = P.opIcons or {}
@@ -1412,7 +1297,6 @@ function P.OverpowerIcon()
 	return P.opIcons[class]
 end
 
--- True while the stage of a plate holds still (test mode's Moving off: S.still), when it has a say.
 function P.Still(p)
 	local still = p.S and p.S.still
 	if type(still) ~= "function" then
@@ -1422,9 +1306,6 @@ function P.Still(p)
 	return ok and answer == true
 end
 
--- The pop of test mode's sample icon as a round starts (an Alpha animation from nothing and a Scale animation from P.OP_POP_FROM to whole, from its
--- middle) and its fade over a round's last P.OP_FADE seconds (an Alpha animation to nothing that keeps its end), as PlateOverpower.lua's MakeMotion
--- makes them; nil on a client without them.
 function P.OverpowerMotion(p)
 	local frame = p.opFrame
 	local ok, pop, fade = pcall(function()
@@ -1457,7 +1338,6 @@ function P.OverpowerMotion(p)
 	end
 end
 
--- The icon's pop and fade stop, and it shows whole: a round that starts, the swipe going off, the stage holding still.
 function P.OverpowerRest(p)
 	for _, group in ipairs({ p.opPop or false, p.opFade or false }) do
 		if group then
@@ -1467,8 +1347,6 @@ function P.OverpowerRest(p)
 	p.opFrame:SetAlpha(1)
 end
 
--- The fade over the round's last P.OP_FADE seconds, once a round, from the Overpower frame's OnUpdate; not while the stage holds still. p.opEnds is
--- when the round's swipe ends, moved on by the time the stage held still, as the swipe's own end is.
 function P.OverpowerFade(p)
 	local fade, ends = p.opFade, p.opEnds
 	if not (fade and ns.Finite(ends)) or p.opFaded or P.Still(p) then
@@ -1481,9 +1359,6 @@ function P.OverpowerFade(p)
 	end
 end
 
--- The swipe pauses as the stage holds still and runs on where it stopped as it moves again; a round that ended while still starts the next one.
--- The icon's pop and fade stop as it holds still, and the fade plays again as the round nears its end after; the round's end moves on by the time
--- held, with or without a swipe. From the Overpower frame's OnUpdate, which runs only while the icon shows.
 function P.SwipeStill(p)
 	local swipe = p.opSwipe
 	local still = P.Still(p)
@@ -1516,11 +1391,6 @@ function P.SwipeStill(p)
 	end
 end
 
--- Rounds of P.OP_WINDOW seconds: test mode's sample (which has the pop and the fade, p.opPop) runs them on its own clock whatever Time left on the
--- Overpower icon says, as a live icon pops and fades with that row off; setup's drawings run them only for the swipe. While Time left on the
--- Overpower icon is on the swipe drains over each round and starts again with the next; off, it is cleared and only the swipe goes with the row.
--- done: the last round just ended (its swipe, or the clock, P.OverpowerClock), so the next round starts even when the clock still reads the end of
--- the last. While the stage holds still a round that runs is not started again, so a repaint leaves it where it stopped. A hidden icon has no round.
 function P.OverpowerSwipe(p, done)
 	local swipe = p.opSwipe
 	local motion = (p.opPop or p.opFade) and true or false
@@ -1543,7 +1413,6 @@ function P.OverpowerSwipe(p, done)
 			round = p.opRound + P.OP_WINDOW
 		end
 		if p.opRound ~= round then
-			-- Test mode's sample pops as each round after the first starts, as a live icon pops as an enemy dodges.
 			local later = p.opRound ~= nil
 			p.opRound = round
 			p.opEnds, p.opFaded, p.opSwiping = round + P.OP_WINDOW, nil, nil
@@ -1555,7 +1424,6 @@ function P.OverpowerSwipe(p, done)
 			end
 		end
 	end
-	-- The swipe follows the row: it starts on the round as the row turns on (or the round starts), and is cleared as the row turns off.
 	if timed and not p.opSwiping and p.opRound then
 		p.opSwiping = true
 		pcall(swipe.SetCooldown, swipe, p.opRound, P.OP_WINDOW)
@@ -1568,8 +1436,6 @@ function P.OverpowerSwipe(p, done)
 	end
 end
 
--- The next round once the round's end has passed while no swipe runs to end it (Time left on the Overpower icon off, or no Cooldown frame), from
--- the Overpower frame's OnUpdate; not while the stage holds still.
 function P.OverpowerClock(p)
 	if p.opSwiping or not ns.Finite(p.opEnds) or P.Still(p) then
 		return
@@ -1580,9 +1446,6 @@ function P.OverpowerClock(p)
 	end
 end
 
--- The Overpower icon of a sample that dodged a warrior (spec.overpower; Mongoose Bite's for a hunter), where PlateOverpower.lua puts it: centred over
--- the sample's auras, else over the name (over the bar while the name is inside it), moved by Overpower icon horizontal and vertical offset, at
--- Overpower icon size, in Flat UI's thin border, with its swipe.
 function P.Overpower(p, spec, o, m)
 	if not (spec.overpower and o.styled and Get("overpower") == true) then
 		p.opFrame:Hide()
@@ -1592,18 +1455,14 @@ function P.Overpower(p, spec, o, m)
 	end
 	local size = Get("overpowerSize")
 	size = ns.Finite(size) and size > 0 and size or 34
-	-- Over the sample's auras while it has them, else over the name (m.top), as the live icon stands over the debuff row, and over a threat value
-	-- above the sample. p.opT is its top, which an Above quest mark stands over.
 	local top = m.top
 	if p.tvalue:IsShown() and p.tvalueSide == "above" and ns.Finite(p.tvalueT) then
 		top = p.tvalueT
 	end
-	-- Moved by Overpower icon horizontal and vertical offset, and an Above quest mark with it.
 	local ox, oy = Get("overpowerX"), Get("overpowerY")
 	ox, oy = ns.Finite(ox) and ox or 0, ns.Finite(oy) and oy or 0
 	P.Put(p, p.opFrame, "BOTTOM", m.BW / 2 + ox, top + P.OP_GAP + oy, size, size)
 	p.opT = top + P.OP_GAP + oy + size
-	-- An Above quest mark stands over the icon's middle, where the offset put it.
 	p.opX = m.BW / 2 + ox
 	p.op:SetTexture(P.OverpowerIcon())
 	ns.SetOutline(p.opOutline, true, false)
@@ -1612,7 +1471,6 @@ function P.Overpower(p, spec, o, m)
 	P.OverpowerSwipe(p)
 end
 
--- The cast bar under the health bar, the icon, the shield, the spell name, the spark and the time.
 function P.Cast(p, spec, o, m)
 	local cast = spec.cast
 	if not cast then
@@ -1636,7 +1494,6 @@ function P.Cast(p, spec, o, m)
 	else
 		P.GameFill(p.cfill, p.cbar, m.BW, cast.share, { 1, 0.7, 0 }, P.ATLAS.cast)
 	end
-	-- The icon, or the shield in its place for a cast that cannot be interrupted.
 	local iconX, iconY
 	if style.spellInside then
 		iconX, iconY = 0, m.CB / 2
@@ -1682,14 +1539,11 @@ function P.Cast(p, spec, o, m)
 	p.spark:SetShown(o.spark and true or false)
 	p.ctime:ClearAllPoints()
 	p.ctime:SetPoint("RIGHT", p.cbar, "RIGHT", -4, 0)
-	-- The time takes the spell name's face, size and outline, as CastTime.lua copies them.
 	P.Text(p.ctime, P.CAST_FONT * m.v, o.castTextSize, o.castOutline, { 1, 1, 1 }, o.face)
 	p.ctime:SetText(("%.1f"):format(cast.left))
 	p.ctime:SetShown(o.castTime and true or false)
 end
 
--- The moving parts of a painted plate's cast, for test mode (TestHud.lua): the fill and spark at `share` of the bar and the seconds left. Only fills
--- and text: P.Plate laid it out.
 function P.CastProgress(p, share, left)
 	local m, o = p.m, p.o
 	if not (m and o and p.castColour and p.cast:IsShown()) then
@@ -1705,7 +1559,6 @@ function P.CastProgress(p, share, left)
 	p.ctime:SetText(("%.1f"):format(math.max(0, left)))
 end
 
--- The health bar of a painted plate filled again in the colour its sample asks for now (a new threat state), for test mode. Only the fill.
 function P.Health(p, spec)
 	local m, o = p.m, p.o
 	if not (m and o) then
@@ -1720,9 +1573,8 @@ function P.Health(p, spec)
 	end
 end
 
--- The row of aura icons above the name.
 function P.Auras(p, spec, o, m)
-	local count = spec.auras and spec.auras.count or 0
+	local count = spec.auras and m.AS and spec.auras.count or 0
 	local sizes = spec.auras and m.AS or 0
 	p.auras:SetAlpha(o.auraAlpha)
 	if count == 0 then
@@ -1757,7 +1609,6 @@ function P.Auras(p, spec, o, m)
 			end
 		end
 		icon.frame:Show()
-		-- The icon's border: a thin one when Aura icon border is on, else the game's thick one, which this drawing leaves as a bare icon.
 		ns.SetOutline(icon.outline, o.auras, false)
 		local colour = o.auras and o.auraColour or nil
 		ns.SetOutlineColour(icon.outline, colour and colour[1], colour and colour[2], colour and colour[3])
@@ -1777,7 +1628,6 @@ function P.Auras(p, spec, o, m)
 	end
 end
 
--- Lays out and paints one plate from its sample and the rows. Returns the box the plate takes up, from its bottom left corner.
 function P.Plate(p, spec, sets)
 	local o = P.Look(spec.friendly)
 	local m = P.Measure(o, spec, sets)
@@ -1785,12 +1635,10 @@ function P.Plate(p, spec, sets)
 	p.box = { l = 0, b = 0, r = m.BW, t = m.top }
 	p.f:SetSize(m.BW, m.top)
 	p.f:SetScale(spec.scale or 1)
-	-- Test mode's sample keeps the opacity it has, and P.Threat eases it to the new one.
 	if not p.alphaStep then
 		p.f:SetAlpha(spec.alpha or 1)
 	end
 	local share = spec.health or P.SHARE
-	-- The health bar.
 	P.Put(p, p.bar, "BOTTOMLEFT", 0, m.healthY, m.HW, m.HH)
 	local colour = P.BarColour(spec, o)
 	local file = o.flat and ns.BarTexture(o.texture) or nil
@@ -1810,7 +1658,6 @@ function P.Plate(p, spec, sets)
 	p.heal:SetShown(o.heal and true or false)
 	p.absorb:SetShown(o.absorb and true or false)
 	p.healAbsorb:SetShown(o.healAbsorb and true or false)
-	-- Every plate that is not the target or the focus is darkened by the game's overlay; Dim other nameplates sets how much.
 	local overlay = 1
 	if o.border then
 		overlay = o.dim and o.dimAmount or 0
@@ -1819,7 +1666,6 @@ function P.Plate(p, spec, sets)
 	p.over:SetAllPoints(p.bar)
 	p.over:SetColorTexture(0, 0, 0, P.DIM * overlay)
 	p.over:SetShown(not (spec.target or spec.focus) and overlay > 0)
-	-- The low health border takes its alpha from a step: full below the limit, none from it.
 	local low = o.styled and Get("lowHealth") == true
 	if low then
 		ns.SetOutlineColour(p.low, ns.Colour(KEY .. ".lowHealthColour"))
@@ -1827,7 +1673,7 @@ function P.Plate(p, spec, sets)
 	p.lowFrame:SetAlpha((low and share * 100 < Get("lowHealthAt")) and 1 or 0)
 	p.lowFrame:SetShown(low and true or false)
 	P.Border(p, spec, o)
-	-- The name and the health text.
+	P.TargetFlash(p, spec, o)
 	p.name:ClearAllPoints()
 	if m.nameAbove then
 		P.Put(p, p.name, "BOTTOM", m.BW / 2, m.healthY + m.HH + m.sp)
@@ -1837,21 +1683,19 @@ function P.Plate(p, spec, sets)
 	P.Text(p.name, P.FONT * m.v, o.nameSize, o.nameOutline, P.NameColour(spec, o), o.face)
 	p.name:SetText(spec.name or "")
 	p.name:SetShown(o.nameShow and true or false)
-	-- The game cuts a name that would run into the health text or past the row.
 	p.name:SetWordWrap(false)
 	if m.nameAbove then
 		p.name:SetWidth(math.max(1, m.BW))
 	else
 		local used = #P.HealthText(o, share) * P.FONT * m.v * o.textSize / 100 * 0.5
-		p.name:SetWidth(math.max(1, m.HW - 12 - (o.textShow and used or 0)))
+		p.name:SetWidth(math.max(1, m.HW - 12 - (P.HealthSeen(spec, o) and used or 0)))
 		p.name:SetJustifyH("LEFT")
 	end
 	p.htext:ClearAllPoints()
 	p.htext:SetPoint("RIGHT", p.bar, "RIGHT", -4, 0)
 	P.Text(p.htext, P.FONT * m.v, o.textSize, o.textOutline, o.textColour, o.face)
 	p.htext:SetText(P.HealthText(o, share))
-	p.htext:SetShown(o.textShow and true or false)
-	-- The row behind the name, in the colour of the bar, fading upward.
+	p.htext:SetShown(P.HealthSeen(spec, o))
 	local nameBottom = m.nameAbove and (m.healthY + m.HH + m.sp) or (m.center - m.NH / 2)
 	p.row:ClearAllPoints()
 	p.row:SetPoint("BOTTOMLEFT", p.f, "BOTTOMLEFT", 0, nameBottom - 1)
@@ -1871,7 +1715,6 @@ function P.Plate(p, spec, sets)
 	p.row:SetShown(drawn)
 	P.Level(p, spec, o, m)
 	P.ClassIcon(p, spec, o, m)
-	-- The raid marker, left of the row.
 	if spec.marker and o.marker then
 		P.Raid(p.marker, spec.marker)
 		P.Put(p, p.marker, "RIGHT", o.markerX - m.iconShift, m.center + o.markerY, o.markerSize, o.markerSize)
@@ -1881,10 +1724,8 @@ function P.Plate(p, spec, sets)
 	end
 	P.LeftEnd(p, spec, o, m)
 	P.Rarity(p, spec, o, m)
-	-- The row of combo points before the threat value, which hangs under it at Below.
 	P.Combo(p, spec, o, m)
 	P.Threat(p, spec, o, m)
-	-- The Overpower icon before the quest mark, which stands over it at Above.
 	P.Overpower(p, spec, o, m)
 	P.QuestMark(p, spec, o, m)
 	P.Cast(p, spec, o, m)
@@ -1892,9 +1733,6 @@ function P.Plate(p, spec, sets)
 	return p.box
 end
 
--- Cells: a plate or a row of chips, with a label --------------------------------------------------------------
-
--- The three threat colours, as small bars under the border the rows give a health bar.
 function P.NewChips(S, parent)
 	local chips = { f = Frame(parent), list = {} }
 	for index = 1, 3 do
@@ -1935,8 +1773,6 @@ function P.NewLabel(parent)
 	return label
 end
 
--- Puts the cells of a drawing in the grid frame. A cell is { id, label, col, show, spec | chips, at = { x, y } }. Columns run top to bottom. Returns the size
--- of the grid before it is scaled to the canvas.
 function P.Place(S, cells, sets)
 	local columns, layout = {}, {}
 	for _, cell in ipairs(cells) do
@@ -1973,7 +1809,6 @@ function P.Place(S, cells, sets)
 	return columns, layout
 end
 
--- Positions the cells of a stack of columns. Every plate is placed by the bottom left corner of its plate, the label to the left of the box.
 function P.Columns(S, columns)
 	local LABEL_W, GAP_X, GAP_Y, COL_GAP = 78, 6, 12, 26
 	local x, width, height = 0, 0, 0
@@ -1998,7 +1833,6 @@ function P.Columns(S, columns)
 	for _, entry in ipairs(placed) do
 		local frame = entry.plate.f or entry.plate.chips.f
 		local label = entry.plate.label
-		-- entry.y is the distance from the top of the grid to the bottom of the plate.
 		frame:ClearAllPoints()
 		frame:SetPoint("BOTTOMLEFT", S.grid, "TOPLEFT", entry.x, -entry.y)
 		label:ClearAllPoints()
@@ -2008,7 +1842,6 @@ function P.Columns(S, columns)
 	return width, height
 end
 
--- Fits a grid of this size to the canvas, or to a canvas of cw by ch: scales it down when it is larger, and says by how much.
 function P.Fit(S, width, height, cw, ch)
 	local fit = math.min(1, ((cw or P.CANVAS_W) - 2 * P.MARGIN) / math.max(1, width), ((ch or P.CANVAS_H) - 2 * P.MARGIN) / math.max(1, height))
 	S.grid:SetSize(math.max(1, width), math.max(1, height))
@@ -2017,8 +1850,6 @@ function P.Fit(S, width, height, cw, ch)
 	S.grid:SetScale(fit)
 	S.fit = fit
 end
-
--- The drawings ------------------------------------------------------------------------------------------------
 
 function P.Build(stage)
 	local S = P.states[stage]
@@ -2034,7 +1865,6 @@ function P.Build(stage)
 	return S
 end
 
--- The scale that fits the canvas to the stage: the canvas itself, or smaller where the stage is.
 function P.Canvas(S)
 	local width, height = S.stage:GetSize()
 	if type(width) ~= "number" or type(height) ~= "number" or width <= 0 or height <= 0 then
@@ -2043,8 +1873,6 @@ function P.Canvas(S)
 	S.root:SetScale(math.min(1, width / P.CANVAS_W, height / P.CANVAS_H))
 end
 
--- The view the stage names, for the outlines: they are laid out and painted from it where the client of this build has the functions, and from the
--- rows as they are now otherwise.
 function P.Follow(S)
 	local view = rawget(S.stage, "view")
 	if view ~= S.view and type(ns.SetOutlineView) == "function" then
@@ -2063,8 +1891,6 @@ function P.Repaint(S)
 	end
 end
 
--- Lays out and paints the cells of one drawing on a stage. With canvas, a function of the nameplate style and size that gives a width and a height, the
--- drawing keeps a canvas of that size, which S.width and S.height say, and is not fitted to the stage: whoever shows it scales the stage to that size.
 function P.Common(stage, cellsOf, arrange, canvas)
 	local S = P.Build(stage)
 	P.Follow(S)
@@ -2091,15 +1917,11 @@ function P.Common(stage, cellsOf, arrange, canvas)
 	return S
 end
 
--- The canvas of the cards of setup's nameplate stop: the label column, and room for its two plates at their largest (Taller, with cast times, in any
--- nameplate style) at the nameplate size chosen. Every card of the stop has the same canvas, so the plates of one card are drawn at the scale of the
--- others' and a smaller plate looks smaller.
 function P.WalkCanvas(sets)
 	local scale = P.SCALES[sets.size] or P.SCALES[2]
 	return 84 + 250 * scale[1], 30 + 130 * scale[2]
 end
 
--- The names an enemy and a friendly plate carry.
 function P.Samples()
 	local name = P.Player()
 	return { enemy = "Defias Pillager", elite = "Defias Taskmaster", player = "Gorvak", friend = name }
@@ -2121,7 +1943,9 @@ function P.Cells(kind)
 				{ id = "elite", label = "Elite", col = 1, spec = Enemy({ name = names.elite, level = 20, kind = "elite" }) },
 				{ id = "player", label = "Enemy player", col = 1, spec = Enemy({ name = names.player, player = true }) },
 				{ id = "friend", label = "Friendly", col = 1, spec = { name = names.friend, level = 18, friendly = true, player = true, health = P.SHARE } },
-				{ id = "target", label = "Target", col = 2, show = Get("targetBar") == true, spec = Enemy({ target = true }) },
+				{ id = "target", label = "Target", col = 2, show = Get("targetBar") == true or Get("healthTextWhen") ~= "always",
+					spec = Enemy({ target = true }) },
+				{ id = "focus", label = "Focus", col = 2, show = Get("healthTextWhen") == "focus", spec = Enemy({ focus = true }) },
 				{ id = "hover", label = "Mouseover", col = 2, show = Get("hover") == true, spec = Enemy({ hover = true }) },
 				{ id = "low", label = "Low health", col = 2, show = Get("lowHealth") == true, spec = Enemy({ health = 0.18 }) },
 				{ id = "threat", label = "Threat", col = 2, show = Get("threat") == true, chips = true },
@@ -2133,8 +1957,11 @@ function P.Cells(kind)
 					spec = Enemy({ cast = { name = "Stoneskin", share = 0.6, left = 1.2, shield = true } }) },
 			}
 		elseif kind == "auras" then
+			local when = Get("aurasWhen")
 			return {
-				{ id = "auras", label = "Auras", col = 1, spec = Enemy({ auras = { count = 5 } }) },
+				{ id = "auras", label = when ~= "always" and "Other enemy" or "Auras", col = 1, spec = Enemy({ auras = { count = 5 } }) },
+				{ id = "auraTarget", label = "Your target", col = 1, show = when ~= "always", spec = Enemy({ target = true, auras = { count = 5 } }) },
+				{ id = "auraFocus", label = "Focus", col = 1, show = when == "focus", spec = Enemy({ focus = true, auras = { count = 3 } }) },
 			}
 		elseif kind == "marks" then
 			local _, class = P.Player()
@@ -2148,18 +1975,15 @@ function P.Cells(kind)
 				{ id = "elite", label = "Elite", col = 2, spec = Enemy({ name = names.elite, level = 20, kind = "elite" }) },
 				{ id = "rare", label = "Rare", col = 2, spec = Enemy({ name = "Old Blanchy", level = 20, kind = "rare" }) },
 				{ id = "boss", label = "Boss", col = 2, spec = Enemy({ name = "Edwin VanCleef", level = 20, kind = "boss" }) },
-				-- A warrior's Overpower over an enemy that dodged them, or a hunter's Mongoose Bite over their target.
-				{ id = "overpower", label = P.OP_NAMES[class] or P.OP_NAMES.WARRIOR, col = 2, show = P.OP_SPELLS[class] ~= nil,
-					spec = Enemy({ overpower = true, target = class == "HUNTER" or nil }) },
-				-- A rogue's or a druid's combo points under their target, 3 of 5, below the room the game keeps for the cast bar.
+				{ id = "overpower", label = P.OP_NAMES[class] or P.OP_NAMES.WARRIOR, col = 2,
+					show = P.OP_SPELLS[class] ~= nil and (class ~= "ROGUE" or P.Knows(P.OP_SPELLS.ROGUE)),
+					spec = Enemy({ overpower = true, target = P.OP_TARGET[class] }) },
 				{ id = "combo", label = "Combo points", col = 2, show = class == "ROGUE" or class == "DRUID",
 					spec = Enemy({ target = true, combo = 3, reserve = true }) },
+				{ id = "comboFull", label = "Full points", col = 2, show = (class == "ROGUE" or class == "DRUID") and Get("comboPoints") == true,
+					spec = Enemy({ target = true, combo = P.COMBO_MAX, reserve = true }) },
 			}
 		elseif kind == "threat" then
-			-- Setup's colours and threat: an enemy, an enemy player, the mouseover and low health as the plate drawing has them, and with Threat on
-			-- nameplates the threat rows on a sample of each state, as test mode's sample takes them in turn: threat you want (faded), changing hands
-			-- (faded by its own opacity), threat you do not want (with the ring, which flashes as the drawing opens), and your target changing hands,
-			-- which never fades, takes Colour the target's health bar and shows the name of the enemy's target with Only on your target too.
 			local threat = Get("threat") == true
 			return {
 				{ id = "enemy", label = "Enemy", col = 1, spec = Enemy() },
@@ -2169,16 +1993,16 @@ function P.Cells(kind)
 				{ id = "good", label = "You want", col = 2, show = threat, spec = Enemy({ threat = "threatGood" }) },
 				{ id = "changing", label = "Changing hands", col = 2, show = threat, spec = Enemy({ threat = "threatTransition" }) },
 				{ id = "bad", label = "You do not want", col = 2, show = threat, spec = Enemy({ threat = "threatBad" }) },
+				{ id = "offtank", label = "Held by another tank", col = 2, show = threat and Get("threatTanks") == true and not P.Damage(),
+					spec = Enemy({ threat = "threatTank" }) },
 				{ id = "target", label = threat and "Your target" or "Target", col = 2, spec = Enemy({ target = true, threat = "threatTransition" }) },
 			}
 		elseif kind == "walk" then
-			-- Flat UI setup's nameplate stop: an enemy casting with auras on it, and one at low health.
 			return {
 				{ id = "cast", label = "Casting", col = 1, spec = Enemy({ cast = { name = "Shadow Bolt", share = 0.6, left = 1.2 }, auras = { count = 3 } }) },
 				{ id = "low", label = "Low health", col = 1, spec = Enemy({ health = 0.18 }) },
 			}
 		end
-		-- The stack: the target, a plate near and a plate far, nearly on top of one another.
 		local selected, far = Get("selectedScale") / 100, Get("minScale") / 100
 		local other = Get("notSelectedAlpha") / 100
 		local cast = Get("showCastBars") == true and { name = "Shadow Bolt", share = 0.6, left = 1.2 } or nil
@@ -2190,7 +2014,6 @@ function P.Cells(kind)
 	end
 end
 
--- The stack: the target at the middle, a far plate beside it at the horizontal step and a near plate above at the vertical step.
 function P.Stack(S, layout)
 	local by = {}
 	for _, entry in ipairs(layout) do
@@ -2199,7 +2022,6 @@ function P.Stack(S, layout)
 	local target = by.target
 	local BW = target.plate.m.BW
 	local step = { BW * Get("overlapH") / 100, target.plate.m.top * Get("overlapV") / 100 }
-	-- The places of the bottom centre of each plate, in the grid before the scale of each plate.
 	local spots = { target = { 0, 0 }, near = { step[1] / 2, step[2] }, far = { -step[1], 0 } }
 	local left, right, bottom, top = math.huge, -math.huge, math.huge, -math.huge
 	for id, spot in pairs(spots) do
@@ -2217,10 +2039,8 @@ function P.Stack(S, layout)
 		local entry = by[id]
 		local scale = entry.cell.spec.scale or 1
 		local frame, label = entry.plate.f, entry.plate.label
-		-- The plate hangs from its own bottom left corner: moved half its width back so that its bottom centre is at the place.
 		frame:ClearAllPoints()
 		frame:SetPoint("BOTTOMLEFT", S.grid, "BOTTOMLEFT", (spot[1] - left + LABEL - BW / 2 * scale) / scale, (spot[2] - bottom) / scale)
-		-- The label hangs from the grid, in the units of the grid, while the plate is in its own scale.
 		label:ClearAllPoints()
 		local base = (spot[1] - left + LABEL - BW / 2 * scale)
 		local middle = spot[2] - bottom + entry.plate.m.center * scale
@@ -2231,13 +2051,11 @@ function P.Stack(S, layout)
 			label:SetPoint("LEFT", S.grid, "BOTTOMLEFT", base + (entry.box.r + 4) * scale, middle)
 			label:SetJustifyH("LEFT")
 		end
-		-- The target is above the others.
 		frame:SetFrameLevel(id == "target" and 30 or 10)
 	end
 	return width, height
 end
 
--- The parts of a stage: the region each saved path changes.
 function P.Parts(S)
 	local plates = S.plates
 	local main = plates.enemy or plates.cast or plates.auras or plates.target or plates.changing
@@ -2252,7 +2070,6 @@ function P.Parts(S)
 		end
 	end
 	local plate = plates.enemy or main
-	-- A cell switched off again is hidden: a part points at the enemy plate then.
 	local function Live(id)
 		local cell = plates[id]
 		if cell and cell.f and cell.f:IsShown() then
@@ -2269,11 +2086,12 @@ function P.Parts(S)
 	Set({ "healAbsorbs" }, plate.healAbsorb)
 	Set({ "textFace", "nameShow", "nameSize", "nameOutline", "nameColour", "nameCustomColour" }, plate.name)
 	Set({ "nameRow" }, plate.row)
-	Set({ "healthText", "healthTextSize", "healthTextOutline", "healthTextColour", "healthTextWhen", "healthFormat" }, plate.htext)
+	Set({ "healthText", "healthTextSize", "healthTextOutline", "healthTextColour", "healthTextWhen", "healthFormat" },
+		(Get("healthTextWhen") ~= "always" and Live("target") or plate).htext)
 	Set({ "level", "levelSize", "levelShape", "levelGap" }, plate.lvl)
 	Set({ "kindMark" }, (plates.elite or plate).mark)
 	Set({ "colourPlayers" }, (plates.player or plate).bar)
-	Set({ "targetBar", "targetBarColour", "target", "targetColour", "targetThickness" }, (Live("target") or plate).bar)
+	Set({ "targetBar", "targetBarColour", "target", "targetColour", "targetThickness", "targetFlash" }, (Live("target") or plate).bar)
 	Set({ "focusColour" }, (Live("focus") or Live("target") or plate).bar)
 	Set({ "threat", "threatRole", "threatGood", "threatTransition", "threatBad", "threatSameColours", "threatDamageGood", "threatDamageTransition",
 		"threatDamageBad" }, plates.threat and plates.threat.chips.f or plate.bar)
@@ -2285,7 +2103,7 @@ function P.Parts(S)
 	Set({ "castSpark" }, plate.spark)
 	Set({ "castShield" }, (plates.locked or plate).shield)
 	Set({ "castTime" }, plate.ctime)
-	Set({ "auras", "auraCrop", "auraBorderOwn", "auraBorderColour", "auraTimers", "auraStacks", "auraOpacity", "aurasWhen" }, plate.auras)
+	Set({ "auras", "auraCrop", "auraBorderOwn", "auraBorderColour", "auraTimers", "auraStacks", "auraOpacity", "aurasWhen" }, (Live("auraTarget") or plate).auras)
 	local player = plates.player or plate
 	Set({ "classEnemy", "classPosition", "classFit", "classSize", "classGap", "classX", "classY", "classBorder", "classShape" }, player.iconFrame)
 	Set({ "classFriendly" }, (plates.friend or plate).iconFrame)
@@ -2295,13 +2113,12 @@ function P.Parts(S)
 	Set({ "raidMarker", "raidMarkerSize", "raidMarkerX", "raidMarkerY" }, (plates.marked or plate).marker)
 	Set({ "questMark", "questMarkSize", "questMarkPlace", "questMarkX", "questMarkY" }, (Live("quest") or plate).quest)
 	Set({ "questMarkCount" }, (Live("quest") or plate).questCount)
-	-- Only a warrior's and a hunter's drawing has the Overpower plate, and a rogue's and a druid's the combo points; for anyone else the rows mark
-	-- nothing.
 	local overpower = Live("overpower")
 	Set({ "overpower", "overpowerSize", "overpowerX", "overpowerY", "overpowerSwipe" }, overpower and overpower.opFrame or nil)
 	local combo = Live("combo")
 	Set({ "comboPoints", "comboColour", "comboFull", "comboFullColour", "comboSize", "comboY" }, combo and combo.combo or nil)
-	-- The threat drawing: each threat row on the sample it changes.
+	local full = Live("comboFull")
+	Set({ "comboFull", "comboFullColour" }, full and full.combo or (combo and combo.combo) or nil)
 	local good, changing, bad = Live("good"), Live("changing"), Live("bad")
 	if good and changing and bad then
 		local target = Live("target") or changing
@@ -2318,6 +2135,8 @@ function P.Parts(S)
 		Set({ "aggroTargetNotMe" }, bad.ttarget:IsShown() and bad.ttarget or bad.bar)
 		Set({ "threatFade", "threatFadeAlpha", "threatFadeSame", "threatFadeDamage" }, good.f)
 		Set({ "threatFadeChanging" }, changing.f)
+		local offtank = Live("offtank")
+		Set({ "threatTanks", "threatTankColour" }, offtank and offtank.bar or good.bar)
 	end
 	Set({ "overlapH", "overlapV", "selectedScale" }, (Live("target") or plate).f)
 	Set({ "minScale", "minAlpha" }, (plates.far or plate).f)
@@ -2325,8 +2144,6 @@ function P.Parts(S)
 	S.parts = parts
 end
 
--- Makes the table of one drawing from the cells it lays out. A drawing with a canvas of its own (P.Common) returns from draw the width and height of
--- that canvas, which the box that shows it fits (SetupDraw.lua, D.PaintIn); the others return their state.
 local function Drawing(kind, arrange, canvas)
 	local cellsOf = P.Cells(kind)
 	local drawing = { parts = {} }
@@ -2341,7 +2158,6 @@ local function Drawing(kind, arrange, canvas)
 		end
 		return S
 	end
-	-- The parts of one stage, and the share of its size the drawing is shown at.
 	function drawing.partsOf(stage)
 		local S = P.states[stage]
 		return S and S.parts or {}

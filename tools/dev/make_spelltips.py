@@ -1,30 +1,4 @@
 #!/usr/bin/env python3
-"""Makes FlatUI/SpellData.lua, the spell data of the spell lines and the gear comparison (design 3).
-
-Usage: python3 tools/dev/make_spelltips.py [--check]
-
-Inputs, all in tools/dev/spelltips: coef.json (the shares of every spell, with the client effect that carries each part), threat.json
-(threat of the spells with a rule of their own, and the threat rules), gear.json (the model's constants, the crit damage talents and
-the item stat keys), curation.json (the hand-kept decisions, each with its reason) and client_spells.json (the client rows, made by
-tools/dev/spelltips_import.py). Every value a client row holds is read from client_spells.json: base points, points a level and a combo
-point, ticks and their period, the weapon percent, cast time, duration, levels, school, DefenseType, attributes, a coefficient the row
-stores, a threat value, a talent's curve, a rule's multiplier. The slices give each part's kind, stat, basis and notes, and the values no
-row holds (server rules and measured shares). Where a slice's value differs from the row, the row wins unless curation.json's
-known_differences names it with a reason.
-
-It prints the counts and the file's size, the spells left out of the comparison, the parts the text scan marked as counted by the game's
-text, the probes per class, and every value of the slices that differs from its row with whether known_differences explains it. --check
-writes nothing and exits 1 on a failed check; without it the file is written only when every check passes, and then luac5.4 -p and
-tools/dev/lua51_check.py run on it when they are there. The checks: every rank ID once and every key once; every default resolves and is a
-key, a list of keys or { needs, keys, else } (the one form GearLines.lua reads); each judgement's seal is an entry of its class with as many
-ranks; a threat list has one value per rank; coefficients between 0 and 5; every basis c, m or e; every talent of the rules and crit talents
-has a curve as long as its ranks, a node and a definition the capture's TraitNodes holds; every value a row holds equals the slice's or is
-in known_differences; every field written is one the shapes of design 3.2 and its stub (3.2a) use, or an entry's seal or a field of the
-first fix round (FIELDS), and every field and comparison kind of the stub is written; every class with spell power has a probe; a
-description whose variables come from build 70888 reads the same in 70938, else it says so; a channel with ticks has a duration; every
-estimate of curation.json names a part the slices mark e; every model value and crit talent of gear.json has a basis and a citation, and its
-stat keys a citation. Python 3, standard library only; deterministic, so a diff shows real changes.
-"""
 import json
 import os
 import re
@@ -33,6 +7,8 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import strip_lua
 DATA = os.path.join(HERE, 'spelltips')
 ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT = os.path.join(ROOT, 'FlatUI', 'SpellData.lua')
@@ -42,19 +18,11 @@ CLASS_FAMILY = {'MAGE': 3, 'WARRIOR': 4, 'WARLOCK': 5, 'PRIEST': 6, 'DRUID': 7, 
 SCHOOL_INDEX = {1: 1, 2: 2, 4: 3, 8: 4, 16: 5, 32: 6, 64: 7}
 ROLL = {1: 'spell', 2: 'special', 3: 'ranged'}
 CMP_KINDS = ('spell', 'dot', 'channel', 'heal', 'hot', 'strike', 'apstrike', 'finisher', 'auto', 'shot', 'wand', 'seal', 'proc', 'threat')
-# The kinds of an item stat key (D.STATS): those GearModel.lua's spell model counts, pen (Spell Piercing, with a school's index for the piercing of
-# that school alone, 3 fire to 7 arcane, which the hit table's resist and the spells of that school count), none and note, and avoid (a rating
-# index: 2 defense, 3 dodge, 4 parry, 5 block, Camelot/PaperDollFrame.lua:5-8) and armor, which only GearAvoid.lua counts; GearModel.lua passes
-# over a kind it does not know.
 STAT_KINDS = ('stat', 'school', 'rating', 'skill', 'vs', 'note', 'none', 'ap', 'rap', 'sp', 'spd', 'heal', 'wdmg', 'bv', 'dps', 'avoid', 'armor',
               'pen')
 PEN_SCHOOLS = (3, 4, 5, 6, 7)
 AVOID_RATINGS = (2, 3, 4, 5)
 
-# The fields the shapes may hold: those of design 3.2, and of its stub (3.2a), which uses a part of them, an entry's seal (a judgement's,
-# whose rank SpellModel.lua's M.Highest gives the judgement), which the join of the parts added, and those the first fix round added: an
-# entry's nd, nm and needs, a part's free and dg. Every field written must be one of these; the second set is reported, so a field the
-# other parts may not read yet is seen. An entry's rule of 3.2 is not written: a rule names the spells of its tooltip itself (tip).
 FIELDS = {
     'entry': {'key', 'pet', 'school', 'sch', 'cmp', 'roll', 'nb', 'nd', 'nm', 'nx', 'needs', 'seal', 'parts', 'ranks', 'threat'},
     'part': {1, 2, 'n', 'p', 'per', 'max', 'j', 'cp', 'spd', 'h', 'sch', 'g', 'fs', 'o', 'two', 'note', 'free', 'dg', 'b'},
@@ -73,14 +41,10 @@ STUB_FIELDS = {
              'holy', 'holyB', 'always'},
     'crit': {'talent', 'node', 'def', 'r', 'spells'},
 }
-# The stat tokens of the client's spell texts: which part stat each one counts.
 TOKENS = {'apm': 'ap', 'ap': 'ap', 'AP': 'ap', 'RAP': 'rap', 'rap': 'rap', 'bh': 'heal', 'SP': 'sp', 'SPH': 'sp', 'SPFR': 'sp',
           'SPFI': 'sp', 'SPN': 'sp', 'SPS': 'sp', 'SPA': 'sp', 'SPI': 'spirit'}
 TOKEN = re.compile(r'\$(apm|ap|AP|RAP|rap|bh|SPFR|SPFI|SPH|SPN|SPS|SPA|SPI|SP)(?![A-Za-z0-9])')
 AURA_TYPES = {6, 27, 35, 65, 119, 128, 129, 143, 174}
-# Attribute word 0's No Active Defense (an attack that cannot be dodged, parried or blocked: SPELL_ATTR0_NO_ACTIVE_DEFENSE, as
-# wowsims/forever's spelldata reads it), and the item a spell needs worn by class and subclass mask: a dagger (weapon 2, subclass 15) and a
-# shield (armor 4, subclass 6).
 NO_ACTIVE_DEFENSE = 0x200000
 NEEDS = {(2, 1 << 15): 'dagger', (4, 1 << 6): 'shield'}
 
@@ -120,8 +84,6 @@ def rnd(x, places=4):
         return int(x)
     return x
 
-
-# The client rows ------------------------------------------------------------------------------------------------------------------
 
 class Client:
     def __init__(self, data):
@@ -163,7 +125,6 @@ def matches(find, e):
 
 
 def periodic_aura(row):
-    """The period of the periodic aura of a rank row (a channel's or ground effect's pulse)."""
     for e in row['effects']:
         if e['type'] in AURA_TYPES and e['aura'] in (3, 8, 23, 53, 64, 226) and e['period']:
             return e['period']
@@ -173,8 +134,6 @@ def periodic_aura(row):
 def channel(row):
     return bool(row['attr1'] & 0x44)
 
-
-# Entries --------------------------------------------------------------------------------------------------------------------------
 
 class Entry:
     def __init__(self, key, cls):
@@ -200,7 +159,6 @@ class Entry:
 
 
 def resolve(client, rank, part, index):
-    """The row and effect that carry a part on a rank, and the ticks of a periodic part."""
     rid = rank['id']
     rank_row = client.row(rid)
     if rank_row is None:
@@ -299,7 +257,6 @@ def build_entries(client, coef, cur):
                 info['shared'] = shared
                 out['parts'].append(info)
             e.ranks.append(out)
-        # The shipped values and the check of every row-held value against the slice.
         for i, sp in enumerate(ce['parts']):
             for r, rank in zip(e.ranks, ce['ranks']):
                 info = r['parts'][i]
@@ -326,11 +283,6 @@ def build_entries(client, coef, cur):
 
 
 def value_of(key, i, sp, r, info, slice_c, diffs):
-    """The share a part ships on a rank: the row's where the row holds one, else the slice's; known_differences keeps the slice's.
-
-    A row holds the coefficient of a spell power or healing part on a spell that is not Physical (EffectBonusCoefficient, times the
-    ticks of a periodic part), the attack power share where BonusCoefficientFromAP is set, and the weapon multiple of a weapon part
-    (effect 31, else 1). Every other share is the slice's: a measured or estimated value no row holds."""
     eff, n, prow = info['effect'], info['n'], info['prow']
     stat = sp['stat']
     known = diffs if diffs and diffs.get('part') == i else None
@@ -368,8 +320,6 @@ def known_value(known, r):
     return c[r['index']] if isinstance(c, list) else c
 
 
-# Text scan, notes, comparison kinds ---------------------------------------------------------------------------------------------
-
 def variables(row):
     out = {}
     for line in (row.get('vars') or '').split('\n'):
@@ -380,7 +330,6 @@ def variables(row):
 
 
 def expanded(row):
-    """A rank's description with its $<name> variables written out, to any depth."""
     text = row.get('desc') or ''
     names = variables(row)
     for _ in range(12):
@@ -435,7 +384,6 @@ def apply_curation(entries, cur):
     for key, s in cur['schools'].items():
         e = need(entries, key, 'schools')
         if 'sch' in s:
-            # The client does not say which school's spell damage counts: the lower is taken, an estimate (design 3.5).
             e.sch = s['sch']
             for part in e.parts:
                 if part['stat'] == 'sp':
@@ -454,8 +402,6 @@ def apply_curation(entries, cur):
 
 
 def apply_rows(entries, client, cur):
-    """The curation that reads a client row: a part's weapon multiple with a dagger (dagger: the effect the text names, on every rank alike)
-    and a rank's duration from the row its text names (durations)."""
     for key, x in cur['dagger'].items():
         e = need(entries, key, 'dagger')
         found = set()
@@ -479,8 +425,6 @@ def apply_rows(entries, client, cur):
 
 
 def apply_judgements(entries, cur):
-    """Each judgement names its seal (curation judgements): the two of a class, with as many ranks, so the judgement's rank of a place is the
-    seal's rank of that place."""
     for key, j in cur['judgements'].items():
         if key == 'about':
             continue
@@ -501,7 +445,6 @@ def need(entries, key, where):
 
 
 def entry_rows(e):
-    """The row that carries the entry's damage or healing: the first part's, else the top rank's."""
     if not e.ranks:
         return None
     top = e.ranks[-1]
@@ -530,7 +473,6 @@ def decide(entries, order, cur):
                 P.fail('%s: school mask %s in the row, %s in the slice' % (e.key, mask, ce['school']))
             e.roll = ROLL.get(row['def'])
         top = e.ranks[-1]['row'] if e.ranks else None
-        # The cast's row rolls the table (Pounce's, whose bleed rides on it), else the row of the damage (a judgement's).
         e.nd = any(x is not None and bool(x['attr0'] & NO_ACTIVE_DEFENSE) for x in (top, row))
         if top is not None and top['attr0'] & 0x4:
             e.nx = True
@@ -549,7 +491,6 @@ def decide(entries, order, cur):
 
 
 def needs_of(e):
-    """The item an entry's ranks need worn (NEEDS: a dagger, a shield), the same on every rank, or None."""
     found = set()
     for r in e.ranks:
         equip = r['row'].get('equip')
@@ -582,8 +523,6 @@ def compare_kind(e, ce, kinds, none):
         return 'strike'
     if any(p['slice'].get('per') == 'cp' for p in e.parts):
         return 'finisher'
-    # A spell that only heals is a heal or a HoT, a channelled one too (Tranquility): it cannot miss and makes heal threat, and a HoT's
-    # figures are a channel's (the total, and a second of the effect, design 2.3).
     if stats <= {'heal'}:
         return 'hot' if periodic or channel(top) else 'heal'
     if channel(top):
@@ -593,10 +532,7 @@ def compare_kind(e, ce, kinds, none):
     return 'dot' if periodic else 'apstrike'
 
 
-# Threat -----------------------------------------------------------------------------------------------------------------------------
-
 def make_threat_entries(entries, client, threat):
-    """An entry with no parts for each threat spell the coefficient slice does not hold."""
     made = []
     for t in threat['spells']:
         key = t['key']
@@ -690,22 +626,17 @@ def build_threat(entries, client, threat, cur):
         if t.get('split'):
             out['split'] = True
         e.threat = out
-    # Heals make heal threat: 0.5 a point healed, split, a quarter for the paladin's three (measured, EV-0045, EV-0057, EV-0058).
     for key, e in entries.items():
         if e.threat is None and e.cmp in ('heal', 'hot') and key not in leave:
             e.threat = {'k': 'heal', 'v': heal.get(key, 0.5), 'b': 'm', 'split': True}
     for key in heal:
         if key not in entries:
             P.fail('heal_threat names %r, which no entry has' % key)
-    # Threat not known on Forever: the spells curation leaves out, and a spell that only absorbs (Ice Barrier, Frost Ward), whose absorb is
-    # neither damage nor healing. k unknown: no threat line and no threat figure, unlike none (no threat) or no threat entry (the damage's).
     for key, e in entries.items():
         absorbs = bool(e.parts) and all(p['slice']['find'] == 'absorb' for p in e.parts)
         if key in leave or (absorbs and e.threat is None):
             e.threat = {'k': 'unknown'}
 
-
-# Rules and crit talents -----------------------------------------------------------------------------------------------------------
 
 def scope_spells(entries, cls, family, mask):
     out = []
@@ -829,7 +760,6 @@ def build_rules(entries, client, threat, cur):
 
 
 def scope(out, entries, cls, row, effect):
-    """What a threat rule covers: a school mask (MOD_THREAT) or the class's spells of a threat modifier's class mask."""
     if effect is None or row is None:
         return
     if effect['aura'] == 10:
@@ -870,8 +800,6 @@ def build_crit(entries, client, gear):
     return out
 
 
-# Probes, defaults, Rockbiter -------------------------------------------------------------------------------------------------------
-
 KNOWN_KEYS = set()
 
 
@@ -903,9 +831,6 @@ def build_probes(entries):
 
 
 def build_defaults(entries, cur):
-    """The default lines of design 2.1, in the one form GearLines.lua reads: a line is a key; a list of keys is the first of them known
-    (Greater Heal, else Heal, else Lesser Heal); { needs, keys, else } is each of its keys while needs is known, else each of else, written as the Lua table
-    { key, key ..., needs = key, ["else"] = { key ... } }. Every key must be an entry of the class or of every class."""
     out = {}
 
     def resolve(cls, role, key):
@@ -962,8 +887,6 @@ def build_rockbiter(client, cur):
     return sorted(out)
 
 
-# Lua --------------------------------------------------------------------------------------------------------------------------------
-
 def lua_num(x):
     if isinstance(x, bool):
         return 'true' if x else 'false'
@@ -998,7 +921,6 @@ def lua(v):
     raise TypeError(v)
 
 
-# Lua's reserved words, which a table constructor can only take as ["word"] = ...
 LUA_WORDS = {'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function', 'if', 'in', 'local', 'nil', 'not', 'or', 'repeat',
              'return', 'then', 'true', 'until', 'while'}
 
@@ -1047,7 +969,6 @@ SEALS = {}
 
 
 def seal_values(entries, client, cur):
-    """The seal value of each rank of a seal, from the dummy effect of the judgement of the same rank."""
     for key, s in cur['seal_values'].items():
         seal, judgement = need(entries, key, 'seal_values'), need(entries, s['from'], 'seal_values')
         if len(seal.ranks) != len(judgement.ranks):
@@ -1097,8 +1018,6 @@ def rank_fields(e, r, parts_top, caster):
                 mean = gain = None
             else:
                 mean = eff['bp'] * k
-                # A gain a level counts from a base mean: with none (a dummy of base 0 the server works out, Riptide's direct heal) there
-                # is no base to gain, so bl, lv and mx stay off that part, as bm does.
                 gain = eff['ppl'] * k if mean else None
                 if part['slice'].get('per') == 'cp' and eff['ppr']:
                     cpb = rnd(eff['ppr'] * k, 2)
@@ -1110,8 +1029,6 @@ def rank_fields(e, r, parts_top, caster):
     for name, vals in (('c', c), ('n', n), ('w', w)):
         if any(v is not None for v in vals):
             f[name] = vals
-    # The cast of a rank: -1 a channel; the caster kinds always (0 instant); others only a real cast (Slam, Aimed Shot). An auto
-    # attack's or a shot's pace is its weapon's speed, and a ranged ability's negative cast (-1000000, "the ranged weapon's") is none.
     cast = row['cast'] if row['cast'] and row['cast'] > 0 else 0
     if channel(row):
         f['ct'] = -1
@@ -1125,8 +1042,6 @@ def rank_fields(e, r, parts_top, caster):
                 and info['prow'] is not row and info['prow']['dur'] and info['prow']['dur'] > 0:
             dur = info['prow']['dur']
             break
-    # The duration of a periodic, channelled, seal or proc rank, and of one whose threat lasts: a taunt's, a forced attack's and Fade's
-    # (SpellModel.lua words "3 sec", "forces attacks 6 sec" and "for 10 sec" from it, design 1.2).
     lasting = e.threat is not None and e.threat.get('k') in ('taunt', 'force', 'more', 'temp')
     if e.duration:
         dur = e.duration
@@ -1343,8 +1258,6 @@ def stat_value(s):
     return v
 
 
-# The checks that need the whole --------------------------------------------------------------------------------------------------
-
 def level_rows(entries):
     out = set()
     for key, e in entries.items():
@@ -1415,8 +1328,6 @@ def check_whole(entries, rules, crit, w, client, coef, threat, gear):
             P.fail('fields the stub uses that no %s holds: %s' % (kind, ', '.join(unwritten)))
 
 
-# Main ------------------------------------------------------------------------------------------------------------------------------
-
 def main():
     check_only = '--check' in sys.argv[1:]
     coef, threat, gear, cur = load('coef.json'), load('threat.json'), load('gear.json'), load('curation.json')
@@ -1440,6 +1351,7 @@ def main():
     rockbiter = build_rockbiter(client, cur)
     seal_values(entries, client, cur)
     text, w = write_lua(entries, rules, crit, gear, cur, threat, probes, defaults, rockbiter, client)
+    text = strip_lua.strip(text)
     check_whole(entries, rules, crit, w, client, coef, threat, gear)
     ranks = sum(len(e.ranks) for e in entries.values())
     with_threat = sum(1 for e in entries.values() if e.threat)

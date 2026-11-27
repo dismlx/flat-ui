@@ -1,33 +1,4 @@
 #!/usr/bin/env python3
-"""flatui_map.py: the data of the Flat UI code map, and the page built from it.
-
-Rebuilt at 0.5.15, after the generator the map was first made with (at 0.4.66) was lost. It reads the addon and
-writes the same data as that one did, by the rules the old data states in its "gaps" and "checks":
-
-  FlatUI/*.lua in the order of FlatUI/FlatUI.toc    files, lines, descriptions, functions, ns definitions, calls between
-                                                   files (written as ns.Name) and the game names each file uses
-  FlatUI/Config.lua, run by lua5.4 with a stub ns   every setting row and page (there is no settings.json any more)
-  FlatUI_test.lua                                  the labels of check("label", ...) and what each check calls
-  Forever's interface source and the client lists  which names are the game's frames, functions, events and CVars
-
-Nothing of the addon is changed. It needs Python 3 and its standard library, lua5.4 for the settings dump, and git
-for --fetch. The game names come from two repositories, which --fetch clones into tools/dev/sources, one commit deep,
-or brings up to date:
-
-  Forever's interface source   https://github.com/Gethe/wow-ui-source, branch forever: Interface/AddOns
-  the client lists             https://github.com/wowless/wowless: data/products/wowf
-
-From the repository's root,
-
-  python3 tools/dev/flatui_map.py --fetch
-
-writes tools/dev/out/data_<version>.json and tools/dev/out/flat-ui-map.html, the page with the data in it, which is
-published in place of the last one. tools/dev/flatui_map_template.html is that page with __DATA__ where the data goes.
-tools/dev/out and tools/dev/sources are left out of git.
-
-  python3 tools/dev/flatui_map.py [--fetch] [--sources DIR] [--interface DIR] [--products DIR]
-                                  [--repo DIR] [--out DIR] [--template FILE] [--lua LUA]
-"""
 
 import argparse
 import collections
@@ -45,21 +16,16 @@ DEFAULTS = {
     "template": os.path.join(HERE, "flatui_map_template.html"),
     "sources": os.path.join(HERE, "sources"),
 }
-# the repositories of the game names: the folder in --sources, the address, the branch, and the folder read in it
 SOURCE_REPOS = (
     ("wow-ui-source", "https://github.com/Gethe/wow-ui-source.git", "forever", ("Interface", "AddOns")),
     ("wowless", "https://github.com/wowless/wowless.git", "main", ("data", "products", "wowf")),
 )
 VERSION_LABEL = "tools/dev/flatui_map.py"
-CODE_MAX = 150      # a quoted line of code is cut at this many characters
-DOC_MAX = 300       # a comment above a function is cut at this many characters
-DOC_LINES = 6       # and only its last lines, the ones nearest the function, are read
-EXAMPLES = 4        # places quoted per call pair or per game name
+CODE_MAX = 150
+DOC_MAX = 300
+DOC_LINES = 6
+EXAMPLES = 4
 
-
-# ----------------------------------------------------------------------------------------------------------------
-# Lua lexer
-# ----------------------------------------------------------------------------------------------------------------
 
 KEYWORDS = frozenset("and break do else elseif end false for function goto if in local nil not or repeat return then"
                      " true until while".split())
@@ -90,7 +56,6 @@ class Comment(object):
 
 
 def decode_string(body):
-    """The value of a short string literal from the text between its quotes."""
     out, i, n = [], 0, len(body)
     while i < n:
         c = body[i]
@@ -138,7 +103,6 @@ def decode_string(body):
 
 
 def lex(text):
-    """Tokens and comments of a Lua source. Strings keep their source text in raw and their value in v."""
     toks, comments = [], []
     i, n, line = 0, len(text), 1
     last_code_line = 0
@@ -230,10 +194,6 @@ def lex(text):
     return toks, comments
 
 
-# ----------------------------------------------------------------------------------------------------------------
-# One Lua file
-# ----------------------------------------------------------------------------------------------------------------
-
 CLOSE_OF = {"(": ")", "[": "]", "{": "}"}
 
 
@@ -252,7 +212,6 @@ class LuaFile(object):
         self.functions = []
         self.fn_spans = []
 
-    # brackets ( [ { and blocks function/do/if/repeat, their partners, and the innermost one open at each token
     def _structure(self):
         self.partner, self.block_end, self.block_start = {}, {}, {}
         self.container = [None] * len(self.toks)
@@ -291,12 +250,7 @@ class LuaFile(object):
         return "%s:%d" % (self.rel, line)
 
 
-# ----------------------------------------------------------------------------------------------------------------
-# Functions
-# ----------------------------------------------------------------------------------------------------------------
-
 def dotted_back(toks, k):
-    """The dotted name (a.b.c or a.b:c) that ends at token k, read backwards, and the index of its first token."""
     parts = []
     j = k
     if toks[j].t != "name":
@@ -311,8 +265,6 @@ def dotted_back(toks, k):
 
 
 def callee_before(f, open_i):
-    """The name a call shows for its argument list opening at token open_i: a.b.c for a plain call, the method name
-    for obj:method(...) and for a call on the result of another call or index, or None when the bracket opens no call."""
     toks = f.toks
     k = open_i - 1
     if k < 0:
@@ -331,7 +283,6 @@ def callee_before(f, open_i):
 
 
 def first_string(f, a, b):
-    """The source text of the first string literal between token indexes a and b."""
     for t in f.toks[a:b]:
         if t.t == "str":
             return t.raw
@@ -339,7 +290,6 @@ def first_string(f, a, b):
 
 
 def find_functions(f, locals_declared):
-    """Every function of the file, named by the way it is declared."""
     toks = f.toks
     out = []
     for t in toks:
@@ -353,7 +303,6 @@ def find_functions(f, locals_declared):
         if prev is not None and prev.t == "kw" and prev.v == "local" and nxt.t == "name":
             kind, name, params_open = "local", nxt.v, k + 2
         elif nxt.t == "name":
-            # function a.b.c:d(...) statement
             parts, j = [nxt.v], k + 2
             while toks[j].t == "op" and toks[j].v in (".", ":") and toks[j + 1].t == "name":
                 parts.append(toks[j].v)
@@ -392,7 +341,6 @@ def find_functions(f, locals_declared):
 
 
 def statement_line(f, k):
-    """The line the declaration of the function at token k starts on (its local keyword or its name)."""
     toks = f.toks
     j = k
     if j > 0 and toks[j - 1].t == "kw" and toks[j - 1].v == "local":
@@ -401,7 +349,6 @@ def statement_line(f, k):
 
 
 def doc_above(f, line):
-    """The comment lines just above a line, joined, without a blank line between."""
     parts = []
     ln = line - 1
     while ln >= 1 and len(parts) < DOC_LINES:
@@ -418,7 +365,6 @@ def doc_above(f, line):
 
 
 def expression_name(f, k, locals_declared):
-    """The name of a function written as an expression at token k."""
     toks = f.toks
     prev = toks[k - 1]
     if prev.t == "kw" and prev.v == "return":
@@ -443,7 +389,6 @@ def expression_name(f, k, locals_declared):
     c = f.container[k]
     if c is None or toks[c].v != "(":
         return "anonymous", "unnamed function"
-    # an argument of a call: only the first function among the arguments is its callback
     for x in toks[c + 1:k]:
         if x.t == "kw" and x.v == "function" and f.container[x.i] == c:
             return "anonymous", "unnamed function"
@@ -457,20 +402,12 @@ def expression_name(f, k, locals_declared):
     return "callback", label + " callback"
 
 
-# ----------------------------------------------------------------------------------------------------------------
-# Definitions on ns
-# ----------------------------------------------------------------------------------------------------------------
-
 def ns_definitions(f):
-    """What the file puts on ns: function ns.X (function), ns.X = function (function), ns.X = ns.X or ... (declare),
-    ns.X = { (table), ns.X = Name (alias), anything else (value). A name the file keeps in a local and puts back
-    (local old = ns.X ... ns.X = old) is a wrap, not a definition."""
     toks = f.toks
     out = []
-    saved = {}      # local name -> ns name read into it
+    saved = {}
     for t in toks:
         if t.t == "kw" and t.v == "local":
-            # local a = ns.X
             j = t.i + 1
             if toks[j].t == "name" and toks[j + 1].v == "=" and toks[j + 2].v == "ns" and toks[j + 3].v == "." \
                     and toks[j + 4].t == "name" and toks[j + 5].v not in (".", ":", "(", "["):
@@ -511,7 +448,6 @@ def ns_definitions(f):
 
 
 def ns_uses(f, defined_here):
-    """Every ns.Name the file writes, as (name, token index), leaving out the places that define a name."""
     toks = f.toks
     out = []
     for t in toks:
@@ -525,7 +461,6 @@ def ns_uses(f, defined_here):
 
 
 def enclosing_names(f, functions):
-    """The named functions of the file as (first line, last line, token, name), for name_at."""
     spans = []
     for r in functions:
         if r["kind"] in ("callback", "anonymous"):
@@ -536,7 +471,6 @@ def enclosing_names(f, functions):
 
 
 def name_at(spans, line):
-    """The innermost named function whose lines hold this line, or ''."""
     best = ""
     for a, b, _, name in spans:
         if a > line:
@@ -545,10 +479,6 @@ def name_at(spans, line):
             best = name
     return best
 
-
-# ----------------------------------------------------------------------------------------------------------------
-# Settings: Config.lua run by lua5.4 with a stub ns
-# ----------------------------------------------------------------------------------------------------------------
 
 DUMP_LUA = r'''
 -- Runs FlatUI/Config.lua with a stub ns and writes every page and row of ns.PAGES as JSON.
@@ -631,7 +561,6 @@ io.write("[" .. table.concat(out, ",\n") .. "]\n")
 
 
 def dump_config(config_path, lua="lua5.4"):
-    """ns.PAGES of Config.lua as a list of pages, each with its rows, by running the file with a stub ns."""
     with tempfile.NamedTemporaryFile("w", suffix=".lua", delete=False) as tf:
         tf.write(DUMP_LUA)
         script = tf.name
@@ -647,8 +576,6 @@ def dump_config(config_path, lua="lua5.4"):
 
 
 def module_keys(f):
-    """The module keys of a file, in order: the value of local KEY = "x" and the keys of ns.Register("x", ...).
-    Returns (keys, registered) where registered are the keys this file passes to ns.Register."""
     toks = f.toks
     keys, registered = [], []
     consts = {}
@@ -696,37 +623,11 @@ def is_setup_file(mid):
     return mid.startswith("Setup")
 
 
-# The fields of a row that name a function of ns, and the order in which the ways a file names a row are shown: a file
-# that writes the row's path shows "path" even when it also defines the row's changed function (0.4.66 data: Scale on
-# general.scaleOn; ButtonText and ButtonStates show "key" for rows whose changed function they define).
 HANDLER_FIELDS = ("changed", "choices", "get", "set")
 WAY_ORDER = ("path", "key", "changed", "choices", "get", "set")
 
 
 def attribute_settings(rows, files, order):
-    """Who names each setting row and which file owns it.
-
-    A file names a row by its saved path written as a string, by its key written as a string when the file has the
-    row's module key (local KEY or ns.Register), or by a function of ns it defines that the row names (changed, the
-    function its choices name, get or set). Setup files only use rows, but for the rows saved under setup. The way
-    shown is the first of path, key, changed, choices, get and set that applies.
-
-    A row of a module goes to the file that defines its changed function, else the one that defines its choices
-    function, else a file with the module key (the one that registers the module first, then TOC order). A row that no
-    such file names "matched only files that do not own them": the file that registers its module is listed with it,
-    and it goes to the first file that writes its path, else to that file (0.4.66 data: unitframes.playerScale went to
-    Movers, which writes its path and defines its get and set functions, with UnitFrames listed by its module). A row
-    saved under a name that no file registers (general, and setup and panel, which rows of the Flat UI page are saved
-    under) goes to the file that holds its value (defines its get or set function: Setup for setup.newCharacter in
-    0.4.66), else the first file in TOC order that writes its path, else one that names it by a function, else the
-    first that writes its key, else Core; it shows "module".
-
-    shared_with is the number of files that name the row, less one, for every file listed with it (0.4.66 data: also
-    for the file listed only because it registers the module).
-
-    rows: dicts with path, key, module and the handler fields. files: id -> LuaFile with .strings, .mkeys,
-    .registered, .defined_fns. Returns {path: [(file id, role, found_by, shared_with)]}, the number of rows that
-    matched only files that do not own them, and the number that no file names."""
     toc = {mid: i for i, mid in enumerate(order)}
     registers = {}
     for mid in order:
@@ -762,7 +663,6 @@ def attribute_settings(rows, files, order):
 
         owner = owner_way = None
         if reg is None:
-            # a row saved under a name that no file registers
             pool = [mid for mid in order if mid in named and may_own(mid) and holds(mid, ("get", "set"))]
             pool = pool or [mid for mid in order if mid in named and may_own(mid) and "path" in named[mid]]
             pool = pool or [mid for mid in order if mid in named and may_own(mid)]
@@ -806,12 +706,7 @@ def attribute_settings(rows, files, order):
     return result, fallback_rows, unmatched
 
 
-# ----------------------------------------------------------------------------------------------------------------
-# Tests: the labels of check("label", ...) in FlatUI_test.lua
-# ----------------------------------------------------------------------------------------------------------------
-
 def read_tests(path):
-    """Every check("label", ...) of the test file: [(label, line, set of ns names the call writes)], in file order."""
     text = open(path, encoding="utf-8", errors="replace").read()
     f = LuaFile(path, os.path.basename(path), "test", text)
     toks = f.toks
@@ -822,7 +717,6 @@ def read_tests(path):
             close = f.partner.get(t.i + 1)
             if close is None:
                 continue
-            # what the check calls: every ns.Name written in the call after its label, W.ns.Name too
             refs = set(NS_REF.findall(text, toks[t.i + 3].pos, toks[close].pos + 1))
             out.append((toks[t.i + 2].v, t.line, refs))
     return out
@@ -836,8 +730,6 @@ def label_prefix(label):
 
 
 def test_links(labels, mid, mkeys, defined):
-    """The labels listed for a module: by key (the prefix is a module key or the file name, or the label names the
-    file) and by reference (the check writes ns.Name for a function the file defines)."""
     names = {k.lower() for k in mkeys} | {mid.lower()}
     fname = mid + ".lua"
     key_idx, ref_idx = [], []
@@ -857,17 +749,11 @@ def test_links(labels, mid, mkeys, defined):
             "key_labels": key_idx, "ref_labels": ref_idx}
 
 
-# ----------------------------------------------------------------------------------------------------------------
-# Game names: what the game client has, from its lists and Forever's own interface source
-# ----------------------------------------------------------------------------------------------------------------
-
-# Lua's own library and the string, table and math shortcuts the client adds: not the game's API.
 LUA_STD = frozenset("""assert collectgarbage error getmetatable ipairs next pairs pcall print rawequal rawget rawlen rawset
 select setmetatable tonumber tostring type unpack xpcall getfenv setfenv loadstring newproxy gcinfo require load dofile
 strsplit strjoin strconcat strtrim strlen strsub strfind strmatch strupper strlower strrep strbyte strchar strrev format
 gsub gmatch tinsert tremove tContains wipe sort abs floor ceil min max sqrt random mod exp log fmod frexp ldexp
 strsplittable strlenutf8 strcmputf8i tostringall bit math string table coroutine os debug utf8 _G _VERSION""".split())
-# Words of the client's object model, mouse buttons and the like: shaped like frame names but no frame.
 NOT_FRAMES = frozenset("""Frame Button CheckButton ScrollFrame MessageFrame ScrollingMessageFrame EditBox StatusBar Slider
 ColorSelect Cooldown GameTooltip Minimap Model ModelScene PlayerModel DressUpModel SimpleHTML Texture FontString
 LeftButton RightButton MiddleButton Button4 Button5 AnyUp AnyDown""".split())
@@ -881,7 +767,6 @@ CVAR_NAMES = {"GetCVar", "SetCVar", "GetCVarBool", "GetCVarDefault", "GetCVarInf
 
 
 class Client(object):
-    """The names the game client has: functions, events, CVars and frames."""
 
     def __init__(self, interface_dir, products_dir):
         self.api, self.events, self.cvars, self.frames, self.frame_prefixes = set(), set(), set(), set(), set()
@@ -961,15 +846,9 @@ class Client(object):
             and not s.endswith("Mixin") and "_" not in s and not s.startswith("FlatUI")
 
 
-# ----------------------------------------------------------------------------------------------------------------
-# Scopes: which names of a file are globals
-# ----------------------------------------------------------------------------------------------------------------
-
 def global_refs(f):
-    """Every read of a global name in the file, as token indexes, and the set of token indexes that declare names."""
     toks = f.toks
     n = len(toks)
-    # where each scope opener closes
     closer = {}
     for k, t in enumerate(toks):
         if t.t != "kw":
@@ -1020,7 +899,6 @@ def global_refs(f):
                         break
                 for j2 in names:
                     declared.add(j2)
-                # the names are seen after the statement's values; close enough to declare them here
                 after = set(toks[j2].v for j2 in names)
                 stack[-1][1].update(after)
                 k += 1
@@ -1043,7 +921,6 @@ def global_refs(f):
                 scope = set()
                 j = k + 1
                 if toks[j].t == "name":
-                    # function a.b:c(...): the first name is read, the rest are fields
                     parts = [j]
                     while toks[j + 1].v in (".", ":") and toks[j + 2].t == "name":
                         if toks[j + 1].v == ":":
@@ -1094,12 +971,7 @@ def global_refs(f):
     return refs, declared
 
 
-# ----------------------------------------------------------------------------------------------------------------
-# Game names of one file
-# ----------------------------------------------------------------------------------------------------------------
-
 def string_at(f, k, consts):
-    """The string at token k: a literal, a local constant of the file, or the literal that starts a concatenation."""
     t = f.toks[k]
     if t.t == "str":
         return t.v
@@ -1109,7 +981,6 @@ def string_at(f, k, consts):
 
 
 def call_args(f, open_i):
-    """The start token of each argument of the call whose bracket opens at open_i."""
     toks = f.toks
     close = f.partner.get(open_i)
     if close is None:
@@ -1156,7 +1027,6 @@ class GameNames(object):
 
 
 def game_names(f, client, spans, consts, helpers, owned_cvars):
-    """Every game name the file uses, by group."""
     toks = f.toks
     out = GameNames()
     refs, declared = global_refs(f)
@@ -1175,7 +1045,6 @@ def game_names(f, client, spans, consts, helpers, owned_cvars):
             calls_here.add(name)
         if toks[k - 1].v == "(" and toks[k - 2].v in ("pcall", "xpcall") and toks[k - 3].v not in (".", ":"):
             calls_here.add(name)
-    # api and frames read by name
     frame_occ = []
     for k in refs:
         t = toks[k]
@@ -1208,14 +1077,12 @@ def game_names(f, client, spans, consts, helpers, owned_cvars):
                 out.add("api", name, t.line)
             continue
         if name in client.api:
-            # a call, the function pcall runs, or what type() is asked about; a name only passed on is not counted
             if toks[k + 1].v == "(" or (toks[k - 1].v == "(" and toks[k - 2].v in ("pcall", "xpcall", "type")
                                          and toks[k - 3].v not in (".", ":")):
                 out.add("api", name, t.line)
             continue
         if name in client.frames and name not in called and client.frame_string(name):
             frame_occ.append((k, name, None))
-    # strings and keys: frame names and event names, added in the order they are written
     occ = []
     for t in toks:
         if t.t == "str":
@@ -1241,8 +1108,6 @@ def game_names(f, client, spans, consts, helpers, owned_cvars):
                 occ.append((args[0], "events", string_at(f, args[0], consts), t.v, None))
     for k, group, name, way, extra in sorted(occ, key=lambda x: x[0]):
         out.add(group, name, toks[k].line, way, extra)
-    # frames: named in a string first, else read from _G, else read as a bare global (counted once a line, and only
-    # for a name the file does not name otherwise)
     by_name = collections.OrderedDict()
     for k, name, way in sorted(frame_occ):
         by_name.setdefault(name, []).append((k, way))
@@ -1259,14 +1124,11 @@ def game_names(f, client, spans, consts, helpers, owned_cvars):
                     counted.append(k)
         for k in counted:
             out.add("frames", name, toks[k].line, via)
-    # registrations whose event is no fixed string
     for t in toks:
         if t.t == "name" and t.v in ("RegisterEvent", "RegisterUnitEvent") and toks[t.i + 1].v == "(":
             args = call_args(f, t.i + 1)
             if args and string_at(f, args[0], consts) is None and not loop_over_list(f, args[0]):
                 out.dynamic += 1
-    # CVars passed to the CVar functions: GetCVar(name), C_CVar.SetCVar(name, v), cvar.GetCVar(name) on a local copy,
-    # and pcall(C_CVar.GetCVar, name); the name written as a string or held by a constant of the file
     for t in toks:
         if t.t != "name" or t.v not in CVAR_NAMES:
             continue
@@ -1288,7 +1150,6 @@ def game_names(f, client, spans, consts, helpers, owned_cvars):
         rec = out.groups["cvars"].get(cvar)
         if rec is None:
             out.groups["cvars"][cvar] = {"name": cvar, "count": 1, "lines": [], "via": "setting row", "extra": {}}
-    # hooks
     for t in toks:
         if t.t != "name" or toks[t.i + 1].v != "(":
             continue
@@ -1315,7 +1176,6 @@ def game_names(f, client, spans, consts, helpers, owned_cvars):
             if t.i > 0 and toks[t.i - 1].v == "." and toks[t.i - 2].v != "ns":
                 continue
             hook_target(f, out, t, args, consts, name)
-    # secure code
     for t in toks:
         if t.t != "name" or toks[t.i + 1].v != "(":
             continue
@@ -1362,7 +1222,6 @@ EVENT_CALL = re.compile(r"Event|Listen")
 
 
 def event_way(f, k):
-    """How an event name written as a string at token k is used, or None when it is only named in passing."""
     toks = f.toks
     prev, nxt = toks[k - 1], toks[k + 1]
     if prev.v in ("==", "~=") or nxt.v in ("==", "~="):
@@ -1387,7 +1246,6 @@ def event_way(f, k):
 
 
 def table_field_name(f, open_i):
-    """The name a table constructor is the value of: events in events = { ... }."""
     toks = f.toks
     if open_i >= 2 and toks[open_i - 1].v == "=" and toks[open_i - 2].t == "name":
         return toks[open_i - 2].v
@@ -1395,7 +1253,6 @@ def table_field_name(f, open_i):
 
 
 def table_value_name(f, k):
-    """What a field of a table constructor holds: the name of a function, or 'function' for one written there."""
     t = f.toks[k]
     if t.t == "kw" and t.v == "function":
         return "function"
@@ -1405,7 +1262,6 @@ def table_value_name(f, k):
 
 
 def loop_over_list(f, k):
-    """True when token k is the variable of a for loop over a table of fixed strings written in the loop."""
     toks = f.toks
     t = toks[k]
     if t.t != "name":
@@ -1428,23 +1284,16 @@ def loop_over_list(f, k):
     return False
 
 
-# ----------------------------------------------------------------------------------------------------------------
-# Areas
-# ----------------------------------------------------------------------------------------------------------------
-
-# The seven areas of 0.4.66, each with its files, and an eighth for the errands, the data panels and the world rows
-# of the Flat UI page, which fit none of them. A file that is in no list and matches a pattern is listed under that
-# area and named in unlisted_files.
 AREAS = [
     ("core", "Core and settings", """Config Core TaintScan Scale Fonts Fade LayoutSpots LayoutText ConfigGame Options Reload
         Panel ProfileSwitch ProfileShare PanelLook PanelCards PanelSamples PanelColour PanelTrust PanelSearch PanelNav
         PanelTabs PanelHome PanelPreview TestMode TestUnits TestHud"""),
     ("setup", "Setup", "SetupSteps SetupProfiles SetupStops Setup SetupWalk SetupWelcome"),
     ("unitframes", "Unit frames", """ClassData UnitFrames UnitFramePortrait UnitFrameLevel UnitFrameCells UnitFrameLooks
-        UnitFrameHead UnitText UnitParts UnitExtras UnitGroupMarks UnitDruidMana UnitPetTarget UnitHots HealthColour
+        UnitFrameHead UnitText UnitParts UnitExtras UnitGroupMarks UnitDruidMana UnitManaRule UnitPetTarget UnitHots HealthColour
         PetFrameSize"""),
     ("nameplates", "Nameplates, combat text and cast bars", """Nameplates PlateThreat PlateColours PlateThreatLook PlateText
-        PlateClick PlateThreatText PlateOverpower PlateQuest PlateCombo CombatBurst CombatTextSpells CombatText ScrollText CombatCues Bars CastTime CastTicks CastRank
+        PlateClick PlateThreatText PlateOverpower PlateQuest PlateCombo PlateTarget CombatBurst CombatTextSpells CombatText ScrollText CombatCues Bars CastTime CastTicks CastRank
         Interrupt CastBarSize"""),
     ("actionbars", "Action bars", """ActionBars OwnBars OwnPaint ButtonText Cooldowns CooldownLooks ButtonStates CooldownData
         ProcData Procs ProcArt ProcGlow ButtonEffects ProcTriggers BarBlock BarBlockButtons BarBlockLists Blocks"""),
@@ -1458,7 +1307,7 @@ AREAS = [
         ItemIndex RotationData GearSearch GearButton TrinketQueue TrinketQueueWindow TrinketQueueButtons Movers MoversMode MoversSnap Hide Tooltip"""),
     ("errands", "Errands, panels and world", """Sparkle SparkleGlow CameraZoom CursorRing MountKey Errands ErrandsMerchant
         ErrandsLoot ErrandsTrainer ErrandsPopups ErrandsSocial ErrandsQuests ErrandsRanks ErrandsLevelling
-        ErrandsNavigation ErrandsBulkBuy ConsumableData Consumables DataPanels DataStreams LavaWalk"""),
+        ErrandsNavigation ErrandsBulkBuy ConsumableData Consumables ConsumeBar DataPanels DataStreams LavaWalk"""),
 ]
 AREA_PATTERNS = [("SetupDraw*", re.compile(r"^SetupDraw"), "setup")]
 
@@ -1473,10 +1322,6 @@ def area_of(mid):
     return None, None
 
 
-# ----------------------------------------------------------------------------------------------------------------
-# The whole addon
-# ----------------------------------------------------------------------------------------------------------------
-
 def read_toc(path):
     files, version = [], ""
     for line in open(path, encoding="utf-8", errors="replace"):
@@ -1490,7 +1335,6 @@ def read_toc(path):
 
 
 def description(f):
-    """The file's header comment: the first block of comment lines, before any code but `local _, ns = ...`."""
     parts, started = [], False
     for i, raw in enumerate(f.lines):
         s = raw.strip()
@@ -1518,7 +1362,6 @@ def build(args):
     order = [n[:-4] for n in present]
     client = Client(args.interface, args.products)
 
-    # files
     files = {}
     for n in present:
         mid = n[:-4]
@@ -1549,7 +1392,6 @@ def build(args):
     for mid in order:
         files[mid].called_names = called
 
-    # settings
     pages = dump_config(os.path.join(addon, "Config.lua"), args.lua)
     rows, page_list, n = [], [], 0
     for pg in pages:
@@ -1601,7 +1443,6 @@ def build(args):
             if role == "owns":
                 owners[meta["path"]] += 1
 
-    # links
     rank = {"function": 0, "table": 1, "alias": 2, "value": 3, "declare": 4}
     defs = collections.defaultdict(list)
     for i, mid in enumerate(order):
@@ -1639,11 +1480,9 @@ def build(args):
         links.append(link)
     links.sort(key=lambda l: (-l["count"], l["from"], l["to"]))
 
-    # tests
     test_path = os.path.join(repo, "FlatUI_test.lua")
     labels = read_tests(test_path) if os.path.exists(test_path) else []
 
-    # modules
     page_by_key = {p["key"]: p["label"] for p in page_list}
     modules, unlisted = [], []
     for i, mid in enumerate(order, 1):
@@ -1654,7 +1493,6 @@ def build(args):
         if pattern:
             unlisted.append("%s.lua -> %s (%s)" % (mid, aid, pattern))
         settings = sorted(by_file.get(mid, []), key=lambda s: s["path"])
-        # CVars: those the file passes to the CVar functions, and the CVar of each row it lists
         first_at = {}
         for s in settings:
             if s.get("cvar"):
@@ -1713,7 +1551,6 @@ def build(args):
         modules.append(m)
     mod_area = {m["id"]: m["area"] for m in modules}
 
-    # areas
     areas = []
     for aid, label, _ in AREAS:
         ms = [m for m in modules if m["area"] == aid]
@@ -1735,7 +1572,6 @@ def build(args):
                                            ("cross", a != b)]) for (a, b), e in al.items()]
     area_links.sort(key=lambda x: (-x["links"], x["from"], x["to"]))
 
-    # checks
     all_rows = [meta["path"] for _, meta in rows]
     dump_ok = all(row["kind"] and meta["key"] for row, meta in rows) and len(set(all_rows)) == len(all_rows)
     listed_owned = sorted(s["path"] for m in modules for s in m["settings"] if s["role"] == "owns")
@@ -1835,10 +1671,6 @@ def gaps(fallback_rows, unmatched):
     ]
 
 
-# ----------------------------------------------------------------------------------------------------------------
-# Output
-# ----------------------------------------------------------------------------------------------------------------
-
 def write_outputs(data, args):
     os.makedirs(args.out, exist_ok=True)
     tag = re.sub(r"\D", "", data["meta"]["version"]).rjust(4, "0")
@@ -1857,7 +1689,6 @@ def write_outputs(data, args):
 
 
 def fetch_sources(sources):
-    """Clones the repositories of the game names into sources, one commit deep, or brings them up to date."""
     os.makedirs(sources, exist_ok=True)
     for name, url, branch, _ in SOURCE_REPOS:
         d = os.path.join(sources, name)

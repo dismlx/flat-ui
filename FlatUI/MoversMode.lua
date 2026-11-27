@@ -1,24 +1,5 @@
 local _, ns = ...
 
--- Movers mode: what the player sees while the handles of Movers.lua are open. A dim and a grid behind the frames, a toolbar at the top, a list of
--- the frames at the left and an inspector with the X and Y of the chosen frame at the right. The handles themselves are Movers.lua's; this file
--- gives them their look and keeps what was done in a session (the spots at the start, the steps for Undo, the handles hidden by the eye). The
--- options window is hidden while the session lasts and comes back with it. Movers.lua hands over through the calls it makes on ns.MoversMode and
--- is read through ns.MoverKit. Every colour and size is a token of PanelLook.lua. The frames the Hidden frames page hides (Hide.lua, ns.HideFrames)
--- are listed first, under Hidden, where the eye shows one again, and the inspector's Hide frame hides the chosen frame or shows it again. Samples
--- on the toolbar turns test mode on or off (TestMode.lua), so the boxes of hidden frames hold their samples; a test mode turned on there passes to
--- the options window when that is shown as the session ends for good, and ends otherwise.
--- The label of a box is one line as wide as the box, cut with an ellipsis where the name is longer and hidden in a box too small for a line, so
--- the labels of small boxes in a crowd stay inside them. The box under the cursor is drawn again over every box, with its whole name on a plate
--- over its middle, by a frame of the addon's own that takes no mouse, so the smaller box under the cursor still takes it.
--- Each control of the toolbar has a tooltip that says what it does (TIPS): the grid's Off, Dim and Bright, Snap, Samples, Frame list, Undo with the
--- steps it holds ("Puts back the last change, 3 to undo."), Redo with its own and Done. Ctrl-Z does what Undo does while the movers are open (the
--- keys frame, unless the question of a close shows or a box of the inspector has the keyboard), and Redo, Ctrl-Y or Ctrl-Shift-Z puts back what
--- Undo took away, step by step, a group as one (S.redo); a new move, size or reset empties it. Undo and Redo are dim while they hold nothing. The grid's segments, Snap and Samples light up under the mouse, and the
--- two switches click and slide as the switches of the options window do (ns.PanelKit.SwitchClick and Slider).
--- Every press here, on the toolbar, a row of the list or its eye, and the buttons of Keep your changes?, counts only when it is let go over what was
--- pressed (Released), as in the options window, so a press slid off before it is let go does nothing; a button's label sinks 1 px while held.
-
 local MM = {}
 ns.MoversMode = MM
 
@@ -29,7 +10,6 @@ local BAR_W, BAR_H = 722, 40
 local LIST_W, LIST_H, ROW_H, LIST_TOP = 240, 400, 24, 66
 local SIDE_W, SIDE_H = 224, 226
 local STEPS_KEPT, SHIFT_STEP = 100, 10
--- Hidden holds the frames the Hidden frames page hides (Hide.lua), whatever group they have otherwise.
 local GROUPS = { "Hidden", "Unit frames", "Action bars", "Flat UI", "Windows", "Other" }
 local UNITS = { PlayerFrame = true, TargetFrame = true, FocusFrame = true, PetFrame = true, PartyFrame = true, CompactRaidFrameContainer = true,
 	BossTargetFrameContainer = true }
@@ -39,15 +19,9 @@ local ARROWS = { UP = { 0, 1 }, DOWN = { 0, -1 }, LEFT = { -1, 0 }, RIGHT = { 1,
 local SCALE_MIN, SCALE_MAX, SCALE_STEP = 50, 200, 5
 local WINDOW_MIN, WINDOW_MAX = 60, 150
 local TRACK_W = 80
--- The label of a box: the room it leaves at each side of the box, the least width it is drawn in, and the height of a line when the client does
--- not say it. The box under the cursor is drawn again over every box at FRONT_LEVEL (Movers.lua gives the boxes levels 1 to 501, BOX_LEVELS).
 local LABEL_INSET, LABEL_MIN_W, LINE_H, FRONT_LEVEL = 3, 24, 10, 600
 
--- The session: spots at the start (snapshot), the last seen spot of each frame (last), the steps for Undo, the handles hidden by the eye,
--- the chosen frame and the handle under the cursor. paused: the session waits for the end of a fight. panel: the options window was open.
--- redo: the steps Undo took away, for Redo, emptied by a new step.
 local S = { snapshot = {}, last = {}, undo = {}, redo = {}, hidden = {}, list = true, texts = {} }
--- The frames this file makes and what they show.
 local ui = { lines = {}, paints = {}, rows = {} }
 
 local function Kit()
@@ -61,8 +35,6 @@ end
 local function Try(fn, ...)
 	return ns.Try(KEY, fn, ...)
 end
-
--- Spots ----------------------------------------------------------------------------------------------
 
 local function Copy(entry)
 	if type(entry) ~= "table" then
@@ -86,7 +58,6 @@ local function CopyAll(saved)
 	return all
 end
 
--- The names whose spot is not what it was when the session began.
 local function Differing()
 	local saved, names = Kit().Saved() or {}, {}
 	for name, entry in pairs(saved) do
@@ -103,7 +74,6 @@ local function Differing()
 	return names
 end
 
--- A step for Undo is added when the spot of a frame is not the one last seen. Movers.lua calls this from every place that changes a spot.
 function MM.Changed(name)
 	if not (S.session and not S.undoing and not S.muted and name) then
 		return
@@ -114,23 +84,19 @@ function MM.Changed(name)
 		if #S.undo > STEPS_KEPT then
 			table.remove(S.undo, 1)
 		end
-		-- A new step: what Undo took away can no longer be put back.
 		S.redo = {}
 		S.last[name] = now
 	end
 end
 
--- Movers.lua mutes the spot it saves for Ctrl and scroll on a frame with none, so that action is one step for Undo.
 function MM.Mute(on)
 	S.muted = on == true
 end
 
--- The saved spot of a frame was dropped by the game (an Edit Mode change): there is no step to undo, and the last seen spot is gone.
 function MM.Forget(name)
 	S.last[name] = nil
 end
 
--- The profile in use changed: the session starts again from the spots of the new one.
 function MM.ProfileChanged()
 	if not S.session then
 		return
@@ -143,13 +109,10 @@ function MM.ProfileChanged()
 	end
 end
 
--- Steps made while a group is open undo together: Space across and Space down are one step.
 function MM.Group(on)
 	S.group = on and {} or nil
 end
 
--- Takes the last step from one list (S.undo or S.redo) and puts its spot back, with the steps of the same group; each spot it replaces goes on
--- the other list as a step of the same group, so Redo puts back what Undo took away and Undo takes it away again.
 local function Step(from, to)
 	local step = table.remove(from)
 	if not step then
@@ -177,12 +140,10 @@ function MM.Undo()
 	Step(S.undo, S.redo)
 end
 
--- Ctrl-Y or Ctrl-Shift-Z: puts back what Undo took away, a step at a time.
 function MM.Redo()
 	Step(S.redo, S.undo)
 end
 
--- Puts every spot back as it was when the session began.
 function MM.Discard()
 	S.undoing = true
 	for _, name in ipairs(Differing()) do
@@ -192,15 +153,12 @@ function MM.Discard()
 	S.undo, S.redo, S.last = {}, {}, CopyAll(Kit().Saved())
 end
 
--- Drawing helpers -------------------------------------------------------------------------------------
-
 local function Make(kind, parent)
 	local frame = CreateFrame(kind, nil, parent or UIParent)
 	ns.Own[frame] = true
 	return frame
 end
 
--- Runs when the screen is shown again, so a change of tone or accent shows.
 local function Painted(fn)
 	ui.paints[#ui.paints + 1] = fn
 	fn()
@@ -217,7 +175,6 @@ local function Fill(frame, layer, token, alpha)
 	return texture
 end
 
--- A frame with a fill and, when the Borders setting says so, a hairline.
 local function Surface(frame, token, edge)
 	local outline = ns.Outline(frame, frame, true)
 	Painted(function()
@@ -239,8 +196,6 @@ local function Text(parent, font, token, justify)
 	return text
 end
 
--- The tooltip of a control of the toolbar: tip gives its title and a dim line under it. GameTooltip is written with its own methods (SetOwner,
--- SetText, AddLine, Show) and hidden on leave only while IsOwned says the control owns it.
 local function ShowTip(owner, tip)
 	local tooltip = _G.GameTooltip
 	if type(tip) ~= "function" or tooltip == nil or ns.IsSecret(tooltip) then
@@ -270,8 +225,6 @@ local function HideTip(owner)
 	end
 end
 
--- The tooltip of a control of the toolbar. hover, when given, runs with true as the mouse comes over it and false as it leaves, so the control
--- lights up under the mouse (it marks the control and paints it again).
 local function Tipped(frame, tip, hover)
 	frame:SetScript("OnEnter", function()
 		if hover then
@@ -287,10 +240,6 @@ local function Tipped(frame, tip, hover)
 	end)
 end
 
--- A press counts only when it is let go over what was pressed, with the mouse button it began with, as in the options window (ns.PanelKit.Clickable).
--- The game sends the release to the frame the press began on, wherever the cursor is, so a press slid off before it is let go does nothing; a
--- client that will not say whether the cursor is over counts as over. onClick gets the mouse button; held, when given, runs with true on the
--- press and false as it ends, let go or hidden.
 local function Over(frame)
 	local ok, over = pcall(frame.IsMouseOver, frame)
 	return not ok or ns.IsSecret(over) or over ~= false
@@ -322,8 +271,6 @@ local function Released(frame, onClick, held)
 	end)
 end
 
--- A button with a label; tip, when given, is its tooltip (ShowTip). While the left button is held on it, it takes the pressed fill and its label
--- sinks 1 px, as a button of the options window does; slid off, it looks as it did, and letting go there does nothing (Released).
 local function Button(parent, text, width, onClick, primary, tip)
 	local button = Make("Frame", parent)
 	button:SetSize(width, 28)
@@ -397,8 +344,6 @@ local function Field(parent, width, onEnter)
 	return box
 end
 
--- The grid and the dim ---------------------------------------------------------------------------------
-
 function MM.DrawGrid()
 	if not ui.screen then
 		return
@@ -448,9 +393,6 @@ function MM.Resized()
 	MM.DrawGrid()
 end
 
--- Handles -----------------------------------------------------------------------------------------------
-
--- Colours the handle of a frame for what it is now: chosen, under the cursor, placed by the game or none of these.
 function MM.Paint(name)
 	local look = Kit().looks[name]
 	if not look then
@@ -485,7 +427,6 @@ function MM.Paint(name)
 	end
 end
 
--- The height of a line of a label as the client gives it, else LINE_H.
 local function LineHeight(text)
 	local ok, height = pcall(text.GetLineHeight, text)
 	if ok and ns.Finite(height) and height > 0 then
@@ -494,14 +435,11 @@ local function LineHeight(text)
 	return LINE_H
 end
 
--- A label shows only in a box with room for a line of a few letters: as high as a line, and LABEL_MIN_W wide inside its insets.
 local function Fit(handle, text)
 	local width, height = handle:GetWidth(), handle:GetHeight()
 	text:SetShown(ns.Finite(width) and ns.Finite(height) and width - 2 * LABEL_INSET >= LABEL_MIN_W and height >= LineHeight(text))
 end
 
--- Called when Movers.lua makes the handle of a frame. Its label is one line as wide as the box, cut with an ellipsis where the name is longer,
--- and hidden in a box too small for it (Fit), so the labels of small boxes stay inside them; pointing at a box shows its whole name (MM.Front).
 function MM.Style(name, handle, outline, text)
 	S.texts[name] = text
 	local object = Look().Object("GameFontHighlightSmall")
@@ -532,9 +470,6 @@ function MM.Style(name, handle, outline, text)
 	MM.Paint(name)
 end
 
--- The box under the cursor, drawn again over every other box by a frame that takes no mouse, so the smaller box under the cursor still takes
--- it: the box's edges, and its whole name on a plate over its middle, which a label cut short, hidden, or under the labels of other boxes is
--- read from. No name, or a box that is not shown, takes it away. The session's tick draws it again, for a name that changed under the cursor.
 function MM.Front(name)
 	local handle = name and Kit().handles[name]
 	local text = name and S.texts[name]
@@ -576,7 +511,6 @@ function MM.Hidden(name)
 	return S.hidden[name] == true
 end
 
--- A press on a handle. Ctrl and left click picks it for even spacing.
 function MM.Press(name, button)
 	if name and button == "LeftButton" and type(IsControlKeyDown) == "function" and IsControlKeyDown() then
 		ns.MoversSnap.Toggle(name, S.selected)
@@ -601,7 +535,6 @@ function MM.Select(name)
 	MM.Refresh(true)
 end
 
--- Moves the chosen frame by whole units. True when it moved.
 local function Nudge(dx, dy)
 	local name = S.selected
 	local kit = Kit()
@@ -621,9 +554,6 @@ local function Nudge(dx, dy)
 	return true
 end
 
--- The inspector -----------------------------------------------------------------------------------------
-
--- The middle of the chosen handle, from the middle of the screen.
 local function Centre(name)
 	local kit = Kit()
 	local look = kit.looks[name]
@@ -643,7 +573,6 @@ local function Rounded(value)
 	return math.floor(value + 0.5)
 end
 
--- Puts the middle of the chosen frame at x, y from the middle of the screen. nil keeps that axis.
 local function Place(x, y)
 	local name = S.selected
 	local kit = Kit()
@@ -731,7 +660,6 @@ local function BuildInspector()
 	end)
 	ui.y:SetPoint("TOPLEFT", body, "TOPLEFT", 134, -32)
 	Label("Scale", 12, -70)
-	-- The track takes a press anywhere on it and follows the cursor while the button is held.
 	local track = Make("Frame", body)
 	track:SetSize(TRACK_W, 20)
 	track:SetPoint("TOPLEFT", body, "TOPLEFT", 76, -68)
@@ -783,7 +711,6 @@ local function BuildInspector()
 		end
 	end)
 	reset:SetPoint("TOPLEFT", body, "TOPLEFT", 116, -152)
-	-- Hides the chosen frame, or shows it again: its tick on the Hidden frames page (Hide.lua). There for a frame that page has.
 	ui.hide, ui.hideLabel = Button(body, "Hide frame", 200, function()
 		local key = S.selected and ns.HideFrames and ns.HideFrames.Key(S.selected)
 		if key then
@@ -796,7 +723,6 @@ local function BuildInspector()
 	ui.hide:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -186)
 end
 
--- The numbers of the chosen frame, the chip over its handle and the buttons that depend on it. force writes a field that has the cursor too.
 function MM.Refresh(force)
 	if not (ui.side and S.session) then
 		return
@@ -835,7 +761,6 @@ function MM.Refresh(force)
 		ui.track:EnableMouse(not info.noScale)
 		ui.trackBar:SetShown(not info.noScale)
 	end
-	-- The chip over the chosen handle says where it is.
 	local handle = info and kit.handles[name]
 	if handle and readable and x then
 		ui.chipText:SetText(("X %d  Y %d"):format(Rounded(x), Rounded(y)))
@@ -849,15 +774,12 @@ function MM.Refresh(force)
 	local hide = info and ns.HideFrames and ns.HideFrames.Key(name)
 	ui.hide:SetShown(hide ~= nil)
 	if hide then
-		-- From the saved tick, so a tick that hides nothing while Leave the game's action bars alone is on reads Show frame and is unticked by it.
 		ui.hideLabel:SetText(ns.HideFrames.Ticked(hide) and "Show frame" or "Hide frame")
 	end
 	ui.undoLabel:SetAlpha(#S.undo > 0 and 1 or 0.4)
 	ui.redoLabel:SetAlpha(#S.redo > 0 and 1 or 0.4)
 	MM.Spacing()
 end
-
--- The frame list ----------------------------------------------------------------------------------------
 
 local function GroupOf(info)
 	if info.kind == "window" then
@@ -874,7 +796,6 @@ local function GroupOf(info)
 	return "Other"
 end
 
--- The rows of the list: a header for each group that has a frame, then the frames. Every listed frame is here, with or without a handle now.
 local function Entries()
 	local kit = Kit()
 	local filter = (ui.search and ui.search:GetText() or ""):lower()
@@ -896,7 +817,6 @@ local function Entries()
 	for _, group in ipairs(GROUPS) do
 		groups[group] = {}
 	end
-	-- A hidden frame is in Hidden, with the row (hide) whose untick shows it again; one with no box (a part of the minimap) has no name.
 	local H, listed = ns.HideFrames, {}
 	for _, name in ipairs(names) do
 		local info = kit.Describe(name)
@@ -966,7 +886,6 @@ local function BuildRow(index)
 	Released(row.eye, function(mouseButton)
 		local name = row.entry and row.entry.name
 		local hide = row.entry and row.entry.hide
-		-- The eye of a hidden frame shows it again (Hide.lua); any other eye hides the handle for the session.
 		if mouseButton == "LeftButton" and hide then
 			Try(ns.HideFrames.Set, hide, false)
 			if name then
@@ -993,7 +912,6 @@ function MM.Scroll(by)
 	MM.Layout()
 end
 
--- Shows the visible part of the list.
 function MM.Layout()
 	if not ui.list then
 		return
@@ -1067,12 +985,9 @@ local function BuildList()
 	ui.empty:SetText("No frames.")
 end
 
--- The toolbar -------------------------------------------------------------------------------------------
-
 local GRID_CHOICES = { { "off", "Off", "No grid behind the frames." }, { "dim", "Dim", "A faint grid behind the frames, the middle of the screen marked." },
 	{ "bright", "Bright", "A brighter grid behind the frames, the middle of the screen marked." } }
 
--- The steps Undo (or Redo, with S.redo) holds: the steps of a group (Space across, Space down) count as one, as Undo puts them back together.
 local function UndoSteps(list)
 	local count, group = 0, nil
 	for _, step in ipairs(list or S.undo) do
@@ -1084,7 +999,6 @@ local function UndoSteps(list)
 	return count
 end
 
--- The tooltips of the toolbar.
 local TIPS = {
 	snap = function(on)
 		return on and "Snap: On" or "Snap: Off", "A dragged box snaps to the middle of the screen and to the other boxes. Click to turn it "
@@ -1117,7 +1031,6 @@ local TIPS = {
 	end,
 }
 
--- A chosen segment is in the accent, and one under the mouse takes the hover backing with its word in full, as on the test mode bar.
 local function PaintSegments()
 	local L = Look()
 	for _, segment in ipairs(ui.segments or {}) do
@@ -1128,13 +1041,10 @@ local function PaintSegments()
 	end
 end
 
--- Snap is on while the middle of the screen or the other frames are snapped to.
 local function SnapOn()
 	return ns.Get("movers.snap") == "middle" or Look().Get("snapFrames") == "on"
 end
 
--- A switch of the toolbar: its track in the accent while on, in the hover tone under the mouse, and its knob sliding to its end
--- (ns.PanelKit.Slider, place) as the switches of the options window do, or set there where the kit has no slider.
 local function PaintSwitch(on, hover, back, knob, track, place)
 	local L = Look()
 	if hover then
@@ -1151,7 +1061,6 @@ local function PaintSwitch(on, hover, back, knob, track, place)
 	end
 end
 
--- The click of a switch the player pressed: the game's checkbox sound, higher for on (ns.PanelKit.SwitchClick).
 local function SwitchClick(on)
 	local kit = ns.PanelKit
 	if type(kit) == "table" and type(kit.SwitchClick) == "function" then
@@ -1163,7 +1072,6 @@ local function PaintToggle()
 	PaintSwitch(SnapOn(), ui.snapHover, ui.trackBack, ui.knob, ui.toggle, ui.placeSnap)
 end
 
--- Samples is on while test mode is (TestMode.lua), paused included.
 local function SamplesOn()
 	local test = ns.TestMode
 	return type(test) == "table" and test.Source() ~= nil
@@ -1173,7 +1081,6 @@ local function PaintSamples()
 	PaintSwitch(SamplesOn(), ui.samplesHover, ui.samplesBack, ui.samplesKnob, ui.samples, ui.placeSamples)
 end
 
--- Test mode turned on or off from anywhere: Samples shows it.
 function MM.TestChanged()
 	if ui.samples then
 		PaintSamples()
@@ -1189,7 +1096,6 @@ local function BuildToolbar()
 	bar:EnableMouse(true)
 	Surface(bar, "card")
 	ui.bar = bar
-	-- The toolbar hid: nothing of it stays lit for the mouse that left with it.
 	bar:SetScript("OnHide", function()
 		ui.snapHover, ui.samplesHover = nil, nil
 		for _, entry in ipairs(ui.segments or {}) do
@@ -1204,7 +1110,6 @@ local function BuildToolbar()
 	local title = Text(bar, "GameFontNormal", "text")
 	title:SetPoint("LEFT", bar, "LEFT", 12, 0)
 	title:SetText("Movers")
-	-- Grid: Off, Dim or Bright, kept for the account.
 	local group = Make("Frame", bar)
 	group:SetSize(150, 24)
 	group:SetPoint("LEFT", bar, "LEFT", 76, 0)
@@ -1237,7 +1142,6 @@ local function BuildToolbar()
 	local snap = Text(bar, "GameFontHighlightSmall", "text-dim")
 	snap:SetPoint("LEFT", bar, "LEFT", 238, 0)
 	snap:SetText("Snap")
-	-- Snap: a handle snaps to the middle of the screen (Snap while dragging on the Movers page) and to other handles (Snap to other frames).
 	local toggle = Make("Frame", bar)
 	toggle:SetSize(32, 16)
 	toggle:SetPoint("LEFT", bar, "LEFT", 274, 0)
@@ -1269,7 +1173,6 @@ local function BuildToolbar()
 		PaintToggle()
 	end)
 	Painted(PaintToggle)
-	-- Samples: test mode (TestMode.lua), so the boxes of hidden frames hold their samples while they are placed.
 	local samplesText = Text(bar, "GameFontHighlightSmall", "text-dim")
 	samplesText:SetPoint("LEFT", bar, "LEFT", 318, 0)
 	samplesText:SetText("Samples")
@@ -1310,7 +1213,6 @@ local function BuildToolbar()
 	listButton:SetPoint("LEFT", bar, "LEFT", 412, 0)
 	ui.undo, ui.undoLabel = Button(bar, "Undo", 64, function()
 		MM.Undo()
-		-- The count of the tooltip under the cursor follows.
 		ShowTip(ui.undo, TIPS.undo)
 	end, nil, TIPS.undo)
 	ui.undo:SetPoint("LEFT", bar, "LEFT", 500, 0)
@@ -1324,8 +1226,6 @@ local function BuildToolbar()
 	end, true, TIPS.done)
 	done:SetPoint("LEFT", bar, "LEFT", 644, 0)
 end
-
--- The question when a close would leave changes ----------------------------------------------------------
 
 local function BuildAsk()
 	local shade = Make("Frame")
@@ -1368,7 +1268,6 @@ local function BuildAsk()
 	ui.ask = shade
 end
 
--- A close that is not Done (the Escape key). Without changes it closes; with changes it asks once.
 function MM.Request()
 	local names = Differing()
 	if #names == 0 then
@@ -1382,7 +1281,6 @@ function MM.Request()
 	ui.ask:Show()
 end
 
--- Three or more picked handles: a small bar with Space across, Space down and Clear.
 local function BuildSpace()
 	local bar = Make("Frame")
 	bar:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -1410,7 +1308,6 @@ local function BuildSpace()
 	bar:Hide()
 end
 
--- Shows the spacing bar while three or more handles are picked.
 function MM.Spacing()
 	if not (ui.space and S.session) then
 		return
@@ -1422,8 +1319,6 @@ function MM.Spacing()
 	ui.space:SetShown(count >= 3)
 end
 
--- Keys: the arrows move the chosen frame, Ctrl-Z undoes the last step, Escape puts back a bar being dragged by its tab, else asks or closes. Every
--- other key goes on to the game.
 local function BuildKeys()
 	local keys = Make("Frame")
 	keys:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -1432,7 +1327,6 @@ local function BuildKeys()
 		local handled = false
 		if key == "ESCAPE" then
 			handled = true
-			-- A bar of a bar block dragged by its tab goes back first, and nothing else happens (BarBlock.lua).
 			local cancelled = false
 			if ns.BarBlockGripCancel then
 				Try(function()
@@ -1448,11 +1342,9 @@ local function BuildKeys()
 			end
 		elseif (key == "Y" or (key == "Z" and type(IsShiftKeyDown) == "function" and IsShiftKeyDown())) and type(IsControlKeyDown) == "function"
 			and IsControlKeyDown() and not (ui.ask and ui.ask:IsShown()) then
-			-- Ctrl-Y or Ctrl-Shift-Z: Redo, what Undo just took away.
 			handled = true
 			Try(MM.Redo)
 		elseif key == "Z" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and not (ui.ask and ui.ask:IsShown()) then
-			-- Ctrl-Z: Undo, the last move, size or reset.
 			handled = true
 			Try(MM.Undo)
 		elseif ARROWS[key] and S.selected and not (ui.ask and ui.ask:IsShown()) then
@@ -1465,8 +1357,6 @@ local function BuildKeys()
 	end)
 	ui.keys = keys
 end
-
--- The session ------------------------------------------------------------------------------------------
 
 local function BuildChip()
 	local chip = Make("Frame")
@@ -1549,7 +1439,6 @@ local function HideAll()
 	end
 end
 
--- Called when the handles open. A session that was paused for a fight goes on with what it had.
 function MM.Opened(source)
 	local kit = Kit()
 	S.source = source
@@ -1561,10 +1450,8 @@ function MM.Opened(source)
 		S.panel = false
 		ns.MoversSnap.Clear()
 	end
-	-- The options window opened during a fight goes away again when the handles do.
 	if type(ns.PanelShown) == "function" and ns.PanelShown() then
 		S.panel = true
-		-- Setup is a mode of the window: it comes back with it, at its draft.
 		S.panelMode = type(ns.PanelMode) == "function" and ns.PanelMode() or nil
 		ns.PanelKit.Hide()
 	end
@@ -1572,13 +1459,11 @@ function MM.Opened(source)
 	Show()
 end
 
--- Called when the handles have been placed: the list and the inspector read them.
 function MM.Ready()
 	MM.Layout()
 	MM.Refresh(true)
 end
 
--- Called when the handles close: for good, or for a fight when Pause was called first.
 function MM.Closed()
 	HideAll()
 	if S.paused then
@@ -1599,7 +1484,6 @@ function MM.Closed()
 			end
 		end
 	end
-	-- Test mode turned on with Samples: the options window, shown now, takes it over; else it ends with the session (TestMode.lua).
 	local test = ns.TestMode
 	if type(test) == "table" and test.Source() == "movers" then
 		if type(ns.PanelShown) == "function" and ns.PanelShown() then
@@ -1616,7 +1500,6 @@ function MM.Pause()
 	end
 end
 
--- Movers.lua turned them off while the session waited for a fight: the session ends and the options window comes back.
 function MM.Abandon()
 	if S.paused then
 		S.paused = nil
@@ -1624,12 +1507,10 @@ function MM.Abandon()
 	end
 end
 
--- True while the options window is hidden by the session.
 function MM.Holding()
 	return S.session == true and S.panel == true
 end
 
--- The way the handles were opened when a fight stopped them, or nil when there is nothing to open again. Edit Mode is closed by then.
 function MM.Resume()
 	if not (S.paused and S.session) then
 		return nil
@@ -1637,7 +1518,6 @@ function MM.Resume()
 	return S.source == "editmode" and "slash" or S.source or "slash"
 end
 
--- What the tests read.
 function MM.State()
 	return S, ui
 end

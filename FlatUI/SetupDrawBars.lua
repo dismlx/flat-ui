@@ -1,17 +1,5 @@
 local _, ns = ...
 
--- Setup drawings of the action bar steps: mock-action-row (Action buttons), mock-bar-block (Bar block), mock-block-places (Class, buffs and
--- consumables bars) and mock-fade (Fading). Each is { build(stage), draw(stage), parts }: build makes the frames once on the stage (a frame, or a table
--- with a frame field), draw reads the settings through ns.Get only, so under a draft view it draws the draft, and parts maps a saved path to the region
--- the setting changes, for the bracket that marks it. The frames and textures are the addon's own (ns.Own) and are laid out here from the settings
--- the modules read: the game's action bars cannot be styled twice. A button is the icon, the outline ns.Outline gives it on the Action bars page
--- (ns.SetOutlineArea), the game's own slot art when the page does not restyle it, and the flat tints, key, count and sweep of the page. The block
--- drawings place bars with the arithmetic of BarBlock.lua (Plan, AroundSpots) and Blocks.lua (Where). Sizes are the game's: a button is 45 units, a
--- stance or pet button 30 (ActionButtonTemplate.xml:20 and 198-204, with the key and count anchors at 85-94), a bar of the block is as wide as its sample buttons. A drawing larger than the stage is scaled down as a whole; the
--- outline edges keep their pixel width (ns.Outline), and the names of bars are on a layer that is not scaled. The game's own art (the slot, the bar art, the
--- end caps, the dividers and the button states) is drawn with its atlas where C_Texture.GetAtlasInfo answers for it, and as plain grey with one Game look
--- label where it does not.
-
 local AREA = "actionbars"
 local STAGE_W, STAGE_H = 658, 204
 local SIZE, SMALL, GAP = 45, 30, 2
@@ -21,10 +9,7 @@ local ICON = "Interface\\Icons\\"
 local ICONS = { "Ability_Warrior_Charge", "Spell_Holy_HolyBolt", "Spell_Fire_FireBolt02", "Spell_Nature_HealingTouch", "Spell_Frost_FrostBolt02",
 	"Ability_Rogue_Eviscerate", "Spell_Shadow_ShadowBolt", "INV_Potion_54", "Ability_Hunter_SniperShot", "Spell_Nature_Rejuvenation", "Ability_Stealth",
 	"Spell_Holy_PowerWordShield" }
--- The buttons of each bar in a drawing: the game lets Edit Mode give every bar its own number of buttons.
 local BUTTONS = { main = 12, bar2 = 10, bar3 = 8, bar4 = 6, bar5 = 6, bar6 = 12, bar7 = 10, bar8 = 8, stance = 4, pet = 10 }
--- The game's art, by atlas (Blizzard_ActionBar/Mainline: ActionButtonTemplate.xml:33 and 146-164, MainActionBar.xml:10-18 and 53, MainMenuBarEndCaps.xml:14-31),
--- and the plain grey drawn where the client does not answer for the atlas.
 local ATLAS = { slot = "ui-hud-actionbar-iconframe-slot", art = "UI-HUD-ActionBar-Frame", capLeft = "ui-hud-actionbar-gryphon-left",
 	capRight = "ui-hud-actionbar-gryphon-right", divTop = "UI-HUD-ActionBar-Frame-Divider-ThreeSlice-EdgeTop",
 	divMid = "_UI-HUD-ActionBar-Frame-Divider-Threeslice-Center", divBottom = "UI-HUD-ActionBar-Frame-Divider-ThreeSlice-EdgeBottom" }
@@ -32,7 +17,6 @@ local STATE_ATLAS = { pressed = "UI-HUD-ActionBar-IconFrame-Down", hover = "UI-H
 	flash = "UI-HUD-ActionBar-IconFrame-Flash" }
 local GREY, GREY_ART, GREY_CAP = { 0.5, 0.5, 0.5, 1 }, { 0.3, 0.3, 0.3, 1 }, { 0.42, 0.42, 0.42, 1 }
 local GREY_STATE = { pressed = { 0.15, 0.15, 0.15, 0.5 }, hover = { 0.8, 0.8, 0.8, 0.35 }, checked = { 0.8, 0.8, 0.8, 0.5 }, flash = { 0.8, 0.8, 0.8, 0.5 } }
--- The tints of a button state in Flat UI (ActionBars.lua:Place).
 local FLAT_STATE = { pressed = { 1, 1, 1, 0.25 }, hover = { 1, 1, 1, 0.2 }, checked = { 1, 0.82, 0, 0.3 }, flash = { 1, 0, 0, 0.3 } }
 local BLOCKS = { { name = "Class spells", bar = "classBar", place = "classPlace" }, { name = "Buffs to apply", bar = "buffsBar", place = "buffsPlace" },
 	{ name = "Consumables", bar = "consumablesBar", place = "consumablesPlace" } }
@@ -72,7 +56,6 @@ local function HasAtlas(name)
 	return asked and info ~= nil
 end
 
--- Paints a texture with the game's atlas where the client answers for it, and with the grey colour where it does not. Returns true for the grey.
 local function GameLook(texture, atlas, grey)
 	if HasAtlas(atlas) then
 		texture:SetAtlas(atlas)
@@ -82,7 +65,6 @@ local function GameLook(texture, atlas, grey)
 	return true
 end
 
--- The frame a drawing is made on: the stage itself, or the frame field of a table that holds it.
 local function Root(stage)
 	if type(stage) == "table" and type(stage.SetPoint) ~= "function" and stage.frame ~= nil then
 		return stage.frame
@@ -90,7 +72,6 @@ local function Root(stage)
 	return stage
 end
 
--- The view the framework draws under, when it gives one: an outline then follows it and not the profile in use.
 local function ViewOf(stage)
 	local view = type(stage) == "table" and type(stage.SetPoint) ~= "function" and stage.view or nil
 	if view == nil and type(ns.SetupDraw) == "table" then
@@ -99,7 +80,6 @@ local function ViewOf(stage)
 	return view
 end
 
--- An outline of an instance: kept, and set to the view the instance is drawn under.
 local function Outlined(inst, outline)
 	if outline then
 		inst.outlines[#inst.outlines + 1] = outline
@@ -110,7 +90,6 @@ local function Outlined(inst, outline)
 	return outline
 end
 
--- Takes the view of this draw: the outlines made before follow it too.
 local function SetView(inst, stage)
 	inst.view = ViewOf(stage)
 	if inst.view ~= nil and type(ns.SetOutlineView) == "function" then
@@ -120,14 +99,12 @@ local function SetView(inst, stage)
 	end
 end
 
--- The marks of the last draw, for the framework to read from the drawing.
 local function Publish(drawing, inst)
 	for path, region in pairs(inst.parts) do
 		drawing.parts[path] = region
 	end
 end
 
--- One instance of a drawing for each stage it is built on.
 local function Instances()
 	return setmetatable({}, { __mode = "k" })
 end
@@ -161,10 +138,6 @@ local function BarWidth(id, size)
 	return n * (size or SIZE) + (n - 1) * GAP
 end
 
--- Buttons ------------------------------------------------------------------------------------------------------------------------------------------
-
--- A button of an action bar. full: with the tints, key, count and sweep of the Action buttons drawing. The key sits where the game puts it
--- (ActionButtonTemplate.xml:15-16 and 200-201).
 local function NewButton(inst, parent, size, index, full)
 	local b = { size = size }
 	b.frame = Frame(parent)
@@ -183,7 +156,6 @@ local function NewButton(inst, parent, size, index, full)
 		b.key = Text(b.frame, "NumberFontNormalSmallGray")
 		b.keyX, b.keyY = size == SMALL and -3 or -4, size == SMALL and -4 or -5
 		b.key:SetPoint("TOPRIGHT", b.frame, "TOPRIGHT", b.keyX, b.keyY)
-		-- The game's box: frame width - 8 by 10, right justified, one line (ActionButtonTemplate.xml:85-91, ActionButton.lua:512-515).
 		b.key:SetSize(size - 8, 10)
 		b.key:SetJustifyH("RIGHT")
 		b.key:SetWordWrap(false)
@@ -195,8 +167,6 @@ local function NewButton(inst, parent, size, index, full)
 	return b
 end
 
--- Paints a button from the Action bars page. look.on: this group is restyled. state: pressed, hover, checked or flash.
--- Returns true when something of the game's look is drawn as grey.
 local function PaintButton(b, look, state)
 	local on = look.on
 	local square = on and look.square
@@ -219,7 +189,6 @@ local function PaintButton(b, look, state)
 	if b.outline then
 		ns.SetOutline(b.outline, on, on and look.backdrop)
 		ns.SetOutlineEdges(b.outline, look.border)
-		-- An empty slot of the main and extra bars: faint or hidden.
 		local alpha
 		if on and b.emptyOn and b.empty and look.empty ~= "show" then
 			alpha = look.empty == "hidden" and 0 or look.emptyAlpha / 100
@@ -241,7 +210,6 @@ local function PaintButton(b, look, state)
 				standin = true
 			end
 		end
-		-- The sweep fits the icon when the icons are square, and keeps the game's own size of it otherwise.
 		b.sweep:SetShown(b.cooling == true)
 		b.sweepText:SetShown(b.cooling == true)
 		b.sweep:ClearAllPoints()
@@ -250,7 +218,6 @@ local function PaintButton(b, look, state)
 	return standin
 end
 
--- A bar: a holder with up to `max` buttons in a row, and a name over it on the layer that is not scaled.
 local function NewBar(inst, size, max)
 	local bar = { size = size, buttons = {} }
 	bar.frame = Frame(inst.box)
@@ -268,7 +235,6 @@ local function NewBar(inst, size, max)
 	return bar
 end
 
--- Shows a bar of `id` at x, y in the box, with the alpha of the scene. Returns true when it draws grey for the game's art.
 local function SetBar(inst, bar, item, look, x, y)
 	local n = math.min(#bar.buttons, item.count or BUTTONS[item.id] or #bar.buttons)
 	bar.frame:SetSize(n * bar.size + (n - 1) * GAP, bar.size)
@@ -298,7 +264,6 @@ local function HideBar(bar)
 	bar.back:Hide()
 end
 
--- An experience bar: a dark bar with a fill.
 local function NewXp(inst)
 	local xp = { frame = Frame(inst.box) }
 	xp.back = Tex(xp.frame, "BACKGROUND", -7)
@@ -331,7 +296,6 @@ local function SetXp(inst, xp, item, x, y)
 	end
 end
 
--- The frame the drawing is made of: a box that is scaled to fit the stage, and a layer over it with the names of the bars, above the box.
 local function NewInstance(stage)
 	local root = Root(stage)
 	local inst = { root = root, view = ViewOf(stage), outlines = {}, parts = {} }
@@ -346,12 +310,10 @@ local function NewInstance(stage)
 	return inst
 end
 
--- The one Game look label of a drawing: shown while any of the game's art in it is drawn as grey.
 local function Standin(inst, on)
 	inst.gameLabel:SetShown(on == true)
 end
 
--- Sizes the box to w by h units, scales it to fit what is left of the stage after `room` units at the left for names, and centres it.
 local function Fit(inst, w, h, room)
 	room = room or 0
 	w, h = math.max(1, w), math.max(1, h)
@@ -364,29 +326,23 @@ local function Fit(inst, w, h, room)
 	return scale
 end
 
--- mock-action-row -----------------------------------------------------------------------------------------------------------------------------------
-
 local ACTION_ROWS = { { "Main", "main", 12, SIZE }, { "Extra", "extra", 12, SIZE }, { "Pet", "pet", 10, SMALL }, { "Stance", "stance", 10, SMALL } }
 local CAP_W, CAP_H, DIVIDER_W, ART_PAD, ROW_GAP, LABEL_ROOM = 40, 38, 12, 5, 10, 64
 local ROW_X = ART_PAD + CAP_W
 local ACTION_W = 12 * SIZE + 11 * GAP + 2 * ROW_X
 local ACTION_H = 2 * ART_PAD + 2 * SIZE + 2 * SMALL + 3 * ROW_GAP
--- Which button of a row has which state, what it counts and which slot is empty: the same on every row.
 local STATES = { [2] = "pressed", [3] = "hover", [4] = "checked", [6] = "flash" }
 local KEYS = { main = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }, extra = { "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", KEY_BUTTON4 or "Mouse Button 4", KEY_NUMPAD1 or "Num Pad 1" } }
 local COUNTS = { main = { [5] = "20", [10] = "3" }, extra = { [2] = "5" } }
 local NAMES = { main = { [5] = "Heal", [8] = "Pot" }, extra = { [3] = "Aim" } }
--- The bars of the Button text page by row, and where its position choices anchor the hotkey.
 local TEXT_GROUP = { main = "main", extra = "side", pet = "other", stance = "other" }
 local TEXT_POINTS = { topright = "TOPRIGHT", topleft = "TOPLEFT", top = "TOP", center = "CENTER", bottomleft = "BOTTOMLEFT", bottom = "BOTTOM", bottomright = "BOTTOMRIGHT" }
--- The buttons of the main row that show a state of Colours and cooldowns: not enough power, cannot use, out of range.
 local USES = { [9] = "mana", [10] = "unusable", [11] = "range" }
 local COUNT_FONTS = { small = "NumberFontNormalSmall", normal = "NumberFontNormal", large = "NumberFontNormalLarge", huge = "NumberFontNormalHuge" }
 local USE_GAME = { mana = { 0.5, 0.5, 1 }, unusable = { 0.4, 0.4, 0.4 } }
 
 local ACTION = { parts = {}, built = Instances() }
 
--- A divider of the main bar (MainActionBar.lua:117-155): the game's three slices, 12 wide, centred on the gap between two buttons, or a thin grey bar.
 local function NewDivider(holder, cut)
 	local atlas = HasAtlas(ATLAS.divTop) and HasAtlas(ATLAS.divMid) and HasAtlas(ATLAS.divBottom)
 	local d = { frame = Frame(holder), standin = not atlas }
@@ -446,7 +402,6 @@ function ACTION.build(stage)
 		entry.label = Text(inst.labels, "GameFontHighlightSmall")
 		entry.label:SetPoint("RIGHT", holder, "LEFT", -(ROW_X + 6), 0)
 		entry.label:SetText(row[1])
-		-- The flat panel behind a bar (Bar backgrounds).
 		entry.plate = Tex(holder, "BACKGROUND", -6)
 		entry.plate:SetPoint("TOPLEFT", holder, "TOPLEFT", -4, 4)
 		entry.plate:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", 4, -4)
@@ -464,7 +419,6 @@ function ACTION.build(stage)
 			local left = GameLook(entry.capLeft, ATLAS.capLeft, GREY_CAP)
 			local right = GameLook(entry.capRight, ATLAS.capRight, GREY_CAP)
 			entry.capStandin = left or right
-			-- The game puts a divider between every two shown buttons of the main bar.
 			entry.dividers = {}
 			for cut = 1, n - 1 do
 				entry.dividers[cut] = NewDivider(holder, cut)
@@ -474,14 +428,11 @@ function ACTION.build(stage)
 	end
 	Fit(inst, ACTION_W, ACTION_H, LABEL_ROOM)
 	local main = inst.rows[1]
-	-- The red border that Mark action buttons puts on the button of a low or missing tracker.
 	main.mark = Tex(main.buttons[7].frame, "OVERLAY", 4)
 	main.mark:SetPoint("TOPLEFT", main.buttons[7].frame, "TOPLEFT", -2, 2)
 	main.mark:SetPoint("BOTTOMRIGHT", main.buttons[7].frame, "BOTTOMRIGHT", 2, -2)
 	Colour(main.mark, { 1, 0.1, 0.1, 1 })
 	main.mark:Hide()
-	-- What the Glows and animations page shows: a proc glow on the second button, the rotation helper highlight on the third, the cast fill on the
-	-- fourth, the interrupt flash on the fifth, and the artwork of the first extra button.
 	local fx = {}
 	fx.proc = Tex(main.buttons[2].frame, "BACKGROUND", -6)
 	fx.assist = Tex(main.buttons[3].frame, "OVERLAY", 5)
@@ -527,7 +478,6 @@ function ACTION.build(stage)
 	return inst
 end
 
--- The hotkey, macro name and count of a button as the Button text page sets them. A bar that is not restyled keeps the game's text.
 local function PaintText(entry, b, on)
 	local group = TEXT_GROUP[entry.key]
 	local function Opt(key)
@@ -572,7 +522,6 @@ function ACTION.draw(stage)
 			PaintText(entry, b, look.on)
 		end
 	end
-	-- Colours and cooldowns, on the main row only: pet and stance buttons keep the game's colours.
 	local main = inst.rows[1]
 	local own, tint, sweepOwn, grey = ns.Get(AREA .. ".usableOwn") == true, ns.Get(AREA .. ".rangeTint") == true, ns.Get(AREA .. ".sweepOwn") == true, ns.Get(AREA .. ".cdGrey") == true
 	local on = look.enabled and ns.Get(AREA .. ".main") == true
@@ -601,14 +550,12 @@ function ACTION.draw(stage)
 		end
 		b.icon:SetDesaturated(on and grey and b.cooling == true)
 	end
-	-- The art of the main bar is the game's, and goes only while Restyle action bars is on.
 	local art = not (look.enabled and ns.Get(AREA .. ".frame") == true)
 	main.art:SetShown(art)
 	local caps = not (look.enabled and ns.Get(AREA .. ".caps") == true)
 	main.capLeft:SetShown(caps)
 	main.capRight:SetShown(caps)
 	main.mark:SetShown(ns.Get("trackers.mark") == true)
-	-- The rows of Glows and animations: the game's look while Restyle action bars is off.
 	local fx, fxOn = main.fx, look.enabled
 	local proc = fxOn and ns.Get(AREA .. ".proc") or "game"
 	fx.proc:ClearAllPoints()
@@ -635,13 +582,6 @@ function ACTION.draw(stage)
 	Publish(ACTION, inst)
 end
 
--- Scenes of the block drawings ---------------------------------------------------------------------------------------------------------------------
-
--- A scene is a list of items { kind, id, key, label, x, y, w, h, alpha } in the units of the game, y up, and a list of loose items with no place.
--- kind: bar (a bar of 45 unit buttons), small (a stance or pet bar), xp (an experience bar), panel (the background of the block).
-
--- The ids of the bars of block 1 of the Bar block page, in order (BarBlockLists.lua): by default the main bar and action bars 2, 4 and 3,
--- which stacked upward from the first bar are 3, 4, 2, main from the top. Blocks 2 and 3 are not drawn.
 local function BlockIds()
 	local ids = {}
 	local lists = ns.BarBlockLists and ns.BarBlockLists() or {}
@@ -653,8 +593,6 @@ local function BlockIds()
 	return ids
 end
 
--- The rows of the block and the bars it places, from BarBlock.lua Plan: gap, width, height, and each row's left and bottom from the first bar.
--- With One size and spacing for every bar on (BarBlockButtons.lua) every bar of the block has 12 buttons, drawn in one row.
 local function BlockPlan(on)
 	local ids = on and BlockIds() or { "main", "bar2", "bar3" }
 	local gap = (on and ns.Get("barblock.ownGap") == true) and ns.Get("barblock.barGap") or GAP
@@ -683,8 +621,6 @@ local function BlockPlan(on)
 	return plan
 end
 
--- The size of a status bar of the drawing, and the space between the two: the game's (the block's width, XP_H and XP_SPACER), or those of Flat UI's own
--- experience bar (XpBar.lua) when the page puts it in their place.
 local function XpSize(width)
 	if ns.Get("hud.enabled") == true and ns.Get("hud.xpOwn") == "flat" then
 		return 1192 * ns.Get("hud.xpWidth") / 100, ns.Get("hud.xpHeight"), ns.Get("hud.xpGap")
@@ -692,14 +628,10 @@ local function XpSize(width)
 	return width, XP_H, XP_SPACER
 end
 
--- Whether Flat UI's experience bar goes under the block (Experience bar under the bar block, XpBar.lua): the page on, Flat UI's bar, the row on.
 local function XpUnder()
 	return ns.Get("hud.enabled") == true and ns.Get("hud.xpOwn") == "flat" and ns.Get("hud.xpUnder") == true
 end
 
--- The bars hung above the block (BarBlock.lua AroundSpots): the two experience bars, then the stance bar on the left and the pet bar on the right,
--- the pet bar on a row of its own above when the stance bar is wider than half the block. Returns the items and the top of the last row. With the
--- experience bar under the block (under) only the stance and pet bars are here.
 local function Around(plan, alpha, under)
 	local width = plan.width > 0 and plan.width or 12 * SIZE + 11 * GAP
 	local xw, xh, spacer = XpSize(width)
@@ -731,7 +663,6 @@ local function Around(plan, alpha, under)
 	return items, cursor
 end
 
--- The same bars with no place: the game puts them where the game puts them. The experience bar under the block (under) is not among them.
 local function LooseAround(plan, under)
 	local width = plan.width > 0 and plan.width or 12 * SIZE + 11 * GAP
 	local loose = {}
@@ -743,9 +674,6 @@ local function LooseAround(plan, under)
 	return loose
 end
 
--- The Action bar block with what the Bar block page says: items, loose items, the plan, the top of the bars above it and the room of Flat UI's
--- experience bar under it. That bar is under the bars, a gap below them, exactly as wide as the block (BarBlock.lua, Plan), the two bars of
--- Experience and reputation one under the other; the panel goes round it too.
 local function BlockScene(on)
 	local plan = BlockPlan(on)
 	local fade = on and ns.Get("barblock.fade") == true
@@ -786,7 +714,6 @@ local function BlockScene(on)
 	return scene
 end
 
--- The pieces of a scene: the panel, the bars, the stance and pet bars and the experience bars, made once.
 local function NewPool(inst, bars)
 	local pool = { bar = {}, small = {}, xp = {} }
 	pool.panel = Frame(inst.box)
@@ -808,7 +735,6 @@ local function NewPool(inst, bars)
 	return pool
 end
 
--- Lays a scene out: loose items go in a dim column at the right, the whole is moved to the bottom left of the box and the box is fitted to the stage.
 local function Compose(inst, items, loose)
 	local pool = inst.pool
 	local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
@@ -826,7 +752,6 @@ local function Compose(inst, items, loose)
 		Grow(item)
 	end
 	if #loose > 0 then
-		-- Room over the column for its name.
 		Grow({ x = columnX, y = columnY - 10, w = 1, h = 16 })
 	end
 	local all = {}
@@ -899,8 +824,6 @@ local function PieceOf(items, id)
 	end
 end
 
--- mock-bar-block ------------------------------------------------------------------------------------------------------------------------------------
-
 local BLOCK = { parts = {}, built = Instances() }
 
 function BLOCK.build(stage)
@@ -935,8 +858,6 @@ function BLOCK.draw(stage)
 	Publish(BLOCK, inst)
 end
 
--- mock-block-places ---------------------------------------------------------------------------------------------------------------------------------
-
 local PLACES = { parts = {}, built = Instances() }
 
 local function PlacesScene()
@@ -947,7 +868,6 @@ local function PlacesScene()
 	if block then
 		items, loose = scene.items, scene.loose
 		ref = { left = 0, bottom = -scene.room, right = scene.plan.width, top = scene.plan.height, above = scene.top }
-		-- The Bar block page keeps the pet bar over the block when it holds the bars above; otherwise the pet bar is set on this page.
 		for index = #loose, 1, -1 do
 			if loose[index].key == "pet" then
 				table.remove(loose, index)
@@ -1034,14 +954,11 @@ function PLACES.draw(stage)
 	Publish(PLACES, inst)
 end
 
--- mock-fade -----------------------------------------------------------------------------------------------------------------------------------------
-
 local TILE_W, TILE_H, TILE_PITCH, TILE_ROW = 124, 28, 130, 46
 local FADE_W = 5 * TILE_PITCH
 local FADE_H = 34 + 12 + 4 * TILE_ROW
 local FADE = { parts = {}, built = Instances() }
 
--- What a faded part looks like: icons for a bar, a row of buttons for the micro menu, and so on, on a body that fades as one.
 local function TileArt(inst, tile, kind, index)
 	local body = tile.body
 	local function Icons(count, size, from)
@@ -1085,7 +1002,6 @@ local function TileArt(inst, tile, kind, index)
 			Block(10, 10, 80 + (position - 1) * 12, 0, { 0.7, 0.62, 0.4 })
 		end
 	elseif kind == "bag window" then
-		-- A small window with two rows of three slots, the window under the slots.
 		local window = Tex(body, "ARTWORK", -1)
 		window:SetSize(48, 24)
 		window:SetPoint("LEFT", body, "LEFT", 6, 0)
@@ -1094,7 +1010,6 @@ local function TileArt(inst, tile, kind, index)
 			Block(12, 8, 9 + ((position - 1) % 3) * 15, position <= 3 and 5 or -5, { 0.5, 0.36, 0.2 })
 		end
 	elseif kind == "xp" then
-		-- Flat UI's experience bar, a fill on a dark track, with the reputation bar under it.
 		local track = Tex(body, "ARTWORK", -1)
 		track:SetSize(110, 6)
 		track:SetPoint("LEFT", body, "LEFT", 6, 4)
@@ -1109,7 +1024,6 @@ function FADE.build(stage)
 	FADE.built[inst.root] = inst
 	inst.tiles = {}
 	Fit(inst, FADE_W, FADE_H)
-	-- Two sample buttons: one at full opacity and one at the faded opacity.
 	inst.samples = {}
 	for index = 1, 2 do
 		local holder = Frame(inst.box)
@@ -1142,7 +1056,6 @@ function FADE.build(stage)
 		inst.parts["fade." .. entry[1]] = tile.body
 	end
 	inst.parts["fade.enabled"], inst.parts["fade.alpha"] = inst.box, inst.samples[2].holder
-	-- The faded opacity of the micro menu and of the bag bar shows on their tiles.
 	inst.parts["fade.microAlpha"], inst.parts["fade.bagsAlpha"] = inst.parts["fade.micro"], inst.parts["fade.bags"]
 	Publish(FADE, inst)
 	return inst
@@ -1165,8 +1078,6 @@ function FADE.draw(stage)
 	Standin(inst, standin)
 	inst.samples[2].label:SetText(enabled and ("Faded opacity " .. ns.Get("fade.alpha") .. "%") or "Faded opacity")
 	for _, tile in ipairs(inst.tiles) do
-		-- The micro menu and the bag bar may have a faded opacity of their own (Micro menu faded opacity, Bag bar faded opacity): a percent, or
-		-- "page" for Faded opacity.
 		local own = (tile.key == "micro" or tile.key == "bags") and tonumber(ns.Get("fade." .. tile.key .. "Alpha")) or nil
 		tile.body:SetAlpha((enabled and ns.Get("fade." .. tile.key) == true) and (ns.Finite(own) and own / 100 or alpha) or 1)
 		if type(ns.RepaintOutline) == "function" then

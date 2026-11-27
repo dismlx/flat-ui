@@ -1,78 +1,15 @@
 local _, ns = ...
 
--- The Trinket queue window (0.5.36): the part "window" of the trinkets module, a small window of Flat UI's own, FlatUITrinkets, 320 by 404, where
--- the list of each trinket slot is edited. TrinketQueue.lua (ns.TrinketQueue, looked up when called) holds the lists and decides; this file only
--- shows them and calls its contract: Q.List, Q.Add, Q.Remove, Q.Move, Q.SetDelay, Q.ToggleStop, Q.Copy, Q.Paused, Q.SetPaused, Q.Auto,
--- Q.SetAuto, Q.Now, Q.Wear, Q.State, Q.Sentence, Q.Tone, Q.Info, Q.Candidates, Q.Clock, Q.Threshold and Q.Version.
--- It opens with /flatui queue (ns.TrinketWindowToggle; queue top and queue bottom, ns.TrinketWindowOpen), the page's Trinket queue window row
--- (ns.TrinketWindowLines and ns.TrinketWindowPick, answering as GearLines.lua's GearOpenLines and GearOpenPick do, GearLines.lua:1223-1229), a click
--- on a slot's square on the Character window (TrinketQueueButtons.lua) and Queue on the test mode bar (TestMode.lua); Escape closes it.
--- Top down: the title bar (a drag moves it; Pause all, which reads Paused in red while the queue is paused; the close cross); the switch, Top
--- trinket and Bottom trinket, each with a dot of its slot's state, and that slot's Auto queue box; the slot line: the worn trinket's icon
--- (its tooltip SetInventoryItem), its name in its quality's colour, the state in words (Q.Sentence) and the next trinket when known, with Queue
--- now while the slot is held, stopped or refused; the column heads; eight rows of the list (the mouse wheel scrolls the rest, a thin bar at the
--- right says where): icon (a click wears it now, Q.Wear), name, cooldown (in the Ready colour, with a dim line in its tooltip, while its time left is
--- inside Ready with this much left, Q.Threshold, as the queue then counts it ready; 0.5.37), Delay (a click adds 5 seconds up to 120, a right click
--- takes 5 off, a Shift-click, IsShiftKeyDown, WL/apis.yaml:40162, sets none, as the Weight cell of the Gear comparison window), Stop, up and down
--- (with Shift to the top or the bottom) and a cross that takes it out; while the list is empty and the other slot's is not, Copy the Top (or Bottom)
--- trinket list under its empty line, which puts the other list here in its order with each Delay and Stop (Q.Copy, 0.5.37; /flatui queue copy top or
--- bottom does the same); the trinkets in the bags and the two worn not in the list (Q.Candidates), two lines of eleven, a click adding one at the end
--- and a Shift-click first; and a foot line, which for SAY_FOR seconds also says what Copy and Queue now did, before the line of a fight (0.5.39;
--- the Copy tooltip names the list and the command for the slot shown). With a chat box open, a Shift-click (the Chat link key, IsModifiedClick "CHATLINK") on a row's icon, the
--- worn trinket's icon or a cell of the bags puts the trinket's link in the chat line and does nothing else (U.Linked, ChatFrameUtil.GetActiveWindow
--- and InsertLink, as GearSearch.lua links; 0.5.37; in a fight too since 0.5.39, as Flat UI's bags link). A trinket dropped on the window
--- (OnReceiveDrag, or the click that ends the drag, GetCursorInfo, :36258) goes in the list shown; one lifted from a bag or a worn slot, locked
--- while it rides the cursor (C_Cursor.GetCursorItem, :10071, and C_Item.IsLocked, :17097), goes back there (ClearCursor, :34956), as
--- GearButton.lua's Lifted; any other item stays on the cursor and the foot says only trinkets go in.
--- Frame, as GearWindow.lua's Make, Open and Raise (GearWindow.lua:3149-3338): CreateFrame on UIParent, in ns.Own, made the first time it opens and
--- only out of combat (an opening asked for in a fight waits for its end once, ns.OutOfCombat, Core.lua:2323-2329); MEDIUM strata, or DIALOG while
--- the options window shows (ns.PanelShown, Panel.lua:3300); toplevel and raised as it opens and when asked again, kept on the screen, moved by Flat
--- UI alone (SetMovable, SetDontSavePosition); its name once in UISpecialFrames, whose windows the game hides on Escape
--- (Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:21-27, 1108). It is no UI panel: no ShowUIPanel, nothing on the panel layout.
--- It fades in over FADE_IN as it opens, with the game's sound of the character sheet opening (SOUNDKIT.IG_CHARACTER_INFO_OPEN, PlaySound in
--- pcall), and plays its closing sound (IG_CHARACTER_INFO_CLOSE) as it shuts by its cross, Escape, /flatui queue or a slot's square (0.5.37), as
--- GearWindow.lua's OnShow and OnHide (GearWindow.lua:3254-3274); neither while /flatui move hides and shows it (MoversMode's Holding), nor as
--- the module or the part goes off (U.Close(true)). Switching Top trinket and Bottom trinket shows the window no new time, so it plays nothing.
--- Placing: its top left corner at its spot in the movers (ns.MoverSpot, Movers.lua:982; entry FlatUITrinkets), else where it was let go this
--- session, else where it starts (0.5.39; U.Start, also the entry's start, ns.TrinketWindowStart): right of the Gear comparison window while that
--- shows (or of its item finder docked at its right; its box while /flatui move is open), or 28 px right of and under its corner on a screen with no
--- room there, else 680 and -120 from the screen's top left, the Gear comparison window's own corner. Each opening places it again; a drag of its
--- title bar (StartMoving and StopMovingOrSizing, SetUserPlaced false) saves where it is let go as its spot (ns.MoverKit.Commit, Movers.lua:1868),
--- as GearWindow.lua's DragStart and Dropped (GearWindow.lua:2168-2201). Movers asks ns.TrinketWindowShown whether it has a handle and calls ns.TrinketWindowMoved.
--- The look is the Windows page's, as GearWindow.lua's PaintLook (GearWindow.lua:680-733): the general backdrop at Window opacity with a thin border
--- (ns.Outline, SetOutlineArea "windows", Core.lua:2081, 2134), boxes in Button and slot colour, the chosen word, the hover and the Auto queue tick in
--- the Highlight colour, icons cut by Icon crop, rules at SEPARATOR; GameFontHighlight for the title and the names, GameFontHighlightSmall for the
--- rest, in font strings of Flat UI's own (ns.OwnText, Core.lua:1726). The look is read again as the window opens, after each refresh of the module
--- (ns.TrinketWindowSync) and when one of those rows changed (looked at each TICK).
--- Tooltips are GameTooltip, never in a fight, as the Gear comparison window's (GearWindow.lua:735-783): SetOwner, then SetBagItem for a carried
--- copy, SetInventoryItem for a worn one, else SetItemByID (secure accessors of the game's tooltip data,
--- Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:525, 527, 543), AddLine for the queue's own lines, Show, and Hide only while a frame of the
--- window owns it (IsOwned). In a fight the window opens, closes and edits the lists, which are frames of its own and saved data; trinkets change
--- only after it (TrinketQueue.lua's gates).
--- It registers no event: while it shows, its OnUpdate repaints the cooldowns and the state every TICK and everything when the queue's version or
--- the slot shown changed; it closes once the module or this part is off. Everything runs as the part "window" (ns.EachPart, a count of its own
--- first, as GearWindow.lua's Run), so three faults stop the window alone with a line for /flatui status, and the first fault of each kind goes to
--- the game's error handler. Every frame, texture and font string here is Flat UI's own; it writes nothing of the game's.
-
 local KEY, PART, NAME = "trinkets", "window", "FlatUITrinkets"
--- The window's size, and where its top left corner starts (Movers.lua's entry has the same).
 local SIZE, BOX = { W = 320, H = 404 }, { x = 680, y = -120 }
--- Units: padding, the title bar, the close cross, the switch, the slot line and its icon, the column heads, a row and the rows shown, the icons of
--- the rows, the cells of the bags (side, gap, a line's count, lines), the foot.
 local L = { PAD = 8, BAR = 26, CLOSE = 18, SWITCH = 20, SLOT = 38, ICON = 32, HEAD = 14, ROW = 22, ROWS = 8, SMALL = 18, CELL = 22, CELL_GAP = 4,
 	PER_LINE = 11, LINES = 2, FOOT = 18, DOT = 6, BOX = 12, STOP = 14, ARROW = 12 }
--- The top of each part, from the window's top.
 local Y = { SWITCH = 28, SLOT = 52, HEAD = 94, ROWS = 108, ADD_TITLE = 290, ADD = 306, RULE = 364, FOOT = 370 }
--- The columns of a row, in window units from its left: the stripe of the worn trinket, the icon, the name, the cooldown (right-aligned), the delay,
--- Stop, up, down and the cross, and the scroll bar.
 local X = { STRIPE = 8, ICON = 12, NAME = 34, NAME_END = 150, CD = 152, CD_END = 210, DELAY = 214, DELAY_END = 244, STOP = 248, UP = 266,
 	DOWN = 280, CROSS = 296, THUMB = 312 }
--- Seconds between two repaints of the cooldowns, how long a drop's line stays in the foot, and how long the window fades in as it opens.
 local TICK, SAY_FOR, FADE_IN = 0.5, 8, 0.1
 local SEPARATOR = 0.07
 local FONT, TITLE_FONT = "GameFontHighlightSmall", "GameFontHighlight"
--- The dim text of the windows and white (PanelLook.lua), and the tones of a slot's dot (TrinketQueue.lua's WHY): grey for off, amber for a wait,
--- red for a halt; on is the Highlight colour.
 local DIM, PLAIN = { 0.66, 0.68, 0.62 }, { 1, 1, 1 }
 local TONES = { off = { 0.45, 0.45, 0.45 }, wait = { 1, 0.67, 0.2 }, halt = { 0.9, 0.3, 0.3 } }
 local T = {
@@ -120,15 +57,12 @@ local T = {
 	STOP_TIP = "Stop: the queue does not take it off while you wear it.",
 	GONE_TIP = "Not in your bags.",
 	LEVEL_TIP = "Needs level %d.",
-	-- The foot after Copy and Queue now (0.5.39), for SAY_FOR seconds.
 	COPIED_FOOT = "Took %d from the %s list, with each Delay and Stop.",
 	COPY_NONE_FOOT = "Nothing to copy: each of those trinkets is here already, or the list is full.",
 	NOW_FOOT = "Queue now: the %s list looks again now.",
 	NOW_FOOT_FIGHT = "Queue now: the %s list looks again as the fight ends.",
 }
 
--- The window's state (W), its making (U) and its painting (Z), in tables of their own to keep the file under the client's count of locals, as
--- GearWindow.lua's Z, O, U and B (GearWindow.lua:2205).
 local W = { frame = nil, n = "top", offset = 0, addOffset = 0, version = -1, painted = nil, runs = 0, faults = {}, elapsed = 0, message = nil,
 	messageAt = 0, rows = {}, cells = {}, owners = {}, rules = {}, strokes = {}, dims = {}, plains = {}, words = {}, panels = {}, icons = {},
 	edges = {}, placed = nil, dropped = nil, moving = false, opening = false, queued = false, look = nil, fade = nil, held = nil, quiet = nil }
@@ -150,13 +84,11 @@ local function Fn(source, name)
 	return type(fn) == "function" and fn or nil
 end
 
--- The engine (TrinketQueue.lua), or nil.
 local function Q()
 	local q = ns.TrinketQueue
 	return type(q) == "table" and q or nil
 end
 
--- True in a fight: InCombatLockdown's answer, a withheld one counting as a fight.
 local function Fighting()
 	if type(InCombatLockdown) ~= "function" then
 		return false
@@ -164,8 +96,6 @@ local function Fighting()
 	local ok, fighting = pcall(InCombatLockdown)
 	return not ok or IsSecret(fighting) or fighting == true
 end
-
--- The part ---------------------------------------------------------------------------------------------------------------------------------------
 
 local function Report(what, err)
 	if W.faults[what] then
@@ -182,7 +112,6 @@ local function Step(_, fn, ...)
 	return fn(...)
 end
 
--- Runs fn as the part "window" with a count of its own first (header). A part that stopped closes the window.
 local function Run(fn, ...)
 	W.runs = W.runs + 1
 	local ok, err = ns.EachPart(KEY, PART, Step, W.runs, fn, ...)
@@ -195,7 +124,6 @@ local function Run(fn, ...)
 	return ok == true
 end
 
--- True while the window may show: the module registered and running, and this part not stopped.
 local function Allowed()
 	return type(ns.modules) == "table" and ns.modules[KEY] ~= nil and ns.ModuleOn(KEY) and not ns.PartStopped(KEY, PART) and Q() ~= nil
 end
@@ -206,8 +134,6 @@ local function Refusal()
 	end
 	return T.OFF
 end
-
--- The look -----------------------------------------------------------------------------------------------------------------------------------
 
 function Z.RGB(path, r, g, b)
 	local ok, cr, cg, cb = pcall(ns.Colour, path)
@@ -227,7 +153,6 @@ function Z.Crop()
 	return (Finite(value) and math.max(0, math.min(15, value)) or 8) / 100
 end
 
--- What the look is made of now, so a change of one of those rows repaints it.
 function Z.Signature()
 	local r, g, b = Z.RGB("windows.accent", 0.85, 0.85, 0.85)
 	local pr, pg, pb = Z.RGB("windows.panel", 0.12, 0.12, 0.12)
@@ -261,7 +186,6 @@ function U.Texture(parent, layer, sub)
 	return U.Own(parent:CreateTexture(nil, layer or "ARTWORK", nil, sub or 0))
 end
 
--- A stroke in units from a button's top left corner, as the Gear comparison window draws its cross (GearWindow.lua:532).
 function U.Stroke(button, layer, x1, y1, x2, y2)
 	local line = U.Own(button:CreateLine(nil, layer, nil, 2))
 	line:SetThickness(1.5)
@@ -270,7 +194,6 @@ function U.Stroke(button, layer, x1, y1, x2, y2)
 	return line
 end
 
--- A button of its own at a place of a parent, from its top left corner.
 function U.Button(parent, x, y, width, height)
 	local button = U.Own(CreateFrame("Button", nil, parent))
 	button:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -y)
@@ -280,7 +203,6 @@ function U.Button(parent, x, y, width, height)
 	return button
 end
 
--- A set of strokes, white or dim, and their copies in the Highlight colour under the cursor.
 function U.Strokes(button, points)
 	local group = { lines = {}, hover = {} }
 	for _, p in ipairs(points) do
@@ -291,7 +213,6 @@ function U.Strokes(button, points)
 	return group
 end
 
--- Four thin edges round a frame, in the border's grey, for the small squares (Stop, the Auto queue box).
 function U.Edges(frame)
 	for _, side in ipairs({ { "TOPLEFT", "TOPRIGHT", nil, 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", nil, 1 }, { "TOPLEFT", "BOTTOMLEFT", 1, nil },
 		{ "TOPRIGHT", "BOTTOMRIGHT", 1, nil } }) do
@@ -307,7 +228,6 @@ function U.Edges(frame)
 	end
 end
 
--- A box in Button and slot colour behind an icon.
 function U.Panel(parent, x, y, side)
 	local panel = U.Texture(parent, "BACKGROUND", 1)
 	panel:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -y)
@@ -328,7 +248,6 @@ function Z.Colour(text, colour, alpha)
 	text:SetTextColor(colour[1], colour[2], colour[3], alpha or 1)
 end
 
--- The tone of a slot's state as a colour.
 function Z.Tone(tone)
 	if tone == "on" then
 		local r, g, b = Z.RGB("windows.accent", 0.85, 0.85, 0.85)
@@ -337,7 +256,6 @@ function Z.Tone(tone)
 	return TONES[tone] or TONES.off
 end
 
--- Everything the rows of the Windows page and the general backdrop decide; texture and colour calls only.
 function Z.PaintLook()
 	if not W.frame then
 		return
@@ -387,8 +305,6 @@ function Z.PaintLook()
 	W.version = -1
 end
 
--- Tooltips ---------------------------------------------------------------------------------------------------------------------------------------
-
 function Z.Tooltip()
 	local tip = _G.GameTooltip
 	if type(tip) == "table" and not IsSecret(tip) and not ns.Forbidden(tip) then
@@ -397,7 +313,6 @@ function Z.Tooltip()
 	return nil
 end
 
--- Hides the tooltip only while that frame of the window owns it.
 function Z.Untip(owner)
 	local tip = Z.Tooltip()
 	if not tip then
@@ -417,7 +332,6 @@ function Z.AddDim(tip, lines)
 	end
 end
 
--- A title and dim lines, never in a fight. SetOwner leaves the tooltip empty, as the game's own tooltips start with AddLine after it.
 function Z.Say(owner, title, lines)
 	local tip = Z.Tooltip()
 	if Fighting() or not tip or not pcall(tip.SetOwner, tip, owner, "ANCHOR_RIGHT") then
@@ -428,12 +342,10 @@ function Z.Say(owner, title, lines)
 	pcall(tip.Show, tip)
 end
 
--- True when a tooltip accessor of the game built a tooltip.
 function Z.Built(ok, answer)
 	return ok and not IsSecret(answer) and answer ~= false
 end
 
--- An item's tooltip: its bag copy, the slot it is worn in, else the item, and the queue's own dim lines under it. Never in a fight.
 function Z.ItemTip(owner, id, copy, wornIn, lines)
 	local tip = Z.Tooltip()
 	if Fighting() or not tip or not pcall(tip.SetOwner, tip, owner, "ANCHOR_RIGHT") then
@@ -453,7 +365,6 @@ function Z.ItemTip(owner, id, copy, wornIn, lines)
 	pcall(tip.Show, tip)
 end
 
--- A frame's tooltip, made by fn each time the cursor comes onto it.
 function U.Tip(frame, fn)
 	frame:SetScript("OnEnter", function()
 		Run(fn, frame)
@@ -470,9 +381,6 @@ function U.Says(frame, key)
 	end)
 end
 
--- Drops ------------------------------------------------------------------------------------------------------------------------------------------
-
--- The item on the cursor: its ID and link, or nil.
 function U.Held()
 	if type(GetCursorInfo) ~= "function" then
 		return nil
@@ -485,7 +393,6 @@ function U.Held()
 	return Finite(id) and id or nil, link
 end
 
--- True when the item on the cursor was lifted from a bag, the bank or a worn slot (header), as GearButton.lua's Lifted.
 function U.Lifted()
 	local get, locked = Fn(_G.C_Cursor, "GetCursorItem"), Fn(_G.C_Item, "IsLocked")
 	if not (get and locked) then
@@ -510,8 +417,6 @@ function U.Lifted()
 	return okLocked and not IsSecret(held) and held == true
 end
 
--- A trinket on the cursor goes in the list shown, and back to its slot when it was lifted from one; any other item stays on the cursor. True when
--- the cursor held an item.
 function U.Drop()
 	local id, link = U.Held()
 	local q = Q()
@@ -535,9 +440,6 @@ function U.Drop()
 	return true
 end
 
--- With a chat box open, a Shift-click (the game's Chat link key, IsModifiedClick "CHATLINK") puts the trinket's link in the chat line and does
--- nothing else, as the item finder links (GearSearch.lua's LinkInChat, ChatFrameUtil.InsertLink): true then. In a fight too, as Flat UI's bags
--- link (BagsItems.lua): InsertLink is not protected, and the click then never reaches Wear or Add (0.5.39).
 function U.Linked(id)
 	local modified = Fn(_G, "IsModifiedClick")
 	if not Finite(id) or not modified then
@@ -566,7 +468,6 @@ function U.Linked(id)
 	return true
 end
 
--- A drop, and the window painted at once after it.
 function U.Dropping()
 	if U.Drop() then
 		Z.Paint()
@@ -584,7 +485,6 @@ function U.Drops(frame, clicks)
 	end
 end
 
--- A click of a button of the window: a trinket on the cursor is a drop, else the button's own act; the window is painted at once after it.
 function U.Click(button, fn)
 	button:SetScript("OnClick", function(_, mouse)
 		Run(function()
@@ -597,9 +497,6 @@ function U.Click(button, fn)
 	U.Drops(button)
 end
 
--- Making ---------------------------------------------------------------------------------------------------------------------------------------
-
--- A word button of the title bar or the slot line: its text, lit under the cursor.
 function U.Word(parent, text, width)
 	local button = U.Own(CreateFrame("Button", nil, parent))
 	button:SetSize(width, 18)
@@ -611,7 +508,6 @@ function U.Word(parent, text, width)
 	return button, label
 end
 
--- The title bar: the title, Pause all and the close cross; a drag of it moves the window.
 function U.MakeBar(frame)
 	local bar = U.Own(CreateFrame("Frame", nil, frame))
 	bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
@@ -657,7 +553,6 @@ function U.MakeBar(frame)
 	W.rules[#W.rules + 1] = rule
 end
 
--- The switch: Top trinket and Bottom trinket with their dots, the underline of the chosen one, and the slot's Auto queue box at the right.
 function U.MakeSwitch(frame)
 	local x = 12
 	for _, n in ipairs({ "top", "bottom" }) do
@@ -698,13 +593,11 @@ function U.MakeSwitch(frame)
 	U.Says(auto, "auto")
 end
 
--- The slot line: the worn trinket's icon, its name, its state, the next one, and Queue now.
 function U.MakeSlot(frame)
 	U.Panel(frame, 12, Y.SLOT + 2, L.ICON + 2)
 	local icon = U.Icon(frame, 13, Y.SLOT + 3, L.ICON)
 	local button = U.Button(frame, 12, Y.SLOT + 2, L.ICON + 2, L.ICON + 2)
 	U.Drops(button)
-	-- Shift-click with the chat box open links the worn trinket (U.Linked); a click does nothing else.
 	U.Click(button, function()
 		local state = Q().State(W.n)
 		if state.worn then
@@ -743,7 +636,6 @@ function U.MakeSlot(frame)
 	W.rules[#W.rules + 1] = rule
 end
 
--- The column heads.
 function U.MakeHeads(frame)
 	local spots = { { X.ICON, "LEFT", 120 }, { X.CD, "RIGHT", X.CD_END - X.CD }, { X.DELAY, "CENTER", X.DELAY_END - X.DELAY },
 		{ X.STOP - 4, "CENTER", L.STOP + 8 } }
@@ -754,7 +646,6 @@ function U.MakeHeads(frame)
 	end
 end
 
--- One row of the list, made once: everything a row shows, each part a frame of its own that takes its clicks.
 function U.MakeRow(frame, index)
 	local y = Y.ROWS + (index - 1) * L.ROW
 	local row = { index = index }
@@ -797,7 +688,6 @@ function U.MakeRow(frame, index)
 	return row
 end
 
--- What a row's parts do (header) and say when pointed at.
 function U.RowScripts(row)
 	local function Index()
 		return row.index + W.offset
@@ -855,7 +745,6 @@ function U.RowScripts(row)
 	end
 end
 
--- The bags: a dim title and two lines of eleven cells.
 function U.MakeAdd(frame)
 	local title = U.Dim(U.Label(frame, FONT, "LEFT", SIZE.W - 24))
 	title:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -Y.ADD_TITLE)
@@ -885,8 +774,6 @@ function U.MakeAdd(frame)
 	end
 end
 
--- A cell of the bags clicked: its trinket goes in the list, at its end or, with Shift, first (with the chat box open, its link goes in the chat
--- line instead); "+N" shows the next ones.
 function U.AddClick(cell)
 	if cell.moreCount then
 		W.addOffset = W.addOffset + #W.cells - 1
@@ -917,7 +804,6 @@ function U.MakeFoot(frame)
 	W.empty:SetWordWrap(true)
 	W.empty:SetPoint("TOP", frame, "TOPLEFT", SIZE.W / 2, -(Y.ROWS + 3 * L.ROW))
 	W.empty:SetText(T.EMPTY)
-	-- Under the empty line: the other slot's list copied here (header).
 	W.copy, W.copyLabel = U.Word(frame, "", 220)
 	W.copy:SetPoint("TOP", frame, "TOPLEFT", SIZE.W / 2, -(Y.ROWS + 5 * L.ROW))
 	W.copy:Hide()
@@ -927,7 +813,6 @@ function U.MakeFoot(frame)
 		W.message, W.messageAt = added > 0 and T.COPIED_FOOT:format(added, T.WORDS[other]) or T.COPY_NONE_FOOT, GetTime()
 		Z.Untip(W.copy)
 	end)
-	-- Its tooltip names the list it copies and the command for this slot.
 	U.Tip(W.copy, function()
 		local tip = T.TIPS.copy
 		Z.Say(W.copy, tip[1], { tip[2]:format(T.WORDS[W.n == "top" and "bottom" or "top"], W.n) })
@@ -936,9 +821,6 @@ function U.MakeFoot(frame)
 	W.thumb:SetWidth(2)
 end
 
--- Placing --------------------------------------------------------------------------------------------------------------------------------
-
--- Left, bottom, width and height of a frame in the units of UIParent.
 function U.Rect(frame)
 	local ok, left, bottom, width, height = pcall(frame.GetRect, frame)
 	local okScale, scale = pcall(frame.GetEffectiveScale, frame)
@@ -951,7 +833,6 @@ function U.Rect(frame)
 	return left * k, bottom * k, width * k, height * k
 end
 
--- A frame of Flat UI's own by its name (the Gear comparison window, FlatUIGear, and its item finder, FlatUIGearSearch), while it shows; nil else.
 function U.OwnShown(name)
 	local frame = _G[name]
 	if type(frame) ~= "table" or IsSecret(frame) or not ns.Own[frame] then
@@ -961,10 +842,6 @@ function U.OwnShown(name)
 	return ok and shown == true and frame or nil
 end
 
--- Where the window starts while no spot is saved for it (0.5.39; Movers.lua's start, ns.TrinketWindowStart, which ns.MoverSpot asks and U.Place
--- uses), as the offsets of its top left corner from the screen's: with the Gear comparison window shown, or its box while /flatui move is open,
--- right of it (or of the item finder docked at its right, within DOCKED px) at its top, GAP px off, while the screen has room for the whole window
--- there, else STEP px right of and under its corner, so both title bars show; else x and y, the entry's corner.
 local START = { GAP = 6, STEP = 28, DOCKED = 12 }
 function U.Start(x, y)
 	local okW, screen = pcall(UIParent.GetWidth, UIParent)
@@ -1008,7 +885,6 @@ function U.Start(x, y)
 	return left + START.STEP, top - START.STEP - tall
 end
 
--- Puts the window at its spot in the movers, else where it was let go this session, else where its entry starts. Not while it is dragged.
 function U.Place()
 	local frame = W.frame
 	if not frame or W.moving then
@@ -1042,8 +918,6 @@ function U.DragStart()
 	W.moving = true
 end
 
--- Let go: a box the window's size, its top left corner at the window's, is saved as its spot (ns.MoverKit.Commit); without the entry it stays
--- where it was let go for this session.
 function U.Dropped()
 	if not W.moving then
 		return
@@ -1069,7 +943,6 @@ function U.Dropped()
 	U.Place()
 end
 
--- Escape closes the window: its name goes once into UISpecialFrames.
 function U.Special()
 	local list = _G.UISpecialFrames
 	if type(list) ~= "table" or IsSecret(list) then
@@ -1083,7 +956,6 @@ function U.Special()
 	table.insert(list, NAME)
 end
 
--- MEDIUM among the game's windows, DIALOG while the options window shows, and at the front of its strata.
 function U.Raise()
 	local over = false
 	if type(ns.PanelShown) == "function" then
@@ -1094,9 +966,6 @@ function U.Raise()
 	pcall(W.frame.Raise, W.frame)
 end
 
--- Painting -------------------------------------------------------------------------------------------------------------------------------
-
--- The colour of an item's quality (C_Item.GetItemQualityColor), else white.
 function Z.Quality(quality)
 	local fn = Fn(_G.C_Item, "GetItemQualityColor")
 	if fn and Finite(quality) then
@@ -1108,7 +977,6 @@ function Z.Quality(quality)
 	return PLAIN
 end
 
--- The cooldown cell of a row (header): its text and colour.
 function Z.CooldownText(info)
 	local q = Q()
 	if info.carried == 0 and not info.wornIn then
@@ -1126,13 +994,11 @@ function Z.CooldownText(info)
 	elseif info.left <= 0 then
 		return T.READY, Z.Tone("on")
 	elseif Z.Soon(info) then
-		-- Inside Ready with this much left: the queue counts it as ready, so its time shows in the Ready colour (0.5.37).
 		return q.Clock(info.left), Z.Tone("on")
 	end
 	return q.Clock(info.left), PLAIN
 end
 
--- Ready with this much left (Q.Threshold) while an item's plain cooldown left is above 0 and at most that, else nil.
 function Z.Soon(info)
 	local q = Q()
 	local most = q and q.Threshold()
@@ -1142,7 +1008,6 @@ function Z.Soon(info)
 	return nil
 end
 
--- The dim lines a row's tooltip adds under the item.
 function Z.RowLines(info, entry)
 	local lines = {}
 	if info.carried == 0 and not info.wornIn then
@@ -1191,7 +1056,6 @@ function Z.CellTip(cell)
 	end
 end
 
--- One row: its entry of the list, or hidden past the list's end.
 function Z.Row(row, entry, wornHere)
 	row.entry = entry
 	if not entry then
@@ -1214,7 +1078,6 @@ function Z.Row(row, entry, wornHere)
 	row.frame:Show()
 end
 
--- The cooldowns of the rows shown, every TICK.
 function Z.Cooldowns()
 	for _, row in ipairs(W.rows) do
 		if row.entry then
@@ -1226,7 +1089,6 @@ function Z.Cooldowns()
 	end
 end
 
--- The slot line and the switch's dots: the worn trinket, the state, the next one and Queue now.
 function Z.Slot()
 	local q = Q()
 	local state = q.State(W.n)
@@ -1244,7 +1106,6 @@ function Z.Slot()
 	end
 	local tone = q.Tone(W.n, state)
 	local hasNext = state.next ~= nil and state.nextAt ~= nil
-	-- The state takes two lines where no next line is under it, else it is cut to one.
 	slot.state:SetWordWrap(not hasNext)
 	slot.state:SetText(q.Sentence(W.n, state))
 	Z.Colour(slot.state, (tone == "wait" or tone == "halt") and TONES[tone] or DIM)
@@ -1275,7 +1136,6 @@ function Z.Slot()
 	return state
 end
 
--- The cells of the bags: the trinkets not in the list, from addOffset, the last cell "+N" while more are left.
 function Z.Add(list)
 	local q = Q()
 	local shown = {}
@@ -1315,11 +1175,9 @@ function Z.Add(list)
 	W.addNone:SetShown(#shown == 0)
 end
 
--- The foot: Paused, else a fight, else the last drop's line for a while, else how to drop.
 function Z.Foot()
 	local q = Q()
 	local text = T.FOOT
-	-- A line of what was just done comes before the fight's line (0.5.39), so Queue now says in a fight when it acts.
 	if q.Paused() then
 		text = T.FOOT_PAUSED
 	elseif W.message and GetTime() - W.messageAt < SAY_FOR then
@@ -1330,7 +1188,6 @@ function Z.Foot()
 	W.foot:SetText(text)
 end
 
--- The scroll bar at the right of the rows, while the list is longer than they are.
 function Z.Thumb(count)
 	if count <= L.ROWS then
 		W.thumb:Hide()
@@ -1345,7 +1202,6 @@ function Z.Thumb(count)
 	W.thumb:Show()
 end
 
--- Everything, after a change of the queue's version, of the slot shown or of the look.
 function Z.Paint()
 	local q = Q()
 	if not (q and W.frame) then
@@ -1371,7 +1227,6 @@ function Z.Paint()
 	Z.Foot()
 end
 
--- Every TICK: the cooldowns, the slot line and the foot.
 function Z.Tick()
 	if W.look ~= Z.Signature() then
 		Z.PaintLook()
@@ -1403,9 +1258,6 @@ function Z.Scroll(delta)
 	end
 end
 
--- Opening and closing ------------------------------------------------------------------------------------------------------------------
-
--- The frame and everything in it, once, out of combat.
 function U.Make()
 	local frame = U.Own(CreateFrame("Frame", NAME, UIParent))
 	frame:SetFrameStrata("MEDIUM")
@@ -1432,8 +1284,6 @@ function U.Make()
 	frame:SetScript("OnMouseWheel", function(_, delta)
 		Run(Z.Scroll, delta)
 	end)
-	-- It fades in with the sound of the character sheet opening and plays its closing sound as it hides (header); neither while /flatui move
-	-- holds it, nor when it closed because the module or the part went off (U.Close(true)).
 	frame:SetScript("OnShow", function()
 		W.fade = 0
 		frame:SetAlpha(0)
@@ -1452,7 +1302,6 @@ function U.Make()
 		end
 		U.Hiding()
 	end)
-	-- While it shows: the fade at each frame; it closes once the module or the part is off, which is plain code, and repaints every TICK.
 	frame:SetScript("OnUpdate", function(_, elapsed)
 		local step = Finite(elapsed) and elapsed or 0
 		if W.fade then
@@ -1488,7 +1337,6 @@ function U.Showing()
 	Z.Paint()
 end
 
--- Whatever hid the window: a drag ends where it was let go, and a tooltip of the window goes. Plain code, so it also runs once the part stopped.
 function U.Hiding()
 	if W.moving then
 		pcall(U.Dropped)
@@ -1498,7 +1346,6 @@ function U.Hiding()
 	end
 end
 
--- Shows another slot's list.
 function U.Show(n)
 	if n ~= W.n then
 		W.n, W.offset, W.addOffset = n, 0, 0
@@ -1506,7 +1353,6 @@ function U.Show(n)
 	end
 end
 
--- Opens the window, on slot n when one is given. An opening asked for in a fight before the window was made waits for the fight's end, once.
 function U.Open(n)
 	if n == "top" or n == "bottom" then
 		U.Show(n)
@@ -1538,7 +1384,6 @@ function U.Open(n)
 	end
 end
 
--- Closes the window. Plain code, so it also works once the part has stopped. quiet: the module or the part went off, so no sound plays.
 function U.Close(quiet)
 	W.opening = false
 	if W.frame then
@@ -1556,10 +1401,6 @@ function U.IsOpen()
 	return ok and shown == true
 end
 
--- The contract -------------------------------------------------------------------------------------------------------------------------------
-
--- /flatui queue and a click on a slot's square: with no slot it opens or closes the window; with a slot it opens on it, shows it while the window
--- shows the other, and closes the window while it shows that slot. False, with a line that says why, while the module or this part is off.
 function ns.TrinketWindowToggle(n)
 	if n ~= "top" and n ~= "bottom" then
 		n = nil
@@ -1579,7 +1420,6 @@ function ns.TrinketWindowToggle(n)
 	return Run(U.Open, n)
 end
 
--- /flatui queue top or bottom: opens on that slot, or raises the window and shows it.
 function ns.TrinketWindowOpen(n)
 	if not Allowed() then
 		print(Refusal())
@@ -1588,12 +1428,10 @@ function ns.TrinketWindowOpen(n)
 	return Run(U.Open, n)
 end
 
--- The slot the open window shows, or nil while it is closed (TrinketQueueButtons.lua).
 function ns.TrinketWindowSlot()
 	return U.IsOpen() and W.n or nil
 end
 
--- The Trinket queue window row (Config.lua): its lines and what choosing one does, as a pick answers.
 function ns.TrinketWindowLines()
 	return T.LINES
 end
@@ -1609,12 +1447,10 @@ function ns.TrinketWindowPick(id)
 	return Run(U.Open, n), nil
 end
 
--- The window has a handle in the movers while it may show, open or not, as GearWindow.lua's GearWindowShown.
 function ns.TrinketWindowShown()
 	return Allowed()
 end
 
--- Where the window and its box in the movers start while no spot is saved (Movers.lua's start): beside the Gear comparison window (U.Start).
 function ns.TrinketWindowStart(x, y)
 	local ok, sx, sy = pcall(U.Start, x, y)
 	if ok and Finite(sx) and Finite(sy) then
@@ -1623,7 +1459,6 @@ function ns.TrinketWindowStart(x, y)
 	return x, y
 end
 
--- The movers set or put back the window's spot: it hangs from it now.
 function ns.TrinketWindowMoved()
 	W.placed, W.dropped = nil, nil
 	if W.frame then
@@ -1631,7 +1466,6 @@ function ns.TrinketWindowMoved()
 	end
 end
 
--- At the end of each refresh of the module: the window closes while the module or this part is off, and takes the look of the Windows page again.
 function ns.TrinketWindowSync()
 	if not Allowed() then
 		U.Close(true)

@@ -1,154 +1,16 @@
 local _, ns = ...
 
--- Gear lines, the part "gear lines" of Chat and tooltips (design 2.1 to 2.4 and 2.6, the contracts of 4.3 and the post call of 4.4; the Spells
--- and gear tab): inside the game's build of an item tooltip, what wearing the item changes for the spells the player chose, against what the
--- player wears in its slot, and on the Character window what a worn item gives them; the list of those spells for this character, the list rows
--- that change it, /flatui gear and its lines of /flatui status. The numbers are GearModel.lua's (ns.GearModel: G.Compare and G.Figure), worked out
--- from the state and stats SpellModel.lua reads (ns.SpellModel); this file reads no stat and works out no number. It adds to the chat module and
--- has no switch of its own, as ChatTips.lua (ChatTips.lua:7): Chat.lua's post call of the game's tooltip data (TooltipDataProcessor.AddTooltipPostCall
--- for every kind, Chat.lua:1169-1200) calls ns.GearTipLines after ns.SpellTipLines and before its own ID and count lines, and the end of Chat.lua's
--- Refresh calls ns.GearLinesSync. The game runs the post calls once it has added its own lines and before it shows the tooltip
--- (Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:281-300), so the tooltip takes the size of the new lines.
---
--- What the post call reads, in its order, each test cheaper than the next (design 4.4). The tooltip: GameTooltip or ItemRefTooltip
--- (Blizzard_GameTooltip/Mainline/GameTooltip.xml:249; Blizzard_UIPanels_Game/Mainline/ItemRef.xml:5), compared with rawequal as BagsTooltip.lua:77-82
--- does, one addons may touch (ns.Forbidden, IsForbidden) and not one inside another (its IsEmbedded, GameTooltip.xml:90), so the comparison tooltips
--- ShoppingTooltip1 and 2, which show the worn items, get nothing. The kind of the data: data.type, Enum.TooltipDataType.Item
--- (TooltipInfoSharedDocumentation.lua:96). The key of Show gear lines: Always, or Shift, Ctrl or Alt held (IsShiftKeyDown, IsControlKeyDown,
--- IsAltKeyDown), or With the game's comparison by the game's own test: on GameTooltip its supportsItemComparison (GameTooltip.xml:251) and either
--- the compareItem of the info the game is building (its processingInfo, TooltipDataHandler.lua:222, 281) or TooltipUtil.ShouldDoItemComparison.
--- The test is alwaysCompareItems (C_CVar.GetCVarBool) while the tooltip's suppressAutomaticCompareItem is not true, or the modified click
--- COMPAREITEMS held (IsModifiedClick; Shift by default, Blizzard_FrameXML/Bindings_Camelot.xml:1546) (Blizzard_SharedXMLGame/Tooltip/
--- TooltipUtil.lua:3-6; TooltipDataRules.lua:168-176); with Compare items only while holding Shift on, which writes alwaysCompareItems 0
--- (ItemCompare.lua:3-14), that is while Shift is held. A worn item shows its lines at this choice while Shift is held. ItemRefTooltip shows them at
--- every choice: the game builds it only for a plain click on a link, a modified one going to HandleModifiedItemClick (SetItemRef,
--- Blizzard_UIPanels_Game/Mainline/ItemRef.lua:17-26), and builds it again only when its data changes (TOOLTIP_DATA_UPDATE, GameTooltip.lua:964-976),
--- never as a key goes down: its OnUpdate shows the worn items beside it with no new build (ItemRef.lua:351-366), so lines that waited for a key or
--- for the comparison would never come there. Then the item: worn when the game gives its data.guid a place
--- in an equipment slot (C_Item.GetItemLocation and the field equipmentSlotIndex, ItemDocumentation.lua:786-799, read as ChatTips.lua:134-157
--- reads it); its link is data.hyperlink, else C_Item.GetItemLinkByGUID(data.guid) (:771-784), as the game finds the item a tooltip shows
--- (TooltipUtil.lua:8-22), else the link of data.id from C_Item.GetItemInfo (:626-657), which carries no random suffix; the game is asked once for an
--- item the client has not loaded (C_Item.RequestLoadItemDataByID, :1710-1718, as BagsData.lua:1649 asks), and the next build has the lines. Its
--- kind is the itemEquipLoc of C_Item.GetItemInfoInstant (:659-680): an item with none gets nothing, nor a relic, bag, quiver, tabard or shirt,
--- whose worth is not in the model (design 2.4); its classID and subclassID (the same call) name its armour or weapon type. Then the lines of the
--- build itself, read fresh each time with the tests of ItemMarks.lua:213-224: an EquipSlot line (Enum.TooltipDataLineType,
--- TooltipInfoSharedDocumentation.lua:55) whose isValidInvSlot is false, or whose isValidItemType is false for a type the player's class never
--- learns, or that is red where the game gives neither field, or a red UsageRequirement line (:77) that says Classes: or Races:
--- (ITEM_CLASSES_ALLOWED and ITEM_RACES_ALLOWED, GlobalStrings/enUS.lua:12687 and 13011), is an item the player can never wear: no lines. The game
--- also gives isValidItemType false, the type in red, for a type the class learns in time and has not learned (T.LEARNS, the client's own table of
--- them: mail for a hunter or a shaman and plate for a warrior or a paladin from level 40, polearms from 20, the weapon masters' other skills, a
--- shaman's two-hand axes and maces through a talent). That, and any other red requirement (a level, a skill, a reputation), is one the player
--- cannot wear yet: the lines show, and end with "Not wearable yet:" and the game's own red requirement line, else the type's red text (design
--- 2.2), so a level 58 player sees what a level 60 reward will do and a level 38 hunter what a mail chest will. A red
--- is the game's RED_FONT_COLOR or near it (ItemMarks.lua:53-54). ItemMarks' own answer (ns.ItemMarks.Unusable) is not used: it is kept by item ID
--- and goes old only through events of the windows module and Bags (ItemMarks.lua:9-19). The Gear comparison window, which has no build of the game's
--- to read, asks the same test of the lines C_TooltipInfo.GetHyperlink gives for its item (ns.GearWearable, TooltipInfoDocumentation.lua:337-354, as
--- GearModel.lua reads them). C_Item.IsItemDataCachedByID (ItemDocumentation.lua:1520-1533) says whether the client has the item. Every field of the
--- data and of the tooltip is read under pcall and through ns.IsSecret, and every call under pcall.
---
--- The block: G.Compare(link, lines, opts), or G.Compare(slot, lines, opts) for a worn item (what it gives: now against that slot empty), with the
--- lines of ns.GearChosen the player knows now and opts.mode "tooltip" and opts.listVersion ns.GearListVersion() (design 4.3); a row's change is with
--- - now, what the item gives, and its label, slots, empty, offEmpty and perSecond are read as GearModel.lua's header says. Of the slots it gives
--- (rings, trinkets, a dual wielder's one-hand weapon) the tooltip shows the one whose shown lines do more in a minute for the figure of the role
--- (GearModel.lua's G.Totals, as G.Compare picks its best slot; 0.5.25), the first the game names on a tie (design 2.4). Written with AddLine and
--- AddDoubleLine, the only writes on a Blizzard frame here, in the one style of SpellModel.lua's M.Fmt.Style (0.5.20): a gold header (the game's
--- NORMAL_FONT_COLOR) that wraps (AddLine's fifth argument), naming what the item replaces, the worn item's name in its quality colour (its link's own
--- colour), and the unit of the plain numbers ("Instead of Band of X (Finger 1), a cast:"); while Overall totals is Weighted (chat.gearTotals), the
--- Overall line: a figure the chosen spells have, each what its rows do in a minute with the item against now (GearModel.lua's G.Totals, with the
--- lines and their weights), and Damage taken while avoidance shows (GearAvoid.lua's taken of the candidate for the same slots, which A.Compare's
--- candidates carry, else A.Totals), each green when better and red when worse, "Overall Damage +2.4% · Threat +1.1% · Damage taken -2.1%", none when
--- no figure changes; a line per spell (AddDoubleLine), its name light grey (0.82) and the change green for a gain, red for a loss (GREEN_FONT_COLOR,
--- RED_FONT_COLOR) and white for none, with ~ before an estimate; at most Spells in an item tooltip of them; then the block's notes, dim
--- (HitTable.lua:79) and wrapped: "and 2 more: /flatui gear" past the rows shown, never "and 1 more", or the note in place of them when none changes
--- by 0.05% or more, "Not wearable yet:" with the game's requirement and the level the numbers are for, each compared weapon line the player has yet
--- to raise (G.Compare's skills: the numbers count every weapon at the full skill of its line), and what is not counted (design 2.3, 2.6), in Compact
--- (chat.tipDetail) joined into one line with "; " between them, a note cut with "..." keeping its dots, and in Full each its own. Each block is kept
--- by the item's link (by its slot and link for a worn one), M.Version(), ns.GearListVersion(), A.Stamp, the WoWSims rotation of the Overall line
--- (G.Rotation) and Overall totals, at most 64 and the oldest first out (design 4.6), and all are dropped at each refresh of the module, where a row
--- may have changed. A block is added once for each build of a tooltip, as Chat.lua adds its own lines (Chat.lua:795-806): the game fetches new
--- data for each build and may run the post calls more than once for one, so the same data with the lines of the first call still there is the
--- same build (NumLines). Each AddLine and AddDoubleLine is under pcall, and
--- one the game refuses stops the adding for that build. In a fight, where the game withholds the stats (design 4.7), a block worked out before it
--- shows, else one dim line (InCombatLockdown, and SpellModel's old stats). A reason G.Compare gives shows as one light grey line ("Needs a one-hand
--- weapon; not compared."), but one it marks quiet (ammunition the game does not use for the player, an off-hand weapon for one who does not dual
--- wield) shows nothing. The numbers are rounded as design 2.3 says by SpellModel's M.Fmt, as the window rounds them: a change a cast whole from 100
--- up and to a tenth below, a second to a tenth and " a second" (Change; what rides on the swings or shots, as the window's A cast counts it), the
--- percent to a tenth with its sign, (0%) under 0.05 (Percent), and none while the figure now is 0.
--- While avoidance shows (Avoidance, chat.gearAvoid; GearAvoid.lua's A.Wanted), the block goes on after the spell block with GearAvoid.lua's lines
--- for the slot they show (A.TipLines: its own block in the same style; { text, colour, wrap } a line alone and { key, left, right, leftColour,
--- colour } a figure), Damage taken among them only while the Overall line does not say it, so it shows once, and the note in place of spell rows
--- that do not change says what it counts; the block's key holds A.Stamp, which changes with what those lines are built from. GearAvoid.lua is
--- asked under pcall, so a fault there goes to the error handler once and the spell rows show without it.
--- The post call runs in two steps, each inside ns.EachPart (Core.lua:2193-2224), which counts a failure once for each first argument and stops a
--- part at the third (Core.lua:260, 2203, 2210-2219): the tests and the link keyed by the data of the build, which is new for each build, and the
--- work keyed by the item's link, so three items that fail stop the gear lines with their note for /flatui status, and a test that fails on every
--- build stops them after three builds (design 4.4). The first error also goes once to geterrorhandler(), as Bags' parts report theirs
--- (Bags.lua:356-373).
---
--- The list: FlatUICharDB.gearSpells (ns.Character, Core.lua:2650-2652), as { { key = "frostbolt" }, { key = "heal", id = 6064, weight = 2 } }: the
--- key of an entry of ns.SpellData (SpellData.lua), only for a kept rank its spell ID, and only where it is not 1 its weight in the Overall line (0
--- to 5 in steps of 0.5, 0 leaving the line out of the totals; ns.GearSetWeight, which the window calls, and /flatui gear weight; a line of the
--- defaults weighted gets its saved entry, the defaults becoming the list); nil until the player first changes it, and nil again after Back
--- to your class's spells (design 4.3). At most 20 lines; a change is saved at once, also in a fight, as Cooldowns' are (Cooldowns.lua:2353). A
--- line with no ID follows the highest rank the player knows (SpellModel's M.Highest, by the ranks of its entry, as Cooldowns and Pulse count the
--- ranks of a spell as one, Cooldowns.lua:2301-2302, Pulse.lua:11-13); a kept rank is known when ns.SpellKnown (Cooldowns.lua:314-325) says so, or
--- when it is the rank M.Highest gives. Attack is known to every character whatever the spell book says, and a judgement, which no spell book holds,
--- takes the rank M.Highest gives it through its seal. While the list is nil the defaults of the data are used (D.DEFAULTS by class and role,
--- design 2.1): the role SpellModel read (ns.PlayerRole's first answer, Core.lua:561-590), and a druid's form (GetShapeshiftFormID: Cat Form 1, the
--- bear forms 5 and 8, PlateThreat.lua:54-56) picks its cat or bear set whatever the role. Every entry of them is "if known", and a set holds 2.1's
--- conditions in the one form tools/dev/make_spelltips.py writes: a key; a list of keys, the first of them known (Greater Heal, else Heal, else
--- Lesser Heal); or { key, key ..., needs = key, ["else"] = { key ... } }, each of its keys while needs is known, else each of else (the seal and
--- judgement of Command with Seal of Command known, else those of Righteousness). ns.GearListVersion() changes
--- with each change of what the list gives: the lines, their ranks, whether they are known, their weights, and
--- the defaults it follows (the role, the form). The names are the game's (C_Spell.GetSpellName), with the rank of a kept line
--- (C_Spell.GetSpellSubtext, as Cooldowns.lua:2271-2284 tells ranks apart), and a name typed after /flatui gear add is found in the data, else by
--- C_Spell.GetSpellInfo (as Cooldowns.lua:362-375 resolves one).
--- The rows (Config.lua, the Gear comparison page; the panel prints a pick's message, Panel.lua:762-791): Add a spell lists the spell book walked as
--- Cooldowns' Add a spell walks it (ns.SpellBookList, Cooldowns.lua:2287-2336), only the spells Flat UI can work out (an entry with cmp) at the
--- highest rank known, with Attack, Auto Shot and Shoot added when the player has them; Remove a spell lists the lines, "(weight 2)" after one whose
--- weight is not 1 and "(not known)" after one the character lost; Add the spells of a bar takes each entry once with the rank on the bar
--- (ns.BarSpells, as Cooldowns' import reads a bar, Cooldowns.lua:2587-2654); Back to your class's spells drops the list; Gear comparison window calls
--- ns.GearWindowShow of GearWindow.lua when it is there, which opens the window or raises an open one, as Reset windows is a list row
--- (Movers.lua:4556-4570). Each pick answers (done, message), as ns.CooldownAdd does (Cooldowns.lua:2354-2370), and never raises: an error goes once
--- to geterrorhandler(). /flatui gear (ns.AddSlash, Core.lua:2358-2373; design 4.11) opens the window (ns.GearWindowToggle, ns.GearWindowShow) and
--- changes the list and its weights, and prints with print(). /flatui status (ns.AddStatus, Core.lua:2334-2354; design 4.12) says, while Your spells
--- in item tooltips is on and this part runs or the window is open (ns.GearWindowOpen, GearWindow.lua), which spells are compared, against what, and,
--- once seen, that the slot table stood in for the game's choice or Flat UI's rating sizes for the game's conversion: of
--- GetCombatRatingBonusForCombatRatingValue, C_TooltipComparison.GetItemComparisonInfo and GetActionInfo (Add the spells of a bar) it only looks
--- whether the client has them, and a candidate of G.Compare whose game is false, or its sizes, the fixed sizes having stood in.
--- UnitClassBase, UnitLevel, GetShapeshiftFormID and ns.PlayerRole are asked only
--- when SpellModel's state lacks the class, level, form or role, and GetTime keeps one reading of the list for one frame.
--- This file registers no event: SpellModel.lua listens for the player's state and stats on a frame of its own while an owner wants them
--- (M.Want("gear lines", on) from ns.GearLinesSync, design 4.5), and a block the client had not loaded is never kept, so the next build has it.
-
 local KEY, PART = "chat", "gear lines"
 
 local IsSecret, Finite = ns.IsSecret, ns.Finite
 
--- The constants of the file, in one table so its functions stay under the client's count of upvalues (as Cooldowns.lua keeps CD,
--- Cooldowns.lua:108-109).
 local T = {
-	-- The owner this file names when it asks SpellModel.lua for its events (M.Want, design 4.3).
 	OWNER = "gear lines",
-	-- The most lines a list holds; the most blocks kept (design 4.6); the action bars of Add the spells of a bar (Cooldowns.lua:127); Spells in an
-	-- item tooltip when the row does not say (design 4.9); the level a boss is three levels above at Against's first choice (design 2.5).
 	MAX_LINES = 20, CACHE = 64, BARS = 8, MOST = 5, MAX_LEVEL = 60,
-	-- Enum.TooltipDataType.Item, and Enum.TooltipDataLineType.UsageRequirement and EquipSlot, for a client whose Enum does not say
-	-- (TooltipInfoSharedDocumentation.lua:96, 77, 55).
 	ITEM = 0, USAGE = 43, EQUIP_SLOT = 21,
-	-- The game's red for a requirement not met is 1, 0.125, 0.125 (RED_FONT_COLOR); any colour this close counts (ItemMarks.lua:53-54).
 	RED_LEAST = 0.9, OTHER_MOST = 0.25,
-	-- Kinds of item that get no lines: relics, whose bonuses are spells, bags, quivers, tabards and shirts (design 2.4), and the kinds of an item
-	-- that cannot be worn.
 	NO_LINES = { INVTYPE_RELIC = true, INVTYPE_BAG = true, INVTYPE_QUIVER = true, INVTYPE_TABARD = true, INVTYPE_BODY = true, INVTYPE_NON_EQUIP = true,
 		INVTYPE_NON_EQUIP_IGNORE = true },
-	-- The armour and weapon types each class can wear once it has learned them, as the client's SkillRaceClassInfo and SkillLineAbility give them
-	-- for each class (build 1.60.1.70888, as GrunzForever exports them; both tables agree): mail from level 40 for a hunter and a shaman, plate from
-	-- 40 for a warrior and a paladin, polearms from 20, a shaman's two-hand axes and maces through a talent (not trainable), the rest from the
-	-- weapon masters. By the item's classID (Enum.ItemClass: Weapon 2, Armor 4) and subclassID (Enum.ItemWeaponSubclass: Axe1H 0, Axe2H 1, Bows 2,
-	-- Guns 3, Mace1H 4, Mace2H 5, Polearm 6, Sword1H 7, Sword2H 8, Staff 10, Unarmed 13, Dagger 15, Thrown 16, Crossbow 18, Wand 19;
-	-- Enum.ItemArmorSubclass: Cloth 1, Leather 2, Mail 3, Plate 4, Shield 6). A type in red that is here is one the player has not learned yet; any
-	-- other, one the class never learns (Wearable).
 	LEARNS = {
 		WARRIOR = { [2] = { [0] = true, [1] = true, [2] = true, [3] = true, [4] = true, [5] = true, [6] = true, [7] = true, [8] = true, [10] = true,
 			[13] = true, [15] = true, [16] = true, [18] = true }, [4] = { [1] = true, [2] = true, [3] = true, [4] = true, [6] = true } },
@@ -165,46 +27,28 @@ local T = {
 		MAGE = { [2] = { [7] = true, [10] = true, [15] = true, [19] = true }, [4] = { [1] = true } },
 		WARLOCK = { [2] = { [7] = true, [10] = true, [15] = true, [19] = true }, [4] = { [1] = true } },
 	},
-	-- The worn slots by number (INVSLOT_AMMO 0 to INVSLOT_TABARD 19, Blizzard_FrameXMLBase/Constants.lua:135-154), in the words of G.Compare's labels
-	-- (GearModel.lua, K.LABEL) and the window's, for a header whose slot G.Compare gave no label.
 	SLOT_NAMES = { [0] = "Ammo", "Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Finger 1", "Finger 2",
 		"Trinket 1", "Trinket 2", "Back", "Main hand", "Off hand", "Ranged", "Tabard" },
-	-- Attack (the auto attack of both hands), Auto Shot and Shoot with a wand, which Add a spell lists when the player has them (design 2.1).
 	GENERIC = { 6603, 75, 5019 },
-	-- Attack is known to every character, whatever the spell book says of it.
 	ALWAYS = { [6603] = true },
-	-- A druid's forms by GetShapeshiftFormID: Cat Form 1 (Blizzard_FrameXMLBase/Constants.lua:327), Bear Form 5 and Dire Bear Form 8
-	-- (PlateThreat.lua:54-56).
 	CAT_FORM = 1, BEAR_FORMS = { [5] = true, [8] = true },
-	-- What a set of the defaults is for, as /flatui status and the list say it.
 	SETS = { damage = "a damage dealer", tank = "a tank", healer = "a healer", cat = "Cat Form", bear = "a bear form" },
 	ROLES = { damage = true, tank = true, healer = true },
-	-- The comparison kinds (design 3.2) that heal: their second is healing a second.
 	HEALS = { heal = true, hot = true },
-	-- The hit cap against a boss of each choice (chat.gearRules, hud.hitTableRules; Config.lua:1959-1961).
 	CAPS = { classic = "9% melee and 16% spells", game = "8% melee and 17% spells" },
-	-- The fixed rating sizes for 1% when the data does not give them (design 2.5, SpellData.lua's D.MODEL.ratings).
 	RATINGS = { hit = 10, crit = 14, haste = 10, expertise = 10 },
-	-- A line's weight in the Overall line (ns.GearSetWeight): 0 (left out) to 5, in steps of 0.5, 1 when none is saved.
 	WEIGHT_MIN = 0, WEIGHT_MAX = 5, WEIGHT_STEP = 0.5, WEIGHT = 1,
-	-- The figures of the Overall line in their order (GearModel.lua's G.Totals), the word each shows as, and the least share a figure must change
-	-- by to show other than 0% (as M.Fmt.Percent rounds).
 	FIGURES = { { "damage", "Damage" }, { "healing", "Healing" }, { "threat", "Threat" } }, TAKEN = "Damage taken", OVERALL = "Overall",
 	SEPARATOR = "  \194\183  ", STILL_PCT = 0.0005,
-	-- The figure each role ranks the slots of an item by (Rank), as GearModel.lua's G.Compare does.
 	ROLE_KIND = { healer = "healing", tank = "threat" },
-	-- The colours of the style while SpellModel.lua's (M.Fmt.Style) cannot be read: the gold header (the game's NORMAL_FONT_COLOR), a figure's
-	-- light grey label and white value, a change better or worse (GREEN_FONT_COLOR, RED_FONT_COLOR) and a dim note.
 	STYLE = { header = { 1, 0.82, 0 }, label = { 0.82, 0.82, 0.82 }, value = { 1, 1, 1 }, good = { 0.1, 1, 0.1 }, bad = { 1, 0.1, 0.1 },
 		dim = { 0.66, 0.68, 0.62 } },
-	-- The notes of a block in Compact are joined into one dim line with this between them (chat.tipDetail).
 	JOIN = "; ",
 	NO_CHANGE = "No change to your chosen spells; armor, avoidance and mana are not counted.",
 	OUT_OF_COMBAT = "Gear lines show out of combat.",
 	RANDOM = "Random stats not known",
 	NOT_YET = "Not wearable yet: ",
 	NOT_YET_LEVEL = " (the numbers are for you now, at level %d)",
-	-- What a type the player has yet to learn needs, when its line gives no text of the type.
 	LEARN = "an armor or weapon skill you have yet to learn",
 	NOT_COUNTED = "Not counted: ",
 	MORE = "and %d more: /flatui gear",
@@ -226,30 +70,20 @@ local T = {
 	},
 }
 
--- Per tooltip: { data, lines } of the build its block went into.
 local added = setmetatable({}, { __mode = "k" })
--- The blocks built, by their key, and the order they came in; the last block of each item whatever the versions, for a fight.
 local blocks = { byKey = {}, order = {}, last = {}, lastOrder = {} }
--- The list: counter changes with each edit, version is ns.GearListVersion(), signature what the list gave at the last reading; memo holds one
--- reading for one frame (memoKey).
 local list = { counter = 0, version = 1 }
--- Seen once: the slot table stood in for the game's choice of slot; the fixed rating sizes for the game's conversion.
 local seen = { slots = false, ratings = false }
--- The item IDs the game was asked to load, the patterns of the game's requirement lines, and the errors already reported, by where.
 local asked, patterns, reported = {}, {}, {}
-
--- Helpers -------------------------------------------------------------------------------------------------------------------------------------
 
 local function Plain(value, kind)
 	return not IsSecret(value) and type(value) == kind
 end
 
--- A whole number above 0, as a spell or item ID is.
 local function Whole(value)
 	return Finite(value) and value > 0 and value == math.floor(value)
 end
 
--- The first answer of a call of the game, or nil when the call is missing, raises or withholds the answer.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -261,13 +95,10 @@ local function Ask(fn, ...)
 	return nil
 end
 
--- t[key], for pcall.
 local function Index(t, key)
 	return t[key]
 end
 
--- A field of a table the game gave, and true as the second answer when the table or the field is withheld or reading it raises; a field that is
--- not there is nil and not withheld.
 local function Field(t, key)
 	if IsSecret(t) or type(t) ~= "table" then
 		return nil, true
@@ -279,13 +110,11 @@ local function Field(t, key)
 	return value, false
 end
 
--- A function of a namespace of the game, such as C_Item.GetItemInfo, or nil.
 local function Call(space, name)
 	local fn = Field(space, name)
 	return type(fn) == "function" and fn or nil
 end
 
--- A value of the client's Enum, or the fallback when it has none.
 local function EnumValue(group, name, fallback)
 	local value = Field(Field(_G.Enum, group), name)
 	if Finite(value) then
@@ -298,7 +127,6 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- Says an error once for each place it came from, to the game's error handler, as Bags' parts say theirs (Bags.lua:356-373).
 local function Report(err, where)
 	where = where or PART
 	if reported[where] then
@@ -311,8 +139,6 @@ local function Report(err, where)
 	end
 end
 
--- SpellModel.lua's lookups and state, GearModel.lua's comparison and the spell data, looked up when asked: another part's file may load after this
--- one, or not at all.
 local function Model()
 	local M = ns.SpellModel
 	if type(M) == "table" and type(M.Find) == "function" and type(M.ByKey) == "function" and type(M.Highest) == "function" then
@@ -329,8 +155,6 @@ local function Gear()
 	return nil
 end
 
--- A function of GearAvoid.lua (ns.GearAvoid), looked up when called and run under pcall: its fault goes to the error handler once and never stops
--- the gear lines, which show without the avoidance block.
 local function Avoid(name, ...)
 	local A = ns.GearAvoid
 	local fn = type(A) == "table" and A[name] or nil
@@ -345,7 +169,6 @@ local function Avoid(name, ...)
 	return first, second
 end
 
--- Asks SpellModel.lua for its events while the gear lines want them. A refusal goes to the error handler, never to the caller.
 local function Want(on)
 	local M = ns.SpellModel
 	if type(M) == "table" and type(M.Want) == "function" then
@@ -356,13 +179,11 @@ local function Want(on)
 	end
 end
 
--- The player's state as SpellModel.lua read it, read first where marked (M.State, design 4.3); always a table.
 local function StateOf(M)
 	local state = M and type(M.State) == "function" and M.State() or nil
 	return Plain(state, "table") and state or {}
 end
 
--- The player's stats (M.Stats), or nil before the first plain read.
 local function StatsOf(M)
 	local stats = M and type(M.Stats) == "function" and M.Stats() or nil
 	return Plain(stats, "table") and stats or nil
@@ -388,7 +209,6 @@ local function Level(state)
 	return Finite(level) and level or 0
 end
 
--- The form by GetShapeshiftFormID, 0 for none.
 local function Form(state)
 	local form = state.form
 	if not Finite(form) then
@@ -397,7 +217,6 @@ local function Form(state)
 	return Finite(form) and form or 0
 end
 
--- "tank", "healer" or "damage": the role SpellModel read, else ns.PlayerRole's first answer (Core.lua:561-590).
 local function Role(state)
 	local role = state.role
 	if Plain(role, "string") and T.ROLES[role] then
@@ -412,12 +231,9 @@ local function Role(state)
 	return "damage"
 end
 
--- True while a fight keeps the stats from being read: in combat, or the stats SpellModel holds are from before the fight (design 4.7).
 local function Fighting(stats)
 	return Ask(InCombatLockdown) == true or (stats ~= nil and stats.old == true)
 end
-
--- Names -------------------------------------------------------------------------------------------------------------------------------------
 
 local function SpellName(id)
 	local name = Ask(Call(C_Spell, "GetSpellName"), id)
@@ -427,7 +243,6 @@ local function SpellName(id)
 	return nil
 end
 
--- The rank text the game shows beside a spell's name ("Rank 4"), or nil.
 local function RankText(id)
 	local text = Ask(Call(C_Spell, "GetSpellSubtext"), id)
 	if Plain(text, "string") and text ~= "" then
@@ -436,7 +251,6 @@ local function RankText(id)
 	return nil
 end
 
--- A key of the data as a name: each word with a capital, "shadow word: pain" as "Shadow Word: Pain".
 local function Title(key)
 	if type(key) ~= "string" then
 		return "?"
@@ -450,16 +264,12 @@ local function NameOf(entry, id)
 	return (Whole(id) and SpellName(id)) or Title(type(entry) == "table" and entry.key or nil)
 end
 
--- The spell ID of a rank of an entry, or nil.
 local function RankId(entry, index)
 	local ranks = type(entry) == "table" and entry.ranks or nil
 	local rank = type(ranks) == "table" and ranks[index] or nil
 	return type(rank) == "table" and Whole(rank[1]) and rank[1] or nil
 end
 
--- Known spells and ranks -------------------------------------------------------------------------------------------------------------------
-
--- Whether the player knows a spell (ns.SpellKnown of Cooldowns.lua, which says yes on a client without a spell book to ask).
 local function Known(id)
 	if T.ALWAYS[id] then
 		return true
@@ -471,8 +281,6 @@ local function Known(id)
 	return known(id) == true
 end
 
--- The rank index and spell ID of the highest rank of an entry the player knows, or nil: SpellModel's answer (M.Highest, which gives a judgement the
--- rank of its seal), else Attack's one rank, which every character knows.
 local function Highest(M, entry)
 	if type(entry) ~= "table" or type(entry.ranks) ~= "table" then
 		return nil
@@ -490,7 +298,6 @@ local function Highest(M, entry)
 	return nil
 end
 
--- Whether the player knows the rank of a kept line: the spell itself, or the rank M.Highest gives (a judgement's, through its seal).
 local function KnownRank(M, entry, id)
 	if Known(id) then
 		return true
@@ -499,7 +306,6 @@ local function KnownRank(M, entry, id)
 	return top ~= nil and top == id
 end
 
--- A weight as saved: a number from WEIGHT_MIN to WEIGHT_MAX, else nil.
 local function WeightOf(value)
 	if Finite(value) and value >= T.WEIGHT_MIN and value <= T.WEIGHT_MAX then
 		return value
@@ -507,27 +313,20 @@ local function WeightOf(value)
 	return nil
 end
 
--- A weight in words: 2, 1.5.
 local function WeightText(weight)
 	return (("%.1f"):format(weight):gsub("%.0$", ""))
 end
 
--- A line as ns.GearChosen gives it (design 4.3), with its key and its weight in the Overall line (0.5.20: the saved one, else 1).
 local function Line(entry, index, id, kept, known, weight)
 	return { entry = entry, rank = index, id = id, name = NameOf(entry, id), kept = kept == true, known = known == true, key = entry.key,
 		weight = WeightOf(weight) or T.WEIGHT }
 end
 
--- An entry the comparison can work out: one of the data with a comparison kind (cmp, design 3.2) and ranks, not of the player's pet.
 local function Comparable(entry)
 	return type(entry) == "table" and type(entry.cmp) == "string" and entry.pet ~= true and type(entry.ranks) == "table" and entry.ranks[1] ~= nil
 		and type(entry.key) == "string"
 end
 
--- The defaults -----------------------------------------------------------------------------------------------------------------------------
-
--- The set of D.DEFAULTS for a class, a role and a form, and what it is for: a druid's cat set in Cat Form and its bear set (else its tank set) in a
--- bear form whatever the role (design 2.1), else the role's set, else the damage set.
 local function SetOf(class, role, form)
 	local D = ns.SpellData
 	local all = type(D) == "table" and D.DEFAULTS or nil
@@ -554,9 +353,6 @@ local function SetOf(class, role, form)
 	return nil, role
 end
 
--- Adds to out the keys one item of a set of D.DEFAULTS gives, in the one form tools/dev/make_spelltips.py writes (design 2.1): a key, while known; a
--- list of keys, the first of them known ("Greater Heal, else Heal, else Lesser Heal"); or { key, key ..., needs = key, ["else"] = { key ... } },
--- each of its keys known while needs is known, else each known key of its else. known says whether the player knows a key's spell.
 local function Items(item, known, out)
 	if type(item) == "string" then
 		if known(item) then
@@ -586,8 +382,6 @@ local function Items(item, known, out)
 	end
 end
 
--- The lines of the defaults for the player's class, role and form, and the set they are: every entry known now, each once, in the set's order.
--- The second answer is the set's name ("damage", "tank", "healer", "cat", "bear"); the third is true when the data has no set for the class.
 local function DefaultLines(M, state)
 	local class, role = Class(state), Role(state)
 	local set, name = SetOf(class, role, Form(state))
@@ -616,11 +410,6 @@ local function DefaultLines(M, state)
 	return lines, name, false
 end
 
--- The saved list --------------------------------------------------------------------------------------------------------------------------
-
--- The saved lines of this character, or nil while the defaults are followed. A line is { key, id, weight }: the key a text, the id nil or a spell
--- ID, the weight nil (1) or 0 to 5; none twice, at most MAX_LINES. A list that is not so is written back cleaned, as Cooldowns' List does
--- (Cooldowns.lua:264-288): a weight out of range is dropped.
 local function Saved()
 	local char = ns.Character()
 	if type(char) ~= "table" then
@@ -659,7 +448,6 @@ local function Saved()
 	return clean
 end
 
--- A saved line as a line of ns.GearChosen, or nil for one the data does not have or cannot work out.
 local function SavedLine(M, item)
 	if item.id ~= nil then
 		local entry, index = M.Find(item.id)
@@ -681,9 +469,6 @@ local function SavedLine(M, item)
 	return topId and Line(entry, top, topId, false, false, item.weight) or nil
 end
 
--- What the list gives now: its lines, and { defaults, set, role, class, noSet }. One reading serves every ask of one frame (GetTime is the time of
--- the frame); an edit of the list or a new M.Version() reads it again. Each reading that gives other lines, ranks or known spells than the last
--- changes ns.GearListVersion().
 local function Resolve()
 	local M = Model()
 	local now = Ask(GetTime)
@@ -724,8 +509,6 @@ local function Resolve()
 	return lines, info
 end
 
--- The lines of the list (design 4.3): { { entry, rank, id, name, kept, known, key, weight } ... }, the spells the comparison works out, in list
--- order, and what the list is (as Resolve). Never raises.
 function ns.GearChosen()
 	local ok, lines, info = pcall(Resolve)
 	if not ok then
@@ -739,7 +522,6 @@ function ns.GearChosen()
 	return copy, info
 end
 
--- A number that changes with each change of what the list gives, the defaults it follows and the weights included (design 4.3).
 function ns.GearListVersion()
 	local ok, err = pcall(Resolve)
 	if not ok then
@@ -748,19 +530,16 @@ function ns.GearListVersion()
 	return list.version
 end
 
--- The blocks built for the tooltips, and the reading of the list kept for this frame, are dropped.
 local function Forget()
 	blocks.byKey, blocks.order, blocks.last, blocks.lastOrder = {}, {}, {}, {}
 	list.memo, list.memoInfo, list.memoKey = nil, nil, nil
 end
 
--- The list was edited.
 local function Changed()
 	list.counter = list.counter + 1
 	Forget()
 end
 
--- The saved list to edit: the saved one, or the defaults made the list (each line following its rank) the first time the player changes them.
 local function Editable()
 	local char = ns.Character()
 	if type(char) ~= "table" then
@@ -778,8 +557,6 @@ local function Editable()
 	return made
 end
 
--- What a line is called in the lists: its name, the rank of a kept one, its weight in the Overall line where it is not 1, and "(not known)"
--- after a spell the character does not know now.
 local function Label(line)
 	local text = line.name or "?"
 	if line.kept then
@@ -797,7 +574,6 @@ local function Label(line)
 	return text
 end
 
--- Whom the list is for: the defaults of a set, or the player's own.
 local function Who(info)
 	if info and info.defaults then
 		return "your class's spells for " .. (T.SETS[info.set] or T.SETS.damage)
@@ -813,8 +589,6 @@ local function Names(lines)
 	return #names > 0 and table.concat(names, ", ") or "none known yet"
 end
 
--- The rows of the list as Remove a spell and /flatui gear list give them: { id, label, line } in list order. A line the data does not have, or cannot
--- work out, keeps its row: by its spell ID, or for one that follows a rank by minus its place in the list.
 local function Entries()
 	local M = Model()
 	local rows = {}
@@ -838,8 +612,6 @@ local function Entries()
 	return rows
 end
 
--- The list rows ------------------------------------------------------------------------------------------------------------------------------
-
 local function ByLabel(a, b)
 	local first, second = a[2]:lower(), b[2]:lower()
 	if first ~= second then
@@ -848,14 +620,11 @@ local function ByLabel(a, b)
 	return a[1] < b[1]
 end
 
--- Add a spell: the player's spells Flat UI can work out, at the highest rank known, that have no line following their rank yet, by name; Attack,
--- Auto Shot and Shoot with them when the player has them.
 local function Candidates()
 	local M = Model()
 	if not M then
 		return {}
 	end
-	-- The spells with a line that follows their ranks, and the ranks a known line stands for now (a kept rank that is the highest).
 	local followed, standing = {}, {}
 	for _, line in ipairs((Resolve())) do
 		if not line.kept then
@@ -901,10 +670,6 @@ local function Candidates()
 	return rows
 end
 
--- Adds a line for a spell ID. keep true keeps that rank (a bar, an ID, a link); false follows the highest rank of its spell (a name); nil follows
--- when the ID is the highest rank the player knows, or no rank is known, and keeps it otherwise (a line of Add a spell, a spell dropped on the
--- window). A line that stands for what a line of the list stands for now is refused. The third answer says why a refusal was: "had", "full" or
--- "bad".
 local function AddLine(id, keep)
 	local M = Model()
 	if not M then
@@ -946,7 +711,6 @@ local function AddLine(id, keep)
 	return true, ("Gear comparison: added %s%s."):format(name, rank and (" (" .. rank .. ")") or "")
 end
 
--- The place of the line a spell ID names among lines: a kept line of that rank, else the line that follows the ranks of its spell.
 local function Which(M, lines, id)
 	for index, line in ipairs(lines) do
 		if line.kept and line.id == id then
@@ -964,8 +728,6 @@ local function Which(M, lines, id)
 	return nil
 end
 
--- The place of the saved line a spell ID names, and its name: a kept line of that rank, else the line that follows the ranks of its spell; or
--- minus the place of a line the data does not have.
 local function SavedAt(M, saved, id)
 	if id < 0 then
 		local item = saved[-id]
@@ -991,7 +753,6 @@ local function SavedAt(M, saved, id)
 	return nil, name
 end
 
--- Takes a line off: by the spell ID of its row (Remove a spell, the window), or minus its place for one the data does not have.
 local function RemoveLine(id)
 	if not Finite(id) or id ~= math.floor(id) or id == 0 then
 		return false, ('Gear comparison: no spell found for "%s".'):format(tostring(id))
@@ -999,7 +760,6 @@ local function RemoveLine(id)
 	local M = Model()
 	local saved = Saved()
 	if saved == nil then
-		-- The defaults: the others become the list.
 		local lines = Resolve()
 		local at = id > 0 and Which(M, lines, id) or nil
 		local char = ns.Character()
@@ -1027,9 +787,6 @@ local function RemoveLine(id)
 	return true, ("Gear comparison: removed %s."):format(name)
 end
 
--- Sets the weight of a line in the Overall line (0.5.20, ns.GearSetWeight): by the spell ID of its row, or minus its place for one the data does
--- not have, as RemoveLine finds it; 0 to 5 in steps of 0.5 (a number between is rounded to the nearest step), 1 by default, 0 leaving the line out
--- of the totals. A line of the defaults gets its saved entry: the defaults become the list, each line following its rank, as a first change does.
 local function SetWeight(id, weight)
 	if not Finite(id) or id ~= math.floor(id) or id == 0 then
 		return false, ('Gear comparison: no spell found for "%s".'):format(tostring(id))
@@ -1065,8 +822,6 @@ local function SetWeight(id, weight)
 	return true, ("Gear comparison: %s weighs %s in the Overall line."):format(name, WeightText(weight))
 end
 
--- Add the spells of a bar: each entry Flat UI can work out on that bar, once, with the rank on the bar (design 2.1). The slots that hold anything
--- else are left out.
 local function BarAdd(bar)
 	if not (Whole(bar) and bar <= T.BARS) then
 		return false, T.BAR_HELP
@@ -1075,8 +830,6 @@ local function BarAdd(bar)
 	if not M then
 		return false, T.NO_MODEL
 	end
-	-- ns.BarSpells answers an empty bar both for a bar with nothing on it and for a client without GetActionInfo, so the call is looked for first,
-	-- as Cooldowns' import does (Cooldowns.lua, ns.CooldownImport).
 	if type(GetActionInfo) ~= "function" then
 		return false, T.NO_BAR
 	end
@@ -1095,7 +848,6 @@ local function BarAdd(bar)
 		if not Comparable(entry) then
 			left = left + 1
 		elseif not taken[entry.key] then
-			-- The same spell twice on the bar, at two ranks, counts once.
 			taken[entry.key] = true
 			local done, _, why = AddLine(id, true)
 			if done then
@@ -1121,7 +873,6 @@ local function BarAdd(bar)
 	return true, said
 end
 
--- Back to your class's spells: the list goes, and the defaults are followed again.
 local function Reset(id)
 	if id ~= 1 then
 		return false, nil
@@ -1140,8 +891,6 @@ local function Reset(id)
 	return true, ("Gear comparison: back to %s: %s."):format(Who(info), Names(lines))
 end
 
--- Gear comparison window: GearWindow.lua's opening, when that file is there (design 6.21: without it the row does nothing). It opens the window, or
--- raises it above the options window and works it out afresh when it is open already, and never closes it, as the line says.
 local function Open(id)
 	local show = ns.GearWindowShow
 	if id ~= 1 or type(show) ~= "function" then
@@ -1151,7 +900,6 @@ local function Open(id)
 	return true, Plain(said, "string") and said or nil
 end
 
--- A list's lines from a call that may fail; an error goes to the error handler once.
 local function Rows(ok, rows)
 	if ok and type(rows) == "table" then
 		return rows
@@ -1162,7 +910,6 @@ local function Rows(ok, rows)
 	return {}
 end
 
--- A pick's answer from a call that may fail: (done, message), and (false, a message) for an error, which goes to the error handler once.
 local function Answer(ok, done, message, ...)
 	if ok then
 		return done, message, ...
@@ -1175,7 +922,6 @@ function ns.GearCandidates()
 	return Rows(pcall(Candidates))
 end
 
--- The lines of the list, in list order, so opening the list also shows what is chosen.
 function ns.GearPicked()
 	return Rows(pcall(function()
 		local rows = {}
@@ -1186,7 +932,6 @@ function ns.GearPicked()
 	end))
 end
 
--- The picks work in combat and with the module off: they change what is saved and nothing on screen.
 function ns.GearAdd(id)
 	return Answer(pcall(AddLine, id))
 end
@@ -1195,7 +940,6 @@ function ns.GearRemove(id)
 	return Answer(pcall(RemoveLine, id))
 end
 
--- The weight of a line in the Overall line (0.5.20): id as ns.GearRemove takes it, weight 0 to 5 in steps of 0.5; answers (done, message).
 function ns.GearSetWeight(id, weight)
 	return Answer(pcall(SetWeight, id, weight))
 end
@@ -1228,9 +972,6 @@ function ns.GearOpenPick(id)
 	return Answer(pcall(Open, id))
 end
 
--- The tooltip --------------------------------------------------------------------------------------------------------------------------------
-
--- GameTooltip or ItemRefTooltip, one addons may touch and not inside another tooltip.
 local function Ours(tooltip)
 	if tooltip == nil or IsSecret(tooltip) or not (rawequal(tooltip, _G.GameTooltip) or rawequal(tooltip, _G.ItemRefTooltip)) or ns.Forbidden(tooltip) then
 		return false
@@ -1247,7 +988,6 @@ local function IsItem(data)
 	return Finite(kind) and kind == EnumValue("TooltipDataType", "Item", T.ITEM)
 end
 
--- True while a key lets the lines show: Always, or Shift, Ctrl or Alt held. A key the game does not say is down counts as up.
 local function KeyHeld(choice)
 	local down
 	if choice == "always" then
@@ -1264,8 +1004,6 @@ local function KeyHeld(choice)
 	return Ask(down) == true
 end
 
--- True while the game compares the item of this tooltip with the worn ones, by its own test (TooltipDataRules.lua:168-176, TooltipUtil.lua:3-6).
--- Find asks it of GameTooltip alone (header). A withheld field counts as no.
 local function Comparing(tooltip)
 	if rawequal(tooltip, _G.GameTooltip) then
 		if Field(tooltip, "supportsItemComparison") ~= true then
@@ -1282,7 +1020,6 @@ local function Comparing(tooltip)
 	return Ask(IsModifiedClick, "COMPAREITEMS") == true
 end
 
--- The equipment slot of a worn item by its GUID, or nil for an item in no slot of the player's.
 local function WornSlot(guid)
 	local location = Ask(Call(C_Item, "GetItemLocation"), guid)
 	local slot = Field(location, "equipmentSlotIndex")
@@ -1292,7 +1029,6 @@ local function WornSlot(guid)
 	return nil
 end
 
--- Asks the game once for an item the client has not loaded.
 local function Load(id)
 	if asked[id] then
 		return
@@ -1301,7 +1037,6 @@ local function Load(id)
 	Ask(Call(C_Item, "RequestLoadItemDataByID"), id)
 end
 
--- The link of the item of the data: its hyperlink, else the link of its GUID, else the link of its ID, which carries no random suffix (design 4.4).
 local function ItemLink(data, id, guid)
 	local link = Field(data, "hyperlink")
 	if Plain(link, "string") and link:find("item:", 1, true) then
@@ -1325,12 +1060,10 @@ local function ItemLink(data, id, guid)
 	return nil
 end
 
--- True when an item worn as loc (itemEquipLoc) can get the gear lines: Chat.lua's Hint while Shift is up promises the spells only then (0.5.37).
 function ns.GearLinesFor(loc)
 	return Plain(loc, "string") and loc ~= "" and not T.NO_LINES[loc]
 end
 
--- The kind an item is worn as (itemEquipLoc), or nil for one that gets no lines.
 local function EquipLoc(link)
 	local instant = Call(C_Item, "GetItemInfoInstant")
 	if not instant then
@@ -1343,7 +1076,6 @@ local function EquipLoc(link)
 	return loc, Finite(itemClass) and itemClass or nil, Finite(subclass) and subclass or nil
 end
 
--- False when the client has not loaded the item yet; the game is asked for it then.
 local function Loaded(id)
 	if Ask(Call(C_Item, "IsItemDataCachedByID"), id) == false then
 		Load(id)
@@ -1360,12 +1092,10 @@ local function Red(colour)
 	return Finite(r) and Finite(g) and Finite(b) and r >= T.RED_LEAST and g <= T.OTHER_MOST and b <= T.OTHER_MOST
 end
 
--- The magic characters of a pattern, escaped.
 local function Escape(text)
 	return (text:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0"))
 end
 
--- The pattern of a requirement line of the game, as "Classes: %s" (a global string, else the English one): its words with anything in place of %s.
 local function PatternOf(name, fallback)
 	local pattern = patterns[name]
 	if pattern then
@@ -1385,7 +1115,6 @@ local function PatternOf(name, fallback)
 	return pattern
 end
 
--- True when the player's class learns the item's armour or weapon type in time (T.LEARNS), by the classID and subclassID of the item.
 local function Learns(itemClass, subclass)
 	if not (Finite(itemClass) and Finite(subclass)) then
 		return false
@@ -1397,7 +1126,6 @@ local function Learns(itemClass, subclass)
 	return type(kinds) == "table" and kinds[subclass] == true
 end
 
--- The red text of a type the player has yet to learn: the EquipSlot line's type ("Mail"), else T.LEARN.
 local function TypeText(line)
 	local text = Field(line, "rightText")
 	if Plain(text, "string") and text ~= "" then
@@ -1406,9 +1134,6 @@ local function TypeText(line)
 	return T.LEARN
 end
 
--- Reads the lines of the build: true when the player can never wear the item (its type, class or race), else false and the text of the first
--- other requirement in red, else of a type the class learns in time and the player has not learned, which the player can meet in time (design
--- 2.2, 6.20). itemClass and subclass are the item's classID and subclassID, or nil.
 local function Wearable(data, itemClass, subclass)
 	local lines = Field(data, "lines")
 	if not Plain(lines, "table") then
@@ -1424,7 +1149,6 @@ local function Wearable(data, itemClass, subclass)
 		if Finite(kind) and kind == slotLine then
 			local itemType, typeWithheld = Field(line, "isValidItemType")
 			local invSlot, slotWithheld = Field(line, "isValidInvSlot")
-			-- Neither field given: a red slot is a slot the player has not, a red type alone a type not learned.
 			if itemType == nil and invSlot == nil and not typeWithheld and not slotWithheld then
 				if Red(Field(line, "leftColor")) then
 					invSlot = false
@@ -1453,9 +1177,6 @@ local function Wearable(data, itemClass, subclass)
 	return false, later or learn
 end
 
--- The test of Wearable for an item the Gear comparison window shows (GearWindow.lua), which has no build of the game's to read: the lines
--- C_TooltipInfo.GetHyperlink gives for its link (header). True when the player can never wear it, else false and what it needs first, or nil; false
--- and nil for a link the client gives no lines for yet.
 function ns.GearWearable(link)
 	if not Plain(link, "string") or link == "" then
 		return false, nil
@@ -1465,9 +1186,6 @@ function ns.GearWearable(link)
 	return Wearable(data, itemClass, subclass)
 end
 
--- The block --------------------------------------------------------------------------------------------------------------------------------
-
--- Keeps a value by its key in a bucket of at most CACHE, the oldest first out.
 local function Store(bucket, order, key, value)
 	if bucket[key] == nil then
 		order[#order + 1] = key
@@ -1478,8 +1196,6 @@ local function Store(bucket, order, key, value)
 	end
 end
 
--- Notes what a comparison shows of the game's calls, for /flatui status: the slot table stood in for the game's choice, the fixed sizes for its
--- rating conversion.
 local function Seen(result)
 	if not seen.ratings and (type(_G.GetCombatRatingBonusForCombatRatingValue) ~= "function" or (type(result) == "table" and result.sizes == true)) then
 		seen.ratings = true
@@ -1499,7 +1215,6 @@ local function Seen(result)
 	end
 end
 
--- The rows of a candidate the tooltip can show: each with its line and a figure now and with the item.
 local function RowsOf(candidate)
 	local rows = {}
 	for _, row in ipairs(type(candidate.rows) == "table" and candidate.rows or {}) do
@@ -1510,7 +1225,6 @@ local function RowsOf(candidate)
 	return rows
 end
 
--- The change of a row in percent of its figure now, or nil while that is 0.
 local function Share(row)
 	if row.now == 0 then
 		return nil
@@ -1518,9 +1232,6 @@ local function Share(row)
 	return (row.with - row.now) / math.abs(row.now) * 100
 end
 
--- What a candidate's shown rows do over a minute for the figure of the role (GearModel.lua's G.Totals: healing for a healer, threat for a tank,
--- damage for the others, else the first there is), as a fraction, by which the tooltip picks the slot to show (design 2.4; 0.5.25, no longer a
--- mean of the rows' percents); 0 when there is none.
 local function Rank(candidate, role, shown)
 	local G = Gear()
 	local ok, totals = pcall(G and G.Totals, candidate, nil, { limit = shown })
@@ -1531,7 +1242,6 @@ local function Rank(candidate, role, shown)
 	return type(total) == "table" and Finite(total.pct) and total.pct or 0
 end
 
--- True when a row changes by 0.05% or more (by 0.05 when its figure now is 0).
 local function Moves(row)
 	local share = Share(row)
 	if share then
@@ -1540,7 +1250,6 @@ local function Moves(row)
 	return math.abs(row.with - row.now) >= 0.05
 end
 
--- Which figure a row is (G.Figure, design 4.3): the row's own, else GearModel's answer for the tooltip, else a cast.
 local function FigureOf(row, role)
 	if Plain(row.figure, "string") then
 		return row.figure
@@ -1555,7 +1264,6 @@ local function KindOf(line)
 	return type(entry) == "table" and entry.cmp or nil
 end
 
--- A function of SpellModel.lua's rounding and style (M.Fmt, design 2.3 and 0.5.20), which the window writes its numbers with too, or nil.
 local function Fmt(name)
 	local M = ns.SpellModel
 	local fmt = type(M) == "table" and type(M.Fmt) == "table" and M.Fmt or nil
@@ -1563,7 +1271,6 @@ local function Fmt(name)
 	return type(fn) == "function" and fn or nil
 end
 
--- The colours of the style: SpellModel.lua's M.Fmt.Style, else this file's (T.STYLE), each { r, g, b }.
 local function Colours()
 	local M = ns.SpellModel
 	local fmt = type(M) == "table" and type(M.Fmt) == "table" and M.Fmt or nil
@@ -1579,7 +1286,6 @@ local function Colours()
 	return style
 end
 
--- Text in a colour of the style inside a line of another colour.
 local function Paint(text, colour)
 	local function Byte(value)
 		return math.floor(math.max(0, math.min(1, Finite(value) and value or 1)) * 255 + 0.5)
@@ -1587,8 +1293,6 @@ local function Paint(text, colour)
 	return ("|cff%02x%02x%02x"):format(Byte(colour[1]), Byte(colour[2]), Byte(colour[3])) .. text .. "|r"
 end
 
--- A change as the tooltip writes it (design 2.3, M.Fmt.Change): whole from 100 up and to a tenth below for a cast, to a tenth for a second, "0"
--- under 0.05.
 local function Amount(change, perSecond)
 	local fn = Fmt("Change")
 	if fn then
@@ -1597,13 +1301,11 @@ local function Amount(change, perSecond)
 	return ("%+.1f"):format(change)
 end
 
--- A change as a share (a fraction) with its sign, one decimal (M.Fmt.Percent): +1.8%, 0% under 0.05%.
 local function Signed(fraction)
 	local fn = Fmt("Percent")
 	return fn and fn(fraction) or ("%+.1f%%"):format(fraction * 100)
 end
 
--- "(+1.8%)", "(0%)" under 0.05 (M.Fmt.Percent), or nil while the figure now is 0.
 local function Percent(row)
 	local share = Share(row)
 	if not share then
@@ -1612,7 +1314,6 @@ local function Percent(row)
 	return "(" .. Signed(share / 100) .. ")"
 end
 
--- The name of a row's spell, with the rank after a kept one below the highest the player knows.
 local function LeftName(M, line)
 	local name = Plain(line.name, "string") and line.name or NameOf(line.entry, line.id)
 	if line.kept and Whole(line.id) then
@@ -1625,9 +1326,6 @@ local function LeftName(M, line)
 	return name
 end
 
--- One line of the block for a row, in the style: the name light grey, the change green for a gain and red for a loss (white for none), ~ before an
--- estimate, the percent after it. A figure that is a second (row.perSecond: what rides on the swings or shots, or its threat) has one decimal and
--- says so: " a second", " healing a second" or " threat a second" (0.5.25: one unit for Attack, as the window has it).
 local function RowLine(M, row, role, style)
 	local figure = FigureOf(row, role)
 	local kind = KindOf(row.line)
@@ -1647,7 +1345,6 @@ local function RowLine(M, row, role, style)
 	return { left = LeftName(M, row.line), right = right, leftColour = style.label, colour = colour }
 end
 
--- The name of a worn item in its quality colour, from its link: the colour the link starts with, else the plain name.
 local function ItemName(link)
 	if not Plain(link, "string") then
 		return nil
@@ -1660,7 +1357,6 @@ local function ItemName(link)
 	return colour and (colour .. name .. "|r") or name
 end
 
--- The words for slots G.Compare gave no label: one slot's name, "both hands", or the names together.
 local function SlotWords(slots)
 	if type(slots) ~= "table" or slots[1] == nil then
 		return "slot"
@@ -1674,10 +1370,6 @@ local function SlotWords(slots)
 	return table.concat(names, " and ")
 end
 
--- The header of the block (design 2.3, 2.4): what the item replaces and the unit of the plain numbers, as GearModel.lua's header of a candidate
--- words it: the slot's words (G.Compare's label) with the worn items' names from SpellModel's state (links), "Instead of X (Finger 1)", "Instead
--- of X, off hand empty" for a one-hander over a worn two-hander (offEmpty), "In your empty Finger 2 slot", "In your empty hands", and for a worn
--- item "What it gives your spells".
 local function Header(M, candidate, slot, unit)
 	local ending = unit and (", " .. unit .. ":") or ":"
 	if slot then
@@ -1707,8 +1399,6 @@ local function Header(M, candidate, slot, unit)
 	return ("Instead of %s (%s)"):format(table.concat(names, " and "), where) .. ending
 end
 
--- The texts of a list of the result (G.Compare's skills, notCounted or vs: the item's and every slot's) that are not only another slot's than the one
--- shown (0.5.25, the review: a block's notes are those of its own slot, as its rows are).
 local function Mine(result, shown, field)
 	local list = type(result[field]) == "table" and result[field] or {}
 	local own, others = {}, {}
@@ -1731,9 +1421,6 @@ local function Mine(result, shown, field)
 	return out
 end
 
--- The notes of what is not counted (design 2.3, 2.6), as texts: G.Compare's skills (a compared weapon line the player has yet to raise), its
--- notCounted, each said "Not counted:" unless it says so already, its creature-type bonuses (vs) and a random suffix not rolled yet; those of the
--- slot shown and the item's own (Mine).
 local function Tail(result, shown)
 	local tail = {}
 	for _, text in ipairs(Mine(result, shown, "skills")) do
@@ -1755,10 +1442,6 @@ local function Tail(result, shown)
 	return tail
 end
 
--- The block for a comparison G.Compare worked out (0.5.20, the style): { head, notes, tail, avoid, slots, still, candidate }: head the gold
--- header and the rows, notes the block's own dim notes (the rows past those shown, or no change), tail the notes of what is not counted, the
--- "Not wearable yet" note going between them at each build, and avoid GearAvoid.lua's lines (BlockFor). Nil when it gave no slot with a line to
--- show.
 local function Build(M, result, slot, info)
 	local candidates = type(result) == "table" and result.candidates or nil
 	if type(candidates) ~= "table" then
@@ -1822,9 +1505,6 @@ local function SameSlots(a, b)
 	return true
 end
 
--- What the item does to an enemy's swing (0.5.20, Damage taken), while avoidance shows: GearAvoid.lua's taken { now, with, pct, estimate } of the
--- candidate of A.Compare for the slots the spell rows show (else its first), which A.Compare's candidates carry, else A.Totals of it; nil while
--- avoidance does not show or has no figure.
 local function Taken(subject, slots, opts)
 	if Avoid("Wanted") ~= true then
 		return nil
@@ -1855,8 +1535,6 @@ local function Taken(subject, slots, opts)
 	return nil
 end
 
--- One figure of the Overall line, as the window writes it: its word in the label's light grey and its change as a share in green when better and
--- red when worse (white for none), ~ before an estimate that moves it (none on a 0%); lower is better for damage taken.
 local function OverallFigure(word, pct, estimate, lowerBetter, style)
 	local colour, moves = style.value, math.abs(pct) >= T.STILL_PCT
 	if moves then
@@ -1865,10 +1543,6 @@ local function OverallFigure(word, pct, estimate, lowerBetter, style)
 	return Paint(word, style.label) .. " " .. Paint((estimate and moves and "~" or "") .. Signed(pct), colour), moves
 end
 
--- The Overall line of the block (0.5.20, Overall totals at Weighted, chat.gearTotals): a figure the chosen spells have, each what its rows do in a
--- minute with the item against now (GearModel.lua's G.Totals of the candidate shown, with the lines and their weights), threat only for a tank (any
--- other role's lines give threat only for those that do no damage, so it would be Sunder Armor's alone, as the window's, 0.5.25), and Damage taken
--- while avoidance shows (Taken): "Overall  Damage +2.4%  ·  Threat +1.1%  ·  Damage taken -2.1%". Nil when there is no figure, or none changes.
 local function Overall(candidate, lines, opts, taken, style)
 	local G = Gear()
 	local parts, moved = {}, false
@@ -1896,8 +1570,6 @@ local function Overall(candidate, lines, opts, taken, style)
 	return { left = T.OVERALL, right = table.concat(parts, Paint(T.SEPARATOR, style.dim)), leftColour = style.label, colour = style.value }
 end
 
--- The block of an item, from the cache or G.Compare. In a fight with nothing worked out now, the last block of the item, else one dim line;
--- out of one, G.Compare's reason as one line (as "Needs a one-hand weapon; not compared.") unless it is quiet, else nothing.
 local function BlockFor(key, data, link, slot, guid)
 	local M, G = Model(), Gear()
 	if not (M and G) then
@@ -1916,7 +1588,6 @@ local function BlockFor(key, data, link, slot, guid)
 		return nil
 	end
 	local totals = Opt("gearTotals") ~= "off"
-	-- The WoWSims rotation the Overall line follows (G.Rotation, 0.5.30) changes with the talents and the form, which M.Version() does not follow.
 	local ok, rotation = false, nil
 	if type(G.Rotation) == "function" then
 		ok, rotation = pcall(G.Rotation, info.role)
@@ -1942,9 +1613,6 @@ local function BlockFor(key, data, link, slot, guid)
 				table.insert(block.head, 2, overall)
 			end
 		end
-		-- The avoidance block after the spell block, for the slots its rows show, while it shows (GearAvoid.lua, A.TipLines); with it, the note in
-		-- place of spell rows that do not change says what it counts. Damage taken shows once: in the Overall line while that line has it, else
-		-- in the avoidance block; the block's header stays only where more than one line still follows it.
 		local more, words = Avoid("TipLines", slot or link, block.slots, opts)
 		if type(more) == "table" then
 			if block.still and type(words) == "string" then
@@ -1975,8 +1643,6 @@ local function BlockFor(key, data, link, slot, guid)
 	if Fighting(stats) then
 		return blocks.last[key] or { head = {}, notes = { T.OUT_OF_COMBAT }, tail = {}, avoid = {} }
 	end
-	-- A reason marked quiet is one no line should show (design 2.4: ammunition the game does not use for the player, an off-hand weapon for one who
-	-- does not dual wield, an item not loaded).
 	if type(result) ~= "table" or result.quiet == true then
 		return nil
 	end
@@ -1987,9 +1653,6 @@ local function BlockFor(key, data, link, slot, guid)
 	return nil
 end
 
--- Adds one line of a block in the style; false when the game refused it. A figure ({ left, right }) has its label light grey and its value in
--- its colour (white by default); a line alone ({ text }) its own colour, light grey by default, a note's dim; GearAvoid.lua's lines are read the
--- same way, with leftColour or rightColour where they give one.
 local function Put(tooltip, entry, style)
 	if entry.right ~= nil then
 		local left = type(entry.leftColour) == "table" and entry.leftColour or style.label
@@ -2001,10 +1664,6 @@ local function Put(tooltip, entry, style)
 	return (pcall(tooltip.AddLine, tooltip, tostring(entry.text or entry.left or ""), colour[1], colour[2], colour[3], entry.wrap ~= false))
 end
 
--- Adds the block once for each build of the tooltip: the same data with the lines of the first call still there is the same build
--- (Chat.lua:795-806). The head, then the block's notes (its own, "Not wearable yet:" with the game's requirement, and what is not counted): in
--- Compact (chat.tipDetail) joined into one dim line, in Full each its own; then GearAvoid.lua's lines. A line the game refuses stops the adding
--- for this build.
 local function Add(tooltip, data, block, later)
 	local ok, shown = pcall(tooltip.NumLines, tooltip)
 	if not ok or not Finite(shown) then
@@ -2044,7 +1703,6 @@ local function Add(tooltip, data, block, later)
 		end
 	elseif #notes > 0 then
 		for index, text in ipairs(notes) do
-			-- A note cut with "..." keeps its dots (0.5.25); one full stop goes.
 			notes[index] = text:sub(-3) == "..." and text or (text:gsub("%.$", ""))
 		end
 		One({ text = table.concat(notes, T.JOIN), colour = style.dim, wrap = true })
@@ -2055,8 +1713,6 @@ local function Add(tooltip, data, block, later)
 	added[tooltip] = { data = data, lines = shown + count }
 end
 
--- Runs a step of the post call as the part, keyed by its first argument (design 4.4); the first error goes once to the error handler, and a part
--- that stops wants SpellModel's events no more.
 local function Run(fn, key, ...)
 	local ok, err = ns.EachPart(KEY, PART, fn, key, ...)
 	if not ok and err ~= nil then
@@ -2068,7 +1724,6 @@ local function Run(fn, key, ...)
 	return ok
 end
 
--- The work of one item, keyed by its link.
 local function Work(key, tooltip, data, link, slot, later, guid)
 	local block = BlockFor(key, data, link, slot, guid)
 	if block then
@@ -2076,7 +1731,6 @@ local function Work(key, tooltip, data, link, slot, later, guid)
 	end
 end
 
--- The tests of one build, keyed by its data: the tooltip, the kind of the data, the key, the item and whether the player can wear it (design 4.4).
 local function Find(data, tooltip)
 	if not Ours(tooltip) or not IsItem(data) then
 		return
@@ -2084,7 +1738,6 @@ local function Find(data, tooltip)
 	local when = Opt("gearWhen")
 	local game, shift = false, false
 	if rawequal(tooltip, _G.ItemRefTooltip) then
-		-- Built for a plain click on a link alone and never again for a key (header): its lines show at every choice.
 		game, shift = true, true
 	elseif when == "compare" then
 		game = Comparing(tooltip)
@@ -2100,7 +1753,6 @@ local function Find(data, tooltip)
 	local guid = Field(data, "guid")
 	guid = Plain(guid, "string") and guid ~= "" and guid or nil
 	local slot = guid and WornSlot(guid) or nil
-	-- At the game's comparison a worn item shows its lines while Shift is held, any other while the game compares.
 	if when == "compare" and not ((slot and shift) or (not slot and game)) then
 		return
 	end
@@ -2123,24 +1775,17 @@ local function Wanted()
 	return ns.Enabled(KEY) and Opt("gear") == true and not ns.PartStopped(KEY, PART)
 end
 
--- Called by Chat.lua's post call for every build of a tooltip (design 4.4). It returns at once unless the module is on and Your spells in item
--- tooltips wants lines.
 function ns.GearTipLines(tooltip, data)
 	if Wanted() then
 		Run(Find, data, tooltip)
 	end
 end
 
--- Called at the end of Chat.lua's Refresh: a row may have changed, so the blocks go, and SpellModel's events are wanted while the lines are.
--- Never raises.
 function ns.GearLinesSync()
 	Forget()
 	Want(Wanted())
 end
 
--- /flatui gear -----------------------------------------------------------------------------------------------------------------------------
-
--- The spell a typed text names, and whether its rank is kept: a spell link or an ID keeps its rank, a name follows the highest rank (design 4.11).
 local function SpellFrom(text)
 	local id = tonumber(text:match("|Hspell:(%d+)") or text:match("^spell:(%d+)") or text:match("^(%d+)$") or "")
 	if Whole(id) then
@@ -2160,7 +1805,6 @@ local function SpellFrom(text)
 	return nil
 end
 
--- /flatui gear add <spell>.
 local function AddNamed(text)
 	local id, keep = SpellFrom(text)
 	if not id then
@@ -2169,7 +1813,6 @@ local function AddNamed(text)
 	return AddLine(id, keep)
 end
 
--- /flatui gear remove <name>: the line of the spell of that name, the one that follows its rank first.
 local function RemoveNamed(text)
 	local M = Model()
 	local entry = M and M.ByKey(text:lower()) or nil
@@ -2195,8 +1838,6 @@ local function RemoveNamed(text)
 	return RemoveLine(id)
 end
 
--- /flatui gear weight <name> <0 to 5>: the weight of the line of the spell of that name in the Overall line, the one that follows its rank first,
--- as RemoveNamed finds it.
 local function WeightNamed(text)
 	local typed, value = text:match("^(.-)%s+([%d%.]+)$")
 	value = tonumber(value or "")
@@ -2227,7 +1868,6 @@ local function WeightNamed(text)
 	return SetWeight(id, value)
 end
 
--- /flatui gear list: the lines with their ranks and weights, and whether they are the defaults.
 local function PrintList()
 	local _, info = Resolve()
 	local rows = Entries()
@@ -2255,7 +1895,6 @@ local function PrintList()
 	end
 end
 
--- Prints the message of a change of the list, or of the window.
 local function Say(ok, done, message)
 	if not ok then
 		Report(done, "list")
@@ -2265,7 +1904,6 @@ local function Say(ok, done, message)
 	end
 end
 
--- Calls a function of GearWindow.lua (ns.GearWindowShow, ns.GearWindowToggle) and answers as a pick does, with what it said.
 local function Window(fn, ...)
 	local said = fn(...)
 	return true, Plain(said, "string") and said or nil
@@ -2275,7 +1913,6 @@ local function Slash(rest)
 	local typed = (Plain(rest, "string") and rest or ""):match("^%s*(.-)%s*$")
 	local word, text = typed:match("^(%S*)%s*(.-)$")
 	word = word:lower()
-	-- A shift-clicked item, or item:ID: compared in the window.
 	if typed:find("|Hitem:", 1, true) or typed:match("^[Ii]tem:%d+") then
 		local show = ns.GearWindowShow
 		if type(show) ~= "function" then
@@ -2287,7 +1924,6 @@ local function Slash(rest)
 	elseif typed == "" then
 		local toggle = ns.GearWindowToggle
 		if type(toggle) ~= "function" then
-			-- Without the window the command still says what is compared.
 			Say(pcall(PrintList))
 			return
 		end
@@ -2313,9 +1949,6 @@ end
 
 ns.AddSlash(KEY, "gear", Slash, T.HELP)
 
--- /flatui status ---------------------------------------------------------------------------------------------------------------------------
-
--- Which spells are compared, for whom, and those not known now.
 local function ListStatus()
 	local lines, info = Resolve()
 	local known, unknown = {}, {}
@@ -2344,7 +1977,6 @@ local function ListStatus()
 	return text .. "."
 end
 
--- Against what the comparison counts: the enemy, where the player stands, and the hit cap against a boss (design 2.5, 4.9).
 local function AgainstStatus()
 	local M = Model()
 	local state = M and StateOf(M) or {}
@@ -2362,7 +1994,6 @@ local function AgainstStatus()
 	return ("Gear comparison: against a boss three levels above you, %s, with a hit cap of %s%s."):format(where, T.CAPS[rules] or T.CAPS.classic, from)
 end
 
--- The rating sizes of the data, else the fixed ones of design 2.5.
 local function RatingNote()
 	local D = ns.SpellData
 	local model = type(D) == "table" and type(D.MODEL) == "table" and D.MODEL or nil
@@ -2373,8 +2004,6 @@ local function RatingNote()
 	return T.RATING_NOTE:format(Size("hit"), Size("crit"), Size("haste"), Size("expertise"))
 end
 
--- The lines of /flatui status while the module is on and Your spells in item tooltips is on with this part running, or the window is open
--- (ns.GearWindowOpen; ns.GearWindowShown is the movers' gate, true while the window may show) (design 4.12).
 ns.AddStatus(KEY, function()
 	if not ns.Enabled(KEY) or ns.IsStopped(KEY) then
 		return {}

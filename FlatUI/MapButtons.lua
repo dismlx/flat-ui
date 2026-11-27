@@ -1,56 +1,25 @@
 local _, ns = ...
 
--- The round buttons that addons put on the minimap with LibDBIcon (frames named LibDBIcon10_<addon>, children of Minimap). The library treats the map as
--- square and puts them on its edge, so on a round map they hang over it. Not a module. The library's code is not in client/: unseen.
--- Only ClearAllPoints and SetPoint on frames that are not protected. No mouse, no script of another addon, nothing written to any addon's saved data.
--- This file writes no alpha of a button: Fading (Fade.lua) fades the buttons with its Minimap buttons row, from the list ns.MapAddonButtons gives,
--- whatever Addon buttons says, and puts each one's alpha back. With Flat addon buttons (on), each button it gathers takes the flat look: the
--- alpha of the textures of the library's round look is 0 (SetAlpha on the region, read first and put back): the gold ring
--- (Interface\Minimap\MiniMap-TrackingBorder, file 136430), the dark disc (Interface\Minimap\UI-Minimap-Background, 136467), any texture
--- whose atlas starts with ui-hud-minimap-button, and the button's highlight texture; matched by texture only, so a button with none of them is
--- left as it is. A frame of the addon's own on the button, 4 in from its edges, carries an outline in the Minimap and HUD look (its backdrop a
--- texture of the addon's own on the button, under the icon) and a light square in the button's highlight layer. The icon and its coordinates are
--- the library's. A button ticked in Leave in place, the row off or the buttons left where each addon puts them get their own art back. The frame
--- and the textures are made out of combat. A secret answer from a size, a centre, a point or a child list stops the pass and the buttons
--- stay (SimpleFrameAPIDocumentation.lua:323-335, SimpleScriptRegionAPIDocumentation.lua:145-149, SimpleScriptRegionResizingAPIDocumentation.lua:65-75).
--- bar: the row starts below the coordinate text of the map (Blizzard_Minimap/Mainline/Minimap.xml:287-291), or below the lines of MapText.lua
--- under the map when they reach further (ns.MapTextBelow).
--- Leave in place (hud.addonButtonsKeep): a list of the buttons found, by the name after the prefix, with a tick on those left where their addon puts
--- them; a pick ticks or unticks one. The names are kept for the account in FlatUIDB.mapButtons.keep. A ticked button is left out of the column or
--- row and gets back at once the points it had before this file moved it, wherever its addon has put it since; an unticked one is placed again.
--- /flatui status says how many are left in place. This follows the Button Sink exclusion list of EnhanceQoL by Philipp Barth (R41Z0R), adapted with
--- his permission (EnhanceQoL/Settings/MapNavigation.lua:3273-3328, EnhanceQoL/EnhanceQoL.lua:5844-5895).
-
 local PREFIX = "LibDBIcon10_"
 local GAP = 2
--- Between the map and the column; the room under the map for the coordinate text.
 local MARGIN, TEXT = 3, 24
--- The list of buttons Fading asks for at each of its steps is looked for again after this many seconds, so a button made later joins within it.
 local LOOK_AGAIN = 1
--- The tick before a button left in place: the game's own check mark, as its dressing room writes it (Blizzard_UIPanels_Game/Mainline/DressUpFrames.lua:678).
 local TICK = "|A:common-icon-checkmark:14:14|a "
--- The most names kept, and the longest.
 local MOST_KEPT, LONGEST = 200, 120
 
 local weak = { __mode = "k" }
--- Per button: the points it had before this file moved it.
 local recorded = setmetatable({}, weak)
--- The flat look: the ring and the disc of the library's round look by file ID and by path, the start of the atlas names of the game's own minimap
--- button art, how far in from the button's edges the plate lies, and per button { faded = the alpha of each faded region, anchor, outline,
--- hover, on } once it has had the look.
 local ROUND_FILES = { [136430] = true, [136467] = true }
 local ROUND_PATHS = { "minimap\\minimap-trackingborder", "minimap\\ui-minimap-background" }
 local ROUND_ATLAS = "ui-hud-minimap-button"
 local INSET = 4
 local skinned = setmetatable({}, weak)
--- found: the last list for Fading and when it was made. ids and names: the number of each name in the list row, the same for the whole session.
 local state = { ticker = nil, found = nil, foundAt = nil, ids = {}, names = {} }
 
 local function Num(value)
 	return type(value) == "number" and not ns.IsSecret(value) and value == value
 end
 
--- The answer of a call that may be missing, raise or be withheld: nil, or up to five values.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -77,7 +46,6 @@ local function Map()
 	return map
 end
 
--- The names the account keeps in place, without the prefix: a map of name to true. With make, the table is made when there is none; without, nil then.
 local function KeptNames(make)
 	local db = ns.Account()
 	if type(db) ~= "table" then
@@ -100,13 +68,11 @@ local function KeptNames(make)
 	return saved.keep
 end
 
--- True for a button, by its full name, that the account keeps where its addon puts it.
 local function Kept(name)
 	local keep = KeptNames(false)
 	return keep ~= nil and type(name) == "string" and keep[name:sub(#PREFIX + 1)] == true
 end
 
--- Every shown button of the library on the map that is not protected, by name; nil when the list could not be read.
 local function Scan(map)
 	local list = { pcall(map.GetChildren, map) }
 	if not list[1] then
@@ -130,13 +96,11 @@ local function Scan(map)
 	return out
 end
 
--- The clock of the client, or nil.
 local function Now()
 	local ok, now = pcall(GetTime)
 	return ok and Num(now) and now or nil
 end
 
--- Scan, kept as the list ns.MapAddonButtons gives Fading.
 local function Fresh(map)
 	local all = Scan(map)
 	if all then
@@ -145,7 +109,6 @@ local function Fresh(map)
 	return all
 end
 
--- The buttons of the library that this file may place: those of Scan that are not kept in place. Nil when the list could not be read.
 local function Buttons(map)
 	local all = Fresh(map)
 	if not all then
@@ -160,7 +123,6 @@ local function Buttons(map)
 	return out
 end
 
--- Keeps the points a button had before it was moved.
 local function Record(button)
 	if recorded[button] then
 		return true
@@ -190,12 +152,10 @@ local function Put(button, dx, dy, map)
 	button:SetPoint("CENTER", map, "CENTER", dx, dy)
 end
 
--- True while gathered buttons take the flat look.
 local function Flat()
 	return Mode() ~= "leave" and ns.Get("hud.addonButtonsFlat") == true
 end
 
--- True for a texture of the library's round look: the ring, the disc or an atlas of the game's minimap buttons.
 local function RoundArt(region)
 	if Ask(region.GetObjectType, region) ~= "Texture" then
 		return false
@@ -215,7 +175,6 @@ local function RoundArt(region)
 	return type(atlas) == "string" and atlas:lower():sub(1, #ROUND_ATLAS) == ROUND_ATLAS
 end
 
--- A region of the round look goes to alpha 0; the alpha it had is kept the first time.
 local function FadeRegion(rec, region)
 	local alpha = Ask(region.GetAlpha, region)
 	if Num(alpha) and alpha > 0 then
@@ -226,8 +185,6 @@ local function FadeRegion(rec, region)
 	end
 end
 
--- The flat look on one gathered button. A button with no texture of the round look is left as it is; the frame and textures of the look are made
--- out of combat only, and the round art is faded again at each pass, in case its addon showed it again.
 local function Skin(button)
 	local rec = skinned[button]
 	local regions = { pcall(button.GetRegions, button) }
@@ -272,7 +229,6 @@ local function Skin(button)
 	rec.on = true
 end
 
--- A button gets its own art back: the alpha of each faded region, and the plate and the hover square hidden.
 local function Unskin(button)
 	local rec = skinned[button]
 	if rec == nil or not rec.on then
@@ -287,7 +243,6 @@ local function Unskin(button)
 	rec.on = false
 end
 
--- One button gets back the points it had before this file moved it, wherever its addon has put it since, and its own art.
 local function Give(button, points)
 	Unskin(button)
 	if Ask(button.IsProtected, button) == false then
@@ -301,7 +256,6 @@ local function Give(button, points)
 	recorded[button] = nil
 end
 
--- Every moved button gets its points back, or with kept only the buttons kept in place.
 local function Restore(kept)
 	for button, points in pairs(recorded) do
 		if not kept or Kept(Ask(button.GetName, button)) then
@@ -313,14 +267,11 @@ end
 local function Place(map, buttons, mode)
 	local mw, mh = Ask(map.GetWidth, map), Ask(map.GetHeight, map)
 	local mx, ux = Ask(map.GetCenter, map), UIParent and Ask(UIParent.GetCenter, UIParent)
-	-- A centre is in the scale of its own frame, and the Edit Mode size of the map scales its container (Blizzard_Minimap/Mainline/Minimap.lua:418-419).
 	local ms, us = Ask(map.GetEffectiveScale, map), UIParent and Ask(UIParent.GetEffectiveScale, UIParent)
 	if not (Num(mw) and Num(mh) and Num(mx) and Num(ux) and Num(ms) and Num(us)) then
 		return
 	end
-	-- The side that faces the screen centre.
 	local sign = mx * ms > ux * us and -1 or 1
-	-- The room under the map: the game's coordinate text, or the lines of MapText.lua when they take more.
 	local room = TEXT
 	local below = ns.MapTextBelow and ns.MapTextBelow()
 	if Num(below) and below + MARGIN > room then
@@ -367,8 +318,6 @@ local function StopTicker()
 	state.ticker = nil
 end
 
--- The ticker runs only while the map has a button of the library to place, so a map without one sets no timer. A button made later is found at the
--- next event of an addon loading or of the world, or at the next change of the row.
 local function Pass()
 	local mode = Mode()
 	if mode == "leave" then
@@ -380,7 +329,6 @@ local function Pass()
 	if map == nil then
 		return
 	end
-	-- A button kept in place since the last pass gets its points back before the others are laid out.
 	Restore(true)
 	local buttons = Buttons(map)
 	if buttons and #buttons == 0 then
@@ -394,13 +342,10 @@ local function Pass()
 	end
 end
 
--- Config changed callback of the row Addon buttons.
 function ns.MapButtonsChanged()
 	Pass()
 end
 
--- For Fading: every shown, unprotected button of the library on the map, kept in place or not and whatever Addon buttons says, as
--- { name = full name, frame = button }. Looked for again after LOOK_AGAIN seconds; an empty list when the map cannot be read.
 function ns.MapAddonButtons()
 	local now = Now()
 	if state.found and now and state.foundAt and now >= state.foundAt and now - state.foundAt < LOOK_AGAIN then
@@ -412,7 +357,6 @@ function ns.MapAddonButtons()
 	return state.found
 end
 
--- The number of a name in the list row, the same for the whole session, so a pick finds its button however the list has changed since it opened.
 local function IdOf(short)
 	local id = state.ids[short]
 	if id == nil then
@@ -423,7 +367,6 @@ local function IdOf(short)
 	return id
 end
 
--- The lines of Leave in place: each button found, by the name after the prefix, with a tick on those left in place.
 function ns.MapButtonLines()
 	local map = Map()
 	local lines = {}
@@ -436,7 +379,6 @@ function ns.MapButtonLines()
 	return lines
 end
 
--- A pick of Leave in place: the button is left where its addon puts it, or placed with the others again.
 function ns.MapButtonPick(id)
 	local short = Num(id) and state.names[id] or nil
 	if short == nil then
@@ -465,7 +407,6 @@ function ns.MapButtonPick(id)
 	return true, said
 end
 
--- /flatui status: how many of the buttons found are left in place, while the others are placed.
 ns.AddStatus("hud", function()
 	if Mode() == "leave" or KeptNames(false) == nil then
 		return {}

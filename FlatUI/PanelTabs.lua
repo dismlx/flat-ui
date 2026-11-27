@@ -1,11 +1,5 @@
 local ADDON_NAME, ns = ...
 
--- The tabs of a module page, the breadcrumb above its title and the frame chooser of the Per frame tab. The child pages of a page are tabs: the
--- sidebar lists modules and the pages that hold part of one (Gear comparison, with its Window and finder tab). The eight frame pages of Unit frames are one tab, Per frame, with a chooser that remembers its last frame per account in
--- FlatUIDB.panel. A tab with any setting off its default has a small dot in the accent after its name (Per frame counts its eight frames), and a
--- tab under More a dot after its line in the list (self.Marks, which Panel.lua's RefreshAll calls); each tab keeps the dot's room, so the bar
--- never moves as one comes or goes. Panel.lua hands the drawing of these to this file; the widgets are the ones of ns.PanelKit.
-
 local Tabs = {}
 ns.PanelTabs = Tabs
 
@@ -15,19 +9,15 @@ local Nav = ns.PanelNav
 local PAD = kit.PAD
 
 local TAB_H, CHOOSE_H, INSET, GAP, CHIP_H, CRUMB_Y = 34, 32, 10, 4, 24, 42
--- The dot of a tab with changes: its size, and the room it keeps after the name.
 local MARK, MARK_ROOM = 5, 9
 Tabs.TAB_H = TAB_H
 
--- The pages of the frames of Unit frames, in the order of the chooser, and what the chooser calls them.
 Tabs.FRAMES = { "unitframesPlayer", "unitframesTarget", "unitframesFocus", "unitframesPet", "unitframesTot", "unitframesParty", "unitframesBoss",
 	"unitframesRaid" }
 local FRAME_LABEL = { unitframesPlayer = "Player", unitframesTarget = "Target", unitframesFocus = "Focus", unitframesPet = "Pet",
 	unitframesTot = "Target of target", unitframesParty = "Party", unitframesBoss = "Boss", unitframesRaid = "Raid" }
--- The pages that have a shorter name as a tab.
 local NAMES = { unitframesBars = "Bars and pictures", unitframesText = "Text", unitframesIcons = "Icons and auras" }
 
--- The tabs of a module: { id, label, pages, frames }. The module page is General. A module with no child page has none.
 function Tabs.List(model, top)
 	local children = Nav.Children(model, top)
 	if #children == 0 then
@@ -48,7 +38,6 @@ function Tabs.List(model, top)
 	return list
 end
 
--- The place of a page in the tabs: the number and the tab.
 function Tabs.Find(list, entry)
 	for number, tab in ipairs(list) do
 		for _, page in ipairs(tab.pages) do
@@ -60,7 +49,6 @@ function Tabs.Find(list, entry)
 	return nil, nil
 end
 
--- The name of the tab a page is in, or nil for a page of a module with no tabs.
 local labelOf = {}
 function Tabs.Label(model, entry)
 	if labelOf.model ~= model then
@@ -75,12 +63,10 @@ function Tabs.Label(model, entry)
 	return label or nil
 end
 
--- The name of a frame page in the chooser, or nil for another page.
 function Tabs.FrameName(entry)
 	return FRAME_LABEL[entry.key]
 end
 
--- The frame the chooser shows when nothing says which: the last one chosen, else the first.
 function Tabs.Frame(model)
 	local store = Look.Store(false)
 	local kept, first = store and store.frame, nil
@@ -94,7 +80,6 @@ function Tabs.Frame(model)
 	return first
 end
 
--- Keeps the frame of a page that is a frame page as the last frame.
 function Tabs.Remember(entry)
 	if entry and FRAME_LABEL[entry.key] then
 		local store = Look.Store(true)
@@ -104,7 +89,6 @@ function Tabs.Remember(entry)
 	end
 end
 
--- The page a click on a tab opens: the last frame for Per frame, else the page of the tab.
 function Tabs.Target(model, tab)
 	if tab.frames then
 		local kept = Tabs.Frame(model)
@@ -117,7 +101,6 @@ function Tabs.Target(model, tab)
 	return tab.pages[1]
 end
 
--- The width of a text, with a guess when the client gives none.
 local function Measure(text)
 	local ok, width = pcall(text.GetStringWidth, text)
 	if ok and type(width) == "number" and not ns.IsSecret(width) and width > 0 then
@@ -126,7 +109,6 @@ local function Measure(text)
 	return 7 * #(text:GetText() or "")
 end
 
--- A tab or a chip of the chooser: a text between two insets, the accent line under the chosen one.
 local function Button(parent, chip)
 	local f = kit.Frame(parent)
 	local b = { frame = f }
@@ -138,7 +120,6 @@ local function Button(parent, chip)
 	b.line:SetHeight(2)
 	b.line:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0)
 	b.line:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
-	-- A tab's dot of changes, 4 units after its name; a chip has none.
 	if not chip then
 		b.dot = kit.Fill(f, "ARTWORK")
 		b.dot:SetSize(MARK, MARK)
@@ -201,8 +182,6 @@ local function Rule(parent)
 	end)
 end
 
--- host: Model(), Show(entry), Width() the width of the column, top the place of the bar under the top of the column. The object has Set(entry), which draws
--- the breadcrumb and the tabs of the page and gives the height they take under the header, and Hide().
 function Tabs.Build(right, host)
 	local self = {}
 	local bar = kit.Frame(right)
@@ -217,7 +196,6 @@ function Tabs.Build(right, host)
 	Rule(choose)
 	bar:Hide()
 	choose:Hide()
-	-- Moves the chooser down by `lift`, so a band can sit between the tabs and the chooser.
 	function self.Shift(lift)
 		choose:ClearAllPoints()
 		choose:SetPoint("TOPLEFT", right, "TOPLEFT", 0, -(host.top + TAB_H + lift))
@@ -228,7 +206,6 @@ function Tabs.Build(right, host)
 	local owner = { frame = more.frame }
 	more.frame:Hide()
 
-	-- The breadcrumb: group, module and tab. The module and the tab are links.
 	local parts, seps = {}, {}
 	for index = 1, 3 do
 		local f = kit.Frame(right)
@@ -311,7 +288,6 @@ function Tabs.Build(right, host)
 		HideCrumbs()
 	end
 
-	-- The tabs shown now (self.Set), and which of them hold a setting off its default.
 	local shownList, marks = nil, {}
 	local function Changed(tab)
 		local trust = ns.PanelTrust

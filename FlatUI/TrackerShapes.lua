@@ -1,27 +1,13 @@
 local _, ns = ...
 
--- The Bar and Text shapes of a tracker. Trackers.lua draws the icon; this file makes the parts of the other two shapes on a tracker's
--- record, says how wide and tall each shape is, and draws a look in them. A bar is a flat status bar with the name on its left and the
--- charges and the time left on its right, beside a square that keeps the icon and its sweep. Text is the name, the charges and the time left
--- on a dark plate. The parts are made once per record, out of combat, and hidden when the record has another shape. A part the game refuses
--- leaves the tracker an icon. Everything drawn here is a texture, text, colour or bar value call, which the game allows in combat, and every
--- number handed to a bar is a plain number made by the addon.
-
 local KEY = "trackers"
 local IsSecret = ns.IsSecret
 
--- PLATE: the dark plate behind a bar or text, and MISSING the same plate when the buff is gone.
--- WHITE: the image the fill of a bar is made from while no bar texture is chosen.
--- FONT: the font object of every string. PAD: units inside a plate, GAP: units between two strings.
--- TICK: seconds between two redraws of a time left, MAX_TEXT: the widest text a tracker is measured for.
--- REFUSED: the line a refused part leaves in the status.
 local K = {
 	PLATE = { 0.06, 0.06, 0.06, 0.85 }, MISSING = { 0.32, 0.08, 0.08, 0.9 },
-	-- RED: the fill and strings of a missing tracker, AMBER of a low one (ffffb333, as Trackers.lua K.AMBER).
 	RED = { 0.851, 0.251, 0.251 }, AMBER = { 1, 0.7, 0.2 }, GREY = { 0.6, 0.6, 0.6 }, BLUE = { 0.302, 0.6, 0.902 },
 	WHITE = "Interface\\Buttons\\WHITE8X8", FONT = "GameFontHighlightSmall",
 	PAD = 3, GAP = 4, TICK = 0.25, SAMPLE_COUNT = "20", SAMPLE_TIME = "10:00",
-	-- The widest count of a group buff tracker (TrackerGroup.lua): how many of a full raid lack the buff.
 	SAMPLE_GROUP = "40/40",
 	REFUSED = {
 		bar = "Trackers: the game refused a bar, so a tracker set to Bar is drawn as an icon.",
@@ -32,7 +18,6 @@ local K = {
 local Shapes = {}
 ns.TrackerShapes = Shapes
 
--- The text of the strings is as high as the bar allows.
 local function TextHeight(height)
 	return math.max(7, math.min(14, height - 4))
 end
@@ -43,7 +28,6 @@ local function Height(entry)
 end
 
 local scratch
--- The width of a text in the font the strings use, measured on a string that is never shown.
 local function Width(text, height)
 	if not scratch then
 		local frame = CreateFrame("Frame", nil, UIParent)
@@ -61,7 +45,6 @@ local function Width(text, height)
 	return #text * height * 0.6
 end
 
--- Red, green and blue of a tracker's colour: its own, else the page's.
 local function Colour(entry)
 	local hex = ns.TrackerValue(entry, "colour")
 	if type(hex) == "string" and #hex == 8 then
@@ -73,7 +56,6 @@ local function Colour(entry)
 	return K.BLUE[1], K.BLUE[2], K.BLUE[3]
 end
 
--- "1:05" for a minute and more, "45" under it, "2h" for hours.
 local function Seconds(left)
 	local whole = math.ceil(left)
 	if whole >= 3600 then
@@ -84,8 +66,6 @@ local function Seconds(left)
 	return ("%d"):format(whole)
 end
 
--- Making the parts ------------------------------------------------------------------------------------------
-
 local function String(host, justify)
 	local text = host:CreateFontString(nil, "OVERLAY", K.FONT)
 	ns.Own[text] = true
@@ -95,7 +75,6 @@ local function String(host, justify)
 	return text
 end
 
--- Builds the parts of a shape into part; raises when the game refuses one.
 local function Build(record, shape, part)
 	local frame = record.frame
 	local body = CreateFrame("Frame", nil, frame)
@@ -120,7 +99,6 @@ local function Build(record, shape, part)
 		end
 		bar:SetMinMaxValues(0, 1)
 		bar:SetValue(0)
-		-- The count, the word and the red edge of the record are drawn above the bar.
 		record.top:SetFrameLevel(bar:GetFrameLevel() + 1)
 		host = bar
 	end
@@ -133,7 +111,6 @@ local function Build(record, shape, part)
 	end
 end
 
--- Shows the parts of the shape the record now has and hides the others.
 local function Switch(record, shape)
 	for name, part in pairs(record.parts) do
 		part.body:SetShown(name == shape)
@@ -146,7 +123,6 @@ local function Switch(record, shape)
 	record.shape = shape
 end
 
--- The shape the record is drawn in: the one asked for, or the icon when the game refused a part.
 function Shapes.Make(record, shape)
 	if shape ~= "bar" and shape ~= "text" then
 		shape = "icon"
@@ -172,10 +148,6 @@ function Shapes.Make(record, shape)
 	return shape
 end
 
--- Size ---------------------------------------------------------------------------------------------------------
-
--- How wide and tall a tracker is in a shape. An icon is its size, a bar is the bar's width beside a square of its height, and text is
--- the width of the strings it shows, each measured at its widest, on a plate of the bar's height.
 function Shapes.Size(entry, shape)
 	local value = ns.TrackerValue
 	shape = shape or value(entry, "shape")
@@ -206,10 +178,6 @@ function Shapes.Size(entry, shape)
 	return size, size
 end
 
--- Fitting ---------------------------------------------------------------------------------------------------------
-
--- Places the parts of the record's shape inside its frame. Gives the frame the red edge hugs, the height that edge is drawn for and the
--- height of the word Missing.
 function Shapes.Fit(record, entry)
 	local shape, frame = record.shape, record.frame
 	local texture, cooldown = record.texture, record.cooldown
@@ -240,7 +208,6 @@ function Shapes.Fit(record, entry)
 		text:SetTextHeight(size)
 	end
 	if shape == "bar" then
-		-- The name stops before the strings on the right.
 		local room = ns.Get(KEY .. ".barWidth") - K.PAD * 2 - K.GAP * 2 - Width(entry.kind == "group" and K.SAMPLE_GROUP or K.SAMPLE_COUNT, size)
 			- Width(K.SAMPLE_TIME, size)
 		part.name:SetWidth(math.max(1, math.floor(room)))
@@ -253,9 +220,6 @@ function Shapes.Fit(record, entry)
 	return part.body, height, size
 end
 
--- Drawing ---------------------------------------------------------------------------------------------------------
-
--- The strings that have text, in a row from one edge: the first at the edge, each next one after it.
 local function Row(host, list, point, sign)
 	local before
 	for _, text in ipairs(list) do
@@ -271,8 +235,6 @@ local function Row(host, list, point, sign)
 	end
 end
 
--- The look of a bar or a text tracker: the plate, the fill, the strings and their colour, amber when low and red with a red plate when
--- missing. A look with no fill keeps the fill drawn last.
 function Shapes.Apply(record, entry, look)
 	local part = record.parts[record.shape]
 	if not part then
@@ -300,7 +262,6 @@ function Shapes.Apply(record, entry, look)
 	part.count:SetText(count)
 	part.time:SetText(time)
 	if part.bar then
-		-- The texture row can change while the bar is up.
 		local file = ns.BarTexture(ns.Get(KEY .. ".barTexture")) or K.WHITE
 		if part.file ~= file then
 			part.file = file
@@ -327,14 +288,12 @@ function Shapes.Apply(record, entry, look)
 	end
 end
 
--- The texture the pulse of a missing tracker plays on: the plate of a bar or text, nil for an icon.
 function Shapes.PulseTarget(record)
 	local part = record.parts[record.shape]
 	return part and part.back or nil
 end
 
 local ticking = false
--- A time left changes between two events: one call to run, K.TICK seconds from now, while any tracker draws one.
 function Shapes.Tick(run)
 	if ticking or not (C_Timer and C_Timer.After) then
 		return

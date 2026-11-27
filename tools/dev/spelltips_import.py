@@ -1,26 +1,4 @@
 #!/usr/bin/env python3
-"""Reads the WoW: Forever client's spell rows into tools/dev/spelltips/client_spells.json (design 3.1).
-
-Usage: python3 tools/dev/spelltips_import.py CAPTURE SQLITE
-
-CAPTURE is wowsims/forever's capture of the Forever client's spell rows (assets/db_inputs/spell_store_inputs.json, plain or
-gzipped): build 1.60.1.70938 with hotfix push 114122, every class (its Builds and Hotfixes keys; the hotfix push of the spell rows is
-the largest of the class groups, as the items group has its own). SQLITE is GrunzForever's export of every client table
-(wow_wowf_1.60.1.70888.sqlite: build 1.60.1.70888 with the hotfixes of its date); its build is the Version of its _ExtractionMetadata
-table, else the 1.60.1.NNNNN of its file name, and the import stops when it finds neither. Every row comes from the capture; the export
-gives only what the capture lacks: the rows of the few spells it holds no row of (Attack and the generic shots), the description
-variables (SpellXDescriptionVariables, SpellDescriptionVariables), the description of 70888 of each spell that has variables (so
-make_spelltips.py can see the text is the same in 70938) and the trait nodes of the talents (TraitNodeEntry, TraitNodeXTraitNodeEntry,
-TraitNode).
-
-The spells read are those the other inputs name (coef.json, threat.json, gear.json, curation.json beside client_spells.json): every
-rank, every carrier row, the spells of the rules and their tooltips, the crit talents, the equip spells of the threat items and enchants,
-Rockbiter Weapon's imbues, the rows curation.json's durations read a duration from, and one level down every spell their effects
-trigger. Each spell gets one uniform record, with the item a caster must wear for it (equip: the item class and subclass mask of CAP
-Equipped or SpellEquippedItems, null for none); each talent its definition, node, tree, rank count and curve per effect (CAP TraitNodes
-and TraitPoints). The IDs taken from the export are printed. Python 3, standard library only; the output is sorted, so a new capture
-shows as a plain diff.
-"""
 import gzip
 import json
 import os
@@ -29,6 +7,7 @@ import sqlite3
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+USAGE = 'Usage: python3 tools/dev/spelltips_import.py CAPTURE SQLITE'
 DATA = os.path.join(HERE, 'spelltips')
 OUT = os.path.join(DATA, 'client_spells.json')
 
@@ -39,7 +18,6 @@ def load(name):
 
 
 def num(x):
-    """A client number as JSON keeps it: float32 noise rounded off, whole numbers as integers."""
     if x is None:
         return None
     if isinstance(x, bool):
@@ -60,7 +38,6 @@ def as_list(x):
 
 
 def wanted():
-    """The spell IDs and talent spell IDs the other inputs name."""
     ids, talents = set(), set()
     coef, threat, gear, cur = load('coef.json'), load('threat.json'), load('gear.json'), load('curation.json')
     for e in coef['spells']:
@@ -91,8 +68,6 @@ def wanted():
     return ids, talents
 
 
-# The capture ---------------------------------------------------------------------------------------------------------------------
-
 def read_capture(path):
     opener = gzip.open if path.endswith('.gz') else open
     with opener(path, 'rt', encoding='utf-8') as handle:
@@ -108,7 +83,6 @@ def cap_effect(e):
 
 
 def equip_of(item_class, subclass):
-    """The item a caster must wear for a spell: [class, subclass mask], or None for none (a class below 0 or no row)."""
     if item_class is None or item_class < 0:
         return None
     return [item_class, subclass or 0]
@@ -134,8 +108,6 @@ def cap_spell(cap, sid, build):
             'family': cls.get('Family', 0), 'mask': list(cls.get('Mask') or [0, 0, 0, 0]),
             'effects': sorted((cap_effect(e) for e in effects or []), key=lambda e: e['i'])}
 
-
-# The export ----------------------------------------------------------------------------------------------------------------------
 
 def one(db, sql, *args):
     row = db.execute(sql, args).fetchone()
@@ -205,7 +177,6 @@ def db_node(db, definition, tree):
 
 
 def db_build(db, path):
-    """The build of the export: the Version of its _ExtractionMetadata table, else the 1.60.1.NNNNN of its file name."""
     try:
         row = one(db, "SELECT Value FROM _ExtractionMetadata WHERE Key = 'Version'")
     except sqlite3.Error:
@@ -218,18 +189,15 @@ def db_build(db, path):
     raise SystemExit('the build of the export %s is in neither its _ExtractionMetadata nor its file name' % path)
 
 
-# The whole ------------------------------------------------------------------------------------------------------------------------
-
 def main():
     if len(sys.argv) != 3:
-        raise SystemExit(__doc__.split('\n\n')[1])
+        raise SystemExit(USAGE)
     cap = read_capture(sys.argv[1])
     db = sqlite3.connect('file:%s?mode=ro' % sys.argv[2], uri=True)
     builds = sorted(set(cap['Builds'].values()))
     if len(builds) != 1:
         raise SystemExit('the capture holds several builds: %s' % builds)
     build = builds[0]
-    # The spell rows' hotfix push: the largest of the class groups; the items group has a push of its own.
     hotfix = max(cap['Hotfixes'][k] for k in cap['Hotfixes'] if k != 'items')
     fallback = db_build(db, sys.argv[2])
     ids, talents = wanted()

@@ -1,109 +1,52 @@
 local _, ns = ...
 
--- Spell ranks: after training, a line at the top of the screen names the action buttons that hold a lower rank of a spell the spell book now knows
--- higher, with an Uprank and reload button. /flatui move places the line (FlatUIUprankNotice, a box while Put new ranks on your bars is on;
--- ns.MoverSpot, placed again out of a fight), and test mode shows a sample of it with Uprank greyed and no secure button. Its click puts the new
--- ranks on those slots (C_Spell.PickupSpell, PlaceAction, ClearCursor) and its secure /reload macro reloads the interface in the same click. No
--- slot is written anywhere else. The game raises ACTIONBAR_SLOT_CHANGED, ACTIONBAR_SHOWGRID, ACTIONBAR_HIDEGRID and CURSOR_CHANGED inside the call
--- that changes a slot or the cursor (SynchronousEvent, ActionBarFrameDocumentation.lua, CursorDocumentation.lua), so its buttons and bars write
--- action, flashing, showAllButtons and their list of shown buttons under the caller (ActionButton.lua:529-553, ActionBar.lua:144-171, 198-217):
--- fields the click of an action button reads, and which the game writes again only behind a read of them, so they would taint every later update of
--- the button, in a fight too. The reload in the same click throws all of that away before any later click or fight reads it; LayoutSpots.lua keeps
--- its one risky write in its Reload click for the same reason.
--- The ranks come from the spell book by name and number: the best rank the book lists of each name (the first number of its rank text), and a
--- slot is offered when it holds a spell of that name with a lower number that is also the highest of that name on its pages (each stance or
--- form page on its own, the other pages together). A lower rank kept beside a higher one (Frostbolt Rank 1 for its slow, a cheaper heal) is the
--- player's choice and stays; the tooltip names it. A copy on another stance or form page is not beside it, so it moves up. Only the player's
--- own pages are read (slots 1 to 120 and 145 to 180), and only spells: macros, items, flyouts, mounts and pets are never touched, nor a rank the
--- player keeps (/flatui rank, kept for the account in FlatUIDB.errands.ranks), nor a name whose top rank two spells share. Out of combat only:
--- the line hides and its secure button leaves it before the lockdown, and both come back after the fight. A line still up in the lockdown sets
--- no attribute in its click, and its macro stops itself there (/stopmacro [combat]). The click asks again about the fight, the cursor, the
--- game's popups, Edit Mode and the quick keybind mode, and a click that cannot uprank cancels its own reload and says why. Never under the
--- gamepad interface. Later keeps a plan from coming back by itself until the plan changes, and so does a reload in which the game kept old
--- ranks; after the reload one line in chat says what the game took.
--- The lines about learned spells: the game's four (ERR_LEARN_SPELL_S, ERR_LEARN_ABILITY_S, ERR_LEARN_PASSIVE_S, ERR_SPELL_UNLEARNED_S) are dropped
--- from the chat windows through the game's own chat filter registry (ChatFrameUtil.AddMessageEventFilter), which calls the filter securely and
--- only with a message the addon may read. No line is changed, only dropped, and by default one line in their place names what was learned;
--- with Say what was done off, the game's lines stay, since no line would take their place.
--- Both follow EnhanceQoL (its AutoRankUp, and the learn and unlearn filter of its chat module), adapted with the permission of its author.
-
 local E = ns.Errands
 local part = E.Part({ label = "Spell ranks" })
 
--- The action slots of the player's own pages: the six pages of the main bar and its four stance and form pages, then bars 6 to 8 (OwnBars.lua's
--- bases 144, 156, 168). The possess, vehicle and override pages between them are the game's own.
 local SLOT_RANGES = { { 1, 120 }, { 145, 180 } }
--- A lower rank is left only beside a higher one on the same pages: each stance or form page (73-84, 85-96, 97-108, 109-120) is a set of its
--- own, since only one of them shows at a time, and the other pages are one set. A copy on another stance page is not beside it.
 local function PageSet(slot)
 	if slot >= 73 and slot <= 120 then
 		return math.floor((slot - 73) / 12) + 1
 	end
 	return 0
 end
--- Seconds after the last learned rank before the line is offered.
 local OFFER_WAIT = 1.5
--- Seconds between two looks at the trainer window, and the looks before the wait gives up.
 local WATCH, WATCH_MOST = 1, 600
--- The line is read again this long after a slot or the spell book changed.
 local REFRESH = 0.2
--- Seconds after the last dropped line before the one line in their place.
 local SUMMARY_WAIT = 2
--- Seconds after the start of the part before the note of the last click is read.
 local AFTER_RELOAD = 1
--- How many names the summary, the line, the tooltip, the line after the reload and the tooltip's lower ranks give before "and N more".
 local CHAT_NAMES, NOTICE_NAMES, TIP_SPELLS, NOTE_NAMES, LEFT_NAMES = 4, 2, 8, 3, 4
--- Under the game's error and quest-progress text ("Not enough mana", "Kobold Vermin slain: 4/10"), which a levelling player reads all the
--- time: UIErrorsFrame is TOP -122, 512 by 60, DIALOG (Blizzard_UIErrorsFrame/*/UIErrorsFrame.xml:3-7). The line of LayoutSpots.lua is above it
--- (TOP -90, 30 high). What the line covers is the first line of the raid warning frame (HIGH, hidden unless a raid warning comes).
 local NOTICE_WIDTH, NOTICE_HEIGHT, NOTICE_Y = 360, 30, -186
--- Its entry in the movers (Movers.lua: a box of the line's default size at TOP 0, NOTICE_Y), and the words of test mode's sample.
 local MOVER = "FlatUIUprankNotice"
 local SAMPLE_TEXT = "New ranks for 3 buttons: Frostbolt, Fireball and 1 more."
 local UPRANK_WIDTH, LATER_WIDTH, GAP = 124, 60, 4
 local MAX_RANK = 1000
--- The game's own words, the last one for an unlearned spell.
 local LINES = { "ERR_LEARN_SPELL_S", "ERR_LEARN_ABILITY_S", "ERR_LEARN_PASSIVE_S", "ERR_SPELL_UNLEARNED_S" }
 local FAILED = "Flat UI: Spell ranks failed. /flatui status shows why."
--- The secure button's macro. Its first line stops it in a fight, whatever the Lua around it did, so a click in the lockdown never reloads.
 local MACRO = "/stopmacro [combat]\n/reload"
 
--- The line: { frame, text, uprank, later, overlay }. broken: the line or its secure button could not be made, and is not tried again.
 local notice
 local broken = false
--- True while the line shows test mode's sample: no secure button on it, Uprank greyed, and a real offer takes its place.
 local sample = false
--- A hide asked for in the lockdown waits for its end, once.
 local hideQueued = false
--- Inside the swaps of a click, and whether a pickup or a placement was made in this click.
 local swapping, touched = false, false
--- Slots placed in this session: any at all means a click whose reload did not follow.
 local placedSession = 0
--- The wait after a learned rank: when the last one was learned, whether a look is due, how many looks so far, and which wait is the latest.
 local learnedAt, watching, looks, watchToken = nil, false, 0, 0
--- The line hidden by a fight ("resume"), and an offer asked for in a fight.
 local suspended, queued
 local refreshToken = 0
--- { count, kept } after the reload, for /flatui status. afterDone: the note of the last click was read this session.
 local lastUpranked
 local afterDone = false
--- Put new ranks on your bars at the last refresh.
 local wasOn = false
 local filtering = false
--- { { pattern, unlearned } }, built once.
 local patterns
--- The spells of the dropped lines until the summary.
 local heard = { learned = {}, unlearned = {}, seen = {}, token = 0 }
 
 local HideNotice, ShowNotice, ScheduleRefresh, Explain, Usable, Offer, Filter, PreClick, PostClick
-
--- Reading ranks -------------------------------------------------------------------------------------------------------------------------------
 
 local function Whole(v)
 	return ns.Finite(v) and v > 0 and v % 1 == 0
 end
 
--- A field of a table the game gave, or nil when it cannot be read or is withheld.
 local function Field(t, key)
 	local ok, value = pcall(function()
 		return t[key]
@@ -124,7 +67,6 @@ local function Subtext(id)
 	return type(text) == "string" and text or nil
 end
 
--- The rank of a rank text: its first number ("Rank 3", "Rang 3", "Ранг 3", "等级 3"). Nil for a text with none ("Racial", "Apprentice", "").
 local function RankNumber(text)
 	if ns.IsSecret(text) or type(text) ~= "string" then
 		return nil
@@ -137,7 +79,6 @@ local function Buttons(n)
 	return n == 1 and "button" or "buttons"
 end
 
--- "A", "A and B", "A, B and C", "A, B, C, D and 3 more".
 local function Join(list, most)
 	local n = #list
 	if n == 0 then
@@ -150,7 +91,6 @@ local function Join(list, most)
 	return table.concat(list, ", ", 1, n - 1) .. " and " .. list[n]
 end
 
--- "Fireball (Rank 4)", or the name alone for a spell with no rank text.
 local function WithRank(name, text)
 	if type(text) == "string" and text ~= "" then
 		return name .. " (" .. text .. ")"
@@ -158,7 +98,6 @@ local function WithRank(name, text)
 	return name
 end
 
--- "Name (Rank text)", the name alone without a rank text, or "Spell <id>" for a spell the game does not name.
 local function Label(id)
 	local name = SpellName(id)
 	if not name then
@@ -167,7 +106,6 @@ local function Label(id)
 	return WithRank(name, Subtext(id))
 end
 
--- Each item's name once, in plan order.
 local function UniqueNames(list)
 	local names, seen = {}, {}
 	for _, item in ipairs(list) do
@@ -179,7 +117,6 @@ local function UniqueNames(list)
 	return names
 end
 
--- The spell book, or nil when the game lacks a call the walk through it needs. The walk is Trackers.lua's, copied: that file keeps its own local.
 local function Book()
 	local book = C_SpellBook
 	if type(book) == "table" and type(book.GetNumSpellBookSkillLines) == "function" and type(book.GetSpellBookSkillLineInfo) == "function"
@@ -190,7 +127,6 @@ local function Book()
 	return nil
 end
 
--- Calls visit(slot, item) for each spell of the player the book lists: the Player bank, no hidden or off-spec line, no passive, no off-spec item.
 local function WalkBook(book, visit)
 	local bank, spellType = Enum.SpellBookSpellBank.Player, Enum.SpellBookItemType.Spell
 	local lines = E.Ask(book.GetNumSpellBookSkillLines)
@@ -210,8 +146,6 @@ local function WalkBook(book, visit)
 	end
 end
 
--- The best rank the book knows of each spell name: best[name] = { id, base, rank, text, bookSlot, tie }. The book may hide lower ranks; only the
--- best one counts here. An item whose rank text has no number is left out, and a name whose top rank two spells share is marked tie.
 local function Best()
 	local best = {}
 	local book = Book()
@@ -250,7 +184,6 @@ local function Best()
 	return best
 end
 
--- Kept ranks: FlatUIDB.errands.ranks[spellID] = true, account-wide beside the sell and keep lists of the items (E.Kept is the item list, not this).
 local function Ranks()
 	local lists = E.Lists()
 	if not lists then
@@ -265,14 +198,11 @@ local function RankKept(id)
 	return ranks ~= nil and ranks[id] == true
 end
 
--- The plan --------------------------------------------------------------------------------------------------------------------------------------
-
 local function Pickups()
 	return (type(C_Spell) == "table" and type(C_Spell.PickupSpell) == "function") or type(PickupSpell) == "function"
 		or (type(C_SpellBook) == "table" and type(C_SpellBook.PickupSpellBookItem) == "function")
 end
 
--- The call that drops the cursor's action into a slot: PlaceAction, or C_ActionBar.PutActionInSlot on a client that has only that.
 local function Placer()
 	if type(PlaceAction) == "function" then
 		return PlaceAction
@@ -282,8 +212,6 @@ local function Placer()
 	return nil
 end
 
--- What the client lacks for the errand: "book" (the spell book walk or the spell names), "client" (the slots, a pickup, a drop or the cursor),
--- or nil.
 local function Unavailable()
 	if not Book() or type(C_Spell) ~= "table" or type(C_Spell.GetSpellName) ~= "function" or type(C_Spell.GetSpellSubtext) ~= "function" then
 		return "book"
@@ -294,11 +222,6 @@ local function Unavailable()
 	return nil
 end
 
--- What a click would do now, in slot order, and the lower ranks it leaves. Per spell name and page set (PageSet), only the slots at the highest
--- rank those slots hold of it move up, and none when that rank is the book's best or above it: a lower rank kept beside a higher one is the
--- player's choice (Frostbolt Rank 1 for its slow, Earth Shock Rank 1 as an interrupt, a cheaper heal), and the book may not list it to drag
--- back. A copy on another stance or form page is not beside it. Two copies at that rank (the main page and a stance page) both move up. A slot
--- whose value the client withholds is left out (E.Ask gives nil), and so is a pet's spell. Callers that need only the plan take the first value.
 local function Plan()
 	local plan, left = {}, {}
 	if Unavailable() then
@@ -308,7 +231,6 @@ local function Plan()
 	if next(best) == nil then
 		return plan, left
 	end
-	-- The ranked spells on the slots, and the highest rank of each name among them; a kept rank counts too.
 	local held, high = {}, {}
 	for _, range in ipairs(SLOT_RANGES) do
 		for slot = range[1], range[2] do
@@ -330,7 +252,6 @@ local function Plan()
 			end
 		end
 	end
-	-- A slot below the book's best moves up when its rank is the highest of its name on the slots; a lower one beside it is left.
 	for _, h in ipairs(held) do
 		local top = h.top
 		if h.rank < top.rank and not RankKept(h.id) then
@@ -353,7 +274,6 @@ local function Signature(plan)
 	return table.concat(parts, ",")
 end
 
--- The plan declined with Later, kept for the character until the plan changes.
 local function Later()
 	local char = ns.Character()
 	local sig = type(char) == "table" and char.errandsRanksLater or nil
@@ -371,8 +291,6 @@ local function Wanted()
 	return ns.Enabled("errands") and E.Opt("uprank") == true and not ns.PartStopped("errands", part.label)
 end
 
--- Whether the cursor holds something. Read with a plain pcall, since E.Ask makes a cursor the client will not say about look empty: that one
--- counts as busy.
 local function Busy()
 	if type(GetCursorInfo) ~= "function" then
 		return true
@@ -384,7 +302,6 @@ local function Busy()
 	return E.Ask(CursorHasItem) == true or E.Ask(CursorHasSpell) == true
 end
 
--- Why a click could not uprank now, or nil.
 local function Refusal()
 	if not Wanted() then
 		return "off"
@@ -399,7 +316,6 @@ local function Refusal()
 	elseif Busy() then
 		return "cursor"
 	elseif #E.Popups() > 0 then
-		-- A reload drops a summon, a group invite, a resurrection or a battleground entry the player has not answered.
 		return "popup"
 	elseif type(ns.EditModeOpen) == "function" and ns.EditModeOpen() then
 		return "editmode"
@@ -409,7 +325,6 @@ local function Refusal()
 	return nil
 end
 
--- What the player is told, by reason. Printed, since the player clicked or typed.
 local ANSWER = {
 	client = "Flat UI: this client cannot put spells on your bars.",
 	book = "Flat UI: the spell book cannot be read here.",
@@ -420,7 +335,6 @@ local ANSWER = {
 	popup = "Flat UI: answer the game's popup first.",
 	editmode = "Flat UI: close Edit Mode first.",
 	keybind = "Flat UI: close the quick keybind mode first.",
-	-- A lower rank left beside a higher one is not "the highest rank", so the words do not claim it.
 	nothing = "Flat UI: no button on your bars needs a new rank.",
 }
 
@@ -434,15 +348,10 @@ local function Answer(why)
 	return ANSWER[why]
 end
 
--- The line ----------------------------------------------------------------------------------------------------------------------------------
-
--- The line shows a real offer (test mode's sample is not one).
 local function Showing()
 	return notice ~= nil and not sample and E.Shown(notice.frame)
 end
 
--- Puts the top of the line at the top of its box in the movers, or TOP 0, NOTICE_Y with no spot saved. Out of combat only: the line is protected
--- while its secure button is on it.
 local function Place(frame)
 	if not frame or E.InCombat() then
 		return
@@ -459,8 +368,6 @@ local function Place(frame)
 	end
 end
 
--- The secure button sits on Uprank only while the line shows out of combat: a secure child makes the frames above it protected, so the line
--- could not be hidden in a fight while it is there (Reload.lua does the same). Neither runs in the lockdown.
 local function Detach()
 	if not notice or E.InCombat() then
 		return
@@ -481,7 +388,6 @@ local function Attach()
 		notice.overlay:SetAllPoints(notice.uprank)
 		notice.overlay:Show()
 	end)
-	-- Above the flat button, so the player's click reaches the secure one.
 	pcall(function()
 		local level = notice.uprank:GetFrameLevel()
 		if ns.Finite(level) then
@@ -490,12 +396,10 @@ local function Attach()
 	end)
 end
 
--- Whether the line may stay up: asked every frame while it shows.
 local function Keep()
 	return Wanted() and not E.Gamepad()
 end
 
--- Made once, out of combat, at the first offer. The layout is that of LayoutSpots.lua's line, the secure button that of Reload.lua.
 local function Build()
 	if notice then
 		return true
@@ -508,7 +412,6 @@ local function Build()
 		ns.Own[frame] = true
 		frame:SetSize(NOTICE_WIDTH, NOTICE_HEIGHT)
 		Place(frame)
-		-- Above the options window (HIGH, Panel.lua).
 		frame:SetFrameStrata("DIALOG")
 		pcall(frame.SetClampedToScreen, frame, true)
 		local outline = ns.Outline(frame, frame, true)
@@ -518,7 +421,6 @@ local function Build()
 		local text = ns.OwnText(frame, "OVERLAY", "GameFontHighlight")
 		text:SetPoint("LEFT", frame, "LEFT", 10, 0)
 		local uprank = E.Button(frame, "Uprank and reload", UPRANK_WIDTH, function()
-			-- Only reached while the secure button is not on top of it.
 			print("Flat UI: the Uprank button is not ready. Try again in a moment.")
 		end, function(owner)
 			E.Run(part, Explain, owner)
@@ -526,7 +428,6 @@ local function Build()
 		uprank:SetPoint("RIGHT", frame, "RIGHT", -GAP, 0)
 		local later = E.Button(frame, "Later", LATER_WIDTH, function()
 			E.Run(part, function()
-				-- Later on the sample only puts the sample away.
 				if not sample then
 					SetLater(Signature(Plan()))
 				end
@@ -534,7 +435,6 @@ local function Build()
 			end)
 		end)
 		later:SetPoint("RIGHT", uprank, "LEFT", -GAP, 0)
-		-- Made on UIParent and hidden, so the line is protected only while Attach puts the secure button on it.
 		local overlay = CreateFrame("Button", nil, UIParent, "SecureActionButtonTemplate")
 		ns.Own[overlay] = true
 		overlay:Hide()
@@ -542,11 +442,9 @@ local function Build()
 		overlay:RegisterForClicks("LeftButtonUp")
 		overlay:SetAttribute("type", "macro")
 		overlay:SetAttribute("macrotext", MACRO)
-		-- The game runs a click on the key press by default (ActionButtonUseKeyDown); the button listens for the release.
 		overlay:SetAttribute("useOnKeyDown", false)
 		overlay:SetScript("PreClick", PreClick)
 		overlay:SetScript("PostClick", PostClick)
-		-- The hover of the flat button under it still runs: its look and its tooltip.
 		overlay:SetScript("OnEnter", function(_, ...)
 			local got, script = pcall(uprank.GetScript, uprank, "OnEnter")
 			if got and type(script) == "function" then
@@ -559,8 +457,6 @@ local function Build()
 				script(uprank, ...)
 			end
 		end)
-		-- A line that is no longer wanted hides itself while it shows, so a part that stopped, or the gamepad interface turned on, cannot leave a
-		-- live reload button on the screen (as Errands.Button's Keep does).
 		frame:SetScript("OnUpdate", function()
 			local fine, keep = pcall(Keep)
 			if not fine or not keep then
@@ -578,19 +474,16 @@ local function Build()
 	return true
 end
 
--- The line, for the test.
 function ns.ErrandsRanksNotice()
 	return notice
 end
 
--- Greyed while a click could not uprank: it still sits under the secure button, whose click then says why and cancels its own reload.
 Usable = function()
 	if notice and not swapping then
 		notice.uprank.SetUsable(not sample and Refusal() == nil)
 	end
 end
 
--- The line as wide as its words and its two buttons.
 local function Fit()
 	local okWidth, width = pcall(notice.text.GetStringWidth, notice.text)
 	if okWidth and ns.Finite(width) then
@@ -598,7 +491,6 @@ local function Fit()
 	end
 end
 
--- A real offer takes the place of test mode's sample.
 ShowNotice = function(plan)
 	if E.InCombat() or not Build() then
 		return false
@@ -622,7 +514,6 @@ HideNotice = function()
 	if not notice then
 		return
 	end
-	-- The sample has no secure button on it, so it hides at once, in a fight too.
 	if sample then
 		sample = false
 		notice.frame:Hide()
@@ -644,8 +535,6 @@ HideNotice = function()
 	notice.frame:Hide()
 end
 
--- Test mode's sample (TestMode.lua): the line with words of its own and Uprank greyed, never its secure button, out of a fight and only while no
--- real offer shows. A real offer takes its place, and the end of test mode hides only a sample.
 local function SampleOn()
 	if sample or Showing() or not Wanted() or E.Gamepad() or E.InCombat() or not Build() then
 		return
@@ -673,8 +562,6 @@ if type(ns.TestMode) == "table" and type(ns.TestMode.Register) == "function" the
 	end })
 end
 
--- The movers (Movers.lua): the line has a box while Put new ranks on your bars is on, and a new spot places it, out of a fight (it waits for the
--- end of one).
 function ns.ErrandsUprankShown()
 	return E.On("uprank")
 end
@@ -694,7 +581,6 @@ function ns.ErrandsUprankMoved()
 	Place(notice.frame)
 end
 
--- A reason as a sentence of the tooltip: the answer without "Flat UI: ".
 local function Sentence(line)
 	local text = line:gsub("^Flat UI: ", "")
 	return text:sub(1, 1):upper() .. text:sub(2)
@@ -705,7 +591,6 @@ Explain = function(owner)
 	if type(tip) ~= "table" or ns.Forbidden(tip) then
 		return
 	end
-	-- The button's look follows the tooltip's reason: a popup or Edit Mode opened since the line showed raises no event here.
 	Usable()
 	tip:SetOwner(owner, "ANCHOR_BOTTOM", 0, -4)
 	tip:SetText("Uprank and reload")
@@ -719,7 +604,6 @@ Explain = function(owner)
 	local function Line(text)
 		tip:AddLine(text, 1, 1, 1, true)
 	end
-	-- One line per spell and old rank, in plan order: two stance pages can hold two ranks of one spell.
 	local order, byName = {}, {}
 	for _, item in ipairs(plan) do
 		local key = item.name .. "\0" .. item.from
@@ -745,7 +629,6 @@ Explain = function(owner)
 		end
 		Line(text)
 	end
-	-- The lower ranks left beside a higher one, each name and rank once.
 	local lower, seen = {}, {}
 	for _, h in ipairs(left) do
 		local label = WithRank(h.name, h.text)
@@ -766,9 +649,6 @@ Explain = function(owner)
 	tip:Show()
 end
 
--- The click -----------------------------------------------------------------------------------------------------------------------------------
-
--- The first of the client's pickups that exists, and only that one. True when the call was taken.
 local function Pickup(item)
 	if type(C_Spell) == "table" and type(C_Spell.PickupSpell) == "function" then
 		return E.Call(C_Spell.PickupSpell, item.new)
@@ -780,7 +660,6 @@ local function Pickup(item)
 	return false
 end
 
--- Whether the cursor holds the new rank: GetCursorInfo gives "spell" and the spell's ID fourth.
 local function CursorSpell(item)
 	local ok, kind, _, _, id = pcall(GetCursorInfo)
 	if not ok or ns.IsSecret(kind) or ns.IsSecret(id) or kind ~= "spell" then
@@ -789,8 +668,6 @@ local function CursorSpell(item)
 	return id == item.new or id == item.base
 end
 
--- The swaps, in the player's click on the secure button. True when the reload must go ahead: from the first pickup on, values written under this
--- call are on the game's bars, so whatever follows, the reload comes. The note for after the reload is written before an error is raised again.
 local function Uprank()
 	local why = Refusal()
 	if why then
@@ -807,12 +684,10 @@ local function Uprank()
 	local ok, err = pcall(function()
 		for _, item in ipairs(plan) do
 			local kind, id = E.Ask(GetActionInfo, item.slot)
-			-- A slot that changed since the plan is left.
 			if kind == "spell" and id == item.old then
 				touched = true
 				if Pickup(item) and CursorSpell(item) then
 					E.Call(Placer(), item.slot)
-					-- The old rank the drop put on the cursor goes.
 					E.Call(ClearCursor)
 					local nowKind, nowId = E.Ask(GetActionInfo, item.slot)
 					if nowKind == "spell" and (nowId == item.new or nowId == item.base) then
@@ -829,7 +704,6 @@ local function Uprank()
 		end
 	end)
 	swapping = false
-	-- The cursor was empty when the click began, so it is left empty.
 	if Busy() then
 		E.Call(ClearCursor)
 	end
@@ -849,9 +723,6 @@ local function Uprank()
 	return touched
 end
 
--- The secure button's PreClick. A click that cannot uprank runs nothing: its type is taken away for that click, so no reload follows. An
--- attribute set on a protected frame in the lockdown is refused and blamed on Flat UI, so there nothing is set: Uprank refuses in a fight, and
--- the macro's own /stopmacro [combat] keeps the reload from running.
 PreClick = function(self)
 	touched = false
 	local go = false
@@ -866,8 +737,6 @@ PreClick = function(self)
 	end
 end
 
--- Only reached for good when no reload followed (a cancelled click): the line is read again on the next frame, outside the click, since a frame
--- is not hidden or moved inside its own click. In the lockdown PreClick took nothing away, so nothing is given back.
 PostClick = function(self)
 	if not E.InCombat() then
 		pcall(self.SetAttribute, self, "type", "macro")
@@ -879,9 +748,6 @@ PostClick = function(self)
 	end
 end
 
--- When the line is offered ------------------------------------------------------------------------------------------------------------------
-
--- The line is read again a moment after a slot or the spell book changed: an empty plan hides it.
 ScheduleRefresh = function()
 	refreshToken = refreshToken + 1
 	local token = refreshToken
@@ -904,8 +770,6 @@ ScheduleRefresh = function()
 	end)
 end
 
--- Shows the line, or says why not: "off", "client", "book", "button", "gamepad", "fight" (asked again after the fight), "nothing" or "later".
--- kind: "training", "login", "turnedOn", "released", "asked" or "resume". Only the automatic ones respect a declined plan.
 Offer = function(kind)
 	if not Wanted() then
 		return "off"
@@ -922,7 +786,6 @@ Offer = function(kind)
 		return "gamepad"
 	end
 	if E.Fighting() then
-		-- What the player asked for wins over what training asked for.
 		if not queued or kind == "asked" then
 			queued = kind
 		end
@@ -947,7 +810,6 @@ local function Now()
 	return ns.Finite(now) and now or nil
 end
 
--- The look after a learned rank: it waits while less than OFFER_WAIT has passed since the last one, or while the trainer window shows.
 local function Look(token)
 	if token ~= watchToken then
 		return
@@ -969,7 +831,6 @@ local function Look(token)
 	Offer("training")
 end
 
--- One wait at a time; now: a look at once (the trainer closed), which takes the place of the one waiting.
 local function Watch(now)
 	if watching and not now then
 		return
@@ -987,7 +848,6 @@ local function Watch(now)
 	end
 end
 
--- A rank learned: a spell with a rank number starts the wait. One with none (Attack, a profession) starts nothing.
 local function Learned(spellID)
 	if not Wanted() or not Whole(spellID) or not RankNumber(Subtext(spellID)) then
 		return
@@ -999,10 +859,6 @@ local function Learned(spellID)
 	Watch(false)
 end
 
--- After the reload ----------------------------------------------------------------------------------------------------------------------------
-
--- The note the click left: which slots took which rank. Read once, and cleared whatever follows; every value is checked, since a saved variable
--- can be edited.
 local function AfterReload()
 	local char = ns.Character()
 	if type(char) ~= "table" or char.errandsUpranked == nil then
@@ -1051,17 +907,11 @@ local function AfterReload()
 	elseif kept > 0 then
 		E.Say(("The game kept the old rank on %d %s. /flatui uprank tries again."):format(kept, Buttons(kept)))
 	end
-	-- The offer at login that follows would show the slots the game just refused, and each click would be one more reload and the same line:
-	-- the plan waits as if declined, until it changes or the player asks for it.
 	if kept > 0 then
 		SetLater(Signature(Plan()))
 	end
 end
 
--- The lines about learned spells ----------------------------------------------------------------------------------------------------------------
-
--- A pattern for a line of the game's: "%s" and "%1$s" capture the spell, "%d" and "%1$d" match a number.
--- "You have learned a new spell: %s."  ->  "^You have learned a new spell: (.+)%.$"
 local function Pattern(format)
 	if ns.IsSecret(format) or type(format) ~= "string" or format == "" then
 		return nil
@@ -1086,7 +936,6 @@ local function Patterns()
 	return list
 end
 
--- Only the latest timer prints, so the line comes a moment after the last dropped line.
 local function Flush(token)
 	if token ~= heard.token then
 		return
@@ -1099,14 +948,11 @@ local function Flush(token)
 		parts[#parts + 1] = "Unlearned " .. Join(heard.unlearned, CHAT_NAMES) .. "."
 	end
 	heard = { learned = {}, unlearned = {}, seen = {}, token = heard.token }
-	-- A change to Hidden, or Errands turned off, before the timer drops the line.
 	if #parts > 0 and ns.Enabled("errands") and E.Opt("learnedLines") == "summary" then
 		E.Say(table.concat(parts, " "))
 	end
 end
 
--- A spell link whose shown text has no number ("[Fireball]", as a modern client writes it) takes the rank of its spell, so two ranks learned at
--- once do not read the same: "[Fireball] (Rank 4)". The link itself is kept, so it stays clickable.
 local function WithLinkRank(what)
 	local id = tonumber(what:match("|Hspell:(%d+)"))
 	if not Whole(id) then
@@ -1123,7 +969,6 @@ local function WithLinkRank(what)
 	return what
 end
 
--- The filter runs once for each chat window that shows the line, so a line is counted once by its lineID (or its text and the time).
 local function Heard(what, unlearned, lineID, msg)
 	local key = Whole(lineID) and lineID or (msg .. "@" .. tostring(E.Ask(GetTime)))
 	if heard.seen[key] then
@@ -1146,8 +991,6 @@ local function Heard(what, unlearned, lineID, msg)
 	end)
 end
 
--- True to drop a line: one of the game's four, while the row hides them. A line is never changed. What it names (the spell, or its link) is kept
--- for the summary only.
 local function Drop(msg, lineID)
 	if not ns.Enabled("errands") or ns.PartStopped("errands", part.label) then
 		return false
@@ -1156,7 +999,6 @@ local function Drop(msg, lineID)
 	if mode ~= "hide" and mode ~= "summary" then
 		return false
 	end
-	-- One line in their place with Say what was done off would leave no line at all (E.Say is silent then): the game's lines stay.
 	if mode == "summary" and E.Opt("chat") == false then
 		return false
 	end
@@ -1175,7 +1017,6 @@ local function Drop(msg, lineID)
 	return false
 end
 
--- The game's registry calls it with the chat frame, the event and the event's values, lineID 11th. One value back: no line is rewritten.
 Filter = function(_, _, msg, _, _, _, _, _, _, _, _, _, lineID)
 	local drop = false
 	E.Run(part, function()
@@ -1184,7 +1025,6 @@ Filter = function(_, _, msg, _, _, _, _, _, _, _, _, _, lineID)
 	return drop
 end
 
--- The game's own chat filter registry: ChatFrameUtil on this client, ChatFrame_AddMessageEventFilter on an older one, or nil.
 local function Registry()
 	if type(ChatFrameUtil) == "table" and type(ChatFrameUtil.AddMessageEventFilter) == "function" and type(ChatFrameUtil.RemoveMessageEventFilter) == "function" then
 		return ChatFrameUtil.AddMessageEventFilter, ChatFrameUtil.RemoveMessageEventFilter
@@ -1195,7 +1035,6 @@ local function Registry()
 	return nil
 end
 
--- The filter is given once and taken back with the same function value.
 local function SetFilter(on)
 	local add, remove = Registry()
 	if not add then
@@ -1214,8 +1053,6 @@ local function FilterWanted()
 	return ns.Enabled("errands") and E.Opt("learnedLines") ~= "game"
 end
 
--- Events ------------------------------------------------------------------------------------------------------------------------------------
-
 for _, event in ipairs({ "LEARNED_SPELL_IN_SKILL_LINE", "LEARNED_SPELL_IN_TAB" }) do
 	E.Listen(part, event, Learned)
 end
@@ -1224,14 +1061,12 @@ E.Listen(part, "TRAINER_CLOSED", function()
 		Watch(true)
 	end
 end)
--- The mainline trainer opens and closes through the interaction manager.
 E.Listen(part, "PLAYER_INTERACTION_MANAGER_FRAME_HIDE", function(kind)
 	local trainer = type(Enum) == "table" and type(Enum.PlayerInteractionType) == "table" and Enum.PlayerInteractionType.Trainer or nil
 	if learnedAt and trainer ~= nil and not ns.IsSecret(kind) and kind == trainer then
 		Watch(true)
 	end
 end)
--- Runs before the lockdown, so the line can still be hidden and its secure button taken off.
 E.Listen(part, "PLAYER_REGEN_DISABLED", function()
 	if Showing() then
 		suspended = "resume"
@@ -1245,7 +1080,6 @@ E.Listen(part, "PLAYER_REGEN_ENABLED", function()
 		Offer(kind)
 	end
 end)
--- It comes for every change of the cursor, so the plan is not read again here.
 E.Listen(part, "CURSOR_CHANGED", function()
 	if Showing() then
 		Usable()
@@ -1278,7 +1112,6 @@ function part.Start()
 	end)
 end
 
--- The row or the page turned on offers the line; turned off, the line goes and nothing waits. The filter follows Lines about learned spells.
 function part.Refresh()
 	local on = Wanted()
 	if on and not wasOn then
@@ -1292,9 +1125,6 @@ function part.Refresh()
 	SetFilter(FilterWanted())
 end
 
--- Kept ranks, Uprank now and the slash words ---------------------------------------------------------------------------------------------
-
--- Rows of a list: { id, label }, by name, then rank.
 local function Sorted(rows)
 	table.sort(rows, function(a, b)
 		if a.name ~= b.name then
@@ -1311,7 +1141,6 @@ local function Sorted(rows)
 	return list
 end
 
--- Every distinct ranked spell on the player's slots that is not kept, so a rank can be kept before the next one is learned.
 local function Candidates()
 	local rows, seen = {}, {}
 	for _, range in ipairs(SLOT_RANGES) do
@@ -1340,7 +1169,6 @@ local function KeptRows()
 	return Sorted(rows)
 end
 
--- Kept ranks change only what is saved, so they work in a fight too.
 local function KeepRank(id)
 	local ranks = Ranks()
 	if not ranks then
@@ -1375,7 +1203,6 @@ local function UnkeepRank(id)
 	return true, ("Flat UI: %s is replaced again when a higher rank is known."):format(label)
 end
 
--- The panel calls these through a plain pcall; the work runs as a part of the module, so its errors count toward stopping the part.
 local function Guarded(fn, ...)
 	local ok, message = false, nil
 	if not E.Run(part, function(...)
@@ -1424,7 +1251,6 @@ function ns.ErrandsUprankNow(id)
 	end)
 end
 
--- The ID of what was typed: a number, a shift-clicked spell link, or "spell:ID".
 local function SpellId(text)
 	text = tostring(text or ""):match("^%s*(.-)%s*$")
 	local id = tonumber(text:match("^(%d+)$") or text:match("|Hspell:(%d+)") or text:match("spell:(%d+)"))
@@ -1455,14 +1281,12 @@ local function RankCommand(rest)
 	return message
 end
 
--- /flatui uprank: the line and its button now, whatever was declined. In a fight it comes after the fight.
 E.slash.uprank = function()
 	local _, message = ns.ErrandsUprankNow(1)
 	if type(message) == "string" then
 		print(message)
 	end
 end
--- /flatui rank: keep a rank, or stop keeping it; alone, the kept ranks.
 E.slash.rank = function(rest)
 	local message
 	if not E.Run(part, function()
@@ -1477,7 +1301,6 @@ end
 E.help[#E.help + 1] = "/flatui uprank - offer the new spell ranks for your bars now, with a button that reloads"
 E.help[#E.help + 1] = "/flatui rank <spell> - keep that rank of a spell on your bars, or stop keeping it; shift-click it in your spell book to name it"
 
--- In a real session the line can only show when a click placed ranks and its reload did not come: /flatui taint may then name ActionButtonN.action.
 ns.ClickPathReporter(function()
 	if placedSession > 0 then
 		return ("Click path: Flat UI put new ranks on %d action %s and no reload followed. /reload clears what that left."):format(placedSession,
@@ -1499,7 +1322,6 @@ function part.Status()
 		end
 		does[#does + 1] = kept > 0 and ("offers new ranks for your bars after training (%d kept)"):format(kept) or "offers new ranks for your bars after training"
 	end
-	-- One line in their place with Say what was done off leaves the game's lines as they are (Drop).
 	local dropping = mode == "hide" or (mode == "summary" and E.Opt("chat") ~= false)
 	if mode == "hide" then
 		does[#does + 1] = "hides the lines about learned spells"

@@ -1,31 +1,5 @@
 local _, ns = ...
 
--- The threat core of the nameplates, a part of Nameplates.lua (ns.PlateExtra): the threat level of each enemy plate, read from the game, kept for
--- the parts that show it (the health bar colour of PlateColours.lua and the other threat parts of the plates) and handed to them through
--- ns.PlateThreat. It does what Threat Plates does on Forever (its ShowFeedback, UpdateThreatStatus and GetPlayerRole: Modules/Threat.lua:111-177,
--- Nameplate.lua:2354-2475), with none of its code, and adds what Forever lets an addon know without a compound unit token.
--- The level is the player's threat situation on the plate's unit, UnitThreatSituation("player", unit) (UnitDocumentation.lua:3279-3294): 0 is low,
--- 1 and 2 are medium and 3 is high, as Threat Plates reads it (Constants.lua:168-173). A query of the player, the pet or an ally against a nameplate is
--- generally not secret (SecretWhenUnitThreatStateRestricted, SecretPredicatesDocumentation.lua:160-163); a withheld answer, a raise or an answer that
--- is no number is no answer and gives no level, and nil says the player is not on the unit's threat table. A tank wants high and a damage dealer or
--- healer low; medium is threat changing hands. A tank whose enemy another tank of the group or the pet holds (a plain 2 or 3 of that unit's own
--- UnitThreatSituation on the plate) has it as held by another tank, where Threat Plates looks at the enemy's target, which Forever withholds
--- (Modules/Threat.lua:131-166, 298-303). An enemy only the pet is on the threat table of is held for the player. With Early warning while tanking, a
--- tank who holds an enemy securely has it as changing hands while UnitThreatLeadSituation (UnitDocumentation.lua:3244-3260) gives yellow or orange,
--- as the game's own plates warn a tank (Shared/CompactUnitFrame.lua:599-623).
--- No player has threat on a plate, nor a unit the player cannot attack; the kind of enemy (tapped, neutral, boss, elite, normal, minor, in Threat
--- Plates' order: Modules/Threat.lua:95-103, Nameplate.lua:497-511 and 557-576) and Only in dungeons and raids decide which others do. The kind is
--- read once for a plate and its unit, and again on UNIT_CLASSIFICATION_CHANGED.
--- The game updates a plate's threat in CompactUnitFrame_UpdateAggroHighlight (Shared/CompactUnitFrame.lua:920-932), which it calls for the plate's own
--- unit on UNIT_THREAT_SITUATION_UPDATE and UNIT_THREAT_LIST_UPDATE (131-143), on GROUP_JOINED and GROUP_LEFT (101-104) and in UpdateAll (454, 474).
--- That call is followed (hooksecurefunc, through ns.FollowGlobal) from the first plate shown with threat on, and every plate is read again when the
--- role changes, the group changes, a fight starts and the rows change; at the end of a fight every plate loses its level, as Threat Plates has it
--- (Modules/Threat.lua:247-253). The other parts hear a change of a plate's level (PT.OnChange), and every update (PT.OnUpdate).
--- The role is worked out on events and not for each plate, and while threat is off at each ask of PT.Role, which Flat UI setup and the hit table
--- make (ns.PlayerRole, Core.lua): the role the group gave, the raid's Main Tank, the game's tank aura, then a warrior's Defensive Stance, a druid's
--- bear form and a paladin's Righteous Fury, as Threat Plates' Classic path has them. Nothing of the game is changed: every call only reads, and a
--- frame of the file's own hears UPDATE_SHAPESHIFT_FORM for a warrior or a druid while the role is automatic.
-
 local KEY = "nameplates"
 local EXTRA = ns.PlateExtra
 if type(EXTRA) ~= "table" then
@@ -34,25 +8,17 @@ end
 
 local PART = "nameplate threat"
 local AGGRO, HEALTH = "CompactUnitFrame_UpdateAggroHighlight", "CompactUnitFrame_UpdateHealthColor"
--- The row of each kind of enemy, and the row of the colour of each want. While Same colours for both roles is off the first three are a tank's and
--- damage or healer has three of its own, as Threat Plates keeps a colour table for each role (Options.lua:11405-11495; Constants.lua:2051-2065).
 local KIND_ROWS = { tapped = "threatTapped", neutral = "threatNeutral", boss = "threatBoss", elite = "threatElite", normal = "threatNormal", minor = "threatMinor" }
 local COLOUR_ROWS = { good = "threatGood", changing = "threatTransition", bad = "threatBad", offtank = "threatTankColour" }
 local DAMAGE_ROWS = { good = "threatDamageGood", changing = "threatDamageTransition", bad = "threatDamageBad" }
--- The classifications of the game counted as elite (Threat Plates puts rares with them, Modules/Threat.lua:32-41) and as minor.
 local ELITE = { worldboss = true, rareelite = true, elite = true, rare = true }
 local MINOR = { minus = true, trivial = true }
--- The kinds of instance Only in dungeons and raids counts (Threat Plates' PvE instance types, Nameplate.lua:1472-1479).
 local INSTANCES = { party = true, raid = true, scenario = true }
--- What a tank and what any other role wants of each level.
 local WANT = {
 	[true] = { high = "good", medium = "changing", low = "bad", offtank = "offtank" },
 	[false] = { low = "good", medium = "changing", high = "bad", offtank = "offtank" },
 }
--- Righteous Fury, whose ranks Threat Plates looks for (Nameplate.lua:2421-2427; 407627 is Season of Discovery's).
 local FURY = { 25780, 20468, 20469, 20470, 407627 }
--- A warrior's Defensive Stance and a druid's bear forms by GetShapeshiftFormID: Threat Plates' 18 (Nameplate.lua:2367-2369), and 5 or 8, where
--- Forever's own DRUID_BEAR_FORM is 8 (Blizzard_FrameXMLBase/Camelot/Constants.lua:14, loaded for that game only, Blizzard_FrameXMLBase.toc:15-16).
 local DEFENSIVE, BEAR, DIRE_BEAR = 18, 5, 8
 local HELP = { "/flatui role [tank|damage|auto|toggle] - the role nameplate threat reads you as, or set it" }
 local MISSING = "Nameplate threat: the game's threat update was not found, so the glow, the fade and the threat value follow the health colour."
@@ -60,17 +26,10 @@ local MISSING = "Nameplate threat: the game's threat update was not found, so th
 local PT = {}
 ns.PlateThreat = PT
 
--- recs: per unit frame, state (the level kept, or nil), answer (true for a plain answer of the game, false for a refused or withheld one, nil for none)
--- and kind with kindUnit (the kind of the unit the plate had when it was read). telling: plates whose listeners are told now. changeFns and updateFns:
--- the listeners. followed: true while the game's threat update is followed, false when the client has none, nil before the first plate. inColour:
--- above 0 while the follow of the health colour call reads, where that call stands in for the threat update. seen: a plate has had an answer.
 local recs = setmetatable({}, { __mode = "k" })
 local telling = setmetatable({}, { __mode = "k" })
 local changeFns, updateFns = {}, {}
 local followed, inColour, seen = nil, 0, false
--- role: tank, its reason and the Your role it was worked out for. class: the player's class once read, false when the game did not say. fury: the
--- Righteous Fury flag. group: the units of the group other than the player whose threat says another tank holds an enemy: tanks by role or by the
--- Main Tank mark, and the other members of a party, who count when the game gives them its tank aura.
 local role = { tank = false }
 local class, fury = nil, false
 local group = { tanks = {}, others = {} }
@@ -80,7 +39,6 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- The first answer of a call of the client, or nil when the call is missing, raises or the answer is withheld.
 local function Call(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -92,7 +50,6 @@ local function Call(fn, ...)
 	return nil
 end
 
--- A count the game gives, as a whole number from 0 to most.
 local function Count(fn, most)
 	local value = Call(fn)
 	if ns.Finite(value) and value > 0 then
@@ -101,8 +58,6 @@ local function Count(fn, most)
 	return 0
 end
 
--- True when the raid gave a unit the assignment: a plain answer the game's own test (if GetPartyAssignment(...) then) takes as true, as
--- UnitParts.lua has it. The client has the call (apis.yaml) and no documentation of it.
 local function Assigned(assignment, unit)
 	if type(GetPartyAssignment) ~= "function" then
 		return false
@@ -111,7 +66,6 @@ local function Assigned(assignment, unit)
 	return ok and not ns.IsSecret(yes) and yes ~= nil and yes ~= false
 end
 
--- False for a friendly plate while Restyle friendly nameplates is off, which stays as the game draws it, as for the rest of its look (PlateColours.lua).
 local function Styled(unitFrame)
 	if Opt("friendly") == true then
 		return true
@@ -120,8 +74,6 @@ local function Styled(unitFrame)
 	return ns.IsSecret(friend) or friend ~= true
 end
 
--- The answer of UnitThreatSituation or UnitThreatLeadSituation: a whole number from 0 to 3 and true for a plain one, nil and false when the call raises
--- or the answer is withheld or no number, and nil and nil for nil or a client without the call.
 local function Threat(fn, who, unit)
 	if type(fn) ~= "function" then
 		return nil, nil
@@ -139,7 +91,6 @@ local function Threat(fn, who, unit)
 	return math.max(0, math.min(3, math.floor(value))), true
 end
 
--- True for a situation of 2 or 3: that unit tanks the enemy.
 local function Holds(value)
 	return value == 2 or value == 3
 end
@@ -148,7 +99,6 @@ local function PetOut()
 	return Call(UnitExists, "pet") == true
 end
 
--- True in a dungeon, a raid or a scenario: IsInInstance (InstanceDocumentation.lua:170-178) plainly says so.
 local function InInstance()
 	if type(IsInInstance) ~= "function" then
 		return false
@@ -157,10 +107,6 @@ local function InInstance()
 	return ok and not ns.IsSecret(inside) and inside == true and not ns.IsSecret(kind) and type(kind) == "string" and INSTANCES[kind] == true
 end
 
--- The kind of the plate's unit. Tapped by someone else as the game greys it (CompactUnitFrame_IsTapDenied, Shared/CompactUnitFrame.lua:560-562) and
--- neutral (UnitReaction 4, unless the unit is player-controlled, which Threat Plates counts as hostile, Nameplate.lua:505-508) are asked each time; a
--- boss (the skull level, UnitEffectiveLevel -1, as Threat Plates takes it, Nameplate.lua:562-564, or a boss mob, as ns.UnitKind has it), an elite and a
--- minor unit once for the plate and its unit. A classification that is missing, withheld or another word counts as normal.
 local function Kind(rec, unit)
 	if Call(UnitIsTapDenied, unit) == true and Call(UnitPlayerControlled, unit) ~= true then
 		return "tapped"
@@ -184,9 +130,6 @@ local function Kind(rec, unit)
 	return rec.kind
 end
 
--- Role ------------------------------------------------------------------------------------------------------------------------------------------
-
--- The player's class, read once: UnitClassBase (UnitDocumentation.lua:930-945), plain for the player.
 local function Class()
 	if class == nil then
 		local value = Call(UnitClassBase, "player")
@@ -195,7 +138,6 @@ local function Class()
 	return class
 end
 
--- The form the player is in. GetShapeshiftFormID is in the client with no documentation (apis.yaml), so its answer must be a plain number.
 local function Form()
 	if type(GetShapeshiftFormID) ~= "function" then
 		return nil
@@ -216,9 +158,6 @@ local function InBearForm()
 	return form == BEAR or form == DIRE_BEAR or (ns.Finite(own) and form == own)
 end
 
--- The Righteous Fury flag of a paladin. GetPlayerAuraBySpellID answers nothing for an aura the game withholds and raises nothing
--- (RequiresNonSecretAura, UnitAuraDocumentation.lua:397-411; SecretPredicatesDocumentation.lua:28-31), so a plain aura found sets the flag and none
--- found clears it only out of combat, where no aura is withheld, as Threat Plates does (Nameplate.lua:2434-2445).
 local function ReadFury()
 	if Class() ~= "PALADIN" then
 		fury = false
@@ -242,38 +181,35 @@ local function ReadFury()
 	end
 end
 
--- Works out whether threat reads the player as a tank, and why. Your role decides when it is Tank or Damage or healer. From your role, stance or form
--- takes the role the group gave (UnitGroupRolesAssigned, UnitDocumentation.lua:1318-1332), else the raid's Main Tank, else the game's tank aura
--- (UnitHasEffectivelyTankAura, UnitDocumentation.lua:1365-1379, which the game's PlayerUtil.IsPlayerEffectivelyTank asks first,
--- Blizzard_SharedXML/UnitUtil.lua:109-121; that is a table of the game, so the client's own function is called, as Setup.lua does), else Defensive
--- Stance, a bear form or Righteous Fury by class. Threat Plates reads the aura and the class alone (Nameplate.lua:2397-2418). True when the role changed.
+local function Auto()
+	local given = Call(UnitGroupRolesAssigned, "player")
+	if given == "TANK" then
+		return true, "your group role"
+	elseif given == "HEALER" or given == "DAMAGER" then
+		return false, "your group role"
+	elseif Assigned("MAINTANK", "player") then
+		return true, "Main Tank"
+	elseif Call(UnitHasEffectivelyTankAura, "player") == true then
+		return true, "a tank aura"
+	end
+	local kind = Class()
+	if kind == "WARRIOR" and Form() == DEFENSIVE then
+		return true, "Defensive Stance"
+	elseif kind == "DRUID" and InBearForm() then
+		return true, "Bear Form"
+	elseif kind == "PALADIN" and fury then
+		return true, "Righteous Fury"
+	end
+	return false, "no tank stance or form"
+end
+
 local function WorkOut()
 	local choice = Opt("threatRole")
 	local tank, reason
 	if choice == "tank" or choice == "damage" then
 		tank, reason = choice == "tank", "your choice"
 	else
-		local given = Call(UnitGroupRolesAssigned, "player")
-		if given == "TANK" then
-			tank, reason = true, "your group role"
-		elseif given == "HEALER" or given == "DAMAGER" then
-			tank, reason = false, "your group role"
-		elseif Assigned("MAINTANK", "player") then
-			tank, reason = true, "Main Tank"
-		elseif Call(UnitHasEffectivelyTankAura, "player") == true then
-			tank, reason = true, "a tank aura"
-		else
-			local kind = Class()
-			if kind == "WARRIOR" and Form() == DEFENSIVE then
-				tank, reason = true, "Defensive Stance"
-			elseif kind == "DRUID" and InBearForm() then
-				tank, reason = true, "Bear Form"
-			elseif kind == "PALADIN" and fury then
-				tank, reason = true, "Righteous Fury"
-			else
-				tank, reason = false, "no tank stance or form"
-			end
-		end
+		tank, reason = Auto()
 	end
 	local changed = role.reason ~= nil and role.tank ~= tank
 	role.tank, role.reason, role.choice = tank, reason, choice
@@ -287,10 +223,6 @@ local function IsTank()
 	return role.tank
 end
 
--- The units whose own threat says another tank holds an enemy, made again when the group or its roles change. A tank is a unit with the tank role or
--- the raid's Main Tank, as ns.UnitFrameExtra.isTank has it (UnitParts.lua:234-259). In a raid raid1 to raid40 without the player (UnitIsUnit with the
--- player is comparable, SecretPredicatesDocumentation.lua:10-14); in a party party1 to party4, whose other members count when the game gives them its
--- tank aura, since groups on Forever often have no roles (plain for party members, SecretPredicatesDocumentation.lua:130-133).
 local function Roster()
 	local tanks, others = {}, {}
 	if PT.Active() and Opt("threatTanks") == true then
@@ -318,7 +250,6 @@ local function Roster()
 	group.tanks, group.others = tanks, others
 end
 
--- True when the pet or another tank of the group tanks the enemy. The tank aura of a party member is asked only for one who tanks it.
 local function HeldByOther(unit)
 	if PetOut() and Holds((Threat(UnitThreatSituation, "pet", unit))) then
 		return true
@@ -336,19 +267,15 @@ local function HeldByOther(unit)
 	return false
 end
 
--- Reading a plate ---------------------------------------------------------------------------------------------------------------------------------
-
 function PT.Active()
 	return ns.Enabled(KEY) and Opt("threat") == true and not ns.PartStopped(KEY, PART)
 end
 
--- The state of a plate and the kind of answer the game gave, or nil.
 local function Ask(unitFrame, rec)
 	local unit = unitFrame.unit
 	if ns.IsSecret(unit) or type(unit) ~= "string" or not Styled(unitFrame) then
 		return nil, nil
 	end
-	-- Threat Plates gives no player threat feedback (Modules/Threat.lua:111-114).
 	if Call(UnitCanAttack, "player", unit) ~= true or Call(UnitIsPlayer, unit) == true then
 		return nil, nil
 	end
@@ -358,7 +285,6 @@ local function Ask(unitFrame, rec)
 	local status, answer = Threat(UnitThreatSituation, "player", unit)
 	local pet = false
 	if status == nil then
-		-- Threat Plates never asks for the pet (Modules/Threat.lua:171): an enemy only the pet is on the table of is held for the player.
 		if answer == false or Opt("threatPet") ~= true or not PetOut() or not Holds((Threat(UnitThreatSituation, "pet", unit))) then
 			return nil, answer
 		end
@@ -400,7 +326,6 @@ local function Failed(err)
 	ns.Note(KEY, "Nameplate threat: a part that follows threat failed. " .. tostring(err))
 end
 
--- Tells the parts that a plate's state changed. While they are told, a Read of that plate answers the state just kept and asks nothing.
 local function Tell(unitFrame, state, previous)
 	telling[unitFrame] = (telling[unitFrame] or 0) + 1
 	for _, fn in ipairs(changeFns) do
@@ -438,7 +363,6 @@ local function Drop(unitFrame, rec)
 	Keep(unitFrame, rec, nil)
 end
 
--- Every kept state goes. The plates are listed first, since a listener may read another plate.
 local function DropAll()
 	local list = {}
 	for unitFrame in pairs(recs) do
@@ -466,7 +390,6 @@ local function Work(unitFrame)
 	Keep(unitFrame, rec, state)
 end
 
--- Asks the game now, keeps the answer and returns the plate's state, or nil when it shows no threat.
 function PT.Read(unitFrame)
 	if unitFrame == nil or ns.IsSecret(unitFrame) then
 		return nil
@@ -496,7 +419,6 @@ function PT.Read(unitFrame)
 	return rec and rec.state or nil
 end
 
--- The state kept from the last Read, without a call to the game.
 function PT.Get(unitFrame)
 	if unitFrame == nil or ns.IsSecret(unitFrame) then
 		return nil
@@ -518,18 +440,14 @@ local function Listen(list, fn)
 	return true
 end
 
--- fn(unitFrame, state, previous) after a plate's state changed, came or went; nil says to put back what is shown on that plate.
 function PT.OnChange(fn)
 	return Listen(changeFns, fn)
 end
 
--- fn(unitFrame, state) after every threat update of a plate, changed or not, and after each pass over the plates.
 function PT.OnUpdate(fn)
 	return Listen(updateFns, fn)
 end
 
--- Red, green and blue of the colour row of a state's want: the damage and healer's row for a state read as damage or healer while Same colours for
--- both roles is off, else the row both roles share. Another tank's colour is a tank's alone.
 function PT.Colour(state)
 	if type(state) ~= "table" then
 		return nil
@@ -544,9 +462,6 @@ function PT.Colour(state)
 	return ns.Colour(KEY .. "." .. row)
 end
 
--- "tank" or "damage", and why, as a short phrase. While threat is off no event works the role out (every handler here looks only while it is on),
--- so each call works it out then, Righteous Fury read first while the role is automatic: Flat UI setup and the hit table ask through ns.PlayerRole
--- (Core.lua), and a role kept from an earlier look would be out of date. Nothing is read again for a plate: no plate shows threat then.
 function PT.Role()
 	if not PT.Active() then
 		if Opt("threatRole") == "auto" then
@@ -559,17 +474,21 @@ function PT.Role()
 	return role.tank and "tank" or "damage", role.reason
 end
 
--- True once a plate has had an answer of the game this session: threat is in use.
+function PT.AutoRole()
+	if not PT.Active() then
+		ReadFury()
+	end
+	local tank, reason = Auto()
+	return tank and "tank" or "damage", reason
+end
+
 function PT.Seen()
 	return seen
 end
 
--- True while the follow of the health colour call reads a plate, in a client without the threat update: the game's colour call is under way.
 function PT.InColourCall()
 	return inColour > 0
 end
-
--- When it is read --------------------------------------------------------------------------------------------------------------------------------
 
 local function Pass(unitFrame)
 	PT.Read(unitFrame)
@@ -580,7 +499,6 @@ local function PassAll()
 	ns.EachPlate(Pass)
 end
 
--- Every compact unit frame comes through the follows, the raid frames too.
 local function OnAggro(frame)
 	if not ns.IsPlate(frame) or not PT.Active() then
 		return
@@ -588,7 +506,6 @@ local function OnAggro(frame)
 	Pass(frame)
 end
 
--- In a client without the threat update the health colour call stands in, which the game also runs on threat events (Shared/CompactUnitFrame.lua:131-140).
 local function OnHealthColour(frame)
 	if not ns.IsPlate(frame) or not PT.Active() then
 		return
@@ -599,7 +516,6 @@ local function OnHealthColour(frame)
 	Update(frame)
 end
 
--- Follows the game's threat update the first time a plate shows with threat on. The follow stays: it does nothing while threat is off.
 local function Install()
 	if followed ~= nil or not PT.Active() then
 		return
@@ -612,8 +528,6 @@ local function Install()
 	end
 end
 
--- UPDATE_SHAPESHIFT_FORM (no module hears it) on a frame of the file's own, only for a warrior or a druid while the role is automatic. The game may
--- fire it with no change of form, so only a role that changed reads the plates again.
 local function OnForm()
 	if PT.Active() and WorkOut() then
 		PassAll()
@@ -660,10 +574,7 @@ local function GroupChanged()
 	end
 end
 
--- Hooks into the plates ------------------------------------------------------------------------------------------------------------------------------
-
 EXTRA.show[#EXTRA.show + 1] = function(unitFrame)
-	-- A plate that gets a unit has its kind read again.
 	local rec = recs[unitFrame]
 	if rec ~= nil then
 		rec.kind, rec.kindUnit = nil, nil
@@ -699,8 +610,6 @@ EXTRA.refresh[#EXTRA.refresh + 1] = function()
 	PassAll()
 end
 
--- The lines of /flatui status, once a plate has had an answer: the plates with a plain answer now and those with a refused or withheld one, the role
--- and why, and the follow that stands in when the client has no threat update.
 local function Said()
 	return seen and PT.Active()
 end
@@ -759,7 +668,6 @@ ns.AddEvent(KEY, "PLAYER_REGEN_ENABLED", function()
 		ns.EachPlate(Update)
 	end
 end)
--- Righteous Fury comes and goes with the player's auras; only a paladin's role reads it.
 ns.AddEvent(KEY, "UNIT_AURA", function()
 	if PT.Active() and Automatic() and Class() == "PALADIN" then
 		ReadFury()
@@ -768,7 +676,6 @@ ns.AddEvent(KEY, "UNIT_AURA", function()
 		end
 	end
 end, PlayerUnit)
--- The plate of that unit, or every plate when the client withholds which unit it was, has its kind read again.
 ns.AddEvent(KEY, "UNIT_CLASSIFICATION_CHANGED", function(unit)
 	if not PT.Active() then
 		return
@@ -788,7 +695,6 @@ ns.AddEvent(KEY, "UNIT_CLASSIFICATION_CHANGED", function(unit)
 	end
 end, PlateUnit)
 
--- /flatui role: the role threat reads the player as, and why; tank, damage or auto sets Your role, and toggle sets the other of tank and damage.
 ns.AddSlash(KEY, "role", function(rest)
 	local word = type(rest) == "string" and rest:lower():match("^%s*(%S*)") or ""
 	if word == "tank" or word == "damage" or word == "auto" then

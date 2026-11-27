@@ -1,9 +1,5 @@
 local _, ns = ...
 
--- Drawings of the setup steps Scale and Fonts: mock-scale and mock-text. Each is { build(stage), draw(stage), parts = { [path] = region } } (research/flatui-wizard/design.md
--- section 4.2). build makes the frames once, all marked ns.Own so no module restyles them. draw reads only ns.Get, so under the setup draft view it draws the draft.
--- Nothing here reads a live value: health and power are fixed sample numbers (design.md section 4.1).
-
 ns.SetupDrawings = ns.SetupDrawings or {}
 
 local own = ns.Own
@@ -24,7 +20,6 @@ local function Texture(parent, layer)
 	return texture
 end
 
--- A solid colour, or the image file of a bar texture tinted with it. The tint goes back to white before a solid colour, which it would multiply.
 local function Paint(texture, file, r, g, b, a)
 	texture:SetVertexColor(1, 1, 1, 1)
 	if file then
@@ -35,17 +30,10 @@ local function Paint(texture, file, r, g, b, a)
 	end
 end
 
--- mock-scale ---------------------------------------------------------------------------------------------------------------------------------------------------------
-
--- One frame at the game's scale beside the same frame at the chosen scale. Both are children drawn with SetScale, so their size on the screen is the scale they have
--- against each other: the chosen scale over the game's. The sample frame is 150 by 76 units; a pair that would not fit the area is drawn smaller together.
 local BOX_W, BOX_H, AREA_W, AREA_H, GRID = 150, 76, 280, 124, 10
 
 local scale = { parts = {} }
 
--- The scale the game uses by its own setting: the UI scale it is set to (the uiscale variable), else its default scale for the screen
--- (GetDefaultScale, ScreenDocumentation.lua:10). Flat UI's own scale on UIParent is never read, so a profile that already has a custom scale draws the game's.
--- The scale on UIParent is the last resort, for a client that answers neither.
 local function GameScale()
 	if type(C_CVar) == "table" and type(C_CVar.GetCVar) == "function" then
 		local ok, on = pcall(C_CVar.GetCVar, "useUiScale")
@@ -68,8 +56,6 @@ local function GameScale()
 	return ok and Plain(current) or 1
 end
 
--- The scale the draft gives and how: "off", "custom", "pixel", "nofit" when pixel-perfect asks for a scale that is not applied, or "noheight" when the screen height
--- is not known (Scale.lua Wanted and ScaleStatus).
 local function ChosenScale(game)
 	if not ns.Get("general.scaleOn") then
 		return game, "off"
@@ -112,7 +98,6 @@ local function SampleBox(root, name)
 	parts.health.track:SetSize(BOX_W - 16, 12)
 	parts.power.track:SetPoint("TOPLEFT", box, "TOPLEFT", 8, -46)
 	parts.power.track:SetSize(BOX_W - 16, 8)
-	-- Health is 7,000 of 10,000 and power 4,200 of 6,000: both 70 percent.
 	for _, key in ipairs({ "health", "power" }) do
 		local part = parts[key]
 		part.fill:SetPoint("TOPLEFT", part.track, "TOPLEFT", 0, 0)
@@ -134,7 +119,6 @@ function scale.build(stage)
 	scale.chosenLabel = ns.OwnText(root, "OVERLAY", "GameFontHighlightSmall")
 	scale.gameLabel:SetPoint("TOP", scale.game, "BOTTOM", 0, -6)
 	scale.chosenLabel:SetPoint("TOP", scale.chosen, "BOTTOM", 0, -6)
-	-- Pixel-perfect: a line every ten units, each one unit wide, so the unit itself is visible.
 	local grid = Frame(scale.chosen)
 	grid:SetAllPoints(scale.chosen)
 	scale.grid = grid
@@ -165,7 +149,6 @@ function scale.build(stage)
 	return root
 end
 
--- The border, the background and the bars of one sample frame, from the settings the modules paint with.
 local function LookOfBox(box)
 	local outline = box.outline
 	if outline then
@@ -190,7 +173,6 @@ local function LookOfBox(box)
 	box.sample.title:SetText(ok and type(name) == "string" and not ns.IsSecret(name) and name or "Player")
 end
 
--- Puts a box at one side of the middle of the area, its bottom edge 36 units up. An offset of a scaled frame is in that frame's units.
 local function PlaceBox(box, side, factor)
 	box:SetScale(factor)
 	box:ClearAllPoints()
@@ -228,15 +210,9 @@ end
 
 ns.SetupDrawings["mock-scale"] = scale
 
--- mock-text ----------------------------------------------------------------------------------------------------------------------------------------------------------
-
--- Interface text, a number and a title in the chosen faces, over a plain world-coloured backdrop, and beside it the text of the game's own size setting. Sizes are the
--- game's sample sizes: a title 15, text 12, a number 12 and small print 8 units. The faces of "Game font" are the game's own files for each role (Fonts.lua ROLE).
 local LATIN_FACE = { body = "Fonts\\FRIZQT__.TTF", numbers = "Fonts\\ARIALN.TTF", titles = "Fonts\\MORPHEUS.TTF" }
 local nativeFace
 
--- The game's own face for each role. On a client whose language is not Latin its faces are other files and Flat UI changes none of them (Fonts.lua), so the file of
--- GameFontHighlightSmall is read once (a read only) and stands for every role.
 local function GameFaces()
 	if ns.FontsLatin() then
 		return LATIN_FACE
@@ -307,7 +283,6 @@ function text.build(stage)
 	return root
 end
 
--- Sets the face, the height and the flags of a font string. A face the client refuses is put back to the game's own file for that role.
 local function SetFace(fontString, file, size, flags, fallback)
 	local ok, result = pcall(fontString.SetFont, fontString, file, size, flags)
 	if (not ok or result == false) and file ~= fallback then
@@ -325,7 +300,6 @@ function text.draw()
 	if text.root == nil then
 		return
 	end
-	-- Off puts every font back to the game's: its faces, a size of 100, no smallest size, its outline and its shadow.
 	local on = ns.Get("fonts.enabled") == true
 	local percent = on and ns.Get("fonts.size") or 100
 	local smallest = on and ns.Get("fonts.minimum") or 0

@@ -1,18 +1,5 @@
 local _, ns = ...
 
--- Party cooldowns shared between players who run Flat UI. Each client sends its own cooldowns as addon messages, text only, and
--- starts the timers of the members it hears from. The messages, all with the prefix "FlatUI" and the version 1 first:
---   1 H <GUID or -> <spell ID> ...   the abilities the sender has, sent on joining, on a roster change and when his spells change
---   1 C <spell ID> [seconds]         his own use of an ability of the list, with the length of its cooldown when the game gives it plain
---   1 S <spell ID>:<seconds left> ...  his running timers, sent only as the answer to an H; each is started on the receiving side as long
---                                    ago as it has run (its full length the cooldown typed for it, else the list's), so the sweep starts as
---                                    far along as on the sender's screen and a long cooldown counts as long for Shortest cooldown that sounds
--- Only plain values of the player's own are put in a message (SendAddonMessage takes no secret argument). The channel is chosen as
--- Blizzard's cooldown broadcaster chooses it (Blizzard_CooldownBroadcaster.lua:146-152), at most 250 characters to a message and a bucket
--- of 10 sends refilled 1 a second (the same file, line 8, and MessageQueue.lua:3-4; the limits of the call itself are not seen). The
--- game's own answer rules: a chat lockdown, or the result AddOnMessageLockdown, closes sharing until the Chat restriction ends.
--- Receiving does not depend on the switch. The helpers are in one table, S.
-
 local KEY = "partycd"
 local PREFIX = "FlatUI"
 local VERSION = "1"
@@ -39,7 +26,6 @@ local function Text(fn, ...)
 	return Plain(answer, "string") and answer ~= "" and answer or nil
 end
 
--- A whole number from 1 to most, written in digits, or nil.
 local function Whole(text, most)
 	if type(text) ~= "string" or #text > 7 or not text:match("^%d+$") then
 		return nil
@@ -52,7 +38,6 @@ local function Timers()
 	return type(C_Timer) == "table" and type(C_Timer.After) == "function"
 end
 
--- True when this player shares his cooldowns: the module is on and so is the switch.
 function S.Active()
 	if not (ns.Enabled(KEY) and ns.Get(KEY .. ".share") == true) then
 		return false
@@ -61,12 +46,10 @@ function S.Active()
 	return not (P and P.Look() == "raid")
 end
 
--- True when addon messages can pass now.
 function S.Open()
 	return not S.closed and ns.MessagesOpen() ~= false
 end
 
--- The ability of a class that a cast ID is, or nil.
 function S.Ability(class, id)
 	local by = ns.ABILITY_BY_CAST
 	if type(by) ~= "table" or type(ns.ABILITIES) ~= "table" then
@@ -82,7 +65,6 @@ function S.Ability(class, id)
 	return nil
 end
 
--- The channel, as Blizzard's cooldown broadcaster picks it: the instance group's, else the raid's, else the party's.
 function S.Channel()
 	local channel = T.Ask(IsInRaid) == true and "RAID" or (T.Ask(IsInGroup) == true and "PARTY" or nil)
 	local instance, home = _G.LE_PARTY_CATEGORY_INSTANCE, _G.LE_PARTY_CATEGORY_HOME
@@ -92,10 +74,6 @@ function S.Channel()
 	return channel
 end
 
--- Sending -------------------------------------------------------------------------------------------------------------------------
-
--- The game blocks messages: nothing waits to be sent, and the status says so. A result of AddOnMessageLockdown keeps it closed until
--- the Chat restriction ends.
 function S.Block(closed)
 	S.blocked = true
 	S.closed = S.closed or closed or nil
@@ -110,7 +88,6 @@ function S.Unblock()
 	end
 end
 
--- Sends one message. true: sent. false: not sent and dropped. nil: the game asks to wait.
 function S.Send(text)
 	local info = type(C_ChatInfo) == "table" and C_ChatInfo or nil
 	if not (info and type(info.SendAddonMessage) == "function") then
@@ -139,7 +116,6 @@ function S.Send(text)
 	return result == (codes.Success or 0) or result == true
 end
 
--- Sends what the bucket allows and keeps the rest for the next second.
 function S.Drain()
 	local now = T.Now()
 	S.at = S.at or now
@@ -172,7 +148,6 @@ function S.Push(text)
 	S.Drain()
 end
 
--- Messages of at most LENGTH characters: the head and as many items as fit, then the head again.
 function S.Pack(head, items)
 	local out, line = {}, head
 	for _, item in ipairs(items) do
@@ -186,8 +161,6 @@ function S.Pack(head, items)
 	return out
 end
 
--- The length of the cooldown a spell just started, in whole seconds, when the game gives it plain. nil when it does not, false when
--- only the global cooldown runs or none has started yet.
 function S.Seconds(id)
 	local spells = type(C_Spell) == "table" and C_Spell or {}
 	local info = T.Ask(spells.GetSpellCooldown, id)
@@ -207,8 +180,6 @@ function S.Seconds(id)
 	return seconds <= MOST_SECONDS and seconds or nil
 end
 
--- A cast of the player's own that the game let through. An ability of the list waits for the next change of cooldowns, which is when the
--- length of its cooldown can be read, and goes out then, or after half a second without it.
 function S.OnCast(unit, spell)
 	if (unit ~= "player" and unit ~= "pet") or not S.Active() then
 		return
@@ -254,7 +225,6 @@ function S.Cooldown()
 	end
 end
 
--- The abilities the player has, to the party.
 function S.SendHello()
 	if not S.Active() or not S.Channel() then
 		return
@@ -277,7 +247,6 @@ function S.SendHello()
 	end
 end
 
--- One hello for a burst of changes.
 function S.Hello()
 	if not S.Active() or S.helloWait or not S.Channel() then
 		return
@@ -293,7 +262,6 @@ function S.Hello()
 	end
 end
 
--- The running timers of the player, to the party: the answer to a hello.
 function S.Answer()
 	local P = ns.PartyCooldownsModule
 	local owner, class = P.Who("player")
@@ -322,8 +290,6 @@ function S.Answer()
 	end
 end
 
--- Listening, and what the settings and the game change -----------------------------------------------------------------------------
-
 function S.Start()
 	local info = type(C_ChatInfo) == "table" and C_ChatInfo or nil
 	if info and type(info.RegisterAddonMessagePrefix) == "function" then
@@ -336,7 +302,6 @@ function S.Start()
 	S.Refresh()
 end
 
--- The player's own casts are heard while he shares and is in a group; the abilities go out when he starts to.
 function S.Refresh()
 	local active = S.Active() and S.Channel() ~= nil
 	if active then
@@ -358,7 +323,6 @@ function S.Roster()
 	S.Hello()
 end
 
--- The Chat restriction ends: messages pass again.
 function S.Restriction(kind, state)
 	local types = type(Enum) == "table" and type(Enum.AddOnRestrictionType) == "table" and Enum.AddOnRestrictionType or {}
 	local states = type(Enum) == "table" and type(Enum.AddOnRestrictionState) == "table" and Enum.AddOnRestrictionState or {}
@@ -367,9 +331,6 @@ function S.Restriction(kind, state)
 	end
 end
 
--- Receiving -----------------------------------------------------------------------------------------------------------------------
-
--- The party unit that a sender is: by name, with or without the realm, else by the GUID his hello carried. nil for anyone else.
 function S.Match(sender, guid)
 	local base = sender:match("^([^%-]+)") or sender
 	for index = 1, 4 do
@@ -397,7 +358,6 @@ function S.Match(sender, guid)
 	return nil
 end
 
--- The numbers of a message, checked before anything is changed: { guid = , ids = , seconds = , left = } or nil when the text is broken.
 function S.Parse(kind, tokens)
 	local out = { ids = {}, left = {} }
 	if kind == "H" then
@@ -441,8 +401,6 @@ function S.Parse(kind, tokens)
 	return out
 end
 
--- CHAT_MSG_ADDON: prefix, text, channel, sender. Another prefix, a sender who is not in the party, a withheld value and broken text are
--- ignored.
 function S.Receive(prefix, text, _, sender)
 	if not (Plain(prefix, "string") and prefix == PREFIX and Plain(text, "string") and Plain(sender, "string")) or #text > 255 or sender == "" then
 		return
@@ -493,9 +451,6 @@ function S.Receive(prefix, text, _, sender)
 			local a = S.Ability(class, id)
 			if a then
 				book.seen[a.key] = true
-				-- The timer keeps its full length (the cooldown typed for it, else the list's), started as long ago as it has run, so the
-				-- sweep is as far along as on the sender's screen and Shortest cooldown that sounds weighs the real cooldown; the end,
-				-- start + seconds, stays now + left. A length shorter than the time left keeps the time left as the length.
 				local left, full = got.left[position], typed[a.key] or a.cd
 				if ns.Finite(full) and full >= left then
 					book.timers[a.key] = { start = now - (full - left), seconds = full }
@@ -511,7 +466,6 @@ function S.Receive(prefix, text, _, sender)
 	end
 end
 
--- True when this member's client sends cooldowns and messages can pass now: his ready icons can be trusted.
 function S.Shares(owner)
 	local book = T.Book(owner)
 	return book ~= nil and book.shares == true and S.Open()

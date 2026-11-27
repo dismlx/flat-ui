@@ -1,34 +1,18 @@
 local _, ns = ...
 
--- The Class and item bars page names up to three of the game's own bars (Class spells, Buffs to apply, Consumables) and hangs each from a side of
--- block 1 of the Bar block page (the Action bar block), or from the bar picked on the page when that block has no bar or the page is off. The
--- game does the casting, the keys, the counts and the cooldowns of these bars; this file only names the bar's box, works out where the bar goes
--- and gives Movers the spot (ns.MoverHold), so it never calls a method of a Blizzard frame. It reads rectangles and sizes only. A bar is held by one owner: the Bar block page comes first,
--- so a bar in any of its blocks is left out here. While Leave the game's action bars alone is on nothing here is held: those bars are in no
--- block of the Bar block page.
--- The pet bar can be hung from the same rectangle, above it on the right or the left.
--- All of it is planned out of combat. Action bars 6 to 8 stay where they were put in a fight; the game stacks the pet bar and bars 2 to 5 again
--- at the start and the end of a fight until each has been moved once in Edit Mode. Since 70425 it stacks the totem bar the same way
--- (Camelot/EditModeUtil.lua:21); no block here holds that bar, the Bar block page does.
-
 local KEY = "blocks"
 local BARS = ns.BarFrames
 local PET, PET_LABEL = "PetActionBar", "Pet bar"
--- The blocks in page order: the choice of the bar, the choice of the position and the name on screen.
 local BLOCKS = {
 	{ key = "class", name = "Class spells", bar = "classBar", place = "classPlace" },
 	{ key = "buffs", name = "Buffs to apply", bar = "buffsBar", place = "buffsPlace" },
 	{ key = "consumables", name = "Consumables", bar = "consumablesBar", place = "consumablesPlace" },
 }
--- The bar a button belongs to, from the name of the button without its number (ActionBars.lua).
 local PREFIXES = { ActionButton = "main", MultiBarBottomLeftButton = "bar2", MultiBarBottomRightButton = "bar3", MultiBarRightButton = "bar4",
 	MultiBarLeftButton = "bar5", MultiBar5Button = "bar6", MultiBar6Button = "bar7", MultiBar7Button = "bar8" }
 local WATCH_EVERY = 0.5
--- The game stacks the pet bar and bars 2 to 5 itself, and the totem bar, which is not a bar of this page; the others it leaves where they are put.
 local STACKED_TOGGLE = 4
 
--- queued: a replan is waiting for the next frame. pending: a fight stopped a replan. on: the page has something to place. last: the plan in
--- use. sig: the signature of the last plan made, whether it was used or not. notes: lines for /flatui status from the last plan.
 local state = { queued = false, pending = false, on = false, notes = {} }
 
 local function Opt(key)
@@ -51,7 +35,6 @@ local function GameFrame(name)
 	return nil
 end
 
--- The bars picked, in page order. A bar already taken by an earlier block has `twin`, the block that keeps it.
 local function Picks()
 	local picks, claimed = {}, {}
 	if not ns.Enabled(KEY) then
@@ -69,7 +52,6 @@ local function Picks()
 	return picks
 end
 
--- The name of the block a bar is in, nil for a bar that is in none.
 function ns.BlockLabel(name)
 	if type(name) ~= "string" then
 		return nil
@@ -82,7 +64,6 @@ function ns.BlockLabel(name)
 	return nil
 end
 
--- The key of the block an action button is in (class, buffs or consumables), nil for a button in none. A button or its name.
 function ns.BlockOf(button)
 	local name = button
 	if type(button) == "table" and not ns.IsSecret(button) then
@@ -104,7 +85,6 @@ function ns.BlockOf(button)
 	return nil
 end
 
--- True only when the game says the bar is switched off in its options.
 local function IsOff(bar)
 	if not bar.toggle or type(GetActionBarToggles) ~= "function" then
 		return false
@@ -115,29 +95,23 @@ local function IsOff(bar)
 	return ok and not ns.IsSecret(value) and value == false
 end
 
--- Whether a block of the Bar block page has the bar.
 local function InMainBlock(id)
 	local bar = BARS[id]
 	return bar ~= nil and ns.BarBlockHolds ~= nil and ns.BarBlockHolds(bar.frame) ~= nil
 end
 
--- Whether the Bar block page places the pet bar over block 1.
 local function MainOwnsPet()
 	return ns.Enabled("barblock") and ns.Get("barblock.others") == "above" and not ns.HandsOff() and ns.MainBlock() ~= nil
 end
 
--- The bars to place, block bars in page order and then the pet bar: frame, name of the bar, position and the bar's entry. `lines` collects what
--- /flatui status says about a bar that is left out.
 local function Requests(lines)
 	local list = {}
-	-- With no Action bar block to hang from, the bar picked on the page is the reference and is not placed itself.
 	local from = ns.MainBlock() == nil and (BARS[Opt("from")] or BARS.main).frame or nil
 	for _, pick in ipairs(Picks()) do
 		local bar, name = pick.bar, pick.block.name
 		if pick.twin then
 			lines[#lines + 1] = ("%s: %s is already used by %s."):format(name, bar.label, pick.twin.name)
 		elseif bar.frame == from then
-			-- Left where it is, without a line.
 		elseif InMainBlock(pick.id) then
 			lines[#lines + 1] = ("%s is already in a block of the Bar block page."):format(bar.label)
 		elseif IsOff(bar) then
@@ -160,8 +134,6 @@ local function Requests(lines)
 	return list
 end
 
--- The rectangle the blocks hang from: the Action bar block, else the bar picked on the page. Nothing, and the name of the bar, when it has no
--- size now or is hidden.
 local function Reference()
 	local left, bottom, width, height, over = ns.MainBlock()
 	if left then
@@ -178,8 +150,6 @@ local function Reference()
 	return nil, bar.label
 end
 
--- The bottom left of a bar of size w by h at a position, with `used` already taken outward at that position.
--- Shared with the setup drawing of the Class, buffs and consumables bars (SetupDrawBars.lua), which must place bars the same way.
 function ns.BlockWhere(ref, place, w, h, gap, used)
 	local x, y
 	if place == "aboveLeft" or place == "aboveRight" then
@@ -199,8 +169,6 @@ function ns.BlockWhere(ref, place, w, h, gap, used)
 end
 local Where = ns.BlockWhere
 
--- The spots of the bars to place, as a plan: spots, signature and the lines for the status. A plan with no `ready` has nothing to hand over,
--- because the rectangle the bars hang from cannot be read.
 local function Plan()
 	local lines = {}
 	local list = Requests(lines)
@@ -258,12 +226,10 @@ local function Release()
 end
 
 local function Replan()
-	-- Nothing is held while Flat UI leaves the game's action bars alone.
 	if not ns.Enabled(KEY) or ns.HandsOff() then
 		Release()
 		return
 	end
-	-- Nothing is placed in a fight; the plan is made when it ends.
 	if InCombatLockdown() then
 		state.pending = true
 		return
@@ -289,7 +255,6 @@ local function Replan()
 	ns.MoverHold(KEY, plan.spots)
 end
 
--- Every replan runs a frame later, so the rectangles are read after the game's own pass.
 local function Queue()
 	if state.queued then
 		return
@@ -301,7 +266,6 @@ local function Queue()
 	end)
 end
 
--- A bar that is laid out later, a bar turned on in the game's options or a block that moved changes the plan.
 local function Watch(_, elapsed)
 	state.clock = (state.clock or 0) + elapsed
 	if state.clock < WATCH_EVERY then
@@ -313,7 +277,6 @@ local function Watch(_, elapsed)
 	end
 end
 
--- Whether the page has a bar to name or place.
 local function Wanted()
 	if not ns.Enabled(KEY) then
 		return false
@@ -339,7 +302,6 @@ local function Refresh()
 	end
 end
 
--- Block 1 of the Bar block page changed or went: the blocks hang from it.
 function ns.BlocksReplan()
 	if state.on then
 		Queue()
@@ -386,7 +348,6 @@ local function Status()
 	return lines
 end
 
--- /flatui blocks: each block, its bar and its position, one line each.
 local function List()
 	local picked = {}
 	for _, pick in ipairs(Picks()) do

@@ -1,26 +1,10 @@
 local _, ns = ...
 
--- Compare items only while holding Shift (chat.compareShift on the Tooltips page of Chat and tooltips, on by default). The game shows the items the
--- player wears beside the tooltip of an item when TooltipUtil.ShouldDoItemComparison says so: always while its variable alwaysCompareItems is on,
--- else only while the modified click COMPAREITEMS is held, Shift (Blizzard_SharedXMLGame/Tooltip/TooltipUtil.lua:4-6,
--- Blizzard_FrameXML/Bindings_Camelot.xml:1546). Every tooltip that compares asks it as it is filled (TooltipDataRules.lua:168-175), and the bag
--- slots and ItemRefTooltip ask it again on each refresh (Mainline/ContainerFrame.lua:1752, Mainline/ItemRef.lua:356), so the comparison comes and
--- goes with Shift. On WoW: Forever the variable is on by default and kept for the account (wowless, data/products/wowf/cvars.yaml), and the
--- game's options have no row for it: only a toggle in the gamepad menus of the bags and the Character window writes it
--- (Mainline/ContainerFrame.lua:743-755, Camelot/PaperDollFrame.lua:1777-1787).
--- While the row and Chat and tooltips are on, Flat UI writes 0, out of combat: at login and when the row, the switch or the profile changes.
--- The text the variable had before the first write is kept in FlatUIDB.compareGame and written back when the row, the switch or the module goes
--- off while the variable is still 0; a value set meanwhile some other way is left as it is. Nothing of the game's tooltips is touched.
--- C_CVar.GetCVar and SetCVar take a name and plain text (CVarDocumentation.lua:20-33, 131-148).
-
 local KEY = "chat"
 local CVAR = "alwaysCompareItems"
--- The text of the variable while the game compares only with Shift held.
 local OFF = "0"
 
--- A write waits for combat to end.
 local queued = false
--- How the last write ended while the row was on: nil when nothing was asked, "ok" or "refused".
 local result = nil
 
 local function Calls()
@@ -31,7 +15,6 @@ local function Calls()
 	return nil
 end
 
--- The text of the variable, or nil when the client has no such variable or withholds it.
 local function Text()
 	local cvar = Calls()
 	if not cvar or type(cvar.GetCVar) ~= "function" then
@@ -44,7 +27,6 @@ local function Text()
 	return nil
 end
 
--- Writes the text and says whether the variable holds it after.
 local function Write(text)
 	local cvar = Calls()
 	if not cvar or type(cvar.SetCVar) ~= "function" then
@@ -69,7 +51,6 @@ local function Apply()
 			result = "ok"
 			return
 		end
-		-- What the game had before the first write, kept for the account like the variable itself.
 		if db.compareGame == nil then
 			db.compareGame = now
 		end
@@ -77,7 +58,6 @@ local function Apply()
 			result = "ok"
 			return
 		end
-		-- The game kept its value: nothing of Flat UI's stands, so there is nothing to put back.
 		db.compareGame = nil
 		result = "refused"
 		return
@@ -85,7 +65,6 @@ local function Apply()
 	result = nil
 	local game = db.compareGame
 	if type(game) ~= "string" then
-		-- Nothing was written by this addon, so the game's value stays.
 		return
 	end
 	db.compareGame = nil
@@ -94,14 +73,10 @@ local function Apply()
 	end
 end
 
--- True while Flat UI's write stands: the row and Chat and tooltips on, and the variable at 0, so the game compares only while Shift is held. Chat.lua
--- asks it for the hint on an item's tooltip while Shift is up (chat.compareHint, 0.5.36).
 function ns.ItemCompareHeld()
 	return Wanted() and Text() == OFF
 end
 
--- Chat.lua calls this at the start of each refresh, and Core.lua at every login, whatever the switch of Chat and tooltips: the variable is the
--- account's, so a character whose profile has the row or the module off gets the game's value back. Nothing is written in combat.
 function ns.ItemCompareSync()
 	if queued then
 		return

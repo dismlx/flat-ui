@@ -1,78 +1,29 @@
 local _, ns = ...
 
--- Levelling errands: the reputation you gain shown on Flat UI's own bar, a reminder of talent points to spend, and the /way command.
---
--- Show the reputation you gain: the game reports a change of standing with the ID of the faction and its new standing (FACTION_STANDING_CHANGED).
--- Each new standing is compared with the last one seen, so a loss is never followed. Of the gains that come together (BURST seconds: a quest of a
--- Steamwheedle Cartel town also raises the other towns by half) the largest wins, and Flat UI's reputation bar (XpBar.lua, through
--- ns.ErrandsRepFollowed) shows that faction in place of the one the game watches. Passed over: a faction you are exalted with, one you moved to
--- Inactive, and a heading. A faction picked in the game's reputation window shows until your next gain. The faction followed and the factions
--- seen inactive are kept for the character (FlatUICharDB.errandsRep, FlatUICharDB.errandsRepInactive), since C_Reputation.IsFactionActive takes
--- a row of the list and the Inactive heading is often closed. The faction the game watches is never changed, and the list of factions is only
--- read, never expanded or collapsed: C_Reputation.SetWatchedFactionByID and the header calls raise UPDATE_FACTION inside the caller (a synchronous
--- event), so the game's status bar manager would run inside Flat UI's call and keep the table of shown bars it wrote then, and on Forever that
--- manager lays out the bottom stack the action bars are in.
--- Remind you of talent points: when you reach a level (PLAYER_LEVEL_UP, read LEVEL_WAIT seconds later, as the game gives the point a moment after)
--- or at the first login of a session (LOGIN_WAIT seconds after it), a line in chat says how many talent points you have to spend and the key that
--- opens the talents. A level reached in a fight is told a second after the fight ends. The points come from the trait talents of vanilla Forever
--- (C_ClassTalents.HasUnspentTalentPoints, which EnhanceQoL asks there), else GetUnspentTalentPoints (classic and TBC clients), else
--- UnitCharacterPoints. The line is the row's own, so it comes also with Say what was done off.
--- Add the /way command: /way and /flatui way put a pin on the map (C_Map.SetUserWaypoint) and ask the game to point to it
--- (C_SuperTrack.SetSuperTrackedUserWaypoint). They take x and y in percent, with a zone name or #map ID before them, and clear. /way is added
--- WAY_WAIT seconds after the start, once every addon that loads with the game has made its commands, and only when no other command is /way
--- (any SLASH_ global, or the game's own list of commands); an addon that adds /way later takes it over by itself, since the game reads new
--- commands last. Also in a fight, with the map closed: the calls are not protected, and the one game handler they then run, the world map's
--- pin button, makes no restricted call. While the map is open its pin provider would draw the pin inside the call (AcquirePin calls
--- SetPassThroughButtons, which a fight refuses, and the first pin of a session would leave the map's pin pool Flat UI's), so a /way typed then
--- waits for the map to close ("the waypoint goes on as you close the map."); so does /way clear, whose call empties that pool under Flat UI's
--- call. The waiting one is looked at every WAIT_STEP seconds, at most WAIT_TRIES times, by C_Timer.After under a token, with no hook: as the map
--- is closed the pin and the arrow go on, a newer /way replaces it, the row or Errands going off drops it, and a wait that runs out says once
--- that it was dropped. /flatui status names a waiting one.
--- These follow EnhanceQoL's reputation bar, its /way command and its classic reminders, adapted with the permission of its author.
-
 local E = ns.Errands
 local part = E.Part({ label = "Levelling" })
 
--- Seconds in which gains count as one: the server sends the share of a gain the other factions of a group get at the same moment.
 local BURST = 0.5
--- The top standing, Exalted, on every client (MAX_REPUTATION_REACTION).
 local TOP = 8
--- The most factions read in one look at the list.
 local MOST_FACTIONS = 400
--- Seconds after a level is reached before the points are read, and after the first login of a session before the reminder.
 local LEVEL_WAIT, LOGIN_WAIT = 2, 8
--- The same number of points is not told twice within this many seconds.
 local TOLD_QUIET = 10
--- Seconds after the start before /way is added; and how often and how many times a /way typed with the map open looks for it closed.
 local WAY_WAIT, WAIT_STEP, WAIT_TRIES = 3, 0.5, 120
--- The command, and the key of Flat UI's in the game's list of commands (SlashCmdList.FLATUIWAY, SLASH_FLATUIWAY1).
 local WAY, WAY_KEY = "/way", "FLATUIWAY"
--- Map types (Enum.UIMapType) a name may mean, best first: a zone, a continent, a cave or a building, an orphan, a dungeon.
 local TYPE_RANK = { [3] = 1, [2] = 2, [5] = 3, [6] = 4, [4] = 5 }
 local MICRO = 5
--- The most maps kept for names, and the most names an answer lists.
 local MOST_MAPS, MOST_NAMES = 5000, 4
--- Map types (Enum.UIMapType) the top of a world can be: Cosmic, World.
 local WORLD_TYPES = { [0] = true, [1] = true }
 local WHY = { top = "you are exalted with it", inactive = "it is inactive", header = "it is a heading" }
 
--- seen: by faction ID, { standing, active, name } from the list and the gains. burst, order: the gains of this moment and their order. token: counts
--- bursts, so an old timer does nothing. followed: the faction shown (false for none, nil before the saved one is read). watched: the faction the
--- game watched at the last look. passed: the last faction passed over and why. switches: how often the bar changed faction this session.
 local rep = { seen = {}, token = 0, ready = false, switches = 0 }
--- token: counts the reminders asked for, so only the last one speaks. waiting: a reminder that waits for the end of a fight. told, toldAt: the
--- number last told and when.
 local talents = { token = 0 }
--- waited: the start's wait is over. claimed: /way is Flat UI's. owner: the key of another addon's /way. index: the maps by name. pending: a /way
--- typed with the map open, { map, p, point } or { clear = true }, that waits for it to close; token: counts them, so an old look does nothing.
 local way = { claimed = false, waited = false, token = 0 }
 
--- A line in chat that a row or a typed command asks for, whatever Say what was done is.
 local function Tell(text)
 	print("Flat UI: " .. text)
 end
 
--- A field of a table the client gave, or nil when it raises or is withheld.
 local function Field(t, key)
 	if type(t) ~= "table" or ns.IsSecret(t) then
 		return nil
@@ -86,8 +37,6 @@ local function Field(t, key)
 	return value
 end
 
--- Reputation -------------------------------------------------------------------------------------------------------------------------------
-
 local function Rep()
 	local R = C_Reputation
 	if type(R) == "table" and not ns.IsSecret(R) then
@@ -96,7 +45,6 @@ local function Rep()
 	return nil
 end
 
--- A faction as the fields of the game's FactionData read here, in a table of Flat UI's own, or nil without an ID and a name.
 local function Faction(data)
 	local id, name = Field(data, "factionID"), Field(data, "name")
 	if not ns.Finite(id) or id <= 0 or type(name) ~= "string" or name == "" then
@@ -110,8 +58,6 @@ local function Faction(data)
 	}
 end
 
--- The classic answer of GetFactionInfo(index) or GetFactionInfoByID(id): name, description, standing, bottom, top, value, at war, can be at
--- war, heading, collapsed, has a standing, watched, child, ID (Vanilla/ReputationFrame.lua:40), in the same shape. byID: the ID asked for.
 local function Classic(fn, arg, byID)
 	if type(fn) ~= "function" then
 		return nil
@@ -131,7 +77,6 @@ local function Classic(fn, arg, byID)
 		atWarWith = plain(war), isWatched = plain(watched) })
 end
 
--- One faction by its ID: C_Reputation.GetFactionDataByID, else the classic GetFactionInfoByID.
 local function Data(id)
 	local R = Rep()
 	if R and type(R.GetFactionDataByID) == "function" then
@@ -140,15 +85,11 @@ local function Data(id)
 	return Classic(_G.GetFactionInfoByID, id, id)
 end
 
--- Whether a faction can be read by its ID on this client.
 local function ByID()
 	local R = Rep()
 	return (R ~= nil and type(R.GetFactionDataByID) == "function") or type(_G.GetFactionInfoByID) == "function"
 end
 
--- The factions seen inactive, kept for the character: C_Reputation.IsFactionActive takes a row of the list, so a faction under a collapsed heading
--- (the Inactive heading closed) is known only from an earlier look. Nil before the saved variables are loaded, and, unless create is true, while
--- no faction was seen inactive.
 local function Inactive(create)
 	if type(FlatUICharDB) ~= "table" then
 		return nil
@@ -164,8 +105,6 @@ local function Inactive(create)
 	return kept
 end
 
--- Each faction of the list the game shows (a collapsed heading hides its own): its standing the first time it is seen, and whether it is
--- active. Nothing is expanded. Returns how many rows were read: none before the game has the list, at the very start of a login.
 local function Walk()
 	local R = Rep()
 	local modern = R ~= nil and type(R.GetNumFactions) == "function" and type(R.GetFactionDataByIndex) == "function"
@@ -214,7 +153,6 @@ local function Walk()
 	return count
 end
 
--- The ID of the faction the game watches, or nil.
 local function WatchedID()
 	local R = Rep()
 	if R and type(R.GetWatchedFactionData) == "function" then
@@ -230,7 +168,6 @@ local function WatchedID()
 	return nil
 end
 
--- The faction followed: the one saved for the character until a gain or a pick changes it.
 local function Followed()
 	if rep.followed == nil then
 		local saved = type(FlatUICharDB) == "table" and FlatUICharDB.errandsRep or nil
@@ -239,8 +176,6 @@ local function Followed()
 	return rep.followed or nil
 end
 
--- Flat UI's bar is drawn again (XpBar.lua), then the Reputation slot of the data panels, which reads the bar's drawing (ns.XpRepNow) and
--- hears no event when the faction followed changes. Their failures are their modules', not this part's.
 local function Redraw()
 	if type(ns.XpBarRedraw) == "function" then
 		pcall(ns.XpBarRedraw)
@@ -259,7 +194,6 @@ local function Follow(id)
 	Redraw()
 end
 
--- Why a faction is passed over, or nil when it can be shown; and its name.
 local function PassOver(id)
 	local f = Data(id)
 	if not f then
@@ -276,7 +210,6 @@ local function PassOver(id)
 	return nil, f.name
 end
 
--- The end of a burst: the largest gain that can be shown is followed.
 local function Decide(token)
 	if token ~= rep.token or not rep.burst then
 		return
@@ -303,7 +236,6 @@ local function Decide(token)
 	end
 end
 
--- FACTION_STANDING_CHANGED: factionID, updatedStanding (ReputationInfoDocumentation.lua).
 local function Gained(id, standing)
 	if ns.IsSecret(id) or not ns.Finite(id) or id <= 0 then
 		return
@@ -343,9 +275,6 @@ local function Gained(id, standing)
 	rep.burst[id] = rep.burst[id] + gain
 end
 
--- The list and the faction the game watches, looked at again on the frame after UPDATE_FACTION. A faction picked in the game's reputation window
--- is followed from then on, until the next gain. The first look that finds the list only notes the faction watched: at a login the game fills
--- the list after the start, and the faction it watched then is no pick of yours.
 local function Look()
 	rep.queued = false
 	local count = Walk()
@@ -362,7 +291,6 @@ local function Look()
 		if watched and E.On("repFollow") and watched ~= Followed() then
 			Follow(watched)
 		elseif not watched and was and E.On("repFollow") and was == Followed() then
-			-- Show as Experience Bar unticked on the faction the bar shows: the bar shows what the game watches, nothing, until the next gain.
 			Follow(false)
 		end
 	end
@@ -378,7 +306,6 @@ local function Changed()
 	end)
 end
 
--- For XpBar.lua: the faction its reputation bar shows in place of the watched one, as the game's FactionData, or nil for the watched one.
 function ns.ErrandsRepFollowed()
 	if not E.On("repFollow") or ns.PartStopped("errands", part.label) then
 		return nil
@@ -396,9 +323,6 @@ end
 E.Listen(part, "FACTION_STANDING_CHANGED", Gained)
 E.Listen(part, "UPDATE_FACTION", Changed)
 
--- Talents ----------------------------------------------------------------------------------------------------------------------------------
-
--- The talent points to spend: a number, true for some when the game does not say how many, 0 for none, or nil when the client does not say.
 local function Points()
 	local T = C_ClassTalents
 	if type(T) == "table" and not ns.IsSecret(T) and type(T.HasUnspentTalentPoints) == "function" then
@@ -431,7 +355,6 @@ local function PointsText(n)
 	return ("You have %d talent points to spend."):format(n)
 end
 
--- The key that opens the talents, as the game writes it (MicroButtonTooltipText does the same), or nil.
 local function TalentKey()
 	local key = E.Ask(_G.GetBindingKey, "TOGGLETALENTS")
 	if type(key) ~= "string" or key == "" then
@@ -467,7 +390,6 @@ local function Remind(token)
 	Tell(PointsText(n) .. (key and (" Press %s to open your talents."):format(key) or ""))
 end
 
--- A reminder in so many seconds; it replaces any reminder still waiting.
 local function Later(seconds)
 	talents.token = talents.token + 1
 	local token = talents.token
@@ -492,8 +414,6 @@ E.Listen(part, "PLAYER_REGEN_ENABLED", function()
 	end
 end)
 
--- /way -------------------------------------------------------------------------------------------------------------------------------------
-
 local function Map()
 	local M = C_Map
 	if type(M) == "table" and not ns.IsSecret(M) then
@@ -510,13 +430,11 @@ local function Track()
 	return nil
 end
 
--- Whether this client can put a pin on the map.
 local function Pins()
 	local M = Map()
 	return M ~= nil and type(M.SetUserWaypoint) == "function" and type(M.CanSetUserWaypointOnMap) == "function"
 end
 
--- A map as { id, name, kind, parent }, or nil.
 local function MapInfo(id)
 	local M = Map()
 	if not M or not ns.Finite(id) then
@@ -530,7 +448,6 @@ local function MapInfo(id)
 	return { id = id, name = name, kind = ns.Finite(kind) and kind or nil, parent = ns.Finite(parent) and parent > 0 and parent or nil }
 end
 
--- The zone you are in: the map the game gives for you, or the zone above it when that is a cave or a building.
 local function Here()
 	local M = Map()
 	local id = M and E.Ask(M.GetBestMapForUnit, "player")
@@ -550,7 +467,6 @@ local function Squash(text)
 	return (text:lower():gsub("[%s%p]", ""))
 end
 
--- The top of the chain of parents of a map.
 local function Top(id)
 	local top, steps = MapInfo(id), 0
 	while top and top.parent and steps < 10 do
@@ -563,8 +479,6 @@ local function Top(id)
 	return top
 end
 
--- Every map under the top of your world, by name: made at the first name asked for, and kept once it holds a zone. In a battleground or an
--- instance whose maps reach no world (an orphan map) the game's fallback world map is the top.
 local function Index()
 	if way.index then
 		return way.index
@@ -604,7 +518,6 @@ local function Index()
 	return index
 end
 
--- The best of maps of one name: one that takes a pin, then the better kind, then the lower ID.
 local function Best(list)
 	local M = Map()
 	local pick, pickPins
@@ -617,8 +530,6 @@ local function Best(list)
 	return pick and { id = pick.id, name = pick.name } or nil
 end
 
--- The map a name means: the same name first, else the one name that starts with it. Returns the map, or nil and the names it could be, or nil,
--- nil and "names" when this client cannot list its maps.
 local function Resolve(name)
 	local index = Index()
 	if not index then
@@ -649,7 +560,6 @@ local function Resolve(name)
 	return nil, names
 end
 
--- A number of /way: digits with a point, from 0.
 local function Number(token)
 	if type(token) ~= "string" or not (token:match("^%d+%.?%d*$") or token:match("^%.%d+$")) then
 		return nil
@@ -657,7 +567,6 @@ local function Number(token)
 	return tonumber(token)
 end
 
--- A token of two numbers with a comma between them ("45,61", "45,2", "45.2,61.8"): its two parts, and whether either has a point.
 local function Comma(token)
 	if type(token) ~= "string" then
 		return nil
@@ -669,11 +578,6 @@ local function Comma(token)
 	return nil
 end
 
--- What /way was given: { empty }, { clear }, or { mapID, name, x, y, note } with x and y in percent; or nil and why ("numbers", "range").
--- "45 61", "45, 61", "45,61" and "45.2,61.8" are two numbers. Decimal commas are read when both coordinates have one ("45,2 61,8"), in the
--- second ("45 61,8"), or with one digit after the comma before a whole number ("45,2 61"); "45,61 3 wolves" is 45, 61 and a note. Three numbers
--- whose first is a whole number above 100 are a map ID and the coordinates (EnhanceQoL takes any three); #1429 is a map ID. The words after the
--- coordinates are a note.
 local function Parse(msg)
 	msg = (type(msg) == "string" and msg or ""):match("^%s*(.-)%s*$")
 	if msg == "" then
@@ -683,7 +587,6 @@ local function Parse(msg)
 	if word == "clear" or word == "reset" or word == "remove" or word == "off" then
 		return { clear = true }
 	end
-	-- A comma with a space beside it, after a digit, only separates: "45, 61", "45 ,61", "45 , 61".
 	msg = msg:gsub("(%d)%s*,%s+", "%1 "):gsub("(%d)%s+,(%d)", "%1 %2")
 	local tokens = {}
 	for token in msg:gmatch("%S+") do
@@ -707,7 +610,6 @@ local function Parse(msg)
 	end
 	local name = not mapID and at > 1 and table.concat(tokens, " ", 1, at - 1) or nil
 	local numbers, i, decimal = {}, at, false
-	-- Whether the numbers so far start a map ID and coordinates (1429 45 61).
 	local function MapFirst()
 		return not mapID and not name and numbers[1] ~= nil and numbers[1] > 100 and numbers[1] == math.floor(numbers[1])
 	end
@@ -717,10 +619,8 @@ local function Parse(msg)
 		if a then
 			local want = (MapFirst() and 3 or 2) - #numbers
 			if not dotted and want == 1 then
-				-- The last coordinate: "45 61,8".
 				numbers[#numbers + 1], decimal = tonumber(a .. "." .. b), true
 			elseif not dotted and (decimal or select(3, Comma(tokens[i + 1])) == false or (#b == 1 and Number(tokens[i + 1]))) then
-				-- Both coordinates with a decimal comma ("45,2 61,8"), or one decimal digit before a whole number ("45,2 61").
 				numbers[#numbers + 1], decimal = tonumber(a .. "." .. b), true
 			else
 				numbers[#numbers + 1] = tonumber(a)
@@ -751,7 +651,6 @@ local function Command()
 	return way.claimed and WAY or "/flatui way"
 end
 
--- The examples name the zone you are in and its map ID, since the IDs of Forever's maps are its own.
 local function Usage()
 	local cmd, here = Command(), Here()
 	local name, id = here and here.name or "Elwynn Forest", here and here.id or 1429
@@ -778,7 +677,6 @@ local function Point(id, x, y)
 	return nil
 end
 
--- Where you are and the waypoint there is, for /way alone.
 local function Where()
 	local M = Map()
 	local here = Here()
@@ -800,13 +698,11 @@ local function Where()
 	end
 end
 
--- Drops a waypoint or a clear that waits for the map to close: an old look then does nothing.
 local function Drop()
 	way.pending = nil
 	way.token = way.token + 1
 end
 
--- Takes the waypoint off, with the map closed.
 local function ClearNow()
 	Drop()
 	local M = Map()
@@ -819,7 +715,6 @@ local function ClearNow()
 	Tell("Waypoint cleared.")
 end
 
--- Sets the pin, with the map closed, and asks the game to point to it.
 local function SetNow(map, p, point)
 	Drop()
 	local ok, set = pcall(Map().SetUserWaypoint, point)
@@ -835,8 +730,6 @@ local function SetNow(map, p, point)
 	Tell(("Waypoint at %s%s."):format(way.last, p.note and (": " .. p.note) or ""))
 end
 
--- A look for the map closed, for the waypoint or clear that waits: once it is, that is done; while it stays open, another look in WAIT_STEP
--- seconds, up to WAIT_TRIES. A newer /way (a new token), the row off or Errands off ends the looks.
 local function Look(token, tries)
 	local pending = way.pending
 	if token ~= way.token or not pending then
@@ -862,7 +755,6 @@ local function Look(token, tries)
 	end
 end
 
--- Keeps a waypoint or a clear typed with the map open until the map closes; it replaces one that waits already.
 local function Wait(pending)
 	Drop()
 	way.pending = pending
@@ -880,8 +772,6 @@ local function Clear()
 		Tell("There is no waypoint to clear.")
 		return
 	end
-	-- ClearUserWaypoint raises USER_WAYPOINT_UPDATED inside the call too: with the map open its pin provider would empty its pool of pins under
-	-- Flat UI's call, and the map's own refresh reads that pool in a later fight. So the clear waits for the map to close.
 	if E.Shown(_G.WorldMapFrame) then
 		Wait({ clear = true })
 		return
@@ -963,9 +853,6 @@ local function Way(msg)
 		Tell("this client has no map pins, so there is no waypoint to set.")
 		return
 	end
-	-- While the world map is open its pin provider takes USER_WAYPOINT_UPDATED, which the game raises inside SetUserWaypoint: the map would draw
-	-- its pin under this call, and AcquirePin calls SetPassThroughButtons, which a fight refuses; the first pin of a session would also leave the
-	-- map's pool of pins Flat UI's until a reload. So the pin is set only with the map closed: typed with it open, it waits for it to close.
 	if E.Shown(_G.WorldMapFrame) then
 		Wait({ map = map, p = p, point = point })
 		return
@@ -979,7 +866,6 @@ local function OnWay(msg)
 	end
 end
 
--- The key of another addon's command that is /way, "the game's list" for one only the game's list of commands holds, or nil.
 local function OtherWay()
 	local found
 	pcall(function()
@@ -1006,7 +892,6 @@ local function OtherWay()
 	return nil
 end
 
--- Whether another addon's /way is the one the game runs now, after Flat UI added its own.
 local function Taken()
 	local hash = _G.hash_SlashCmdList
 	if type(hash) ~= "table" or ns.IsSecret(hash) then
@@ -1023,7 +908,6 @@ local function Claim()
 	if way.claimed or not E.On("wayCommand") or not Pins() then
 		return
 	end
-	-- The pass over the global table runs once a session: an addon found then keeps /way, and a refresh does not walk the table again.
 	way.owner = way.owner or OtherWay()
 	if way.owner then
 		return
@@ -1039,8 +923,6 @@ end
 E.help[#E.help + 1] = "/flatui way 45 61 - put a pin on your map there; a zone name or #map ID may come first, and clear takes it off"
 E.help[#E.help + 1] = "/way - the same, while nothing else has taken /way"
 
--- The part --------------------------------------------------------------------------------------------------------------------------------
-
 function part.Start()
 	rep.ready, rep.burst, rep.order = false, nil, nil
 	Look()
@@ -1050,8 +932,6 @@ function part.Start()
 	end)
 end
 
--- A change of a row, of Run errands or of the profile: the bar shows the faction the rows now ask for (Errands' Refresh runs when the page goes
--- off too).
 function part.Refresh()
 	if not E.On("repFollow") then
 		rep.burst, rep.order = nil, nil
@@ -1095,7 +975,6 @@ function part.Status()
 		elseif ns.Get("hud.xpShow") == "xp" then
 			lines[#lines + 1] = "Levelling: Bars shown is Experience only, so the reputation bar is hidden."
 		end
-		-- Only a client that answers false lacks the event; one without C_EventUtils does not say.
 		local events, valid = C_EventUtils, nil
 		if type(events) == "table" and not ns.IsSecret(events) then
 			valid = E.Ask(events.IsEventValid, "FACTION_STANDING_CHANGED")

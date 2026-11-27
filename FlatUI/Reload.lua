@@ -1,23 +1,12 @@
 local _, ns = ...
 
--- Reloads the interface. If the game blocks ReloadUI from add-on code, the first press says so and the
--- button gets a secure button on top that runs the game's own /reload on the next press. That secure button leaves in a fight, so there every
--- reload button (the options window's strip, Home's Needs a reload, the reload notice, the welcome screen's) is dimmed, and a press says that
--- Reload works again after the fight and that /reload works now (ns.Reload); the buttons come back as the fight ends. The strip's Reload of the
--- options window counts the changes that wait ("Reload (2)") and lists them in the notice's tooltip (ns.ReloadTip). The secure button takes the
--- mouse of the button under it, so it hands on the press with HookScript (a frame of Flat UI's own): the button's label sinks 1 px while the left
--- button holds it, as every button of the options window does (ns.PanelKit.Press). The buttons of the taint log box act only when let go over them.
-
 local secure = false
 local buttons = {}
 local built = {}
 local overlays = {}
--- What a button does before the game's own reload runs, by button.
 local befores = {}
 local watcher
 
--- A secure child makes every frame above it protected, so a secure button over Reload would stop the options window from being shown,
--- hidden or moved in combat. The buttons leave the window before combat locks and come back when it ends.
 local function Detach()
 	for _, overlay in pairs(overlays) do
 		pcall(function()
@@ -38,12 +27,10 @@ local function Attach()
 	end
 end
 
--- How solid a reload button is while a fight keeps its secure button off it.
 local FIGHT_ALPHA = 0.4
 
 local Wanted, IsSecure
 
--- Every reload button is dimmed while a fight keeps the secure button off it, and solid again after. They are Flat UI's own frames.
 local function DimAll(fight)
 	local held = fight and (Wanted() or IsSecure())
 	for _, button in ipairs(buttons) do
@@ -73,14 +60,10 @@ local function Watch()
 	end)
 end
 
--- True when a secure button is on a reload button. The account record only decides whether to make one.
 function IsSecure()
 	return next(overlays) ~= nil
 end
 
--- True on WoW: Forever, whose interface number is 16000 to 19999 (EllesmereUI/EllesmereUI_ClientGate.lua:22-33). The client blocks ReloadUI from addon
--- code there (EllesmereUI/EllesmereUI_Popups.lua:458-465), and a blocked call is blamed on the addon. The button is secure from the first press and
--- ReloadUI is never called.
 local function Forever()
 	if type(GetBuildInfo) ~= "function" then
 		return false
@@ -103,7 +86,6 @@ function Wanted()
 	return record ~= nil and record.reloadSecure == true
 end
 
--- The pressed look of a Button of the options window's kit under a secure button (Panel.lua, ns.PanelKit.Press); any other button has none.
 local function Press(button, down)
 	local kit = ns.PanelKit
 	if type(kit) == "table" and type(kit.Press) == "function" then
@@ -111,13 +93,11 @@ local function Press(button, down)
 	end
 end
 
--- True while the cursor is over a frame; a client that will not say counts as over, as with the options window's Clickable.
 local function Over(frame)
 	local ok, over = pcall(frame.IsMouseOver, frame)
 	return not ok or ns.IsSecret(over) or over ~= false
 end
 
--- A secure button over the button, made out of combat. The hover scripts of the button still run, and its pressed look (Press).
 local function Cover(button)
 	if built[button] then
 		return
@@ -135,7 +115,6 @@ local function Cover(button)
 			overlay:RegisterForClicks("LeftButtonUp")
 			overlay:SetAttribute("type", "macro")
 			overlay:SetAttribute("macrotext", "/reload")
-			-- The game runs a click on the key press by default (ActionButtonUseKeyDown); the button listens for the release.
 			overlay:SetAttribute("useOnKeyDown", false)
 			overlay:SetScript("PreClick", function()
 				if befores[button] then
@@ -176,7 +155,6 @@ local function Cover(button)
 	end)
 end
 
--- Remembers a reload button, and covers it when ReloadUI is known to be blocked.
 function ns.SecureReload(button, before)
 	if type(button) ~= "table" then
 		return
@@ -193,7 +171,6 @@ function ns.SecureReload(button, before)
 	end
 	if Wanted() then
 		Cover(button)
-		-- The watcher dims the buttons in a fight even where the client made no secure button. A button made in a fight starts dimmed.
 		Watch()
 		if InCombatLockdown() then
 			pcall(button.SetAlpha, button, FIGHT_ALPHA)
@@ -205,8 +182,6 @@ function ns.ReloadIsSecure()
 	return IsSecure()
 end
 
--- The press of a reload button. A blocked call raises no error: the game fires ADDON_ACTION_FORBIDDEN as the call is made, and Core
--- counts it. In a fight, where the reload needs the secure button and the fight keeps it off the button, the press says so first.
 local AFTER_FIGHT = "Flat UI: Reload works here again after the fight. Type /reload to reload now."
 
 function ns.Reload()
@@ -217,8 +192,6 @@ function ns.Reload()
 	if IsSecure() or type(ReloadUI) ~= "function" then
 		return
 	end
-	-- Here the secure button does the reload. A press that reaches this function means it is not on the button (the client would not make it):
-	-- the call is not made.
 	if Forever() then
 		print("Flat UI: Reload is blocked for add-ons here. Type /reload.")
 		return
@@ -238,12 +211,6 @@ function ns.Reload()
 	end
 end
 
--- Taint log reminder -----------------------------------------------------------------------------------------------------------------
--- While taintLog is on, Flat UI leaves out the looks that follow game frames (ns.HookMethod). The box says so once a session and offers
--- to turn the variable off and reload. The approach is EllesmereUI's reminder (EllesmereUI.lua:4172-4215: once a session, Ignore holds it
--- until the next reload, plain C_CVar.SetCVar as the fix) and its secure /reload click with the work done after the click
--- (EllesmereUI_Popups.lua:488 and 725-800). Nothing is saved: the flag lives until the reload.
-
 local taint = { wanted = false, shown = false, ignored = false, suspended = false }
 local taintBox, taintOverlay, taintWatcher
 
@@ -252,7 +219,6 @@ local function TaintShade(delta)
 	return math.min(1, math.max(0, r + delta)), math.min(1, math.max(0, g + delta)), math.min(1, math.max(0, b + delta))
 end
 
--- The box is protected while the secure button is on it, so the button leaves before combat locks and comes back when it ends.
 local function TaintDetach()
 	if taintOverlay then
 		pcall(function()
@@ -273,7 +239,6 @@ local function TaintAttach()
 	end
 end
 
--- Without the secure button the click only turns the variable off and says what to type.
 local function TaintTurnOff()
 	pcall(C_CVar.SetCVar, "taintLog", "0")
 end
@@ -354,7 +319,6 @@ local function TaintBuild()
 			box:Hide()
 		end
 	end)
-	-- The reload is the game's own /reload on a secure button; the CVar is turned off after the click, as in EllesmereUI_Popups.lua:483-486.
 	local made, overlay = pcall(CreateFrame, "Button", nil, reload, "SecureActionButtonTemplate")
 	if made and type(overlay) == "table" then
 		local done = pcall(function()
@@ -386,7 +350,6 @@ local function TaintBuild()
 		end
 	end
 	box:SetScript("OnHide", function()
-		-- Ignore, Escape and the reload button all end here; only the start of a fight hides it without an answer.
 		if not taint.suspended then
 			taint.ignored = true
 		end
@@ -432,7 +395,6 @@ local function TaintWatch()
 			return
 		end
 		if event == "PLAYER_REGEN_DISABLED" then
-			-- Runs before the lockdown (EllesmereUI_Popups.lua:725-800), so the box can still be hidden.
 			taint.suspended = true
 			TaintDetach()
 			pcall(taintBox.Hide, taintBox)
@@ -443,7 +405,6 @@ local function TaintWatch()
 	end)
 end
 
--- Shows the box once a session, out of combat. A call in combat waits for the end of the fight; after Ignore it does nothing until the reload.
 function ns.TaintReminder()
 	if taint.shown or taint.ignored then
 		return
@@ -453,41 +414,15 @@ function ns.TaintReminder()
 	TaintShow()
 end
 
--- Reload notice ------------------------------------------------------------------------------------------------------------------------------
--- A change that needs a reload (ns.ReloadLines, Core.lua), made anywhere, shows a small notice of Flat UI's own at the top of the screen: what
--- needs it, Reload, Undo and Later. Its Reload is a reload button like the others (ns.SecureReload): where ReloadUI is blocked, the game's own
--- /reload runs on a secure button, which leaves the notice as a fight starts and comes back after it, so meanwhile the button is dimmed and says so.
--- Undo sets every change it lists back to the value the game runs since login, in the profile in use, with ns.Set, out of combat and while Setup
--- does not have the options window; they go into Home's record of changes as one batch (ns.PanelHome.Noted), so Recent changes shows them as one
--- line with one Undo and one Ctrl+Z puts them all back, and one line in chat says how many. Later hides
--- the notice until the next change that needs a reload; it goes when nothing needs one any more. Undo is dimmed while it would do nothing (in a fight,
--- while Setup has the window). Pointing at the notice, or at any of its buttons, shows GameTooltip with every change, its value now and at login,
--- in the words of the options window (ns.PanelTrust.ValueText). It fades in over 0.2 s each time it shows from hidden (its own alpha), and out over
--- 0.2 s on Later or once nothing needs a reload, coming back from where it is if a change needs one meanwhile. It is in
--- DIALOG strata, over the options window (HIGH), and has an own entry in /flatui move (FlatUIReloadNotice, Movers.lua), at whose spot it stands.
--- It keeps clear of the title bar of the options window while that shows, of the toolbar of /flatui move while that is open and of the test mode
--- bar while that shows (TM.BarRect, TestMode.lua): covering any of them, it takes the nearest place just above or just under one of them that
--- covers none and fits on the screen, else just above the window, or just under it where there is no room above, as before. It is always placed
--- from UIParent, never from those frames, and only while nothing protected hangs from it; an error in the placing leaves it at its start, reported
--- once. While test mode is on and nothing needs a reload, a dimmed sample of it, a plain frame of its own with greyed buttons, stands at its spot by
--- the same rules (NoticeSample), so the spot can be seen and set before a change needs it.
-
--- width and height of the notice, y: its start under the top of the screen, reload, undo and later: the widths of the buttons, chars: about how
--- many letters of names the line holds before the rest are counted, every: how often a shown notice looks where to stand, in seconds, fade: how
--- long it takes to come in, in seconds, gap: the room it keeps from what it steps clear of.
 local NOTICE = { name = "FlatUIReloadNotice", width = 520, height = 52, y = -40, reload = 80, undo = 60, later = 64, chars = 64, every = 0.25,
 	fade = 0.2, gap = 6 }
--- frame, text, reload and undo: the parts once built. later: what Later held, the value of each change by its path, or nil. queued: a look on the
--- next frame is asked for. placed: where it stands now. wait: the time to the next look while shown. alpha: how far it has faded in.
 local notice = { queued = false, wait = 0, alpha = 1 }
--- The colours of the tooltip's lines: the value, and the line that says what the buttons do.
 local VALUE, HINT = { 0.66, 0.68, 0.62 }, { 0.9, 0.72, 0.36 }
 
 local function Finite(value)
 	return type(ns.Finite) == "function" and ns.Finite(value)
 end
 
--- What the line says: how many changes need a reload, and their names, as many as fit, then how many more.
 local function NoticeText(lines)
 	local names, length = {}, 0
 	for _, entry in ipairs(lines) do
@@ -508,12 +443,10 @@ local function NoticeText(lines)
 	return ("%d changes need a reload: %s."):format(#lines, list)
 end
 
--- True while a press of Reload needs the secure button (ReloadUI is blocked here) and a fight keeps that button off it.
 local function NoticeWaits(fight)
 	return fight == true and (Wanted() or IsSecure())
 end
 
--- Reload is dimmed while it waits for the end of a fight, and Undo in a fight and while Setup has the options window, where it does nothing.
 local function NoticeDim(fight)
 	if notice.reload then
 		pcall(notice.reload.SetAlpha, notice.reload, NoticeWaits(fight) and 0.4 or 1)
@@ -524,8 +457,6 @@ local function NoticeDim(fight)
 	end
 end
 
--- What the notice keeps clear of, each { left, right, top, bottom, up, down } in the units of UIParent: the band it must not cover, and the top of the
--- notice just above and just under the frame. The title bar of the options window, whose place under it is under the whole window, is window.
 local function NoticeBlocks()
 	local blocks = {}
 	local function Add(left, bottom, width, height, under)
@@ -545,7 +476,6 @@ local function NoticeBlocks()
 			blocks.window = Add(left, title, width, bottom + height - title, bottom)
 		end
 	end
-	-- The toolbar of /flatui move while it is open and shows (MoversMode.lua, at the top of the screen; MM.State gives its parts).
 	local movers, mode = ns.MoverKit, ns.MoversMode
 	if type(movers) == "table" and type(movers.IsOpen) == "function" and movers.IsOpen() == true and type(kit) == "table"
 		and type(mode) == "table" and type(mode.State) == "function" then
@@ -559,7 +489,6 @@ local function NoticeBlocks()
 			Add(kit.Rect(bar))
 		end
 	end
-	-- Only the rectangle: BarRect's fifth return is where the bar stands ("top", "above", "below" or "dragged"), not the place under it.
 	local test = ns.TestMode
 	if type(test) == "table" and type(test.BarRect) == "function" then
 		local left, bottom, width, height = test.BarRect()
@@ -568,7 +497,6 @@ local function NoticeBlocks()
 	return blocks
 end
 
--- True when a notice with its top left corner at x, y covers a block.
 local function NoticeCovers(x, y, blocks)
 	for _, block in ipairs(blocks) do
 		if y - NOTICE.height < block[3] and y > block[4] and x + NOTICE.width > block[1] and x < block[2] then
@@ -578,7 +506,6 @@ local function NoticeCovers(x, y, blocks)
 	return false
 end
 
--- The top of the notice nearest to y, just above or just under a block, that covers none of them and fits on the screen, or nil.
 local function NoticeNearest(x, y, blocks, screenH)
 	local best
 	for _, block in ipairs(blocks) do
@@ -593,8 +520,6 @@ local function NoticeNearest(x, y, blocks, screenH)
 	return best
 end
 
--- The top left corner of the notice in the units of UIParent, or nil for its start at the top of the screen: the spot of its box in /flatui move,
--- but clear of the title bar of the options window, the toolbar of /flatui move and the test mode bar while they show.
 local function NoticeSpot()
 	local x, y
 	if type(ns.MoverSpot) == "function" then
@@ -619,7 +544,6 @@ local function NoticeSpot()
 	if best then
 		return x, best
 	end
-	-- No place is clear of them all: clear of the window's title bar, as before the bars counted.
 	local window = blocks.window
 	if window and NoticeCovers(x, y, { window }) then
 		return x, window[5] <= screenH and window[5] or window[6]
@@ -627,7 +551,6 @@ local function NoticeSpot()
 	return x, y
 end
 
--- Places the notice, or with `frame` the sample of test mode (NoticeSample, below), at the same spot by the same rules.
 local function NoticePlace(frame)
 	frame = frame or notice.frame
 	local field = frame == notice.frame and "placed" or "samplePlaced"
@@ -639,7 +562,6 @@ local function NoticePlace(frame)
 	if protected then
 		return
 	end
-	-- An error in the placing leaves the notice at its start at the top, so it still shows and the OnUpdate below does not repeat the error.
 	local ok, x, y = pcall(NoticeSpot)
 	if not ok then
 		if not notice.failed then
@@ -648,7 +570,6 @@ local function NoticePlace(frame)
 		end
 		x, y = nil, nil
 	end
-	-- A spot with only one of its two numbers is no spot: the notice stands at its start.
 	if not (Finite(x) and Finite(y)) then
 		x, y = nil, nil
 	end
@@ -667,7 +588,6 @@ local function NoticePlace(frame)
 	end)
 end
 
--- Later: the changes that need a reload now are held, and the notice fades out until another comes (notice.leaving, NoticeBuild's OnUpdate).
 local function NoticeLater()
 	notice.later = {}
 	for _, entry in ipairs(ns.ReloadLines()) do
@@ -676,8 +596,6 @@ local function NoticeLater()
 	notice.leaving = true
 end
 
--- Reload: the secure button takes the press where it is on the button. A press that reaches this function in a fight, where the reload needs that
--- button, is not made.
 local function NoticeReload()
 	if NoticeWaits(InCombatLockdown()) then
 		print(AFTER_FIGHT)
@@ -686,8 +604,6 @@ local function NoticeReload()
 	ns.Reload()
 end
 
--- The words for a value of a row, as the options window says them (ns.PanelTrust.ValueText: On or Off, the text of a choice, a number with its
--- unit), so the notice's list and Home's Recent changes say a value alike.
 local function NoticeValue(path, value)
 	local trust = ns.PanelTrust
 	if type(trust) == "table" and type(trust.ValueText) == "function" then
@@ -703,8 +619,6 @@ local function NoticeValue(path, value)
 	return type(value) == "string" and value or "changed"
 end
 
--- The tooltip of the notice and of Undo, under owner: every change that needs a reload, with its value now and at login, and what the buttons do.
--- Another Reload button (ns.ReloadTip) gives the anchor and its own last line.
 local function NoticeTip(owner, anchor, hint)
 	if ns.Forbidden(GameTooltip) then
 		return
@@ -728,7 +642,6 @@ local function NoticeTip(owner, anchor, hint)
 	end)
 end
 
--- Hides the tooltip while it is the notice's: owner's, or either's when owner is nil (the notice hid under the cursor).
 local function NoticeUntip(owner)
 	owner = owner or notice.tip
 	if not owner or ns.Forbidden(GameTooltip) then
@@ -743,8 +656,6 @@ local function NoticeUntip(owner)
 	end
 end
 
--- The same list for the Reload button of the options window's strip (Panel.lua, BuildFoot), above it, with what that button does; nothing while no
--- change waits for a reload.
 function ns.ReloadTip(owner)
 	NoticeTip(owner, "ANCHOR_TOP", "Reload applies them. Home's Needs a reload lists them too.")
 end
@@ -753,9 +664,6 @@ function ns.ReloadUntip(owner)
 	NoticeUntip(owner)
 end
 
--- Undo: every change the notice lists goes back to the value the game runs since login, in the profile in use, so no reload is needed; ns.Set
--- asks the notice to look again, and it goes once nothing needs a reload. Not in a fight, where a module's change could need what is locked, and
--- not while Setup has the options window, whose Finish would write its draft over it.
 local function NoticeUndo()
 	if InCombatLockdown() then
 		print("Flat UI: Undo after the fight.")
@@ -769,7 +677,6 @@ local function NoticeUndo()
 	if not ok or type(lines) ~= "table" then
 		return
 	end
-	-- Its changes are one batch of Home's record: one line of Recent changes, one Undo and one Ctrl+Z.
 	local home, count = ns.PanelHome, 0
 	local batch = { label = "Undo of the reload notice", what = "the notice's Undo" }
 	for _, entry in ipairs(lines) do
@@ -780,7 +687,6 @@ local function NoticeUndo()
 				geterrorhandler()(err)
 			elseif ns.Get(path) == was then
 				count = count + 1
-				-- Into Home's record like a change made in the window, so its Undo can make the change again.
 				if type(home) == "table" and type(home.Noted) == "function" then
 					pcall(home.Noted, type(ns.Def) == "function" and ns.Def(path) or { path = path, label = entry[1] }, now, was, batch)
 				end
@@ -824,8 +730,6 @@ local function NoticeBuild()
 	pcall(text.SetMaxLines, text, 2)
 	notice.frame, notice.text, notice.reload, notice.undo = frame, text, reload, undo
 	ns.SecureReload(reload)
-	-- The list of changes under the notice and under each button, whose hover fill (kit.Button) stays; the tooltip goes with the notice. Reload's
-	-- own scripts are wrapped, not hooked: the secure button over it runs them through GetScript (Cover, above), which leaves a hook out.
 	frame:SetScript("OnEnter", NoticeTip)
 	frame:SetScript("OnLeave", NoticeUntip)
 	for _, button in ipairs({ undo, later }) do
@@ -850,7 +754,6 @@ local function NoticeBuild()
 	end)
 	frame:SetScript("OnUpdate", function(_, elapsed)
 		local step = Finite(elapsed) and elapsed or 0
-		-- Later, and nothing left to reload, fade it out over the time it takes to come in, then hide it.
 		if notice.leaving then
 			notice.alpha = math.max(0, notice.alpha - step / NOTICE.fade)
 			pcall(frame.SetAlpha, frame, notice.alpha)
@@ -867,11 +770,9 @@ local function NoticeBuild()
 		if notice.wait <= 0 then
 			notice.wait = NOTICE.every
 			NoticePlace()
-			-- Setup taking the options window or giving it back, and the lockdown, are followed here.
 			NoticeDim(InCombatLockdown())
 		end
 	end)
-	-- The secure button leaves Reload as a fight starts (Detach, above), before the lockdown, so the button is dimmed here as well.
 	pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_DISABLED")
 	pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_ENABLED")
 	frame:SetScript("OnEvent", function(_, event)
@@ -880,9 +781,6 @@ local function NoticeBuild()
 	return frame
 end
 
--- The sample of test mode: while test mode is on and nothing needs a reload, a dimmed notice of its own shows at the notice's spot, stepping clear of
--- the same bars, with greyed Reload, Undo and Later that take no click. It is a plain frame of its own and never the notice, whose Reload carries the
--- secure /reload button. A real change hides it at once (NoticeRefresh), and it goes as test mode ends or pauses in a fight (TM.Watch, below).
 local SAMPLE_TEXT = "Sample: 2 changes need a reload: Square icons, Side tabs."
 local SAMPLE_TIP = "A sample while test mode is on: this notice shows here when a change needs a reload."
 
@@ -937,7 +835,6 @@ local function SampleBuild()
 			GameTooltip:Hide()
 		end
 	end)
-	-- It looks where to stand as often as the notice does, so it follows the bars and its box in /flatui move.
 	local wait = 0
 	frame:SetScript("OnUpdate", function(self, elapsed)
 		wait = wait - (Finite(elapsed) and elapsed or 0)
@@ -950,7 +847,6 @@ local function SampleBuild()
 	return frame
 end
 
--- Shows the sample while test mode is on and nothing needs a reload (`shown`), else hides it.
 local function NoticeSample(shown)
 	local frame = notice.sampleFrame
 	if not shown then
@@ -974,8 +870,6 @@ local function NoticeSample(shown)
 	frame:Show()
 end
 
--- Looks at what needs a reload, and shows the notice, says it again, hides it or leaves it hidden after Later. With nothing to reload, the sample of
--- test mode shows while test mode is on.
 local function NoticeRefresh()
 	notice.queued = false
 	local ok, lines = pcall(ns.ReloadLines)
@@ -985,14 +879,12 @@ local function NoticeRefresh()
 	NoticeSample(#lines == 0 and notice.sample == true)
 	if #lines == 0 then
 		notice.later = nil
-		-- It fades out (NoticeBuild's OnUpdate); one already hidden stays so.
 		if notice.frame and notice.frame:IsShown() then
 			notice.leaving = true
 		end
 		return
 	end
 	if notice.later then
-		-- A change put back is no longer held, so making it again shows the notice; a change Later did not hold, or one with another value, shows it now.
 		local now, fresh = {}, false
 		for _, entry in ipairs(lines) do
 			now[entry[3]] = true
@@ -1022,8 +914,6 @@ local function NoticeRefresh()
 	NoticeDim(InCombatLockdown())
 	notice.wait = 0
 	NoticePlace()
-	-- From hidden it fades in (OnUpdate, above); shown already, it only says the new line, and an open list says it again. One fading out comes
-	-- back in from where it is.
 	notice.leaving = false
 	if not notice.frame:IsShown() then
 		notice.alpha = 0
@@ -1037,8 +927,6 @@ local function NoticeRefresh()
 	notice.frame:Show()
 end
 
--- A change that may need a reload was made (ns.Set and a profile put in use, Core.lua): the notice looks on the next frame, once for a burst of
--- changes such as Reset page, and outside any drawing of setup.
 function ns.ReloadNoticeUpdate()
 	if notice.queued then
 		return
@@ -1051,7 +939,6 @@ function ns.ReloadNoticeUpdate()
 	end
 end
 
--- The movers: the notice has a box whether or not it shows, so it can be placed before it is needed.
 function ns.ReloadNoticeShown()
 	return true
 end
@@ -1066,7 +953,6 @@ function ns.ReloadNoticeMoved()
 	end
 end
 
--- Test mode on, off, paused or resumed (TestMode.lua loads first): the sample follows on the next frame, with what needs a reload then.
 if type(ns.TestMode) == "table" and type(ns.TestMode.Watch) == "function" then
 	ns.TestMode.Watch(function(on)
 		notice.sample = on == true

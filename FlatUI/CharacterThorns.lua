@@ -1,79 +1,31 @@
 local _, ns = ...
 
--- Show thorns: what an attacker takes each time it strikes the player in melee, the damage shields, as one total a hit ("Thorns 45"), on the
--- character page of the Character window, under the right column of slots (the lowest is the second trinket,
--- Blizzard_UIPanels_Game/Camelot/PaperDollFrame.xml:836-860), right-aligned, so it mirrors Show durability under the left column. The line lies
--- at the height of the row of weapon slots (main hand, off hand, ranged and ammo, PaperDollFrame.xml:861-877, the main hand placed by
--- PaperDollItemSlotButton_OnLoad, PaperDollFrame.lua:1934-1943), so it is never wider than the room between the right edge of the second trinket
--- and the rightmost weapon slot that shows (GetRight and GetEffectiveScale of the slots, read each time it is written; 74 units where they cannot
--- be read, the room left when the ammo slot shows), and text wider than that is cut with an ellipsis (SetWidth and SetWordWrap). A shield spike,
--- which strikes only on a block, follows the total ("Thorns 45, +20-30 on block") only where that fits, and is not added to it. The game's own
--- stats list is not touched: the text is this addon's, on a frame of its own made out of a fight on the item frame of the character page
--- (PaperDollItemsFrame, PaperDollFrame.xml:777), so it shows only on that page, as CharacterDurability.lua's does. Pointing at the line lists
--- each source with its school, the spike, the total and the total of each school in GameTooltip (SetOwner, AddLine, AddDoubleLine, Show, and
--- Hide only while IsOwned says the frame owns it), never in a fight, as the Compare gear button's tooltip. Since 0.5.35 the line shows only while
--- something deals damage to attackers (a total above 0 or a shield spike); with nothing, its text hides and its frame stops answering the mouse,
--- unless Also at 0 (windows.thornsZero, off by default) keeps the grey "Thorns 0". The frame itself stays, so the reads below go on.
--- What is read, only what the client gives addon code:
---   The worn items' tooltip lines (ns.GearModel.TipLines, C_TooltipInfo.GetInventoryItem, TooltipInfoDocumentation.lua:389-405, the lines the
---   Gear comparison reads): a line that says an attacker that strikes you takes a number of damage of a school ("Equip: When struck in combat
---   inflicts 3 Arcane damage to the attacker."), an Equip line, a Set line of a bonus that holds, or an enchantment's. A line with a chance
---   (a proc), a Use line, a Chance on hit line and the grey line of a set bonus not yet held ("(2) Set: ...") are not thorns.
---   The shield's permanent enchantment (the second field of its link, GetInventoryItemLink of the off hand): Iron, Mithril and Thorium Shield
---   Spike, physical damage on a block.
---   The player's buffs (C_UnitAuras.GetUnitAuras(player, HELPFUL), UnitAuraDocumentation.lua:495-510), only while the game shows buffs to addon
---   code (ns.Tracking.Open: C_Secrets.ShouldAurasBeSecret plainly false), as Absorbs.lua reads them. The damage shields Flat UI knows by spell ID
---   (the client rows of aura type 15 in tools/dev/spelltips/client_spells.json: Thorns and Retribution Aura, and the imp's Fire Shield): the
---   amount is the aura's first value (points[1]), else the number its tooltip gives (C_TooltipInfo.GetUnitBuffByAuraInstanceID,
---   TooltipInfoDocumentation.lua:1259-1277), else the client row's base points, shown with ~ before it. Any other buff with a time whose
---   tooltip says it deals damage of a school to attackers counts too, except one with charges (Lightning Shield, whose charges are not thorns,
---   and is left out by spell ID as well). While the game hides buffs, in a fight, the buffs last read stay and the tooltip says so.
--- Every value is tested with ns.IsSecret and ns.Finite before it is used. It is read when the settings are applied, each time the page shows,
--- and while it shows on the player's UNIT_AURA and UNIT_INVENTORY_CHANGED (heard by its own frame, RegisterUnitEvent, only while it shows),
--- PLAYER_EQUIPMENT_CHANGED and the end of a fight, a quarter of a second after the first of them, so nothing runs while the page is shut. Nothing of the game's is written,
--- and on a client without C_TooltipInfo nothing is made. Not a module: the windows module calls ns.CharacterThorns.Apply whenever it applies its
--- settings.
-
 local KEY, PART, ROW = "windows", "thorns", "windows.thorns"
--- Also at 0 (0.5.35, off by default): the grey "Thorns 0" while nothing deals damage to attackers.
 local ZERO = "windows.thornsZero"
 local FONT = "GameFontHighlightSmall"
--- The frame lies this far under the second trinket slot, and where the slot is not found, this far from the bottom left of the page.
 local GAP, FALLBACK_X, FALLBACK_Y = -12, 24, 24
 local HEIGHT, LEAST_WIDTH = 16, 40
--- The line keeps this far from the rightmost weapon slot. Where the slots cannot be read it is at most ROOM wide: the second trinket's right edge
--- lies 81 units right of the ammo slot's (LeftPaneHost is 398 wide, CharacterFrame.xml:407-408; the trinket's right edge 20 in from it, the
--- main hand's centre 60 left of its middle, then the off hand, the ranged slot and the ammo slot 6, 6 and 19 apart, 40, 40, 40 and 27 wide).
 local SPACE, ROOM = 6, 74
 local WEAPONS = { "CharacterMainHandSlot", "CharacterSecondaryHandSlot", "CharacterRangedSlot", "CharacterAmmoSlot" }
 local REREAD = 0.25
 local OFF_HAND, FIRST_SLOT, LAST_SLOT = 17, 1, 19
--- The tooltip line kinds of Enum.TooltipDataLineType the Gear comparison names (GearModel.lua K): Use, Equip and Chance on hit lines.
 local ON_USE, ON_EQUIP, ON_PROC = 44, 45, 46
 local LINES = 40
 local WHITE, DIM, NONE = { 1, 1, 1 }, { 0.7, 0.7, 0.7 }, { 0.55, 0.55, 0.55 }
--- The schools in the game's order (Lua school index 1-7, SpellData.lua's SCHOOL_NAMES), English where the client has no SCHOOL_STRINGS
--- (Blizzard_FrameXMLBase/Constants.lua:48-56), and their colours as the game colours the schools of its combat log (CombatLogColors.lua:13-22).
 local ENGLISH = { "Physical", "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }
 local SCHOOL_RGB = { { 0.7, 0.7, 0.7 }, { 1, 0.9, 0.5 }, { 1, 0.5, 0 }, { 0.3, 1, 0.3 }, { 0.5, 1, 1 }, { 0.5, 0.5, 1 }, { 1, 0.5, 1 } }
 local PHYSICAL, HOLY, FIRE, NATURE = 1, 2, 3, 4
--- The damage shields by spell ID: { school, base points of the client row }. Thorns ranks 1 to 6 and Retribution Aura ranks 1 to 5 are the client
--- rows of aura type 15 (client_spells.json); the imp's Fire Shield, ranks 1 to 5, puts its shield on the one it is cast on, and has no row there.
 local SHIELDS = {
 	[467] = { NATURE, 3 }, [782] = { NATURE, 6 }, [1075] = { NATURE, 9 }, [8914] = { NATURE, 12 }, [9756] = { NATURE, 15 }, [9910] = { NATURE, 18 },
 	[7294] = { HOLY, 5 }, [10298] = { HOLY, 8 }, [10299] = { HOLY, 12 }, [10300] = { HOLY, 16 }, [10301] = { HOLY, 20 },
 	[2947] = { FIRE }, [8316] = { FIRE }, [8317] = { FIRE }, [11770] = { FIRE }, [11771] = { FIRE },
 }
--- Lightning Shield, ranks 1 to 7: damage to an attacker for each of its charges, not thorns.
 local NOT_THORNS = { [324] = true, [325] = true, [905] = true, [945] = true, [8134] = true, [10431] = true, [10432] = true }
--- The shield spikes by the enchantment of the shield (SpellItemEnchantment): its name and the damage of a block.
 local SPIKES = { [43] = { "Iron Spike", 8, 12 }, [463] = { "Mithril Spike", 16, 20 }, [1704] = { "Thorium Spike", 20, 30 } }
 
 local CharacterThorns = {}
 ns.CharacterThorns = CharacterThorns
 
--- The frame, its text and the last read. broken: the game refused one of them, and nothing is tried again. waiting: the making waits for the end
--- of a fight. auras: the buffs last read, kept while the game hides them (stale). pending: a read is due shortly.
 local state = { frame = nil, text = nil, broken = false, waiting = false, auras = {}, stale = false, pending = false, read = nil }
 
 local IsSecret, Finite = ns.IsSecret, ns.Finite
@@ -86,7 +38,6 @@ local function Usable(value)
 	return value ~= nil and not IsSecret(value) and type(value) == "table"
 end
 
--- An amount to show: a talent can give a share of a point.
 local function Round(value)
 	return math.floor(value + 0.5)
 end
@@ -99,7 +50,6 @@ local function Index(t, key)
 	return t[key]
 end
 
--- A field of a table the client gave, or nil when it is withheld or reading it raises.
 local function Field(t, key)
 	if not Usable(t) then
 		return nil
@@ -111,7 +61,6 @@ local function Field(t, key)
 	return nil
 end
 
--- True when the game would refuse a frame made on this one now.
 local function Blocked(frame)
 	if not InCombatLockdown() then
 		return false
@@ -120,9 +69,6 @@ local function Blocked(frame)
 	return not ok or IsSecret(protected) or protected == true
 end
 
--- Reading -------------------------------------------------------------------------------------------------------------------------------------
-
--- The client's names of the schools, lower case, by school index.
 local function SchoolWords()
 	local words, given = {}, _G.SCHOOL_STRINGS
 	for index, english in ipairs(ENGLISH) do
@@ -140,8 +86,6 @@ local function SchoolName(index)
 	return ENGLISH[index] or ENGLISH[PHYSICAL]
 end
 
--- The school and amount a line of text gives for damage to an attacker: "inflicts 3 Arcane damage", "Causes 18 Nature damage", or a number of
--- damage with no school (physical). Nil when the line names none.
 local function Damage(text, words)
 	local lower = text:lower()
 	for amount, word in lower:gmatch("(%d+) (%a+) damage") do
@@ -158,7 +102,6 @@ local function Damage(text, words)
 	return nil
 end
 
--- True when a line is about an attacker that strikes the player, with no chance in it.
 local function AboutAttackers(lower)
 	if lower:find("chance", 1, true) or lower:find("%", 1, true) then
 		return false
@@ -171,7 +114,6 @@ local function Starts(text, word)
 	return Plain(word, "string") and word ~= "" and text:sub(1, #word) == word
 end
 
--- The thorns of the worn items, from their tooltip lines, into found: { name, school, amount, kind }.
 local function ReadItems(found, words)
 	local lines = ns.GearModel and ns.GearModel.TipLines
 	if type(lines) ~= "function" then
@@ -198,7 +140,6 @@ local function ReadItems(found, words)
 	end
 end
 
--- The shield spike on the off hand: { name, least, most, item }, or nil.
 local function ReadSpike()
 	local call = _G.GetInventoryItemLink
 	if type(call) ~= "function" then
@@ -217,7 +158,6 @@ local function ReadSpike()
 	return { name = spike[1], least = spike[2], most = spike[3], item = item }
 end
 
--- The number of damage to attackers a buff's tooltip gives, and its school, or nil.
 local function TipDamage(instance, words, strict)
 	local call = Field(_G.C_TooltipInfo, "GetUnitBuffByAuraInstanceID")
 	if type(call) ~= "function" then
@@ -247,12 +187,10 @@ local function TipDamage(instance, words, strict)
 	return nil
 end
 
--- The fields of one buff, or nothing when one is withheld.
 local function AuraFields(aura)
 	return aura.spellId, aura.auraInstanceID, aura.name, aura.points, aura.duration, aura.charges
 end
 
--- The damage shields among the player's buffs: a list of { name, school, amount, guess }, or nil when the game hides buffs.
 local function ReadAuras(words)
 	local open = ns.Tracking and ns.Tracking.Open
 	if type(open) ~= "function" or not open() then
@@ -295,7 +233,6 @@ local function ReadAuras(words)
 	return found
 end
 
--- One read: { items, auras, spike, total, schools = { [school] = amount }, stale }.
 local function Read()
 	local words = SchoolWords()
 	local items = {}
@@ -318,7 +255,6 @@ local function Read()
 	return read
 end
 
--- The total of each school, "Nature 30, Arcane 15", and how many schools there are.
 local function Schools(read)
 	local parts = {}
 	for school = 1, #ENGLISH do
@@ -330,7 +266,6 @@ local function Schools(read)
 	return table.concat(parts, ", "), #parts
 end
 
--- The line: "Thorns 45", and with the spike "Thorns 45, +20-30 on block".
 local function Words(read, spike)
 	local text = ("Thorns %d"):format(Round(read.total))
 	if spike and read.spike then
@@ -339,9 +274,6 @@ local function Words(read, spike)
 	return text
 end
 
--- Showing --------------------------------------------------------------------------------------------------------------------------------------
-
--- The width a font string's text needs, whatever width it is given; 0 when the client does not say.
 local function TextWidth(text)
 	local ok, width = pcall(text.GetUnboundedStringWidth, text)
 	if not (ok and Finite(width)) then
@@ -350,7 +282,6 @@ local function TextWidth(text)
 	return ok and Finite(width) and width or 0
 end
 
--- The right edge of a frame in screen units, or nil when it is not there, does not show or the client does not say.
 local function Edge(frame, shown)
 	if not Usable(frame) or ns.Forbidden(frame) then
 		return nil
@@ -369,8 +300,6 @@ local function Edge(frame, shown)
 	return nil
 end
 
--- The width the line may take in the frame's units: from the right edge of the second trinket slot to the rightmost weapon slot that shows,
--- less SPACE; ROOM where they cannot be read.
 local function Room(frame)
 	local right = Edge(_G.CharacterTrinket1Slot, false)
 	local ok, scale = pcall(frame.GetEffectiveScale, frame)
@@ -401,8 +330,6 @@ local function Update()
 	end
 	local read = Read()
 	state.read = read
-	-- Nothing deals damage to attackers: no line unless Also at 0 is on, and no empty spot that answers the mouse. The frame stays shown, so
-	-- its events still come and a Thorns buff gained while the page is open brings the line back within REREAD.
 	if read.total <= 0 and not read.spike and ns.Get(ZERO) ~= true then
 		pcall(text.Hide, text)
 		pcall(frame.EnableMouse, frame, false)
@@ -410,7 +337,6 @@ local function Update()
 	end
 	local colour = (read.total > 0 or read.spike) and WHITE or NONE
 	pcall(text.SetTextColor, text, colour[1], colour[2], colour[3], 1)
-	-- The spike follows the total only where both fit; the text is never wider than the room, and is cut with an ellipsis where it would be.
 	local room = Room(frame)
 	pcall(text.SetText, text, Words(read, true))
 	local need = TextWidth(text)
@@ -426,7 +352,6 @@ local function Update()
 	pcall(frame.SetMouseClickEnabled, frame, false)
 end
 
--- A read a moment from now, once, while the page shows.
 local function Soon()
 	local frame = state.frame
 	if state.pending or frame == nil or not Wanted() then
@@ -468,7 +393,6 @@ local function AddSource(tip, left, school, right, colour)
 	pcall(tip.AddDoubleLine, tip, left, right, colour[1], colour[2], colour[3], rgb[1], rgb[2], rgb[3])
 end
 
--- Each source with its school and amount, the total, and why a buff may be out of date.
 local function Say()
 	local tip, frame, read = Tooltip(), state.frame, state.read
 	if InCombatLockdown() or not (tip and frame and read) or not pcall(tip.SetOwner, tip, frame, "ANCHOR_BOTTOMRIGHT") then
@@ -516,7 +440,6 @@ local function Run(fn)
 	ns.EachPart(KEY, PART, fn)
 end
 
--- Hears the player's buffs and gear on the frame while it shows.
 local function Listen(frame)
 	local ok, shown = pcall(frame.IsVisible, frame)
 	if ok and not IsSecret(shown) and shown == true then
@@ -525,7 +448,6 @@ local function Listen(frame)
 	end
 end
 
--- Makes the frame and its text on the item frame of the character page. True when they are there.
 local function Make(page)
 	local ok, frame = pcall(CreateFrame, "Frame", nil, page)
 	if not ok or not Usable(frame) then
@@ -548,14 +470,12 @@ local function Make(page)
 	pcall(text.SetPoint, text, "RIGHT", frame, "RIGHT", 0, 0)
 	pcall(text.SetJustifyH, text, "RIGHT")
 	pcall(text.SetWordWrap, text, false)
-	-- Over the line the mouse shows the sources; clicks go through to the page.
 	pcall(frame.EnableMouse, frame, true)
 	pcall(frame.SetMouseClickEnabled, frame, false)
 	pcall(frame.SetScript, frame, "OnEnter", function()
 		Run(Say)
 	end)
 	pcall(frame.SetScript, frame, "OnLeave", Untip)
-	-- The player's buffs and gear are heard only while the page shows.
 	pcall(frame.SetScript, frame, "OnShow", function()
 		Listen(frame)
 		Run(Update)
@@ -601,7 +521,6 @@ local function Applied()
 	Update()
 end
 
--- Shows the frame while the row is on, or hides it.
 function CharacterThorns.Apply()
 	if ns.PartStopped(KEY, PART) and state.frame then
 		pcall(state.frame.Hide, state.frame)
@@ -609,7 +528,6 @@ function CharacterThorns.Apply()
 	ns.EachPart(KEY, PART, Applied)
 end
 
--- The gear changed, or a fight ended and the buffs can be read again.
 local function Changed()
 	if state.frame and Wanted() then
 		ns.EachPart(KEY, PART, Soon)

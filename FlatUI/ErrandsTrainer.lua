@@ -1,20 +1,5 @@
 local _, ns = ...
 
--- Train all: a button beside the Train button of the trainer window (ClassTrainerFrame and ClassTrainerTrainButton, from the game's
--- Blizzard_TrainerUI, which loads when a trainer is first opened) that learns every service the trainer marks available and you can pay for.
--- The plan takes the rows in the order of the list, each while the money left pays for it, and the calls (BuyTrainerService) go last first,
--- each row read again just before its call, so a list rebuilt after a purchase cannot move a call onto another row.
--- A profession is left to the game's Train button, which asks before it uses one of your two places; so is a row whose price or flags cannot
--- be read. Both shapes of the client's answers are read: GetTrainerServiceInfo gives name, type, ... (the mainline trainer) or name, rank,
--- type, ... (the classic one), and GetTrainerServiceCost gives cost, isProfession or cost, talent points, profession points.
--- The button says how many it would learn, Train all (4), and Train all alone, greyed, when there is nothing; the tooltip says what a click
--- learns, each skill with its rank (the classic shape's second answer) and price, up to TIP_SKILLS of them, and why anything is left. The chat
--- line of a click names the first CHAT_SKILLS skills it learns. After a click the button waits SETTLE seconds, so a double click asks once.
--- It follows the game's ClassTrainerFrame_Update and TRAINER_UPDATE to stay right. Not in combat: the button is made only out of the lockdown
--- and does nothing in a fight. Never under the gamepad interface, whose navigation could not reach it; /flatui train does the same there.
--- While EnhanceQoL's own Train All button (EQOLTrainAllButton) is shown in the same place, this one stands aside.
--- It follows EnhanceQoL's Train All button, adapted with the permission of its author.
-
 local E = ns.Errands
 local part = E.Part({ label = "Trainer" })
 
@@ -23,20 +8,14 @@ local KINDS = { available = true, unavailable = true, used = true, header = true
 local SETTLE = 1
 local MAX_ROWS = 500
 local GAP = 2
--- Wide enough for Train all (12); it grows leftwards from the Train button and stays clear of the money at the window's bottom left
--- (ClassTrainerFrameMoneyBg ends 153 from the left of the 338 wide window, the Train button, 80 wide, sits in its bottom right corner).
 local WIDTH = 92
--- The skills the tooltip lists by name, and those the chat line of a click names; the rest are counted.
 local TIP_SKILLS, CHAT_SKILLS = 8, 3
 
 local button
 local followed = false
--- A make of the button failed: it is not tried again.
 local broken = false
--- A make waits for the end of the fight.
 local queued = false
 local settling = false
--- What /flatui status says: the last click that the game took, and a click the game refused.
 local last
 local refusedLast = false
 
@@ -46,18 +25,14 @@ local function Skills(n)
 	return n == 1 and "skill" or "skills"
 end
 
--- " for 4s", or nothing for skills that cost nothing.
 local function For(cost)
 	return cost > 0 and (" for " .. E.Money(cost)) or ""
 end
 
--- EnhanceQoL's own Train All button, shown where this one would be.
 local function TheirsShown()
 	return E.Shown(_G.EQOLTrainAllButton)
 end
 
--- One row of the trainer's list: { kind, name, rank, price, profession, other }, or nil when it cannot be read. rank is the second answer of the
--- classic shape (name, rank, type) when it is a text that is not empty ("Rank 3").
 local function Service(index)
 	local ok, name, a, b = pcall(GetTrainerServiceInfo, index)
 	if not ok then
@@ -88,14 +63,11 @@ local function Service(index)
 	if second == true or (ns.Finite(third) and third > 0) then
 		row.profession = true
 	elseif ns.Finite(second) and second > 0 then
-		-- Older clients: the row also costs talent or training points, which this button does not check.
 		row.other = true
 	end
 	return row
 end
 
--- What a click learns: the available rows in the order of the list, each while the money left pays for it. The rest is counted for the
--- tooltip: rows the money does not reach (short), professions, and rows left to the Train button (other).
 local function Plan()
 	local plan = { buy = {}, cost = 0, short = 0, shortCost = 0, professions = {}, other = 0, rows = 0, read = 0 }
 	if type(GetTrainerServiceInfo) ~= "function" or type(GetTrainerServiceCost) ~= "function" then
@@ -131,14 +103,12 @@ local function Plan()
 	return plan
 end
 
--- Learns the plan. Returns how many calls the game took, what they cost, and the plan.
 local function Learn()
 	if not E.On("trainAll") or settling or E.Fighting() then
 		return 0, 0, nil
 	end
 	local plan = Plan()
 	local calls, asked, cost = 0, 0, 0
-	-- The skills the game took, in the order of the list, for the chat line.
 	plan.taken = {}
 	for i = #plan.buy, 1, -1 do
 		local want = plan.buy[i]
@@ -154,7 +124,6 @@ local function Learn()
 	refusedLast = calls > 0 and asked == 0
 	if asked > 0 then
 		last = { count = asked, cost = cost }
-		-- A second click before the game answers would ask again for the same rows.
 		settling = true
 		C_Timer.After(SETTLE, function()
 			settling = false
@@ -164,7 +133,6 @@ local function Learn()
 	return asked, cost, plan
 end
 
--- A skill by its name and its rank, "Frostbolt (Rank 3)", or nil when the game gave no name.
 local function SkillName(entry)
 	if type(entry.name) ~= "string" then
 		return nil
@@ -172,7 +140,6 @@ local function SkillName(entry)
 	return entry.rank and ("%s (%s)"):format(entry.name, entry.rank) or entry.name
 end
 
--- The first CHAT_SKILLS names of the skills a click learns, ": Frostbolt (Rank 3), Fireball (Rank 2) and 2 more", or nothing without names.
 local function Names(list)
 	local names = {}
 	for _, entry in ipairs(list or {}) do
@@ -193,7 +160,6 @@ local function Names(list)
 	return (": %s and %s"):format(table.concat(names, ", ", 1, #names - 1), names[#names])
 end
 
--- What a click says: what it learns, and what the money did not reach.
 local function Said(asked, cost, plan)
 	local text = ("Learning %d %s%s%s."):format(asked, Skills(asked), For(cost), Names(plan and plan.taken))
 	if plan and plan.short > 0 then
@@ -211,7 +177,6 @@ local function TrainAll()
 	return asked, cost, plan
 end
 
--- True when the trainer's filter hides the rows you can learn.
 local function Filtered()
 	if type(GetTrainerServiceTypeFilter) ~= "function" then
 		return false
@@ -234,7 +199,6 @@ Explain = function(owner, plan)
 		Line("Waiting for the trainer.")
 	elseif #plan.buy > 0 then
 		Line(("Learns %d %s%s."):format(#plan.buy, Skills(#plan.buy), For(plan.cost)))
-		-- Each skill with its rank and price, the first TIP_SKILLS of them.
 		local listed = 0
 		for _, entry in ipairs(plan.buy) do
 			local name = listed < TIP_SKILLS and SkillName(entry) or nil
@@ -275,8 +239,6 @@ Explain = function(owner, plan)
 	GameTooltip:Show()
 end
 
--- The trainer window and its Train button, or nil and why not: "client" (no BuyTrainerService), "window" (missing, forbidden or protected),
--- "train" (no Train button).
 local function Window()
 	if type(BuyTrainerService) ~= "function" then
 		return nil, nil, "client"
@@ -291,7 +253,6 @@ local function Window()
 	return frame, train
 end
 
--- Makes the button, out of the lockdown only. False while it cannot be made now.
 local function Build(frame, train)
 	if button then
 		return true
@@ -300,7 +261,6 @@ local function Build(frame, train)
 		return false
 	end
 	if E.Fighting() then
-		-- In the lockdown the make waits for its end; in the moment before it, PLAYER_REGEN_ENABLED brings the next try.
 		if E.InCombat() and not queued then
 			queued = true
 			ns.OutOfCombat(function()
@@ -310,7 +270,6 @@ local function Build(frame, train)
 		end
 		return false
 	end
-	-- The hover runs as a part of the module, so its errors count toward stopping the part and are seen.
 	local ok, made = pcall(E.Button, frame, LABEL, WIDTH, function()
 		E.Run(part, TrainAll)
 	end, function(owner)
@@ -372,7 +331,6 @@ E.Listen(part, "ADDON_LOADED", function(name)
 		Update()
 	end
 end)
--- Events that change what the button shows. Until the trainer UI exists there is nothing to do.
 for _, event in ipairs({ "TRAINER_SHOW", "TRAINER_UPDATE", "PLAYER_MONEY", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
 	"INPUT_DEVICE_INTERFACE_TRANSITION" }) do
 	E.Listen(part, event, function()
@@ -382,7 +340,6 @@ for _, event in ipairs({ "TRAINER_SHOW", "TRAINER_UPDATE", "PLAYER_MONEY", "PLAY
 	end)
 end
 
--- At the start (the trainer UI may have been loaded before, by another addon) and at each refresh (the row, the page, the profile).
 local function Look()
 	broken = false
 	if button or ClassTrainerFrame ~= nil then
@@ -391,7 +348,6 @@ local function Look()
 end
 part.Start, part.Refresh = Look, Look
 
--- /flatui train: the same as a click, for the gamepad interface or a macro, at an open trainer.
 E.slash.train = function()
 	local frame = Window()
 	if not frame or not E.Shown(frame) then
@@ -418,7 +374,6 @@ E.slash.train = function()
 	elseif learned == 0 then
 		print("Flat UI: nothing here you can learn now.")
 	elseif E.Opt("chat") == false then
-		-- A typed command always answers, even with Say what was done off.
 		print("Flat UI: " .. Said(learned, cost, plan))
 	end
 end
@@ -439,7 +394,7 @@ function part.Status()
 		return { "Trainer: the trainer window has no Train button here, so there is no Train all button." }
 	end
 	if TheirsShown() then
-		return { "Trainer: EnhanceQoL's Train All button is shown, so this one stands aside. /flatui train still works." }
+		return { "Trainer: another addon's Train All button is shown, so this one stands aside. /flatui train still works." }
 	end
 	local lines = { "Trainer: Train all button." }
 	if last then

@@ -1,30 +1,18 @@
 local _, ns = ...
 
--- UIParent's scale is the game's UI scale. An addon that calls UIParent:SetScale changes the layout of every Blizzard action bar from
--- tainted code, and the game's next secure layout pass runs tainted: a click on an action button is then refused with
--- ADDON_ACTION_FORBIDDEN for UseAction (research/reports/2026-10-12-0.4.37, and the report of 2026-10-13). So the scale the game takes is
--- written to the game's own variables (useUiScale and uiscale), and the game applies it itself, at every login too. Only the row
--- Scale below 65% still calls SetScale, because the game's slider stops at 65%, and its tip says what that costs.
-
 local TOLERANCE = 0.0005
--- A dragged slider sends every step. The scale is written once the value has stopped changing.
 local SETTLE = 0.3
--- How near the game's answer has to be to the asked value.
 local MATCH = 0.005
--- The lowest scale the game's own setting takes.
 local FLOOR = 0.65
 local MIN_PIXEL_SCALE, MAX_PIXEL_SCALE = 0.35, 1.15
 
--- The scale asked of the game, and how the last write ended: nil until checked, "ok" or "refused".
 local asked, result, checking
--- True while the variables hold a scale this addon wrote.
 local written = false
--- True once the game's variables were written in this session. The game applies them in a clean run at the next login, so /reload finishes it.
 local liveWrite = false
--- UIParent has a scale this addon set with SetScale, and whether a reload is left to put the game's back.
 local direct, reloadNote = false, false
 local pending = false
 local generation = 0
+local told = false
 
 local function Percent(scale)
 	return math.floor(scale * 100 + 0.5)
@@ -49,13 +37,10 @@ local function CVarText(name)
 	return nil
 end
 
--- The scale the game's variable gives, or nil.
 local function CVarScale()
 	return tonumber(CVarText("uiscale"))
 end
 
--- The scale at which one unit is pixelSize screen pixels, and false when it is outside what is applied. Nil when the client does not
--- say how tall the screen is.
 local function PixelScale()
 	if type(GetPhysicalScreenSize) ~= "function" then
 		return nil
@@ -67,11 +52,8 @@ local function PixelScale()
 	local scale = ns.Get("general.pixelSize") * 768 / height
 	return scale, scale >= MIN_PIXEL_SCALE and scale <= MAX_PIXEL_SCALE
 end
--- Shared with the setup drawing of the Scale step, so the drawing and the applied scale use one formula.
 ns.PixelScale = PixelScale
 
--- The scale to apply and the route: "cvar" writes the game's variables, "set" calls SetScale (only under the game's floor, and only with
--- Scale below 65% on). With no scale to apply the first answer is nil and the second says why, for the status.
 local function Wanted()
 	if ns.Get("general.scaleOn") ~= true then
 		return nil
@@ -95,13 +77,8 @@ local function Wanted()
 	end
 	return ns.Get("general.scale") / 100, "cvar"
 end
--- Shared with Core.lua, which reads it under the settings of a profile it makes (ns.Viewing) to fit the positions that profile starts with.
 ns.ScaleWanted = Wanted
 
--- The overIf of Custom scale and Small scale (Config.lua): in the order of Wanted, Pixel-perfect scale sets the scale before Scale below 65%, and
--- either before Custom scale, so the row they pass over is greyed and reads "not used now" on the options pages. Setup, where ns.Get reads the draft,
--- shows only the rows that apply (Setup.lua, S.Shown), so its Scale step shows Custom scale or Small scale, whichever sets the scale, beside the
--- switches that choose.
 function ns.ScaleCustomOver()
 	return ns.Get("general.scaleOn") == true and (ns.Get("general.pixelPerfect") == true or ns.Get("general.scaleBelow") == true)
 end
@@ -110,7 +87,6 @@ function ns.ScaleSmallOver()
 	return ns.Get("general.scaleOn") == true and ns.Get("general.pixelPerfect") == true
 end
 
--- What the game held before the first write, kept for the account.
 local function Remember()
 	local db = FlatUIDB
 	if type(db) ~= "table" or type(db.scaleGame) == "table" then
@@ -129,7 +105,6 @@ local function Verify()
 	checking = false
 	local use, now, shown = CVarText("useUiScale"), CVarScale(), Current()
 	if use == "1" and now and math.abs(now - asked) < MATCH and (not shown or math.abs(shown - asked) < MATCH) then
-		-- The game sends UI_SCALE_CHANGED itself, and the edges drawn on the frames follow it.
 		result = "ok"
 	else
 		result = "refused"
@@ -147,14 +122,12 @@ local function Write(value)
 	end
 	Remember()
 	asked, result, checking, written, liveWrite = value, nil, false, true, true
-	-- uiscale first, so the game does not apply the old value when useUiScale turns on.
 	pcall(C_CVar.SetCVar, "uiscale", ("%.10g"):format(value))
 	if CVarText("useUiScale") ~= "1" then
 		pcall(C_CVar.SetCVar, "useUiScale", "1")
 	end
 	checking = true
 	if C_Timer and C_Timer.After then
-		-- UI_SCALE_CHANGED checks the write when the game sends it. Without one the check is made after the wait.
 		C_Timer.After(SETTLE, Verify)
 		if CVarText("useUiScale") == "1" and math.abs((CVarScale() or -1) - value) < MATCH then
 			Verify()
@@ -164,7 +137,6 @@ local function Write(value)
 	end
 end
 
--- Puts the game's own values back after a scale this addon wrote, in this session or an earlier one (the account keeps them in scaleGame).
 local function Release()
 	if direct then
 		direct, reloadNote = false, true
@@ -192,17 +164,15 @@ local function SetDirect(value)
 	end
 	if pcall(UIParent.SetScale, UIParent, value) then
 		direct = true
-		-- Setting the scale here fires no scale event.
 		ns.ResizeAll()
 	end
 end
 
 local function Apply()
-	pending = false
+	pending, told = false, false
 	local value, route = Wanted()
 	if route == "cvar" then
 		if direct then
-			-- UIParent holds a scale this addon set. The game puts its own back at the next /reload.
 			direct, reloadNote = false, true
 		end
 		Write(value)
@@ -216,8 +186,11 @@ local function Apply()
 	end
 end
 
--- Nothing is written in combat.
-local function Queue()
+local function Queue(changed)
+	if changed and not told and InCombatLockdown() and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+		told = true
+		print("Flat UI: the UI scale changes when the fight ends.")
+	end
 	if pending then
 		return
 	end
@@ -227,7 +200,6 @@ end
 
 function ns.ScaleChanged(path)
 	if path == "general.scaleOn" and ns.Get("general.scaleOn") and not ns.IsSet("general.scale") then
-		-- Ticked for the first time: start from the scale on screen.
 		local current = Current()
 		if current then
 			ns.Set("general.scale", Percent(current))
@@ -241,16 +213,14 @@ function ns.ScaleChanged(path)
 	if C_Timer and C_Timer.After then
 		C_Timer.After(SETTLE, function()
 			if mine == generation then
-				Queue()
+				Queue(true)
 			end
 		end)
 	else
-		-- Without a timer every step of the slider is written.
-		Queue()
+		Queue(true)
 	end
 end
 
--- The percent a profile held under the game's 65% before it moved to Small scale, for the profile in use.
 local function Moved()
 	return ns.scaleMoved and ns.scaleMoved[ns.Profile()]
 end
@@ -310,25 +280,41 @@ function ns.ScaleStatus()
 	return line
 end
 
+function ns.ScaleTell()
+	if InCombatLockdown() then
+		told = true
+	end
+	local function Say()
+		print("Flat UI: " .. (ns.ScaleStatus() or "Custom UI scale: off."))
+	end
+	if C_Timer and C_Timer.After then
+		C_Timer.After(2 * SETTLE + 0.2, Say)
+	else
+		Say()
+	end
+end
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
 pcall(frame.RegisterEvent, frame, "PLAYER_ENTERING_WORLD")
 pcall(frame.RegisterEvent, frame, "UI_SCALE_CHANGED")
 pcall(frame.RegisterEvent, frame, "DISPLAY_SIZE_CHANGED")
+pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_ENABLED")
 frame:SetScript("OnEvent", function(_, event)
+	if event == "PLAYER_REGEN_ENABLED" then
+		told = false
+		return
+	end
 	if event == "PLAYER_LOGIN" and Moved() then
 		print("Flat UI: Custom scale " .. MovedLine() .. " Turn on Custom UI scale and Scale below 65% to use it.")
 	end
-	-- The game's events only read back: the game applies its variables itself.
 	if event == "UI_SCALE_CHANGED" then
 		Verify()
 	end
 	local _, route = Wanted()
 	if route == "set" then
-		-- The game puts its own scale back after these events, so the small scale is set again.
 		Queue()
 	elseif event == "DISPLAY_SIZE_CHANGED" and ns.Get("general.scaleOn") == true and ns.Get("general.pixelPerfect") then
-		-- A pixel-perfect scale follows the screen height. The write is made only when the height gives another scale.
 		Queue()
 	end
 end)

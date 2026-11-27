@@ -1,46 +1,8 @@
 local _, ns = ...
 
--- The group buff tracker: how many members of the player's party or raid lack the player's class buff, shown as missing/total on the icon,
--- and a click on the icon (TrackerClicks.lua) casts the buff on a member who lacks it. This follows the group buff check of the Class Buff
--- Reminder of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLClassBuffReminder/ClassBuffReminder.lua:940-970,
--- 5950-6080 and 7450-7600): a member counts while the unit exists, is connected, is alive and is not one of the game's followers, and, but for
--- the player, is in sight and in the player's phase; it lacks the buff only when the game plainly gives none of the buff's auras on it. In a
--- raid every member counts.
--- A warrior's Battle Shout is left out. EnhanceQoL's warrior entry is retail's shout, spell 6673 alone (ClassBuffReminder.lua:541-545), but on
--- Forever 6673 is the first of the seven ranks of the classic shout (ClassData.lua:9), which takes rage and is cast in fights. Out of combat a
--- warrior's rage runs down, so a click would mostly get the game's Not enough rage, which Forever's error frame shows with its sound (it hides
--- one other error alone: Blizzard_UIErrorsFrame/Camelot/UIErrorsFrameOverrides.lua:1-3, Mainline/UIErrorsFrame.lua:133-157), and in a fight,
--- where the others are not read, the check would keep its last look, red, after the shout. The warrior's own Battle Shout tracker
--- (ClassData.lua:9) follows the shout in fights (Trackers.lua:1367-1384, 1751-1781, 2489-2537).
--- A paladin keeps one blessing of his own on a member, and the blessing he casts takes the place of the one of his that was there: the tooltips
--- of every rank of Might, Wisdom, Kings and Light and of their greater blessings say "Players may only have one Blessing on them per Paladin at
--- any one time" (the Spell table of the DB2 tables of build 1.60.1.70707), and the Forever build of EnhanceQoL keeps one blessing for each member,
--- by the member's GUID (Core/Cleanup.lua:1236-1244; Locales/enUS.lua:709-710, 741). Salvation and Mass Salvation, as Forever names Blessing of
--- Salvation and its greater blessing, are not counted as blessings: their tooltips there place no Blessing and give no such rule. A member who
--- lacks a blessing tracker's buff but has another of the player's own blessings therefore counts as having it, with no time of its own, so a
--- click, which casts on a member who lacks the buff or, while the tracker is low, on the one whose buff ends first, never casts over the
--- player's blessing on him. The game gives the auras the player cast to the PLAYER filter (Blizzard_FrameXMLUtil/AuraUtil.lua:274).
--- The auras of other units are read only out of combat, and only while the game says aura values are open (C_Secrets.ShouldAurasBeSecret,
--- SecretPredicateAPIDocumentation.lua:119-127): C_UnitAuras.GetUnitAuraBySpellID and GetAuraDataBySpellName are SecretWhenUnitAuraRestricted and
--- RequiresNonSecretAura (UnitAuraDocumentation.lua:245-262, 456-473), GetUnitAuraBySpellID gives nothing for a unit out of sight, and UNIT_AURA
--- carries withheld values while auras are restricted (UnitAuraDocumentation.lua:645-655). In a fight the tracker shows what was known last, as
--- a buff does. UnitPhaseReason is SecretWhenUnitIdentityRestricted (UnitDocumentation.lua:2651-2665) and UnitInRange always secret (1700-1715), so
--- range is asked of C_Spell.IsSpellInRange (SpellDocumentation.lua:948-963), which has no withheld answer, and only to choose whom a click casts on.
--- Every answer is still tested with IsSecret before it is compared or kept.
-
 local KEY = "trackers"
 local IsSecret = ns.IsSecret
 
--- FAMILIES: by the class token UnitClass gives, the group buffs of the class: key (the word it is added by), label (its name when the game gives
--- none), cast (the first rank of the spell cast on one member; the click casts it by name, which is its highest rank), ids (every rank of that spell
--- and of the one cast on the whole group or class, all of which count as the buff), blessing (a paladin's blessing, of which he keeps one of his
--- own on a member; not Salvation), check (the buff is offered only while C_Spell.DoesSpellExist, SpellDocumentation.lua:46-60, says its spell
--- exists: the Forever build of EnhanceQoL takes Blessing of Light and Blessing of Salvation out, Core/Cleanup.lua:1236-1244). The IDs are those
--- of ClassData.lua (lines 16, 35-37, 53, 68), from the DB2 tables of build 1.60.1.70245, the Blessing split by its name.
--- PICK: the words of the Add a check line. MAX_UNITS: the largest raid. MAX_NAMES: the members the check names. RECHECK: the seconds after
--- which an event of any member reads the whole group again, for a change that no event of its own member tells, such as a member going out of
--- sight: the game's own unit watch reads UnitExists and UnitIsVisible again every 0.2 seconds rather than on an event (SecureStateDriver.lua:56-63,
--- 119-136).
 local K = {
 	FAMILIES = {
 		PRIEST = {
@@ -68,10 +30,6 @@ local K = {
 	MAX_UNITS = 40, MAX_NAMES = 5, MAX_ID = 2147483647, MAX_SPELLS = 40, MAX_NAME = 40, RECHECK = 5,
 	NO_AURAS = "Trackers: the game gives no buff information of other units, so group buff trackers show a grey icon.",
 }
--- What was read of each tracker, by the id of its entry: { missing, total, lacking = { unit, ... }, soonest = { unit, expires, length }, seen =
--- { unit = what was seen of it (Sight) }, entry, others (Others), time, fresh }. A read is used again until an event of the group says it is
--- old. heard: what the frame hears, nil, "roster" (a group tracker is on: the roster and the end of a fight) or "all" (in a group: the units as
--- well). EVENTS: the events of each.
 local S = { read = {}, frame = nil, heard = nil }
 local EVENTS = { roster = { "GROUP_ROSTER_UPDATE", "PLAYER_REGEN_ENABLED" }, all = { "UNIT_AURA", "UNIT_CONNECTION", "UNIT_FLAGS", "UNIT_PHASE" } }
 
@@ -83,7 +41,6 @@ local function Whole(value)
 	return Plain(value, "number") and value >= 1 and value <= K.MAX_ID and value == math.floor(value)
 end
 
--- The first answer of a game call, or nil when the call is missing, raises or is withheld.
 local function Ask(call, ...)
 	if type(call) ~= "function" then
 		return nil
@@ -95,7 +52,6 @@ local function Ask(call, ...)
 	return nil
 end
 
--- A field of a table, or nil when it cannot be read or is withheld.
 local function Field(object, key)
 	local ok, value = pcall(function()
 		return object[key]
@@ -116,7 +72,6 @@ local function SpellName(id)
 	return Plain(name, "string") and name ~= "" and name or nil
 end
 
--- True when the player knows a spell of the list: the game's two known tests (SpellBookDocumentation.lua:738-770).
 local function Knows(ids)
 	local book = type(C_SpellBook) == "table" and C_SpellBook or {}
 	for _, id in ipairs(ids or {}) do
@@ -127,7 +82,6 @@ local function Knows(ids)
 	return false
 end
 
--- The group buffs of the player's class that this game has: a buff marked check only when C_Spell.DoesSpellExist says yes.
 local function Families()
 	local ok, _, token = pcall(UnitClass, "player")
 	local list = ok and Plain(token, "string") and K.FAMILIES[token] or {}
@@ -140,7 +94,6 @@ local function Families()
 	return found
 end
 
--- The names of the auras, each once, as the game gives them: the spell cast on one member and the one cast on all.
 local function Names(ids)
 	local names, seen = {}, {}
 	for _, id in ipairs(ids) do
@@ -153,7 +106,6 @@ local function Names(ids)
 	return names
 end
 
--- For a tracker of one of the player's blessings, the names of his other blessings that this game has; nil for any other buff.
 local function Others(entry)
 	local own, others = false, {}
 	for _, family in ipairs(Families()) do
@@ -181,12 +133,10 @@ local function Others(entry)
 	return names
 end
 
--- The player is in a party or a raid.
 local function Grouped()
 	return Ask(IsInGroup) == true
 end
 
--- Whether other units' auras may be read now: out of combat, and while the game says aura values are open.
 local function Open()
 	if InCombatLockdown() then
 		return false
@@ -199,7 +149,6 @@ local function Open()
 	return ok and not IsSecret(answer) and answer == false
 end
 
--- The units of the group, in the order the game numbers them: the raid, or the player and the party.
 local function Units()
 	local units = {}
 	if Ask(IsInRaid) == true then
@@ -217,8 +166,6 @@ local function Units()
 	return units
 end
 
--- True for a member that counts: there, connected, alive, no follower of the game's; one that is not the player also in sight and in phase. An
--- answer the game withholds is taken as no, but for the phase, which is taken as in phase.
 local function Counts(unit)
 	if Ask(UnitExists, unit) ~= true or Ask(UnitIsConnected, unit) ~= true or Ask(UnitIsDeadOrGhost, unit) ~= false or Ask(UnitInPartyIsAI, unit) == true then
 		return false
@@ -233,9 +180,6 @@ local function Counts(unit)
 	return not ok or IsSecret(reason) or reason == nil
 end
 
--- Whether the unit has one of the buff's auras: true and the aura, false for plainly none, nil when a call failed or was withheld. By ID first,
--- then by name, which finds a rank the list lacks. others: the names of the player's other blessings (Others), for a blessing tracker; a
--- member with one of them cast by the player has his blessing, true with no aura, so its time is not the tracker's.
 local function Has(entry, unit, others)
 	local auras = type(C_UnitAuras) == "table" and C_UnitAuras or {}
 	local failed, asked = false, false
@@ -279,9 +223,6 @@ local function Has(entry, unit, others)
 	return false
 end
 
--- What a look sees of one member, as a plain word kept for its unit: "out" for one that does not count, else what Has gives and, while the buff
--- is on, when it ends and how long it lasts; then that answer, the end and the length. others: the names of the player's other blessings, as Has
--- takes them.
 local function Sight(entry, unit, counts, others)
 	if not counts then
 		return "out"
@@ -295,7 +236,6 @@ local function Sight(entry, unit, counts, others)
 	return ("on %s %s"):format(tostring(expires), tostring(length)), true, expires, length
 end
 
--- One look at the group: how many lack the buff of how many that count, who lacks it, whose buff ends first, and what was seen of each unit.
 local function Scan(entry)
 	local read = { missing = 0, total = 0, lacking = {}, seen = {}, entry = entry, others = Others(entry), time = Now(), fresh = true }
 	for _, unit in ipairs(Units()) do
@@ -314,7 +254,6 @@ local function Scan(entry)
 	return read
 end
 
--- The look of the group kept for the tracker, read again when an event made it old.
 local function Fresh(entry)
 	local read = S.read[entry.id]
 	if not (read and read.fresh) then
@@ -324,14 +263,12 @@ local function Fresh(entry)
 	return read
 end
 
--- Every look kept is old: the next pass reads the group again. The player entering the world or the spells changing asks for a pass already.
 local function Old()
 	for _, read in pairs(S.read) do
 		read.fresh = false
 	end
 end
 
--- Every look kept is old, and the trackers are drawn again.
 local function Stale()
 	Old()
 	if type(ns.TrackerDirty) == "function" then
@@ -339,15 +276,10 @@ local function Stale()
 	end
 end
 
--- A unit of the group: the player, party1 to party4 and raid1 to raid40, none of their pets.
 local function Member(unit)
 	return unit == "player" or (unit:find("^party%d+$") ~= nil) or (unit:find("^raid%d+$") ~= nil)
 end
 
--- True when an event of the member can change what a look kept shows: no look is kept yet, a look is old or older than K.RECHECK, or the member
--- is not what a look saw of its unit. Only that member is read again, once for every look that read its unit. A look that did not read the unit
--- leaves the event alone: the game sends a unit event for each token of the member, as the raid frames show, which give every member of a raid,
--- the player too, its raid token and hear UNIT_AURA for that token alone (CompactRaidGroup.lua:56-68, CompactUnitFrame.lua:348).
 local function Changed(unit)
 	local now, counts, kept = Now(), nil, false
 	for _, read in pairs(S.read) do
@@ -368,11 +300,6 @@ local function Changed(unit)
 	return not kept
 end
 
--- In a fight nothing is read, and the end of the fight makes every look old. While aura values are withheld nothing can be read either, and
--- UNIT_AURA withholds its unit as well (UnitAuraDocumentation.lua:645-655): the looks are only made old. The start of the restriction has drawn
--- the tracker hidden already and the pass that follows its end reads the group again (Trackers.lua, ADDON_RESTRICTION_STATE_CHANGED: Warn and
--- Restriction). Else the group is read again and the trackers drawn only when the event can change a look (Changed); a member's other auras,
--- flags and drinks change none.
 local function OnEvent(_, event, unit)
 	if not ns.Enabled(KEY) then
 		return
@@ -388,8 +315,6 @@ local function OnEvent(_, event, unit)
 	end
 end
 
--- The frame hears the roster only while a group tracker is on, and the units only while the player is in a group as well (UNIT_AURA of every
--- unit is many events in a raid). heard is nil, "roster" or "all".
 local function Listen(heard)
 	if heard == S.heard then
 		return
@@ -413,10 +338,6 @@ local function Listen(heard)
 	S.heard = heard
 end
 
--- The kind --------------------------------------------------------------------------------------------------------------------------------
-
--- The reading: missing while a member lacks the buff, low while the first one to end has Low at (seconds left) or less, else fine; count is how
--- many lack it and total how many count. Out of a group it is absent and the tracker is not shown; in a fight it is hidden.
 local function Read(entry)
 	if not Grouped() then
 		Listen("roster")
@@ -436,8 +357,6 @@ local function Read(entry)
 	local soonest = read.soonest
 	if soonest and reading.state == "fine" then
 		reading.expires, reading.length = soonest.expires, soonest.length
-		-- The Low at here (ns.TrackerLowTime, Trackers.lua): in a dungeon or raid a group buff of 10 minutes or more warns as Low in dungeons and raids
-		-- says, by the full length of the buff that ends first.
 		local lowTime = ns.TrackerLowTime(entry, soonest.length)
 		if Plain(lowTime, "number") and lowTime > 0 then
 			if soonest.expires - Now() <= lowTime then
@@ -450,7 +369,6 @@ local function Read(entry)
 	return reading
 end
 
--- A group tracker keeps its spells and names as a buff does, and the spell it casts.
 local function Clean(entry)
 	if ns.TrackerCleanSpells(entry) ~= true or #entry.spells == 0 then
 		return false
@@ -461,7 +379,6 @@ local function Clean(entry)
 	return true
 end
 
--- The fields of a group tracker for a buff: one of the class, or any spell by name, ID or link with every rank the spell book lists.
 local function Fields(family)
 	local name = SpellName(family.cast) or family.label
 	local names = Names(family.ids)
@@ -540,7 +457,6 @@ local function Icon(entry)
 	return (Plain(icon, "number") or Plain(icon, "string")) and icon or nil
 end
 
--- Hidden out of a group; else the rules of Show.
 local function Wanted()
 	if not Grouped() then
 		return 0
@@ -548,7 +464,6 @@ local function Wanted()
 	return nil
 end
 
--- "2/5" on the icon: how many lack the buff of how many count, from a reading made now.
 local function Count(_, reading, how)
 	if how == "live" and Plain(reading.count, "number") and Plain(reading.total, "number") then
 		return ("%d/%d"):format(reading.count, reading.total)
@@ -561,8 +476,6 @@ local function UnitLabel(unit)
 	return Plain(name, "string") and name ~= "" and name or unit
 end
 
--- A member's name in the colour of their class (RAID_CLASS_COLORS, read and never written: its plain r, g and b, no call of its own), else the plain
--- name.
 local function ClassLabel(unit)
 	local label = UnitLabel(unit)
 	local class = Ask(UnitClassBase, unit)
@@ -581,8 +494,6 @@ local function ClassLabel(unit)
 	return ("|cff%02x%02x%02x%s|r"):format(Byte(r), Byte(g), Byte(b), label)
 end
 
--- " (Mara, Eli)": the names of the members who lack the buff at the last look, in their class colours, at most K.MAX_NAMES and how many more, or
--- "" for none.
 local function Who(read)
 	local names = {}
 	for index, unit in ipairs(read.lacking) do
@@ -607,7 +518,6 @@ local function Lines(entry)
 	return { ("Group buff: %d of %d lack it%s.%s Other members are read out of combat only."):format(read.missing, read.total, Who(read), blessing) }
 end
 
--- The line of the tracker's tooltip (Tracker tooltips, Trackers.lua): who lacks the buff at the last look, which is made out of combat only.
 local function Tip(entry)
 	local read = Grouped() and S.read[entry.id]
 	if not read then
@@ -618,7 +528,6 @@ local function Tip(entry)
 	return { ("%d of %d lack it%s."):format(read.missing, read.total, Who(read)) }
 end
 
--- Forgets what was read of a tracker that is gone, and stops hearing the group when no group tracker is left.
 local function Gone(id)
 	S.read[id] = nil
 	for _, entry in ipairs(type(ns.TrackerEntries) == "function" and ns.TrackerEntries() or {}) do
@@ -629,9 +538,6 @@ local function Gone(id)
 	Listen(nil)
 end
 
--- What a click on the tracker casts and on whom: { type, spell, unit } for the secure button and the words of its tooltip, or nil when nothing is to
--- be done. A member who lacks the buff and is in the spell's range first, then one who lacks it, then, while the tracker is low, the one whose buff
--- ends first. With now set (the click itself, or the mouse over it) the group is looked at afresh, else the look the tracker was drawn from is taken.
 function ns.TrackerGroupChoice(entry, now)
 	if type(entry) ~= "table" or entry.kind ~= "group" or not Grouped() or not Open() or not Knows(entry.spells) then
 		return nil
@@ -647,7 +553,6 @@ function ns.TrackerGroupChoice(entry, now)
 	else
 		read = Fresh(entry)
 	end
-	-- Low by the Low at the tracker is drawn with (Read).
 	local lowTime = ns.TrackerLowTime(entry, read.soonest and read.soonest.length)
 	local low = read.soonest and Plain(lowTime, "number") and lowTime > 0 and read.soonest.expires - Now() <= lowTime
 	if read.missing == 0 and not low then
@@ -667,7 +572,6 @@ function ns.TrackerGroupChoice(entry, now)
 	return { type = "spell", spell = name, unit = unit }, ("casts %s on %s"):format(name, UnitLabel(unit))
 end
 
--- The lines of Add a check: each group buff of the class that the player knows.
 if type(ns.TrackerAddPicks) == "function" then
 	ns.TrackerAddPicks(function()
 		local rows = {}

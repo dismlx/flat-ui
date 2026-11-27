@@ -1,39 +1,21 @@
 local _, ns = ...
 
--- The tooltip of units, action buttons and the world. The game anchors it to Edit Mode's tooltip box in
--- GameTooltip_SetDefaultAnchor. Following that function (ns.FollowGlobal) marks GameTooltip as placed by this module, and
--- a frame of the addon's own places it again each frame at the cursor or at the Tooltip handle of the
--- movers. At the cursor, a tooltip that would pass the screen's edge goes to the cursor's other side on that axis, mirrored (Flip), so the
--- game's clamp to the screen never pushes it over the cursor; it comes back once there is room.
--- No method of GameTooltip is hooked: the scripts of GameTooltip are followed with HookScript (OnShow, OnHide), so with Every
--- tooltip a tooltip anchored beside its owner is placed before it is drawn there (but for a buff or debuff icon of the party frames, PartyAura),
--- and the frame of the addon's own that places the tooltip sees the game fade it (the alpha falls) and hides a tooltip at the cursor at once.
--- SetOwner is never called, and Edit Mode's
--- tooltip box is never touched. An owner is tested with IsForbidden before it is used (EllesmereUIBlizzardSkin/EllesmereUIBlizzardSkin.lua:2705-2760).
-
 local KEY = "tooltip"
 local MOVER = "FlatUITooltip"
--- Placements that fail this many times in a row stop until the next tooltip.
 local MAX_FAILURES = 5
--- The tooltip is placed again at this interval even when nothing changed, in case the game moved it.
 local REPLACE_EVERY = 0.25
 
--- Anchor types that place a tooltip beside its owner. The cursor types, ANCHOR_PRESERVE and
--- ANCHOR_NONE are left to the game.
 local BESIDE_OWNER = {
 	ANCHOR_TOP = true, ANCHOR_RIGHT = true, ANCHOR_BOTTOM = true, ANCHOR_LEFT = true,
 	ANCHOR_TOPRIGHT = true, ANCHOR_BOTTOMRIGHT = true, ANCHOR_TOPLEFT = true, ANCHOR_BOTTOMLEFT = true,
 }
 
 local armed, armedOwner, failures = false, nil, 0
--- True once the armed tooltip has been seen shown. A tooltip the game anchors now may be shown a frame later.
 local seenShown = false
 local lastX, lastY, lastPoint
 local sincePlaced = 0
 local hooked, scriptsHooked = false, false
--- The highest alpha seen on the armed tooltip: the game fades a tooltip out by lowering it (UnitFrame_OnLeave and the world cursor, GameTooltip:FadeOut).
 local topAlpha
--- A fall of alpha this large is a fade.
 local FADE_STEP = 0.02
 local driver
 
@@ -41,7 +23,6 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- True while the Tooltip handle of the movers has an effect: the tooltip is placed here and its position is fixed.
 function ns.TooltipSpotUsed()
 	return ns.Enabled(KEY) and Opt("mode") == "fixed"
 end
@@ -54,7 +35,6 @@ local function Disarm()
 	armed, armedOwner, failures, lastX, seenShown, topAlpha = false, nil, 0, nil, false, nil
 end
 
--- Notes the alpha of the armed tooltip as the one a fade is measured from.
 local function Baseline(tooltip)
 	local ok, alpha = pcall(tooltip.GetAlpha, tooltip)
 	if ok and Number(alpha) and (topAlpha == nil or alpha > topAlpha) then
@@ -62,16 +42,10 @@ local function Baseline(tooltip)
 	end
 end
 
--- How far a span from low to high passes the edges 0 and limit, both together.
 local function Past(low, high, limit)
 	return math.max(0, -low) + math.max(0, high - limit)
 end
 
--- The point and offsets of a tooltip at the cursor, mirrored to the cursor's other side on each axis where the tooltip would pass the screen's
--- edge and passes it less on the other side: the game keeps the tooltip on the screen (clampedToScreen), and pushed back it would lie over the
--- cursor and what it points at. It flips back as soon as there is room, since each placement starts again from the chosen point. A point centred
--- on an axis (Top, Bottom, Left, Right, Centre) is left as it is on that axis. x, y and the offsets are in the units of UIParent; size is the
--- tooltip's scale over UIParent's. A size that cannot be read leaves the point as chosen.
 local function Flip(tooltip, point, x, y, offsetX, offsetY, size)
 	local okWidth, width = pcall(tooltip.GetWidth, tooltip)
 	local okHeight, height = pcall(tooltip.GetHeight, tooltip)
@@ -82,7 +56,6 @@ local function Flip(tooltip, point, x, y, offsetX, offsetY, size)
 		return point, offsetX, offsetY
 	end
 	width, height = width * size, height * size
-	-- The chosen side on each axis: the span the tooltip takes there and the span it takes mirrored.
 	local here, there = x + offsetX, x - offsetX
 	if point:find("LEFT", 1, true) and Past(there - width, there, screenW) < Past(here, here + width, screenW) then
 		point, offsetX = point:gsub("LEFT", "RIGHT"), -offsetX
@@ -98,7 +71,6 @@ local function Flip(tooltip, point, x, y, offsetX, offsetY, size)
 	return point, offsetX, offsetY
 end
 
--- Where the chosen point of the tooltip goes, in the units of the tooltip: point, x, y. Nil when a scale, the cursor or the spot cannot be read.
 local function Where(tooltip)
 	local okScale, scale = pcall(tooltip.GetEffectiveScale, tooltip)
 	local okBase, base = pcall(UIParent.GetEffectiveScale, UIParent)
@@ -106,10 +78,8 @@ local function Where(tooltip)
 		return nil
 	end
 	local point = Opt("point")
-	-- The offsets are for the cursor. The fixed spot is placed with the Tooltip handle.
 	local x, y, offsetX, offsetY
 	if Opt("mode") == "fixed" then
-		-- A handle that was centred is on the middle of the screen, so the tooltip hangs from the middle of its row and is centred at any width.
 		point = ns.MoverCentred(MOVER, point) or point
 		x, y = ns.MoverSpot(MOVER, point)
 		offsetX, offsetY = 0, 0
@@ -126,12 +96,10 @@ local function Where(tooltip)
 	if Opt("mode") == "cursor" then
 		point, offsetX, offsetY = Flip(tooltip, point, x, y, offsetX, offsetY, scale / base)
 	end
-	-- The offsets are in the units of UIParent. SetPoint takes the units of the tooltip.
 	local ratio = base / scale
 	return point, (x + offsetX) * ratio, (y + offsetY) * ratio
 end
 
--- Puts the chosen point of the tooltip at the fixed spot, or at the cursor with the offsets.
 local function Place(tooltip)
 	local point, x, y = Where(tooltip)
 	if not point then
@@ -156,12 +124,10 @@ local function Wake()
 	end
 end
 
--- Called after the game has anchored the tooltip to Edit Mode's tooltip box.
 local function Arm(tooltip, parent)
 	if tooltip == nil or ns.IsSecret(tooltip) or tooltip ~= GameTooltip then
 		return
 	end
-	-- Whatever was armed is over, also when this tooltip is left to the game.
 	Disarm()
 	if not ns.Enabled(KEY) or ns.EditModeOpen() or ns.Forbidden(tooltip) or (parent ~= nil and ns.Forbidden(parent)) then
 		return
@@ -172,7 +138,6 @@ local function Arm(tooltip, parent)
 	Wake()
 end
 
--- True while the tooltip is still the one that was armed, in the place the game put it.
 local function Holds(tooltip)
 	if ns.EditModeOpen() then
 		return false
@@ -189,7 +154,6 @@ local function Holds(tooltip)
 	if okType and not ns.IsSecret(anchor) and anchor ~= "ANCHOR_NONE" then
 		return false
 	end
-	-- An owner that cannot be read keeps the tooltip armed.
 	local okOwner, owner = pcall(tooltip.GetOwner, tooltip)
 	if okOwner and not ns.IsSecret(owner) and armedOwner ~= nil and owner ~= armedOwner then
 		return false
@@ -197,7 +161,6 @@ local function Holds(tooltip)
 	return true
 end
 
--- The parent of a frame, or nil when it cannot be read, is withheld or may not be touched.
 local function ParentOf(frame)
 	local ok, parent = pcall(frame.GetParent, frame)
 	if ok and parent ~= nil and not ns.IsSecret(parent) and not ns.Forbidden(parent) then
@@ -206,11 +169,6 @@ local function ParentOf(frame)
 	return nil
 end
 
--- True for a buff or debuff icon of the game's party frames: a button of the row of icons under a party member or under its pet (its parent is that
--- frame's AuraFrameContainer: Mainline\PartyFrameTemplates.xml:60-67 and 369-376, Mainline\PartyMemberFrame.lua:369-370), or of the box of buffs and
--- debuffs the game opens over a party frame (PartyMemberBuffTooltip, Shared\PartyFrame.xml:42-56, Shared\PartyFrame.lua:179-182). The game opens the
--- tooltip of such an icon beside it (ANCHOR_RIGHT, Shared\PartyMemberFrame.lua:191-193), and Every tooltip leaves it there: at the cursor, with its
--- offsets, it lay over the icons and the frames next to the one pointed at, and seemed to be theirs. Only parents and the container are read.
 local function PartyAura(owner)
 	local row = ParentOf(owner)
 	local frame = row and ParentOf(row)
@@ -226,14 +184,10 @@ local function PartyAura(owner)
 	if not ok or ns.IsSecret(container) or not rawequal(container, row) then
 		return false
 	end
-	-- A party member hangs from the party frame, and a party pet from its member; the pet frame of the player does neither.
 	local party, up = _G.PartyFrame, ParentOf(frame)
 	return party ~= nil and up ~= nil and (rawequal(up, party) or rawequal(ParentOf(up), party))
 end
 
--- Every tooltip: one that the game anchors beside its owner is made a tooltip with no anchor type, and placed. A buff or debuff icon of the party
--- frames keeps its tooltip beside it (PartyAura).
--- The caller has tested the anchor type with ns.IsSecret. A tooltip not yet shown is not armed as shown.
 local function Take(tooltip, anchor, shown)
 	if not BESIDE_OWNER[anchor] or ns.EditModeOpen() then
 		return
@@ -242,7 +196,6 @@ local function Take(tooltip, anchor, shown)
 	if not okOwner or owner == nil or ns.IsSecret(owner) or ns.Forbidden(owner) or PartyAura(owner) then
 		return
 	end
-	-- A tooltip that cannot be placed now stays where the game puts it beside its owner.
 	if not Where(tooltip) then
 		return
 	end
@@ -253,7 +206,6 @@ local function Take(tooltip, anchor, shown)
 	end
 end
 
--- A tooltip that is up and was not taken when it was shown.
 local function Adopt(tooltip)
 	local okShown, shown = pcall(tooltip.IsShown, tooltip)
 	local okType, anchor = pcall(tooltip.GetAnchorType, tooltip)
@@ -263,8 +215,6 @@ local function Adopt(tooltip)
 	Take(tooltip, anchor, true)
 end
 
--- The tooltip has been shown (OnShow): one that the game anchors beside its owner is taken before it is drawn there, and one that is armed
--- has been seen shown.
 local function Shown(tooltip)
 	if tooltip == nil or ns.IsSecret(tooltip) or tooltip ~= GameTooltip or not ns.Enabled(KEY) then
 		return
@@ -277,7 +227,6 @@ local function Shown(tooltip)
 	end
 end
 
--- The tooltip has been hidden (OnHide): an armed tooltip that was shown is over.
 local function Hidden(tooltip)
 	if tooltip == nil or ns.IsSecret(tooltip) or tooltip ~= GameTooltip then
 		return
@@ -287,7 +236,6 @@ local function Hidden(tooltip)
 	end
 end
 
--- True when the alpha of the armed tooltip has fallen: the game fades it out when the mouse leaves its unit.
 local function Fading(tooltip)
 	local ok, alpha = pcall(tooltip.GetAlpha, tooltip)
 	if not ok or not Number(alpha) then
@@ -300,8 +248,6 @@ local function Fading(tooltip)
 	return alpha < topAlpha - FADE_STEP
 end
 
--- The game fades the tooltip out, when the mouse leaves its unit. One at the cursor would stay stuck to it
--- for the whole fade, so it is hidden at once. At the fixed spot the fade stays.
 local function Faded(tooltip)
 	if tooltip == nil or ns.IsSecret(tooltip) or tooltip ~= GameTooltip or not armed or not ns.Enabled(KEY) or Opt("mode") ~= "cursor" then
 		return
@@ -334,8 +280,6 @@ local function Step(elapsed)
 	end
 end
 
--- The hooks are put on the first time the tooltip is placed, and the script hooks the first time it is for every
--- tooltip. A forbidden GameTooltip stays forbidden, so it is tested once here and never in a frame.
 local function Install()
 	if not ns.Enabled(KEY) then
 		return
@@ -383,7 +327,6 @@ ns.Register(KEY, {
 	Start = Refresh,
 	Refresh = Refresh,
 	events = {
-		-- Cursor and nameplate tooltips of the world have UIParent as owner like the default one, so the event tells them apart.
 		WORLD_CURSOR_TOOLTIP_UPDATE = function(anchorType)
 			local default = Enum and Enum.WorldCursorAnchorType and Enum.WorldCursorAnchorType.Default
 			if armed and (ns.IsSecret(anchorType) or anchorType ~= default) then

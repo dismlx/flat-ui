@@ -1,16 +1,8 @@
 local ADDON_NAME, ns = ...
 
--- Range, heal prediction and shields, the parts of a raid frame and the timers of the totem buttons. Raid frames follow the game's own range opacity with a value of
--- their own: the game's answer about range is withheld from addon code, so it is handed to SetAlphaFromBoolean and never read. Party frames get a black layer
--- of the addon's own that a timer of the addon's own darkens by the same withheld answer. The prediction and shield segments, the parts of a raid frame and the
--- parts of a totem button are regions the game shows and hides and never fades, so off is a change of opacity to 0 and on gives back the opacity they had
--- (X.fade, UnitParts.lua). This file adds its work after the steps of UnitFrames.lua through ns.UnitFrameExtra: a part that stops on errors counts as off here,
--- and every function can run twice with the same result. The menu of a right-click on the target frame opens at the cursor, as the player and focus menus do.
-
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
 local PARTY, RAIDRANGE, RAID, PREDICT, TOTEM, MENU = "Party range", "Raid range", "Raid frame parts", "Heal prediction", "Totem timers", "Target menu"
--- The game's own opacity for a raid frame out of range and in range (CompactUnitFrame.lua:1066), and how often the party layers look at range, in seconds.
 local GAME_ALPHA, TICK = 0.5, 0.25
 local NOTE = "Unit frames: Party range: a member out of range and a member whose range the game does not report are both dimmed."
 
@@ -20,12 +12,10 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- A line for /flatui status about a part that could not do its work for a reason of the client.
 local function Note(part, text)
 	ns.Note(KEY, ("Unit frames: %s: %s"):format(part, text))
 end
 
--- The line about what keeps the party layers from dimming, which goes when they dim again or are off.
 local problem = nil
 local function Problem(text)
 	if problem == text then
@@ -40,13 +30,36 @@ local function Problem(text)
 	end
 end
 
--- Party range ------------------------------------------------------------------------------------------------
+local HANG = 43
 
--- The layer of a party member: a frame of the addon's own above the member, with one black texture, made out of combat. It starts transparent.
+function X.cover(rec, region, margin, placed)
+	local body = X.joined(rec) and X.body(rec) or nil
+	local key = ("%s:%.3f"):format(body and "body" or "parts", margin)
+	if placed == key then
+		return key
+	end
+	region:ClearAllPoints()
+	if body ~= nil then
+		region:SetPoint("TOPLEFT", body, "TOPLEFT", -margin, margin)
+		region:SetPoint("BOTTOMRIGHT", body, "BOTTOMRIGHT", margin, -margin)
+	elseif rec.kind == "party" then
+		region:SetPoint("TOPLEFT", rec.frame, "TOPLEFT", 0, 0)
+		region:SetPoint("BOTTOMRIGHT", rec.frame, "TOPRIGHT", 0, -(HANG + margin))
+	else
+		region:SetAllPoints(rec.frame)
+	end
+	return key
+end
+
+local function ShadeMargin(rec)
+	local t = ns.Pixels(rec.frame, ns.Get("general.thickness"))
+	return ns.Finite(t) and t or 1
+end
+
 local function Make(rec)
 	local ok, level = pcall(rec.frame.GetFrameLevel, rec.frame)
 	local box = X.frame(rec.frame, ok and X.number(level) and level + 10 or nil)
-	box:SetAllPoints(rec.frame)
+	rec.rangePlaced = X.cover(rec, box, ShadeMargin(rec))
 	local shade = X.layer(box, "OVERLAY", 7)
 	shade:SetColorTexture(0, 0, 0, 1)
 	shade:SetAlpha(0)
@@ -62,7 +75,6 @@ local function Make(rec)
 	end)
 end
 
--- The shade is clear for a member in range and as dark as 100 minus Out of range opacity says for any other answer, a withheld one included.
 function X.rangeLook(rec)
 	local shade = rec.rangeShade
 	if shade == nil or Off(PARTY) or Opt("partyRangeDim") ~= true then
@@ -96,11 +108,12 @@ function X.rangeLook(rec)
 end
 
 local function PartyRange(rec, on)
-	if rec.kind ~= "party" then
+	if rec.kind ~= "party" and rec.kind ~= "partypet" then
 		return
 	end
 	local want = on and not Off(PARTY) and Opt("partyRangeDim") == true
-	if want then
+	if rec.kind ~= "party" then
+	elseif want then
 		ns.Note(KEY, NOTE)
 	else
 		ns.ClearNote(KEY, NOTE)
@@ -110,8 +123,8 @@ local function PartyRange(rec, on)
 		if not want then
 			return
 		end
-		-- The layer is made out of combat, on a frame the game protects.
 		if InCombatLockdown() then
+			X.tell("Flat UI: party members dim by range when the fight ends.")
 			if not rec.rangeQueued then
 				rec.rangeQueued = true
 				ns.OutOfCombat(function()
@@ -129,10 +142,12 @@ local function PartyRange(rec, on)
 	end
 end
 
--- Raid frames -------------------------------------------------------------------------------------------------
+local function PlaceRange(rec)
+	if rec.rangeBox ~= nil then
+		rec.rangePlaced = X.cover(rec, rec.rangeBox, ShadeMargin(rec), rec.rangePlaced)
+	end
+end
 
--- The opacity of a raid frame by its own range answer: Out of range opacity when the game says the unit is out of range, 100% otherwise. The answer is never
--- tested, only handed on. At 50% the game's own opacity is back, set from the same answer, and nothing is called while the row has never left 50%.
 local function RaidRange(rec, on)
 	if rec.kind ~= "raid" then
 		return
@@ -140,7 +155,6 @@ local function RaidRange(rec, on)
 	local frame = rec.frame
 	local percent = on and not Off(RAIDRANGE) and Opt("raidRangeAlpha") or 50
 	local state = frame.outOfRange
-	-- The game's answer is a boolean or a withheld one; nothing was answered while the game fades nothing or has not looked yet.
 	if not ns.IsSecret(state) and type(state) ~= "boolean" then
 		rec.rangeSet = nil
 		return
@@ -158,7 +172,6 @@ local function RaidRange(rec, on)
 	end
 end
 
--- The role icon, the name and the status text of a raid frame. The role icon also goes for a role that Role icons for leaves out (UnitParts.lua).
 local function RaidParts(rec, on)
 	if rec.kind ~= "raid" then
 		return
@@ -169,9 +182,6 @@ local function RaidParts(rec, on)
 	Fade(RAID, X.path(frame, "statusText"), live and Opt("raidStatusText") == false)
 end
 
--- Heal prediction and shields -------------------------------------------------------------------------------
-
--- Per row: the segments of a unit frame, which hang from its health bar (the pet's are globals named PetFrame and the key), and the textures of a raid frame.
 local SEGMENTS = {
 	{ opt = "healPrediction", keys = { "MyHealPredictionBar", "OtherHealPredictionBar" }, raid = { "myHealPrediction", "otherHealPrediction" } },
 	{ opt = "absorbShield", keys = { "TotalAbsorbBar", "OverAbsorbGlow" }, raid = { "totalAbsorb", "totalAbsorbOverlay", "overAbsorbGlow" } },
@@ -196,7 +206,6 @@ local function Predict(rec, on)
 	end
 end
 
--- The game draws these parts of a raid frame again with its own updates.
 local RAID_FOLLOWS = {
 	CompactUnitFrame_UpdateName = RaidParts, CompactUnitFrame_UpdateStatusText = RaidParts, CompactUnitFrame_UpdateRoleIcon = RaidParts,
 	CompactUnitFrame_UpdateHealPrediction = Predict, CompactUnitFrame_UpdateCenterStatusIcon = RaidRange,
@@ -218,7 +227,6 @@ local function Follow(name)
 	end
 end
 
--- The hooks are made when a raid frame is first styled.
 local function Hook(rec)
 	if rec.kind ~= "raid" then
 		return
@@ -231,13 +239,6 @@ local function Hook(rec)
 	end
 end
 
--- Target menu -------------------------------------------------------------------------------------------------
-
--- The game opens the menu of the target frame at the cursor and then moves it to the right side of the frame (TargetFrame_OpenMenu,
--- Blizzard_UnitFrame/Mainline/TargetFrame.lua:680-682), while the player and focus menus stay at the cursor (PlayerFrame.lua:79-97, TargetFrame.lua:1158-1166).
--- A hook on the click runs after the game's script, so the menu is open and placed by then; it is put back at the cursor with the game's own call for the
--- player menu (Blizzard_SharedXML/InputUtil.lua:239-252). The game's attributes and scripts of the frame are not written, and a menu that hangs from a
--- protected frame is not moved in combat.
 local menuHooked = setmetatable({}, { __mode = "k" })
 
 local function Gamepad()
@@ -249,7 +250,6 @@ local function Gamepad()
 	return ok and not ns.IsSecret(on) and on == true
 end
 
--- The menu that is open, when its first point is the one TargetFrame_OpenMenu gave it: LEFT of the frame's RIGHT side.
 local function BesideFrame(frame)
 	local manager = _G.Menu
 	if type(manager) ~= "table" or ns.IsSecret(manager) or type(manager.GetManager) ~= "function" then
@@ -290,16 +290,7 @@ local function TargetMenu(rec)
 	end
 end
 
--- Totems -----------------------------------------------------------------------------------------------------
-
--- The buttons seen, so that a button the game has released gets its opacity back too.
 local seen = setmetatable({}, { __mode = "k" })
--- The game colours the time left of a totem button again with every tick of its OnUpdate, which gives the text the opacity of a colour with no
--- fourth number. TotemButtonMixin:OnUpdate calls AuraButtonMixin.UpdateDuration by that name (Blizzard_UnitFrame/Mainline/TotemFrame.lua:71), so the
--- function of that table is followed, not a method of a button or of its text (EllesmereUI hooks no text of a Blizzard frame, and treats a hook
--- on a table of functions as safe: EllesmereUIBlizzardSkin_WindowPacks.lua:3188-3190). The timer text of a button the addon has not seen is left alone.
--- Mixin copies functions when a frame is created, so aura buttons made after this runs copy the followed UpdateDuration, and KeepTimer then runs
--- once per player buff per tick. It is cheap, and the seen check filters it.
 local timerFollowed = false
 
 local function KeepTimer(button)
@@ -340,18 +331,12 @@ local function Totems()
 	end
 end
 
--- The game lays the buttons out again and sets their text and swipe; the unit frames file calls this after each of its passes over the buttons,
--- one frame after the game's call.
 function X.afterTotems()
 	if Opt("totemTimer") == false or Opt("totemSwipe") == false then
 		X.run(TOTEM, Totems)
 	end
 end
 
--- Long names on small and boss frames ----------------------------------------------------------------------------------------------------------
-
--- The name of the row is set to its own size first. With Smaller text, a name wider than the row is set at room / need of that size, down to FIT_FLOOR.
--- The scale is a font string call that works in combat and stays out of the font call's cache. A width the client withholds, or 0, leaves the name cut.
 local NAMEFIT, FIT_FLOOR = "Long names", 0.75
 local fitNote = nil
 local function FitNote(text)
@@ -366,7 +351,6 @@ local function FitNote(text)
 		ns.Note(KEY, text)
 	end
 end
--- The frames whose name could not be measured; the status line stays while any of them is, and goes with the last.
 local unmeasured = setmetatable({}, { __mode = "k" })
 local function Measured(rec, ok)
 	unmeasured[rec] = not ok or nil
@@ -403,6 +387,7 @@ end
 table.insert(X.after.rowText, { part = NAMEFIT, fn = FitName })
 table.insert(X.after.layout, { part = NAMEFIT, fn = FitName })
 table.insert(X.after.apply, { part = PARTY, fn = PartyRange })
+table.insert(X.after.layout, { part = PARTY, fn = PlaceRange })
 table.insert(X.after.apply, { part = RAID, fn = RaidParts })
 table.insert(X.after.apply, { part = RAIDRANGE, fn = RaidRange })
 table.insert(X.after.apply, { part = PREDICT, fn = Predict })

@@ -1,9 +1,5 @@
 local _, ns = ...
 
--- Snap in movers mode: a dragged handle lines up with the other handles, a guide shows where, and three or more picked handles are spaced
--- evenly. Movers.lua asks for the snap on each step of a drag (ns.MoversSnap.Snap) and MoversMode.lua keeps the picks (Ctrl and click on a
--- handle). Only out of combat. The guide takes its colour from the accent token of PanelLook.lua.
-
 local Z = {}
 ns.MoversSnap = Z
 
@@ -24,8 +20,6 @@ function Z.On()
 	return ns.PanelLook.Get("snapFrames") == "on"
 end
 
--- The move that puts a mark of a span (its start, middle or end) on a mark of another span, when one is within 5 units. spans are { start, size }.
--- Returns the move and the place of the mark that was met.
 function Z.Pull(start, size, spans)
 	local best, at
 	for _, other in ipairs(spans) do
@@ -41,8 +35,6 @@ function Z.Pull(start, size, spans)
 	return best, at
 end
 
--- The starts of spans { start, size } when the gaps between all of them are the same. The first and the last by start stay where they are.
--- Returns the new starts in the order given, or nil for fewer than three.
 function Z.Spread(spans)
 	if #spans < 3 then
 		return nil
@@ -71,8 +63,6 @@ function Z.Spread(spans)
 	return starts
 end
 
--- The guides -------------------------------------------------------------------------------------------
-
 local function Guide(key)
 	if not ui.frame then
 		local frame = CreateFrame("Frame", nil, UIParent)
@@ -85,7 +75,6 @@ local function Guide(key)
 	if not ui[key] then
 		local texture = ui.frame:CreateTexture(nil, "OVERLAY", nil, 0)
 		ns.Own[texture] = true
-		-- As the middle line: a thin line is not pulled to a pixel.
 		pcall(texture.SetSnapToPixelGrid, texture, false)
 		pcall(texture.SetTexelSnappingBias, texture, 0)
 		ui[key] = texture
@@ -93,7 +82,6 @@ local function Guide(key)
 	return ui[key]
 end
 
--- Shows a vertical guide at x and a horizontal one at y, from the left and bottom of the screen. nil hides that guide.
 function Z.Guides(x, y)
 	local r, g, b = ns.PanelLook.Colour("accent")
 	local thin = 1
@@ -125,7 +113,6 @@ function Z.Hide()
 	Z.Guides(nil, nil)
 end
 
--- The boxes of the handles a dragged handle can line up with: shown, not hidden by the eye, not placed by the game, not the dragged one.
 local function Others(skip)
 	local kit = Kit()
 	local xs, ys = {}, {}
@@ -145,7 +132,6 @@ end
 local function Pulled(name, left, bottom, width, height, onMiddle)
 	local xs, ys = Others(name)
 	local moveX, atX, moveY, atY
-	-- A handle held on the middle of the screen keeps that left edge.
 	if not onMiddle then
 		moveX, atX = Z.Pull(left, width, xs)
 	end
@@ -162,7 +148,6 @@ local function Pulled(name, left, bottom, width, height, onMiddle)
 	return left, bottom
 end
 
--- Called on each step of a drag with the place the cursor gives. Returns the place the handle takes. Without a name it only hides the guides.
 function Z.Snap(name, left, bottom, width, height, onMiddle)
 	if not (name and Z.On()) then
 		Z.Hide()
@@ -176,13 +161,10 @@ function Z.Snap(name, left, bottom, width, height, onMiddle)
 	return left, bottom
 end
 
--- Picked handles ---------------------------------------------------------------------------------------
-
 function Z.Picked(name)
 	return picked[name] == true
 end
 
--- The picked handles that can be placed, by name.
 function Z.List()
 	local kit, names = Kit(), {}
 	for name in pairs(picked) do
@@ -195,7 +177,6 @@ function Z.List()
 	return names
 end
 
--- Ctrl and click on a handle picks it or lets it go. The first pick brings in the chosen frame too.
 function Z.Toggle(name, chosen)
 	if next(picked) == nil and chosen and chosen ~= name then
 		picked[chosen] = true
@@ -213,8 +194,6 @@ function Z.Clear()
 	end
 end
 
--- Spaces the picked handles so the gaps between them are the same, across (axis "x") or down ("y"). The two outer ones stay. Out of combat only.
--- Returns the number of handles that moved.
 function Z.Space(axis)
 	if type(InCombatLockdown) == "function" and InCombatLockdown() then
 		return 0

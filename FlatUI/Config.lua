@@ -1,34 +1,8 @@
 local _, ns = ...
 
--- Every option, in the order the options panel shows it. A page is the root category or a
--- subcategory. An entry is a section header or one setting, saved under "<page>.<key>".
---   kind: "bool", "number" (with a unit shown beside the value), "colour" (AARRGGBB), "choice"
---     or "list": a dropdown that acts and holds no value. `none` is its first line, `items` names a
---     function of ns that returns { { id, text }, ... } for the other lines, and `pick` names the
---     function of ns that is called with the id of the line chosen.
---   needs: another setting on the same owner (the same page, or a page listed under the same page) that must be on for this one to apply
---   needsIn: with needs naming a choice, the values of that choice for which this one applies
---   overIf: the name of a function of ns that is true while something else takes the row over: the row is greyed (Panel.lua, Over), and a
---     number row shows overText in place of its value and unit.
---   page: the page whose setting this is, for a row shown on another page. The saved path is
---     "<page>.<key>" and the row takes the switch of the page it is shown on.
---   parent: on a page, the page it is listed under in the panel. A sub-page is listed right after its parent and the pages that share it.
---   owner: on a sub-page, the page its rows belong to. A row with no page of its own is saved as "<owner>.<key>" and takes the switch of the
---     owner, so a row moved onto a sub-page keeps its saved path. An owner without a parent is a page of its own in the sidebar that holds rows
---     of another module (Buffs and debuffs of Minimap and HUD, Gear comparison of Chat and tooltips): it shows that module's switch in its
---     header and its Off chip, and is no module of its own on Home or in profile sharing (Panel.lua, BuildModel).
---   moduleLabel: on a module's own page, the module's name where it differs from the page's (Home tiles, profile sharing, the search).
---   switch: on a page, the page whose "enabled" its rows need, for a sub-page that has no switch of its own.
---   get, set: names of functions of ns that hold the value of a row outside the profile; cvar (with scale for a number, values for a choice
---     as { id = "text" }) names a game setting that holds it. live: the row acts at once, saves nothing, and is not greyed by its page's switch.
---   changed: the name of a function of ns called with the path when the row changes, in place of a refresh of its module.
---   choices: the list, or the name of a function of ns that returns it when the page is built.
--- Every setting on a page other than the first also needs that page's "enabled".
 local RELOAD = "Turning this off takes full effect after /reload."
--- The bars a row of the Bar block page can hold.
 local SLOTS = { { "none", "None" }, { "main", "Main action bar" }, { "bar2", "Action bar 2" }, { "bar3", "Action bar 3" }, { "bar4", "Action bar 4" },
 	{ "bar5", "Action bar 5" }, { "bar6", "Action bar 6" }, { "bar7", "Action bar 7" }, { "bar8", "Action bar 8" } }
--- The bars a block can be, and the bars the blocks hang from (the main bar too).
 local BLOCK_BARS, BLOCK_FROM = { SLOTS[1] }, {}
 for index = 2, #SLOTS do
 	BLOCK_FROM[#BLOCK_FROM + 1] = SLOTS[index]
@@ -42,34 +16,22 @@ local BLOCK_PLACES = { { "free", "Where its handle is" }, { "aboveLeft", "Above,
 ns.BAR_CHOICES = { { "flat", "Flat" }, { "soft", "Soft shade" }, { "shaded", "Shaded" }, { "gloss", "Gloss" }, { "stripes", "Stripes" },
 	{ "edge", "Bottom edge" }, { "fade", "Side fade" }, { "game", "Game status bar" }, { "skills", "Skills bar" }, { "targeting", "Targeting bar" } }
 
--- The faces a text row offers: id and the name a row shows (Core.lua has the files). A face the client does not load leaves the game's font and says so.
 ns.FONT_CHOICES = { { "default", "Game font" }, { "friz", "Friz Quadrata" }, { "arial", "Arial Narrow" }, { "morpheus", "Morpheus" }, { "skurri", "Skurri" } }
--- The formats a health or power text row offers and the places for the text (UnitText.lua has the calls for each).
 ns.TEXT_FORMAT_CHOICES = { { "game", "As the game has it" }, { "hide", "Hidden" }, { "cur", "Current" }, { "curmax", "Current / max" }, { "pct", "Percent" },
 	{ "curpct", "Current and percent" }, { "miss", "Missing" } }
 ns.TEXT_POS_CHOICES = { { "left", "Left" }, { "centre", "Centre" }, { "right", "Right" } }
--- The outlines a text row offers: "game" leaves the game's own flags, the others set them (UnitText.lua has the flags).
 ns.OUTLINE_CHOICES = { { "game", "As the game has it" }, { "none", "None" }, { "thin", "Thin" }, { "thick", "Thick" } }
 ns.OUTLINE_FLAGS = { none = "", thin = "OUTLINE", thick = "OUTLINE, THICK" }
--- The colours a name can have: on a nameplate and on a unit frame the same list.
 ns.NAME_COLOUR_CHOICES = { { "game", "As the game has it" }, { "white", "White" }, { "class", "Class" }, { "reaction", "Reaction" }, { "custom", "Custom" } }
 
--- The tip of a row that does nothing to the game's action bars while Leave the game's action bars alone is on.
 local KEPT = "Not applied while Leave the game's action bars alone is on."
--- The same for the rows that apply to both experience bars: Flat UI's own bar is not held back by that setting.
 local KEPT_XP = "On the game's bar, not applied while Leave the game's action bars alone is on."
--- Where a line of text around the minimap goes (MapText.lua).
 local MAP_TEXT_PLACES = { { "above", "Above the map" }, { "below", "Below the map" } }
--- The text sizes of the hit table, under the player frame and on enemy tooltips (HitTable.lua, HitTableTip.lua). Ids are the percent in text; a
--- number saved before 0.5.26, when Text size was a slider of 50 to 200%, reads as the nearest of them (Core.lua, Renamed).
 local HIT_TABLE_SIZES = { { "70", "70%" }, { "80", "80%" }, { "90", "90%" }, { "100", "100%" }, { "110", "110%" }, { "125", "125%" },
 	{ "150", "150%" }, { "175", "175%" }, { "200", "200%" } }
--- When a frame of When shown on the Fading page is at full opacity; at other times it fades (Fade.lua has the rules).
 local FADE_WHEN = { { "always", "Always" }, { "combat", "Only in combat" }, { "group", "Only in a group" }, { "instance", "Only in an instance" },
 	{ "outside", "Only outside an instance" }, { "unmounted", "Only when not mounted" } }
--- The faded opacity of the micro menu and of the bag bar on the Fading page (Fade.lua): the page's Faded opacity, or a percent of their own.
 local FADE_TO = { { "page", "As Faded opacity" }, { "0", "0%, gone until the mouse is over it" }, { "10", "10%" }, { "25", "25%" }, { "50", "50%" } }
--- The tip of the Picture row of each unit frame: what Game portrait is, in either Frame style (UnitFrames.lua draws it).
 local GAME_PORTRAIT = "Game portrait draws the game's portrait in the frame, square or round as Portrait shape says. Flat UI portraits off keeps the game's own portrait where the game puts it."
 
 ns.PAGES = {
@@ -107,7 +69,6 @@ ns.PAGES = {
 	},
 	{
 		key = "generalColours", label = "Colours", parent = "general", owner = "general",
-		-- The colours of every cast bar, nameplates too, so they change whatever the Cast bars page has on.
 		{ section = "Cast colours" },
 		{ page = "castbars", key = "castColour", kind = "colour", default = "ffe6b333", label = "Cast colour" },
 		{ page = "castbars", key = "channelColour", kind = "colour", default = "ff4dbf59", label = "Channel colour" },
@@ -147,11 +108,8 @@ ns.PAGES = {
 		{ key = "healthHalf", kind = "colour", default = "ffe6c12e", label = "Colour at half health" },
 		{ key = "healthLow", kind = "colour", default = "ffd93a30", label = "Colour at low health" },
 	},
-	-- The options window, Flat UI setup and the button in the game menu, a tab of the Flat UI page. Options window and Setup are held per account,
-	-- outside every profile; Game menu is saved as general.*.
 	{
 		key = "generalWindow", label = "Options and setup", parent = "general", owner = "general",
-		-- The look of the options window: held per account in FlatUIDB.panel beside the window position, outside every profile (PanelLook.lua has the functions).
 		{ section = "Options window" },
 		{ page = "panel", key = "accent", kind = "choice", default = "indigo", label = "Accent colour", live = true, get = "PanelGet", set = "PanelSet", changed = "PanelLookChanged",
 			choices = { { "indigo", "Indigo" }, { "sage", "Sage" }, { "amber", "Amber" }, { "rose", "Rose" }, { "ice", "Ice" }, { "class", "Class colour" }, { "custom", "Custom" } },
@@ -184,14 +142,12 @@ ns.PAGES = {
 			choices = { { "on", "On" }, { "off", "Off" } }, tip = "A small picture beside each bar texture, font and row direction in a list." },
 		{ page = "panel", key = "snapFrames", kind = "choice", default = "on", label = "Snap to other frames", live = true, get = "PanelGet", set = "PanelSet", changed = "PanelLookChanged",
 			choices = { { "on", "On" }, { "off", "Off" } }, tip = "A guide shows when an edge or the middle of a handle lines up with another handle within 5 units." },
-		-- Flat UI setup: held per account in FlatUIDB.setup, outside every profile (Setup.lua has the functions).
 		{ section = "Setup" },
 		{ page = "setup", key = "newCharacter", kind = "choice", default = "ask", label = "Profile on a new character", live = true, get = "SetupGet", set = "SetupSet",
 			choices = "SetupNewChoices", tip = "Used once, on a character with no profile of its own." },
 		{ page = "setup", key = "welcomeWhen", kind = "choice", default = "character", label = "Welcome screen shows", live = true, get = "SetupGet", set = "SetupSet",
 			choices = { { "character", "New character with no profile" }, { "account", "First login on the account" } },
 			tip = "First login on the account shows it only while no character has a profile." },
-		-- What Keep this look on the welcome screen does (SetupWelcome.lua).
 		{ page = "setup", key = "welcomeSkip", kind = "choice", default = "default", label = "Keep this look uses", live = true, get = "SetupGet", set = "SetupSet",
 			choices = { { "default", "Default profile" }, { "game", "The game's look" } },
 			tip = "The game's look uses a profile named Game look, with every Flat UI module off." },
@@ -203,18 +159,14 @@ ns.PAGES = {
 		{ key = "menuOpens", kind = "choice", default = "options", label = "Flat UI button opens", needs = "menuButton",
 			choices = { { "options", "Options window" }, { "setup", "Flat UI setup" } } },
 	},
-	-- Rows of the Flat UI page (saved as general.*) on a page of their own in the Helpers group: the world and the mouse pointer. The Flat UI page
-	-- has no switch, so nothing greys them.
 	{
 		key = "generalWorld", label = "World and cursor", owner = "general",
 		{ section = "World" },
 		{ key = "questSparkle", kind = "bool", default = true, label = "Quest item sparkle", changed = "SparkleChanged",
 			tip = "Quest items in the world sparkle. Sets a game setting that the game's options do not show. Turned off, the game's own value is back from its next start." },
-		-- The game's graphics variables that thicken the sparkle, only ever raised (Sparkle.lua).
 		{ key = "sparkleStrength", kind = "choice", default = "strongest", label = "Sparkle strength", needs = "questSparkle", changed = "SparkleChanged",
 			choices = { { "game", "As the game has it" }, { "strong", "Strong" }, { "strongest", "Strongest" } },
 			tip = "Thickens the sparkle by raising the game's Particle Density, and its Spell Density where the game has one, raid settings too: Strong to High and Reduced, Strongest to Ultra and Everything. A higher value of yours stays. More particles can cost frame rate in busy fights. As the game has it, or Quest item sparkle off, puts your own values back." },
-		-- A sparkle of Flat UI's own on the game's nameplate of the object the Interact Key would use (SparkleGlow.lua).
 		{ key = "sparkleGlow", kind = "bool", default = true, label = "Glow on the nearest object", needs = "questSparkle", changed = "SparkleChanged",
 			tip = "A pulsing glow, gold or by what it is, with twinkling stars on the herb, vein or quest object your Interact Key would use. It shows only while the game gives that object a nameplate: Enable Interact Key in the game's Controls options and Interact Key Icons at Show All in Accessibility. Turn on what the glow needs sets both. In a fight, a new object gets it once the fight ends." },
 		{ key = "sparkleGlowColour", kind = "choice", default = "gold", label = "Glow colour", needs = "sparkleGlow", changed = "SparkleChanged",
@@ -227,10 +179,8 @@ ns.PAGES = {
 		{ key = "sparkleSetup", kind = "list", default = 0, label = "Turn on what the glow needs", none = "Choose", items = "SparkleGlowSetupLines",
 			pick = "SparkleGlowSetup", needs = "sparkleGlow",
 			tip = "Ticks the game's Enable Interact Key and sets its Interact Key Icons to Show All, out of a fight, so herbs, veins and quest objects get the nameplate the glow sits on. Show All also shows the key's icons over enemies. A line in chat says what changed." },
-		-- The game holds this one (CameraZoom.lua): it is ticked while the game's camera distance is at Flat UI's top, in every profile.
 		{ key = "cameraZoom", kind = "bool", default = false, label = "Maximum camera distance", live = true, get = "CameraZoomGet", set = "CameraZoomSet",
 			tip = "The camera zooms out to 2.6, past the 2.0 that the game's Max Camera Distance allows, and glides out there as you tick it. A game setting, the same in every profile. Turned off, the distance you had is back." },
-		-- A ring of Flat UI's own around the mouse pointer (CursorRing.lua).
 		{ section = "Cursor" },
 		{ key = "cursorRing", kind = "choice", default = "off", label = "Cursor ring", changed = "CursorRingChanged",
 			choices = { { "always", "Always" }, { "combat", "In combat only" }, { "shake", "When you shake the mouse" }, { "off", "Off" } }, tip = "A ring around the mouse pointer, so you find it at a glance. It takes no clicks, hides while you turn the camera with the mouse, and in combat only fades in and out with the fight. When you shake the mouse shows no ring until you shake the pointer from side to side: then it fades in swollen, eases back to its size and fades out about a second later. Changing the ring here out of a fight shows it for a moment." },
@@ -240,14 +190,12 @@ ns.PAGES = {
 			changed = "CursorRingChanged" },
 		{ key = "cursorRingShake", kind = "bool", default = true, label = "Grow when you shake the mouse", needs = "cursorRing", needsIn = { "always", "combat" },
 			changed = "CursorRingChanged", tip = "A quick side-to-side shake of the mouse swells the ring to two and a half times its size, and it eases back over half a second, so you find the pointer at once." },
-		-- Two swipes of the ring's own fed the game's duration objects (CursorRing.lua).
 		{ key = "cursorRingCast", kind = "bool", default = true, label = "Cast progress on the ring", needs = "cursorRing", needsIn = { "always", "combat" },
 			changed = "CursorRingChanged", tip = "Your cast or channel runs round the ring." },
 		{ key = "cursorRingCastColour", kind = "colour", default = "ff33b6e6", label = "Cast progress colour", needs = "cursorRingCast", changed = "CursorRingChanged" },
 		{ key = "cursorRingGcd", kind = "bool", default = true, label = "Global cooldown on the ring", needs = "cursorRing", needsIn = { "always", "combat" },
 			changed = "CursorRingChanged", tip = "Just inside the cast's ring." },
 		{ key = "cursorRingGcdColour", kind = "colour", default = "ffffffff", label = "Global cooldown colour", needs = "cursorRingGcd", changed = "CursorRingChanged" },
-		-- A bar of Flat UI's own that times the ticks of lava from the fire hits on the player (LavaWalk.lua). It shows nothing until one lands.
 		{ section = "Lava walking" },
 		{ key = "lavaTimer", kind = "choice", default = "zones", label = "Lava tick timer", changed = "LavaChanged",
 			choices = { { "zones", "In lava zones" }, { "anywhere", "Anywhere" }, { "off", "Off" } },
@@ -273,9 +221,11 @@ ns.PAGES = {
 	{
 		key = "nameplates", label = "Nameplates",
 		{ key = "enabled", kind = "bool", default = true, label = "Restyle nameplates" },
-		{ key = "friendly", kind = "bool", default = true, label = "Restyle friendly nameplates" },
+		{ key = "friendly", kind = "bool", default = true, label = "Restyle friendly nameplates",
+			tip = "Off, friendly nameplates keep the game's own look and size while enemies keep Flat UI's. Click through friendly nameplates works either way." },
 		{ section = "Border and background" },
-		{ key = "lookOwn", kind = "bool", default = false, label = "Own border and background" },
+		{ key = "lookOwn", kind = "bool", default = false, label = "Own border and background",
+			tip = "Gives the nameplates' borders and backgrounds the colours and opacity below, in place of those of the Flat UI page." },
 		{ key = "lookBorder", kind = "colour", default = "ff000000", label = "Border colour", needs = "lookOwn" },
 		{ key = "lookBack", kind = "colour", default = "ff0f0f0f", label = "Background colour", needs = "lookOwn" },
 		{ key = "lookBackAlpha", kind = "number", default = 85, min = 0, max = 100, step = 5, unit = "%", label = "Background opacity", needs = "lookOwn" },
@@ -291,9 +241,12 @@ ns.PAGES = {
 		{ key = "dim", kind = "bool", default = true, label = "Dim other nameplates", tip = "Darkens every nameplate that is not your target or focus.", needs = "health" },
 		{ key = "dimAmount", kind = "number", default = 60, min = 10, max = 100, step = 10, unit = "%", label = "Dim strength", needs = "dim" },
 		{ section = "Health bar art" },
-		{ key = "healPrediction", kind = "bool", default = true, label = "Incoming heals" },
-		{ key = "absorbs", kind = "bool", default = true, label = "Absorb shields" },
-		{ key = "healAbsorbs", kind = "bool", default = true, label = "Heal absorbs" },
+		{ key = "healPrediction", kind = "bool", default = true, label = "Incoming heals",
+			tip = "The game's fill of heals on their way, just past the health on the bar. Off hides it on nameplates." },
+		{ key = "absorbs", kind = "bool", default = true, label = "Absorb shields",
+			tip = "The game's light fill of a shield that soaks up damage, such as Power Word: Shield, past the health. Off hides it on nameplates." },
+		{ key = "healAbsorbs", kind = "bool", default = true, label = "Heal absorbs",
+			tip = "The game's dark fill over the health that heals must undo before they count. Off hides it on nameplates." },
 	},
 	{
 		key = "nameplatesColours", label = "Colours", parent = "nameplates", owner = "nameplates",
@@ -308,7 +261,8 @@ ns.PAGES = {
 		{ key = "hover", kind = "bool", default = true, label = "Mouseover border", needs = "health" },
 		{ key = "hoverColour", kind = "colour", default = "ffd9d9d9", label = "Mouseover colour", needs = "hover" },
 		{ section = "Health left" },
-		{ key = "healthByLeft", kind = "bool", default = false, label = "Colour health bars by health left" },
+		{ key = "healthByLeft", kind = "bool", default = false, label = "Colour health bars by health left",
+			tip = "In the three colours of the Colours page, from full to low as health drops. The target's colour, threat colours and reaction colours come first." },
 		{ key = "lowHealth", kind = "bool", default = true, label = "Low health border" },
 		{ key = "lowHealthAt", kind = "number", default = 20, min = 5, max = 50, step = 5, unit = "%", label = "Low health below", needs = "lowHealth" },
 		{ key = "lowHealthColour", kind = "colour", default = "ffff3333", label = "Low health border colour", needs = "lowHealth" },
@@ -325,7 +279,6 @@ ns.PAGES = {
 		{ key = "threatGood", kind = "colour", default = "ff4dbf59", label = "Threat you want", needs = "threat", tip = "As a tank an enemy you hold securely, as damage or healer one on someone else." },
 		{ key = "threatTransition", kind = "colour", default = "ffe6c133", label = "Threat changing hands", needs = "threat", tip = "An enemy close to turning to you or away from you." },
 		{ key = "threatBad", kind = "colour", default = "ffd94040", label = "Threat you do not want", needs = "threat", tip = "As a tank an enemy on someone else, as damage or healer one on you." },
-		-- Off, the three rows above are a tank's and these three are for damage or healing (PlateThreat.lua, PT.Colour).
 		{ key = "threatSameColours", kind = "bool", default = true, label = "Same colours for both roles", needs = "threat",
 			tip = "Off, the three colours above are a tank's and the three below are for damage or healing." },
 		{ key = "threatDamageGood", kind = "colour", default = "ff4dbf59", label = "Threat you want as damage or healer", needs = "threatSameColours", needsIn = { false },
@@ -336,7 +289,8 @@ ns.PAGES = {
 			needsIn = { false }, tip = "An enemy on you." },
 		{ key = "threatTanks", kind = "bool", default = true, label = "Enemies held by another tank", needs = "threat",
 			tip = "As a tank, an enemy another tank of your group or your pet holds takes the colour below, so it is not taken for a loose one." },
-		{ key = "threatTankColour", kind = "colour", default = "ff0faac8", label = "Another tank's colour", needs = "threatTanks" },
+		{ key = "threatTankColour", kind = "colour", default = "ff0faac8", label = "Another tank's colour", needs = "threatTanks",
+			tip = "The colour of an enemy another tank of your group or your pet holds, while you count as a tank." },
 		{ section = "Whose threat" },
 		{ key = "threatPet", kind = "bool", default = true, label = "Your pet's threat counts", needs = "threat", tip = "An enemy your pet holds shows as held for you before you hit it." },
 		{ key = "threatLead", kind = "bool", default = false, label = "Early warning while tanking", needs = "threat",
@@ -348,7 +302,8 @@ ns.PAGES = {
 		{ key = "threatMinor", kind = "bool", default = true, label = "Minor enemies", needs = "threat", tip = "Totems and other units the game counts as minor or trivial." },
 		{ key = "threatNeutral", kind = "bool", default = true, label = "Neutral enemies", needs = "threat", tip = "Units that do not attack until you do." },
 		{ key = "threatTapped", kind = "bool", default = true, label = "Enemies tapped by others", needs = "threat", tip = "Their health bar keeps the game's grey." },
-		{ key = "threatInstances", kind = "bool", default = false, label = "Only in dungeons and raids", needs = "threat" },
+		{ key = "threatInstances", kind = "bool", default = false, label = "Only in dungeons and raids", needs = "threat",
+			tip = "Nameplates show threat only inside a dungeon or a raid, and none in the open world or a battleground." },
 		{ section = "Glow and opacity" },
 		{ key = "threatGlow", kind = "choice", default = "needs", label = "Threat glow", needs = "threat",
 			choices = { { "off", "Off" }, { "needs", "When the enemy needs you" }, { "all", "Every threat state" } },
@@ -364,7 +319,6 @@ ns.PAGES = {
 		{ key = "threatFade", kind = "bool", default = true, label = "Fade enemies held for you", needs = "threat",
 			tip = "Enemies whose threat you want fade so the ones that need you stand out, while your target and focus stay clear." },
 		{ key = "threatFadeAlpha", kind = "number", default = 75, min = 10, max = 100, step = 5, unit = "%", label = "Opacity of enemies held for you", needs = "threatFade" },
-		-- Off, the row above is a tank's and the next one is for damage or healing (PlateThreatLook.lua, FadeRow).
 		{ key = "threatFadeSame", kind = "bool", default = true, label = "Same opacity for both roles", needs = "threatFade",
 			tip = "Off, the opacity above is a tank's and the one below is for damage or healing." },
 		{ key = "threatFadeDamage", kind = "number", default = 75, min = 10, max = 100, step = 5, unit = "%", label = "Opacity as damage or healer", needs = "threatFadeSame",
@@ -378,7 +332,8 @@ ns.PAGES = {
 			choices = { { "off", "Off" }, { "scaled", "Share of aggro" }, { "raw", "Share of the tank's threat" }, { "lead", "Lead while tanking" } },
 			tip = "Next to the health bar, where 100% share of aggro is the point at which the enemy turns to you." },
 		{ key = "threatValueWhen", kind = "choice", default = "group", label = "Show threat value", needs = "threatValue", needsIn = { "scaled", "raw", "lead" },
-			choices = { { "always", "Always" }, { "group", "In a group or with a pet" }, { "party", "Only in a group" } } },
+			choices = { { "always", "Always" }, { "group", "In a group or with a pet" }, { "party", "Only in a group" } },
+			tip = "In a group or with a pet hides it while you play alone with no pet, when every enemy is on you anyway; Only in a group hides it with a pet too." },
 		{ key = "threatValueColour", kind = "bool", default = true, label = "Threat value in the threat colour", needs = "threatValue", needsIn = { "scaled", "raw", "lead" },
 			tip = "Off, the value takes Threat value colour." },
 		{ key = "threatValueCustom", kind = "colour", default = "ffffffff", label = "Threat value colour", needs = "threatValueColour", needsIn = { false } },
@@ -400,9 +355,12 @@ ns.PAGES = {
 		{ section = "Enemy's target" },
 		{ key = "aggroTarget", kind = "bool", default = false, label = "Name of the enemy's target", needs = "threat",
 			tip = "Who the enemy attacks, right of the health bar, in the class colour of a player." },
-		{ key = "aggroTargetCombat", kind = "bool", default = true, label = "Only in combat", needs = "aggroTarget" },
-		{ key = "aggroTargetOnly", kind = "bool", default = false, label = "Only on your target", needs = "aggroTarget" },
-		{ key = "aggroTargetNotMe", kind = "bool", default = true, label = "Not when it attacks you", needs = "aggroTarget" },
+		{ key = "aggroTargetCombat", kind = "bool", default = true, label = "Only in combat", needs = "aggroTarget",
+			tip = "The enemy's target shows only while you are in a fight." },
+		{ key = "aggroTargetOnly", kind = "bool", default = false, label = "Only on your target", needs = "aggroTarget",
+			tip = "The enemy's target shows on your target's nameplate alone." },
+		{ key = "aggroTargetNotMe", kind = "bool", default = true, label = "Not when it attacks you", needs = "aggroTarget",
+			tip = "Leaves out your own name, so only an enemy that attacks someone else shows whom it attacks." },
 	},
 	{
 		key = "nameplatesText", label = "Text", parent = "nameplates", owner = "nameplates",
@@ -428,8 +386,10 @@ ns.PAGES = {
 		{ key = "level", kind = "choice", default = "box", label = "Level box", tip = "Text only removes the box and keeps the number.",
 			choices = { { "box", "Thin border" }, { "text", "Text only" }, { "default", "Default" }, { "hidden", "Hidden" } } },
 		{ key = "levelShape", kind = "choice", default = "square", label = "Level box shape", needs = "level", needsIn = { "box", "text" },
-			choices = { { "square", "Square" }, { "game", "Game width" } } },
-		{ key = "levelGap", kind = "number", default = 0, min = 0, max = 6, step = 1, label = "Level box gap", needs = "level", needsIn = { "box", "text" } },
+			choices = { { "square", "Square" }, { "game", "Game width" } },
+			tip = "Square is a box as tall as the health bar at its end, and the bar shortens to make room; Game width keeps the game's wider box past the end of the bar." },
+		{ key = "levelGap", kind = "number", default = 0, min = 0, max = 6, step = 1, label = "Level box gap", needs = "level", needsIn = { "box", "text" },
+			tip = "Nameplate units between the health bar and a Square level box." },
 		{ key = "levelSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Level number size", tip = "100% is the game's own size.", needs = "level", needsIn = { "box", "text", "default" } },
 		{ section = "Elite and Rare" },
 		{ key = "kindMark", kind = "bool", default = true, label = "Mark after the level", tip = "+ for an Elite, R for a Rare, R+ for a Rare Elite.", needs = "level", needsIn = { "box", "text", "default" } },
@@ -449,7 +409,8 @@ ns.PAGES = {
 		{ section = "Parts" },
 		{ key = "castIconSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Spell icon size", tip = "100% is the game's own size." },
 		{ key = "castSpark", kind = "bool", default = true, label = "Spark" },
-		{ key = "castShield", kind = "bool", default = true, label = "Shield on uninterruptible casts" },
+		{ key = "castShield", kind = "bool", default = true, label = "Shield on uninterruptible casts",
+			tip = "The game's shield at the spell icon of a cast you cannot interrupt. Off hides it." },
 		{ section = "Cast time" },
 		{ key = "castTime", kind = "bool", default = true, label = "Cast time",
 			tip = "Seconds left, at the right end of the bar, in the spell name's font and size; just past the end while the bar names the cast's target." },
@@ -461,12 +422,15 @@ ns.PAGES = {
 		{ key = "targetColour", kind = "colour", default = "ffffffff", label = "Target colour", needs = "target" },
 		{ key = "focusColour", kind = "colour", default = "ffff9900", label = "Focus colour", needs = "target" },
 		{ key = "targetThickness", kind = "number", default = 1, min = 1, max = 4, step = 1, unit = " px", label = "Target and focus border thickness", needs = "target" },
+		{ key = "targetFlash", kind = "bool", default = true, label = "Flash as you change target", needs = "target",
+			tip = "The new target's border flashes once in Target colour and settles, and the focus's in Focus colour as you set it, so you see which nameplate Tab took." },
 		{ section = "Class icons" },
 		{ key = "classEnemy", kind = "bool", default = true, label = "Class icon on enemy players" },
 		{ key = "classFriendly", kind = "bool", default = true, label = "Class icon on friendly players" },
 		{ key = "classPosition", kind = "choice", default = "left", label = "Class icon position",
 			choices = { { "left", "Left" }, { "right", "Right" }, { "above", "Above" }, { "below", "Below" } } },
-		{ key = "classFit", kind = "choice", default = "bar", label = "Class icon size", choices = { { "bar", "Health bar height" }, { "own", "Custom" } } },
+		{ key = "classFit", kind = "choice", default = "bar", label = "Class icon size", choices = { { "bar", "Health bar height" }, { "own", "Custom" } },
+			tip = "Health bar height keeps the icon as tall as the bar, so it grows with Health bar height; Custom takes Custom class icon size." },
 		{ key = "classSize", kind = "number", default = 20, min = 8, max = 64, step = 1, label = "Custom class icon size", needs = "classFit", needsIn = { "own" } },
 		{ key = "classGap", kind = "number", default = 0, min = 0, max = 6, step = 1, label = "Class icon gap" },
 		{ key = "classX", kind = "number", default = 0, min = -60, max = 60, step = 1, label = "Class icon horizontal offset" },
@@ -479,14 +443,16 @@ ns.PAGES = {
 		{ key = "rareColour", kind = "colour", default = "ffc7ccd6", label = "Rare colour", needs = "kindBorder" },
 		{ key = "bossColour", kind = "colour", default = "ffff593d", label = "Boss colour", needs = "kindBorder" },
 		{ section = "Raid marker" },
-		{ key = "raidMarker", kind = "bool", default = true, label = "Raid marker" },
+		{ key = "raidMarker", kind = "bool", default = true, label = "Raid marker",
+			tip = "The game's raid marker left of the health bar, at the size and offsets below. Off hides it on nameplates." },
 		{ key = "raidMarkerSize", kind = "number", default = 22, min = 8, max = 48, step = 1, label = "Raid marker size" },
 		{ key = "raidMarkerX", kind = "number", default = 0, min = -40, max = 40, step = 1, label = "Raid marker horizontal offset" },
 		{ key = "raidMarkerY", kind = "number", default = 0, min = -40, max = 40, step = 1, label = "Raid marker vertical offset" },
-		{ key = "offscreenIcon", kind = "bool", default = true, label = "Arrow for nameplates behind you" },
+		{ key = "offscreenIcon", kind = "bool", default = true, label = "Arrow for nameplates behind you",
+			tip = "The game's arrow at the screen edge for nameplates behind you. Off hides it." },
 		{ section = "Overpower" },
-		{ key = "overpower", kind = "bool", default = true, label = "Overpower or Mongoose Bite on enemy nameplates",
-			tip = "Warriors: when an enemy dodges you, Overpower shows over its nameplate for 5 seconds. Hunters: when Mongoose Bite becomes usable after you dodge, its icon shows over your target. It glows while you can use it." },
+		{ key = "overpower", kind = "bool", default = true, label = "Overpower, Mongoose Bite or Riposte on enemy nameplates",
+			tip = "Warriors: when an enemy dodges you, Overpower shows over its nameplate for 5 seconds. Hunters: when Mongoose Bite becomes usable after you dodge, its icon shows over your target. Rogues: when Riposte becomes usable after you parry, its icon shows over your target. It glows while you can use it." },
 		{ key = "overpowerSize", kind = "number", default = 34, min = 16, max = 48, step = 1, label = "Overpower icon size", needs = "overpower" },
 		{ key = "overpowerX", kind = "number", default = 0, min = -40, max = 40, step = 1, label = "Overpower icon horizontal offset", needs = "overpower",
 			tip = "Moves the icon left or right, and an Above quest mark with it." },
@@ -529,13 +495,13 @@ ns.PAGES = {
 		{ key = "auraBorderColour", kind = "colour", default = "ff000000", label = "Aura border colour", needs = "auraBorderOwn" },
 		{ key = "auraTimers", kind = "bool", default = true, label = "Countdown numbers" },
 		{ key = "auraStacks", kind = "bool", default = true, label = "Stack count" },
-		{ key = "auraOpacity", kind = "number", default = 100, min = 10, max = 100, step = 5, unit = "%", label = "Aura opacity" },
+		{ key = "auraOpacity", kind = "number", default = 100, min = 10, max = 100, step = 5, unit = "%", label = "Aura opacity",
+			tip = "How solid the buff and debuff icons on nameplates are; lower lets what is behind them show through." },
 		{ key = "aurasWhen", kind = "choice", default = "always", label = "Show auras",
 			choices = { { "always", "On every nameplate" }, { "target", "Only on the target" }, { "focus", "On the target and focus" } },
 			tip = "On the target and focus also keeps your sheep, sap or shackle in sight on the focus's nameplate." },
 	},
 	{
-		-- Size and clicks: the clickable area of Flat UI's own, then the game's own nameplate settings. The game saves those: a row shows the game's value, and nothing is written until it is moved.
 		key = "nameplatesGame", label = "Size and clicks", parent = "nameplates", owner = "nameplates",
 		{ section = "Clickable area" },
 		{ key = "clickThroughFriendly", kind = "bool", default = false, label = "Click through friendly nameplates",
@@ -544,11 +510,19 @@ ns.PAGES = {
 			needs = "clickThroughFriendly", choices = { { "always", "Everywhere" }, { "instances", "In dungeons and raids" } },
 			tip = "In dungeons and raids switches as you zone in and out, after the fight if you zone in one." },
 		{ key = "clickThroughEnemy", kind = "bool", default = false, label = "Click through enemy nameplates", tip = "Target with Tab or a key binding." },
-		{ key = "clickExtraX", kind = "number", default = 0, min = -10, max = 30, step = 1, label = "Extra clickable width" },
-		{ key = "clickExtraY", kind = "number", default = 0, min = -10, max = 20, step = 1, label = "Extra clickable height" },
+		{ key = "clickExtraX", kind = "number", default = 0, min = -10, max = 30, step = 1, label = "Extra clickable width",
+			tip = "Widens the part of a nameplate that takes a click on both sides, as far as the nameplate reaches; below 0 narrows it." },
+		{ key = "clickExtraY", kind = "number", default = 0, min = -10, max = 20, step = 1, label = "Extra clickable height",
+			tip = "Heightens the part of a nameplate that takes a click above and below, as far as the nameplate reaches; below 0 makes it shorter." },
 		{ section = "Which show" },
 		{ key = "showCastBars", kind = "bool", default = true, cvar = "nameplateShowCastBars", label = "Cast bars on nameplates" },
 		{ key = "maxDistance", kind = "number", default = 45, min = 10, max = 60, step = 5, unit = " yd", cvar = "nameplateMaxDistance", label = "Nameplate distance" },
+		{ key = "showMinions", kind = "bool", default = false, cvar = "nameplateShowEnemyMinions", label = "Nameplates on enemy pets and totems",
+			tip = "Pets, totems and guardians of enemies. Off hides their nameplates, so a hunter's pet or a shaman's totems add no clutter." },
+		{ key = "showMinus", kind = "bool", default = false, cvar = "nameplateShowEnemyMinus", label = "Nameplates on minor enemies",
+			tip = "Weak enemies the game counts as minor. Minor enemies on the Threat tab says whether they show threat." },
+		{ key = "friendNamesOnly", kind = "bool", default = false, cvar = "nameplateShowOnlyNameForFriendlyPlayerUnits", label = "Friendly players as names only",
+			tip = "The game shows a friendly player's name without a health bar; with Class icon on friendly players the icon then stands above the name." },
 		{ section = "Size and stacking" },
 		{ key = "style", kind = "choice", default = "thin", cvar = "nameplateStyle", label = "Nameplate style",
 			choices = { { "thin", "Thin" }, { "modern", "Modern" }, { "block", "Block" }, { "castfocus", "Cast focus" } },
@@ -597,7 +571,6 @@ ns.PAGES = {
 			choices = { { "apart", "Keep apart" }, { "turn", "Stay in turn" } } },
 		{ key = "rows", kind = "number", default = 4, min = 1, max = 6, step = 1, label = "Rows", tip = "Most numbers stacked one above another." },
 	},
-	-- The tabs of Combat text: its rows, saved as combattext.*, by what they set.
 	{
 		key = "combattextScroll", label = "Scroll areas", parent = "combattext", owner = "combattext",
 		{ section = "Scroll areas" },
@@ -694,10 +667,6 @@ ns.PAGES = {
 			needs = "source", needsIn = { "front" },
 			choices = { { "own", "Same as your text" }, { "smaller", "Smaller than your text" }, { "game", "The game's own size" }, { "enemy", "Same as numbers over enemies" } } },
 		{ section = "Warnings" },
-		-- CombatCues.lua: alerts of the addon's own in the middle of the screen, at the spot of Combat text: alerts in the movers. No target is on
-		-- by default since 0.5.33 and +Combat and -Combat since 0.5.27 (Jon Default), though the game has its own (floatingCombatTextCombatState_v2
-		-- is 0) and EnhanceQoL has both. Low health and Low mana (0.5.36) take the place of the game's own, which go with Scrolling Combat Text for
-		-- Self; since 0.5.37 only in a fight by default (lowFight), and Low mana in a colour of its own.
 		{ key = "noTarget", kind = "bool", default = true, label = "No target warning",
 			tip = "In a fight with no target, or with a dead or friendly one, No target shows in the middle of the screen after a second." },
 		{ key = "noTargetFriendly", kind = "bool", default = true, label = "Warn with a friendly target", needs = "noTarget",
@@ -888,8 +857,10 @@ ns.PAGES = {
 			tip = "Off: a button that only waits for the global cooldown shows no sweep. Flat UI's buttons only." },
 		{ key = "sweepEdge", kind = "bool", default = false, label = "Edge line", tip = "A bright line along the edge of the sweep. Not on the pet and stance bars.", changed = "ButtonStatesChanged" },
 		{ key = "sweepEdgeColour", kind = "colour", default = "ffffffff", label = "Edge colour", needs = "sweepEdge", changed = "ButtonStatesChanged" },
+		{ key = "cdNumbers", kind = "bool", default = false, label = "Cooldown numbers", live = true, get = "ButtonNumbersGet", set = "ButtonNumbersSet",
+			tip = "The game's Show numbers on cooldowns: the seconds left on every action button, Flat UI's and the game's, the pet and stance bars too. A game setting, the same in every profile. Changed in a fight, it is written when the fight ends." },
 		{ key = "cdFont", kind = "choice", default = "game", label = "Cooldown number size", changed = "ButtonStatesChanged",
-			tip = "Numbers show while the game's Show numbers on cooldowns is on, on Flat UI's buttons too. Also on the pet and stance bars.",
+			tip = "Numbers show while Cooldown numbers is on. Also on the pet and stance bars.",
 			choices = { { "game", "As the game has it" }, { "small", "Small" }, { "normal", "Normal" }, { "large", "Large" },
 				{ "huge", "Huge" } } },
 		{ key = "cdColour", kind = "colour", default = "ffffffff", label = "Cooldown number colour", tip = "Also on the pet and stance bars.", changed = "ButtonStatesChanged" },
@@ -920,7 +891,8 @@ ns.PAGES = {
 		{ key = "outline", kind = "choice", default = "bar", label = "Border around", choices = { { "bar", "Bar only" }, { "frame", "Whole timer" } } },
 		{ key = "backdrop", kind = "bool", default = true, label = "Timer background" },
 		{ section = "Fill" },
-		{ key = "flat", kind = "bool", default = true, label = "Flat fill" },
+		{ key = "flat", kind = "bool", default = true, label = "Flat fill",
+			tip = "A plain fill in the three colours below, in place of the game's art. Needed for Bar texture, the colours, Class colour, Spark and Text shadow." },
 		{ key = "texture", kind = "choice", default = "default", label = "Bar texture", needs = "flat", choices = "BarChoicesDefault" },
 		{ key = "mainColour", kind = "colour", default = "ffd9a640", label = "Main hand colour", needs = "flat" },
 		{ key = "offColour", kind = "colour", default = "ff5c9fd6", label = "Off hand colour", needs = "flat" },
@@ -928,7 +900,8 @@ ns.PAGES = {
 		{ key = "classColour", kind = "bool", default = false, label = "Class colour", tip = "Your class colour on all three timers, in place of the three colours above.", needs = "flat" },
 		{ key = "spark", kind = "bool", default = true, label = "Spark", tip = "The bright line at the end of the fill.", needs = "flat" },
 		{ key = "textShadow", kind = "bool", default = false, label = "Text shadow", tip = "The dark band behind the timer's name.", needs = "flat" },
-		{ key = "reverse", kind = "bool", default = false, label = "Fill from the right" },
+		{ key = "reverse", kind = "bool", default = false, label = "Fill from the right",
+			tip = "The fill grows from the right end, and the Auto Shot window moves to the left end." },
 		{ section = "Auto Shot" },
 		{ key = "autoShot", kind = "bool", default = true, label = "Auto Shot window",
 			tip = "Marks the last half second of the ranged timer. Moving or casting a spell then delays your next Auto Shot." },
@@ -938,7 +911,8 @@ ns.PAGES = {
 			tip = "Colours the main hand timer while Heroic Strike, Cleave, Maul or Raptor Strike waits for your next swing, and gives it its own colour back as the swing lands." },
 		{ key = "queuedColour", kind = "colour", default = "ffe8802e", label = "Queued ability colour", needs = "queued" },
 		{ section = "Out of range and idle" },
-		{ key = "rangeAlpha", kind = "number", default = 40, min = 10, max = 100, step = 5, unit = "%", label = "Out of range opacity" },
+		{ key = "rangeAlpha", kind = "number", default = 40, min = 10, max = 100, step = 5, unit = "%", label = "Out of range opacity",
+			tip = "How see-through a timer is while your target is out of its reach. The game's own is 40%." },
 		{ key = "idle", kind = "choice", default = "combat", label = "Show the timer", tip = "Works with Main hand border, Off hand border or Ranged border on.", choices = { { "show", "Always" }, { "combat", "In combat" }, { "hide", "Only while swinging" } } },
 		{ section = "Text" },
 		{ key = "textSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Text size", tip = "100% is the game's own size." },
@@ -980,19 +954,25 @@ ns.PAGES = {
 		{ key = "textPlate", kind = "bool", default = false, label = "Spell name background", tip = "Keeps the game's own background behind the spell name." },
 		{ key = "spark", kind = "bool", default = true, label = "Spark" },
 		{ key = "shield", kind = "bool", default = true, label = "Uninterruptible shield icon" },
-		{ key = "stateBorder", kind = "bool", default = false, label = "Border takes the cast colour", needs = "flat" },
+		{ key = "stateBorder", kind = "bool", default = false, label = "Border takes the cast colour", needs = "flat",
+			tip = "The thin border takes the colour of the fill: Interrupted colour as a cast is stopped, Uninterruptible colour for a cast that cannot be interrupted." },
 		{ key = "latency", kind = "bool", default = false, label = "Latency zone on the player bar",
 			tip = "The end of the bar your connection delay covers, in Latency zone colour: the right end of a cast, the left end of a channel, where it drains to. With or without Flat fill." },
 		{ key = "latencyColour", kind = "colour", default = "ffff0000", label = "Latency zone colour", needs = "latency",
 			tip = "Shown at 60% opacity, so the fill shows through. Red at first; pick another for a red bar or a class colour that hides it." },
 		{ key = "ticks", kind = "bool", default = true, label = "Channel ticks on the player bar",
 			tip = "A thin mark where each tick of a channel lands, such as Arcane Missiles, Blizzard, Mind Flay or Drain Life." },
+		{ key = "ticksColour", kind = "colour", default = "ffffffff", label = "Channel tick colour", needs = "ticks",
+			tip = "At 60% opacity, fainter once its tick lands. White at first; pick a dark one for a white or pale bar, such as a priest's class colour." },
 		{ section = "Fill" },
-		{ key = "flat", kind = "bool", default = false, label = "Flat fill" },
+		{ key = "flat", kind = "bool", default = false, label = "Flat fill",
+			tip = "A plain fill in the cast colours of the Colours page in place of the game's gold and green art. Needed for Bar texture, the class and own colours and Border takes the cast colour; the interrupt colours then fill the whole bar." },
 		{ key = "texture", kind = "choice", default = "default", label = "Bar texture", needs = "flat", choices = "BarChoicesDefault" },
 		{ section = "Colours" },
-		{ key = "playerClass", kind = "bool", default = false, label = "Class colour on the player bar", needs = "flat" },
-		{ key = "targetOwn", kind = "bool", default = false, label = "Own colours on target and focus bars", needs = "flat" },
+		{ key = "playerClass", kind = "bool", default = false, label = "Class colour on the player bar", needs = "flat",
+			tip = "Your class colour on your casts and channels, also on the cast fill of Flat UI's action buttons." },
+		{ key = "targetOwn", kind = "bool", default = false, label = "Own colours on target and focus bars", needs = "flat",
+			tip = "Colours of their own for enemy casts on the target and focus bars, in place of Cast colour and Channel colour. The interrupt colours go before them while Interrupt readiness on enemy casts is on." },
 		{ key = "targetCast", kind = "colour", default = "ffe6b333", label = "Target and focus cast colour", needs = "targetOwn" },
 		{ key = "targetChannel", kind = "colour", default = "ff4dbf59", label = "Target and focus channel colour", needs = "targetOwn" },
 		{ section = "Sound" },
@@ -1000,23 +980,29 @@ ns.PAGES = {
 			tip = "Plays as an enemy's Kick, Counterspell, Pummel, Earth Shock or stun stops your cast or channel. Moving, jumping or Escape plays nothing. Plays once as you pick it.",
 			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
+		{ key = "focusSound", kind = "choice", default = "none", label = "Sound when your focus casts", changed = "CastKickedSoundPicked", needs = "interrupt",
+			tip = "Plays as the enemy you focus starts a cast or channel while your interrupt is ready and in range, at most once a second, so you hear when to kick without watching the focus bar. Needs Interrupt readiness on enemy casts. A cast that cannot be interrupted may play it too, as the game does not always say. Plays once as you pick it.",
+			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
+				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
 	{
 		key = "castbarsSize", label = "Size", parent = "castbars", owner = "castbars",
 		{ key = "playerMatch", kind = "choice", default = "resource", label = "Player cast bar", tip = "Width set below is the game's 208 while Custom player cast bar size is off.",
 			choices = { { "resource", "Width of the personal resource display" }, { "own", "Width set below" } } },
-		{ key = "playerSize", kind = "bool", default = true, label = "Custom player cast bar size" },
+		{ key = "playerSize", kind = "bool", default = true, label = "Custom player cast bar size",
+			tip = "A change in a fight lands as it ends while the game protects the bar then, as under Edit Mode's Lock to player frame." },
 		{ key = "playerWidth", kind = "number", default = 266, min = 80, max = 400, step = 1, label = "Player cast bar width", needs = "playerSize" },
 		{ key = "playerHeight", kind = "number", default = 18, min = 6, max = 40, step = 1, label = "Player cast bar height", needs = "playerSize" },
 		{ key = "playerText", kind = "choice", default = "game", label = "Player cast bar text", needs = "playerSize",
 			choices = { { "game", "As the game has it" }, { "below", "Below the bar" }, { "inside", "Inside the bar" } } },
-		{ key = "petSize", kind = "bool", default = false, label = "Custom pet cast bar size" },
+		{ key = "petSize", kind = "bool", default = false, label = "Custom pet cast bar size",
+			tip = "A change in a fight lands as it ends while the game protects the bar then." },
 		{ key = "petWidth", kind = "number", default = 195, min = 80, max = 400, step = 1, label = "Pet cast bar width", needs = "petSize" },
 		{ key = "petHeight", kind = "number", default = 13, min = 6, max = 40, step = 1, label = "Pet cast bar height", needs = "petSize" },
-		{ key = "targetSize", kind = "bool", default = false, label = "Custom target cast bar size" },
+		{ key = "targetSize", kind = "bool", default = false, label = "Custom target cast bar size", tip = "A change in a fight lands as it ends." },
 		{ key = "targetWidth", kind = "number", default = 150, min = 80, max = 400, step = 1, label = "Target cast bar width", needs = "targetSize" },
 		{ key = "targetHeight", kind = "number", default = 10, min = 6, max = 40, step = 1, label = "Target cast bar height", needs = "targetSize" },
-		{ key = "focusSize", kind = "bool", default = false, label = "Custom focus cast bar size" },
+		{ key = "focusSize", kind = "bool", default = false, label = "Custom focus cast bar size", tip = "A change in a fight lands as it ends." },
 		{ key = "focusWidth", kind = "number", default = 150, min = 80, max = 400, step = 1, label = "Focus cast bar width", needs = "focusSize" },
 		{ key = "focusHeight", kind = "number", default = 10, min = 6, max = 40, step = 1, label = "Focus cast bar height", needs = "focusSize" },
 	},
@@ -1035,7 +1021,9 @@ ns.PAGES = {
 		{ key = "ownTime", kind = "bool", default = true, label = "Cast time on target and focus bars",
 			tip = "Seconds left, at the right end of the bar, in the spell name's size and outline." },
 		{ key = "castTarget", kind = "bool", default = true, label = "Target of enemy casts",
-			tip = "Whom the cast on your target's or focus's bar is aimed at, as > Bex, just past the bar's right end, so you see who is about to be hit or sheeped. The name takes the class colour of that player, as the game's nameplates colour it." },
+			tip = "Whom the cast on your target's or focus's bar is aimed at, as > Bex, just past the bar's right end, so you see who is about to be hit or sheeped. The name takes the class colour of that player, as the game's nameplates colour it. It stays while the bar fades or holds Interrupted, so you still see whom a kicked cast was aimed at." },
+		{ key = "kickTime", kind = "bool", default = true, label = "Seconds until your interrupt is ready", needs = "interrupt",
+			tip = "While an enemy you target or focus casts and your interrupt cools down, its seconds left count down inside the left end of the bar in Interrupt on cooldown colour, so you see whether Kick is back before the cast lands. Works while Interrupt readiness on enemy casts is on." },
 		{ key = "playerTime", kind = "bool", default = false, label = "Cast time on your bars",
 			tip = "Seconds left, inside the right end of your cast bar and your pet's; the game's own time from Edit Mode is hidden meanwhile." },
 		{ key = "timeTotal", kind = "bool", default = false, label = "Total cast time too",
@@ -1044,10 +1032,10 @@ ns.PAGES = {
 			tip = "How far hits have set your cast back, as +0.5 in Pushback colour just past the right end of your cast bar, or after the game's own seconds from Edit Mode; a channel cut short shows -0.8. Each new delay makes it pop. It stays as the bar flashes or holds Interrupted, and fades with it." },
 		{ key = "pushbackColour", kind = "colour", default = "ffff4d4d", label = "Pushback colour", needs = "pushback" },
 		{ section = "Icon" },
-		{ key = "iconPos", kind = "choice", default = "game", label = "Target and focus bar icon",
+		{ key = "iconPos", kind = "choice", default = "game", label = "Target and focus bar icon", tip = "A change in a fight lands as it ends.",
 			choices = { { "game", "Left of the bar" }, { "right", "Right of the bar" }, { "hidden", "Hidden" } } },
 		{ key = "playerIcon", kind = "bool", default = false, label = "Spell icon on player and pet bars",
-			tip = "The icon of the spell left of your cast bar and your pet's, as tall as the bar. With or without Flat fill. The game's own small icon, which Edit Mode's Lock to player frame shows, gives way to it." },
+			tip = "The icon of the spell left of your cast bar and your pet's, as tall as the bar. With or without Flat fill. It stays while the bar fades or holds Interrupted. The game's own small icon, which Edit Mode's Lock to player frame shows, gives way to it." },
 	},
 	{
 		key = "cooldowns", label = "Cooldowns",
@@ -1162,8 +1150,6 @@ ns.PAGES = {
 		{ key = "keybind", kind = "bool", default = false, label = "Keybind on icons", tip = "The key bound to the spell on your action bars, short (M4, N1) while Hotkey text of the action bars is Short.", changed = "CooldownLookChanged" },
 		{ key = "keybindSize", kind = "number", default = 100, min = 50, max = 250, step = 5, unit = "%", label = "Keybind size", needs = "keybind", changed = "CooldownLookChanged" },
 	},
-	-- CooldownLooks.lua and Cooldowns.lua: rows 2 to 4 of Cooldown icons, each off until switched on, with a Position, offsets, size, direction and
-	-- Show rule of their own; every other row of the Cooldowns pages applies to them. /flatui move places each (FlatUICooldowns2 to 4 in Movers.lua).
 	{
 		key = "cooldownsRows", label = "Rows 2 to 4", parent = "cooldowns", owner = "cooldowns",
 		{ section = "Icons" },
@@ -1209,7 +1195,6 @@ ns.PAGES = {
 		{ key = "row4Grow", kind = "choice", default = "center", label = "Row direction", needs = "row4",
 			choices = { { "center", "From the middle" }, { "right", "Left to right" }, { "left", "Right to left" } }, changed = "CooldownLookChanged" },
 	},
-	-- Pulse.lua: a module of its own, on by default, listed under Cooldowns. /flatui move places its icon (FlatUIPulse in Movers.lua).
 	{
 		key = "pulse", label = "Cooldown pulse", parent = "cooldowns",
 		{ key = "enabled", kind = "bool", default = true, label = "Cooldown pulse",
@@ -1234,7 +1219,6 @@ ns.PAGES = {
 			tip = "Choose one, then open the list again for its own sound. One without it plays Sound. Out of combat, a pick shows it." },
 		{ key = "name", kind = "bool", default = true, label = "Name under the icon", changed = "PulseLookChanged", tip = "The spell or item that is ready again, fading with the icon. An item's name is in its quality's colour." },
 		{ key = "grow", kind = "bool", default = false, label = "Grow as it fades", changed = "PulseLookChanged", tip = "The icon swells by a quarter as it fades out." },
-		-- Spots 2 and 3 have handles of their own in /flatui move (FlatUIPulse2 and FlatUIPulse3 in Movers.lua); Icon size above is spot 1's.
 		{ section = "Spots" },
 		{ key = "spots", kind = "choice", default = "1", label = "Pulse spots", changed = "PulseLookChanged", choices = { { "1", "One" }, { "2", "Two" }, { "3", "Three" } },
 			tip = "Each spot has its own handle in /flatui move and pulses on its own. Icon size is the size at spot 1. Out of combat, a change shows a test pulse at each spot in use." },
@@ -1391,8 +1375,6 @@ ns.PAGES = {
 	},
 	{
 		key = "tracker", label = "Edit a tracker", parent = "trackers", switch = "trackers",
-		-- The block of the window's own that edits one tracker. A row with only a key takes its label, choices and range from the Trackers page row of
-		-- that key; the rows after the template are added by ns.TrackerEditorRow.
 		{ kind = "entries", rows = {
 			{ key = "on", kind = "bool", label = "On" },
 			{ key = "spells", kind = "text", label = "Spell IDs", tip = "Numbers separated by commas. Only a buff tracker has them." },
@@ -1430,8 +1412,6 @@ ns.PAGES = {
 			tip = "For a buff that is not listed, type /flatui defensives add and its spell ID." },
 		{ key = "remove", kind = "list", default = 0, label = "Remove a spell", none = "Choose a spell", items = "DefensiveListed", pick = "DefensiveRemove" },
 	},
-	-- Absorbs.lua: a module of its own, on by default, a page of the Combat group. /flatui move places its bars (FlatUIAbsorbs and
-	-- FlatUIAbsorbsTarget in Movers.lua).
 	{
 		key = "absorbs", label = "Absorb shields",
 		{ key = "enabled", kind = "bool", default = true, label = "Absorb shields",
@@ -1493,6 +1473,9 @@ ns.PAGES = {
 			choices = { { "cooling", "Only while on cooldown" }, { "always", "Always, used ones dark" } } },
 		{ key = "raid", kind = "choice", default = "own", label = "In a raid group", tip = "Own position has a handle in /flatui move.",
 			choices = { { "own", "Own position" }, { "off", "Off" } } },
+		{ key = "grow", kind = "choice", default = "down", label = "Rows stack", needs = "raid", needsIn = { "own" },
+			choices = { { "down", "Down" }, { "up", "Up" } },
+			tip = "Up keeps the bottom of the raid group stack on the bottom of its box in /flatui move, so more rows grow upward: for a stack above your action bars." },
 		{ key = "ownRow", kind = "bool", default = false, label = "Your own row", tip = "Shown while you are in a party." },
 		{ key = "count", kind = "number", default = 6, min = 3, max = 8, step = 1, label = "Icons for each member" },
 		{ key = "size", kind = "number", default = 24, min = 16, max = 64, step = 2, label = "Icon size" },
@@ -1569,7 +1552,6 @@ ns.PAGES = {
 		{ key = "soundMinimum", kind = "number", default = 0, min = 0, max = 300, step = 10, unit = " s", label = "Shortest cooldown that sounds",
 			tip = "A cooldown shorter than this ends without the sound, so a Kick or a Pummel on your target stays quiet; the flash still shows. 0 sounds for every cooldown." },
 	},
-	-- Threat.lua: a window of Flat UI's own with the group by threat on the enemy you fight. On by default; it shows in a group, pets with it.
 	{
 		key = "threat", label = "Threat list",
 		{ key = "enabled", kind = "bool", default = true, label = "Show the threat list",
@@ -1594,19 +1576,20 @@ ns.PAGES = {
 		{ key = "warnAt", kind = "number", default = 90, min = 50, max = 100, step = 5, unit = "%", label = "Warn at",
 			tip = "The share of Warn near aggro, and for a tank of Show who is near your aggro." },
 		{ key = "lost", kind = "bool", default = true, label = "Warn when you lose aggro",
-			tip = "While you are a tank (your group role, else your stance or form): your bar pulses red and Warning sound plays once when an enemy you held turns to someone else, and the bar of whoever took it pulses red with yours. Not on bosses, where the game hides threat." },
+			tip = "While you are a tank (your group role, else your stance or form): your bar pulses red for up to 2 seconds, until you take it back, and Warning sound plays once when an enemy you held turns to someone else, and the bar of whoever took it pulses red with yours. Not on bosses, where the game hides threat." },
 		{ key = "others", kind = "bool", default = true, label = "Show who is near your aggro",
 			tip = "While you are a tank: the bar of a member at Warn at or above who is not tanking turns amber, with no sound, so you see who is about to pull. Not on bosses, where the game hides threat." },
+		{ key = "otherTanks", kind = "bool", default = true, label = "Calm when another tank takes it",
+			tip = "While you are a tank: an enemy another tank of the group takes (his tank role, the raid's main tank, or in a party his tank stance, form or aura) plays no warning, and his bar never turns amber." },
 		{ key = "warnSound", kind = "choice", default = "raid", label = "Warning sound",
 			tip = "Plays once for each enemy as Warn near aggro starts, and once each time you lose aggro. Picking one plays it.",
 			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
-	-- HealerMana.lua: a window of Flat UI's own with the mana of the healers of the group. On by default; it shows in a dungeon or raid.
 	{
 		key = "healermana", label = "Healer mana",
 		{ key = "enabled", kind = "bool", default = true, label = "Show healer mana",
-			tip = "The mana of the healers in your group, by their role. While nobody has the healer role, a member with no role counts by class. /flatui move places the list, /flatui healers shows a sample." },
+			tip = "The mana of the healers in your group, by their role. While nobody has the healer role, a member with no role counts by class, unless he is plainly no healer: you with damage or tank talents, anyone in his tank stance, form or aura. /flatui move places the list, /flatui healers shows a sample." },
 		{ section = "When it shows" },
 		{ key = "show", kind = "choice", default = "instance", label = "Show", tip = "While your group has a healer.",
 			choices = { { "instance", "In a dungeon or raid" }, { "group", "In a group" } } },
@@ -1631,7 +1614,6 @@ ns.PAGES = {
 			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
-	-- GroupTools.lua: a row of buttons of Flat UI's own for a group. On by default; it shows in a group with every button. /flatui move places it.
 	{
 		key = "grouptools", label = "Group tools",
 		{ key = "enabled", kind = "bool", default = true, label = "Show the group tools",
@@ -1664,8 +1646,6 @@ ns.PAGES = {
 		{ key = "fade", kind = "bool", default = false, label = "Fade until you point at it",
 			tip = "The buttons stay faint until the mouse comes over one, and fade again a second after it leaves; they still take clicks. Full during a ready check or a countdown, also in a fight." },
 	},
-	-- PingBar.lua: a bar of Flat UI's own with a button for each ping of the game, with its key. On by default; it shows in a group. /flatui move
-	-- places it.
 	{
 		key = "pingbar", label = "Ping bar",
 		{ key = "enabled", kind = "bool", default = true, label = "Show the ping bar",
@@ -1675,6 +1655,12 @@ ns.PAGES = {
 			tip = "Hidden while pings are off in the game's options or your group lets only some members ping and you are not one; the tooltip of a button says why while a fight keeps it shown.",
 			choices = { { "group", "In a group" }, { "always", "Always" }, { "never", "Never, only its keys" } } },
 		{ section = "Pings" },
+		{ key = "ping", kind = "bool", default = true, label = "Ping",
+			tip = "The button that lets the game pick the kind of ping. A ping turned off here keeps its key under Key Bindings." },
+		{ key = "attack", kind = "bool", default = true, label = "Attack" },
+		{ key = "warning", kind = "bool", default = true, label = "Warning" },
+		{ key = "onMyWay", kind = "bool", default = true, label = "On My Way" },
+		{ key = "assist", kind = "bool", default = true, label = "Assist" },
 		{ key = "cooldown", kind = "bool", default = true, label = "Cooldown swipe",
 			tip = "The game lets you ping only so often: after a ping from the bar the buttons show when you can ping again." },
 		{ section = "Look" },
@@ -1743,8 +1729,6 @@ ns.PAGES = {
 		{ key = "more", kind = "bool", default = true, label = "Collections, stable, sockets and other windows", reload = "off", tip = RELOAD },
 	},
 	{
-		-- The item slots of the game's windows, its bag and bank windows among them, rows of Windows (saved as windows.*) on a page of their own in the
-		-- Bags and items group. Flat UI bags has a page of its own (Bags, below).
 		key = "windowsItems", label = "Item slots", owner = "windows",
 		{ section = "Item slots" },
 		{ key = "slots", kind = "bool", default = true, label = "Flat item slots", reload = "off", tip = RELOAD },
@@ -1775,7 +1759,6 @@ ns.PAGES = {
 		{ key = "unusableTint", kind = "bool", default = true, label = "Tint items you cannot use", tip = "Red over an item whose tooltip has a requirement in red: class, race, level, skill, reputation, armour or weapon type, or a recipe you already know. In the game's bag and bank windows." },
 		{ key = "petFood", kind = "bool", default = true, label = "Mark food your pet eats", tip = "For hunters: the Feed Pet icon at the bottom left of food your pet eats, while it is out. In the game's bag and bank windows." },
 		{ key = "combinedBags", kind = "bool", default = false, cvar = "combinedBags", label = "Combine bags" },
-		-- BagKey.lua: the keys of Toggle Backpack run the game's Open All Bags, so B opens the reagent bag too.
 		{ key = "bagKey", kind = "bool", default = true, label = "Backpack key opens every bag", changed = "BagKeyChanged",
 			tip = "B, or your key for Toggle Backpack, opens the reagent bag with your other bags and closes them all again, as Open All Bags (Shift+B) does. With separate bags it opens all of them, not only the backpack." },
 		{ section = "Clean up bags" },
@@ -1789,17 +1772,11 @@ ns.PAGES = {
 			tip = "Of all the gear you wear, under the left column of slots: white above 80%, yellow above 50%, red at 50% and below, and red while an item is broken, yellow while one is at 20% or less. Point at it for each item with its icon, lowest first, and about what a repair costs. Not where gear does not wear out." },
 		{ key = "thorns", kind = "bool", default = true, label = "Show thorns",
 			tip = "The damage an attacker takes each time it strikes you in melee, one total under the right column of slots: Thorns, Retribution Aura, Fire Shield, items and shield spikes (on a block). Point at it for each source and school. It shows only while something deals such damage." },
-		-- CharacterThorns.lua: keeps the grey line while the total is 0 (0.5.35).
 		{ key = "thornsZero", kind = "bool", default = false, label = "Also at 0", needs = "thorns",
 			tip = "Shows Thorns 0 in grey while nothing deals damage to attackers." },
-		-- StatTips.lua and StatTipsMore.lua: plain lines after the game's own in the tooltip of each stat of the Character window's stats list.
 		{ key = "statTips", kind = "bool", default = true, label = "Explain the stats", changed = "StatTipsChanged",
 			tip = "Point at a stat on the Character window for a few plain lines under the game's own, in your numbers now: what it does for you, against an enemy of your level and a boss three levels above (from level 60, or as Against on the Gear comparison page names one), and what to aim for. Defense shows what 100 melee swings of each do to you (missed, dodged, parried, blocked, crits, crushing blows and normal hits) and how far you are from 440 defense, for no crits from a raid boss, and from 100% avoided, for no crushing blows. Block says how much one block stops and where it comes from; armor and resistances what share of the damage they take off. In a fight, the numbers from before it." },
 	},
-	-- Bags.lua and the Bags*.lua files: a bag window and a bank window of Flat UI's own in place of the game's, with sections, a search and the bags
-	-- and bank of your other characters. On by default for every character since 0.5.19 (a profile saved before then with every module that is on
-	-- by default off keeps it off: Core.lua, KeepBagsOff); the windows look as the Windows page sets (Window opacity, Button and slot colour,
-	-- Highlight colour, Icon crop), and no row has a function of its own: the module applies them all when one changes.
 	{
 		key = "bags", label = "Bags",
 		{ key = "enabled", kind = "bool", default = true, label = "Flat UI bags",
@@ -1821,37 +1798,36 @@ ns.PAGES = {
 			tip = "Shows what the Currency tab of the Character window marks Show on Backpack, after your gold under the bag window, in the game's order: each currency's icon with how many you have. Point at one for its tooltip, and click it to open the Currency tab (in a fight, once it ends). Shift-click it to link it in chat, or, with no chat box open, to take it off the footer, as on the game's backpack. Another character's bags show its currencies as Flat UI last saw them. When the window is too narrow for them all, the last ones lose their counts first." },
 		{ section = "Sections" },
 		{ key = "newItems", kind = "bool", default = true, label = "New items at the top",
-			tip = "Items the game marks as new stay at the top until you close the bags after seeing them; a click on the title there, or a clean up, puts them away now. Anything else that comes into your bags while they are open, such as an item from the bank, gear you take off or an item moved to an empty slot, waits there too, and with this row off so does everything: the shelf is titled New items only while everything on it is new, else Added." },
-		-- BagsCategories.lua: Equipment as one section, as Weapons, Armour and Jewellery, or each kind apart (0.5.40).
+			tip = "Items the game marks as new stay at the top until you close the bags after seeing them; a click on the title there, or a clean up, puts them away now. Anything else that comes into your bags while they are open, such as an item from the bank, gear you take off or an item moved to an empty slot, waits there too, and with this row off so does everything: the shelf is titled New items only while everything on it is new, else Added. An item you placed in a section by hand (Items placed by hand) goes straight to that section instead, glowing while it is new." },
 		{ key = "gear", kind = "choice", default = "one", label = "Equipment",
-			tip = "In Sections. Weapons, armour and jewellery puts shields, off-hands and relics with the weapons. Each kind shows Weapons (bows, guns, wands and thrown weapons too), Shields and off-hands, Armour, Rings, Necklaces, Trinkets, Relics, and Shirts and tabards, with Equipment for anything else you can equip. Each can be folded, moved, hidden and dropped on like any other section, and right-clicking one of their titles changes this row too.",
+			tip = "In Sections. Weapons, armour and jewellery puts shields, off-hands and relics with the weapons. Each kind shows Weapons (bows, guns, wands and thrown weapons too), Shields and off-hands, Armour, Rings, Necklaces, Trinkets, Relics, and Shirts and tabards, with Equipment for anything else you can equip. Each can be folded, moved, deleted and dropped on like any other section, and right-clicking one of their titles changes this row too; Delete a section below deletes the whole group at once.",
 			choices = { { "one", "One section" }, { "kind", "Weapons, armour and jewellery" }, { "each", "Each kind" } } },
 		{ key = "addSlots", kind = "bool", default = true, label = "Drop slot in each section",
 			tip = "In Sections, each section of your bags ends in an empty slot with a +. Drop an item on it, or click it with an item on your cursor, to keep that item in that section: on Junk it goes on your sell list, on Keep in place its slot is pinned. An item from your bank or one you wear goes into a free slot of your bags first, out of combat, and a merchant's item is bought into one, unless the game asks before it buys that item; nothing moves when the section would not take the item, such as a quest item on Junk. A drop on a section's title, or anywhere among its slots, does the same, in both windows and with this row off too, while a drop on an item swaps the two as before. While an item or a merchant's item is on your cursor, every + slot and title that would take it lights in your Highlight colour, and one that would not stays unlit, its tooltip saying why in red; nothing lights in a fight. The + slots draw on Free slots, whose title says how many are free of how many (gold at 4 or fewer, red at none): with no free slot left they dim, and still take an item that is already in your bags." },
-		-- BagsCategories.lua: Consumables as one section, or Food and drink, Potions and elixirs and the rest apart (0.5.37), or each kind apart
-		-- (0.5.40); Trade goods as one section or each kind apart (0.5.40).
 		{ key = "consumables", kind = "choice", default = "one", label = "Consumables",
-			tip = "In Sections. Food, potions and the rest shows Food and drink, Potions and elixirs (flasks too) and Consumables for the rest, such as bandages and scrolls. Each kind shows Food and drink, Potions, Elixirs and flasks, Scrolls, Bandages, Enhancements (weapon oils, sharpening stones and the like), and Explosives and devices, which the game counts as trade goods but go here then, with Consumables for the rest. Each can be folded, moved, hidden and dropped on like any other section, and right-clicking one of their titles changes this row too.",
+			tip = "In Sections. Food, potions and the rest shows Food and drink, Potions and elixirs (flasks too) and Consumables for the rest, such as bandages and scrolls. Each kind shows Food and drink, Potions, Elixirs and flasks, Scrolls, Bandages, Enhancements (weapon oils, sharpening stones and the like), and Explosives and devices, which the game counts as trade goods but go here then, with Consumables for the rest. Each can be folded, moved, deleted and dropped on like any other section, and right-clicking one of their titles changes this row too; Delete a section below deletes the whole group at once.",
 			choices = { { "one", "One section" }, { "kind", "Food, potions and the rest" }, { "each", "Each kind" } } },
 		{ key = "tradeGoods", kind = "choice", default = "one", label = "Trade goods",
-			tip = "In Sections. Each kind shows Cloth, Leather, Metal and stone, Herbs, Elemental, Enchanting, Meat and Parts (with explosives and devices, unless Consumables is at Each kind), with Trade goods for the rest, such as gems. Each can be folded, moved, hidden and dropped on like any other section; right-click one of their titles to split them or join them into one again.",
+			tip = "In Sections. Each kind shows Cloth, Leather, Metal and stone, Herbs, Elemental, Enchanting, Meat and Parts (with explosives and devices, unless Consumables is at Each kind), with Trade goods for the rest, such as gems. Each can be folded, moved, deleted and dropped on like any other section; right-click one of their titles to split them or join them into one again, and Delete a section below deletes the whole group at once.",
 			choices = { { "one", "One section" }, { "each", "Each kind" } } },
 		{ key = "placed", kind = "list", default = 0, label = "Items placed by hand", none = "Choose one to put it back in its own section", items = "BagsPlacedLines",
 			pick = "BagsPlacedPick",
-			tip = "In Sections, drop an item from your bags on the title of a section to keep it there. Dropped on Junk, whose title is always there unless you hide it, it goes on your sell list (/flatui sell); an item of Junk dropped on another section comes off the sell list, and a grey one goes on your keep list (/flatui keep), while Junk is not hidden. In the bag and bank windows such an item's tooltip ends with Placed by hand in that section. Choose an item here to put it back in its own section, or, with two or more placed, the first line to put them all back, or right-click a section's title to put back the items placed there. Until the next put back or a reload, that title's menu and the first line here bring back what the last one took away, each item in the section it was in, unless it is placed elsewhere since. With a search typed, a section's right-click menu also places there every item the search finds in other sections (Place the 7 items that match the search here), not those of New items, Junk or Keep in place, so #boe q>=uncommon fills an Auction section at once; #placed finds every item you placed." },
+			tip = "In Sections, drop an item from your bags on the title of a section, its + slot or among its slots to keep it there: from then on every stack of it shows in that section, in the bag and bank windows and for all your characters, also when you loot it again (it still glows while it is new) or move it while the bags are open, until you place it somewhere else or put it back here. A drop on the section it would go to anyway keeps it there too, so changing Equipment, Consumables or Trade goods, or a section deleted and brought back, never moves it; one placed in a kind the row does not show now, such as Potions with Consumables as one section, shows in the section that holds that kind and in Potions again once the row shows it. Dropped on Junk, whose title is always there unless you delete it, it goes on your sell list (/flatui sell); an item of Junk or a grey one dropped on another section comes off the sell list, and a grey one goes on your keep list (/flatui keep), while Junk is not deleted. An item you put on your sell list another way shows in Junk while it is there, as Sell junk sells it, and in its section again once it comes off; in a pinned slot it shows in Keep in place. In the bag and bank windows such an item's tooltip ends with Placed by hand in that section. Choose an item here to put it back in its own section, or, with two or more placed, the first line to put them all back, or right-click a section's title to put back the items placed there. Until the next put back or a reload, that title's menu and the first line here bring back what the last one took away, each item in the section it was in, unless it is placed elsewhere since. With a search typed, a section's right-click menu also places there every item the search finds in other sections (Place the 7 items that match the search here), New items too but not those of Junk or Keep in place, so #boe q>=uncommon fills an Auction section at once; #placed finds every item you placed. At most 2000 items are placed by hand." },
 		{ key = "order", kind = "list", default = 0, label = "Section order", none = "Choose one", items = "BagsOrderLines", pick = "BagsOrderPick",
 			tip = "In Sections, drag a section's title to move the section, or right-click the title to move it up, down, to the top or to the bottom. One order for both windows and all your characters; New items stays at the top and Free slots at the bottom. This puts Flat UI's own order back." },
 		{ key = "folded", kind = "list", default = 0, label = "Folded sections", none = "Choose one to open it", items = "BagsFoldLines", pick = "BagsFoldPick",
-			tip = "In Sections, click a section's title to fold it to its title and count, and click again to open it; Shift-click it to open only that section and fold the others, and Shift-click it again to open them all. Its right-click menu folds and opens it, or every section. The same sections fold in both windows and for all your characters. Point at a folded title to see what it holds, each item with its count. While you search, every section's title says how many of its items match, as in 3 of 24, and a section with no match fades. This opens one folded section, or all of them; a fold kept for a hidden section is marked (hidden), and one for a section not shown now, such as Rings with Equipment at One section, (not in use now)." },
-		-- BagsOrder.lua: the sections of Flat UI's own the player hid from a title's menu, in FlatUIDB.bags.hidden (0.5.40).
-		{ key = "hidden", kind = "list", default = 0, label = "Hidden sections", none = "Choose one to show it again", items = "BagsHiddenLines",
+			tip = "In Sections, click a section's title to fold it to its title and count, and click again to open it; Shift-click it to open only that section and fold the others, and Shift-click it again to open them all. Its right-click menu folds and opens it, or every section. The same sections fold in both windows and for all your characters. Point at a folded title to see what it holds, each item with its count. While you search, every section's title says how many of its items match, as in 3 of 24, and a section with no match fades. This opens one folded section, or all of them; a fold kept for a deleted section is marked (deleted), and one for a section not shown now, such as Rings with Equipment at One section, (not in use now)." },
+		{ key = "remove", kind = "list", default = 0, label = "Delete a section", none = "Choose one to delete it", items = "BagsRemoveLines",
+			pick = "BagsRemovePick",
+			tip = "In Sections, deletes a section in both windows and for all your characters, as Delete this section in its title's right-click menu does. It lists every section you can delete now, in the order the windows show them: Flat UI's own, and yours, marked (yours). While Equipment, Consumables or Trade goods shows its kinds apart, a line before them deletes the whole group at once (Equipment: all 8 kinds), and it stays deleted if you change that row later; the group's own section, which holds the rest, is marked (the rest). A deleted section's items go to the next section that takes them, so nothing is lost: Other is not listed, since it takes whatever no other section does. Deleting Junk only moves your junk into other sections (Sell junk, the junk coin and your sell list stay), and deleting Keep in place leaves your pins as they are. Deleted sections below brings one of Flat UI's back; one of yours goes with its items put back in their own sections, and until the next delete or a reload Bring back in Custom sections, or at the top of + New section's menu, restores it. New items and Free slots are not listed: they are shelves, not sections, and no row turns them off (with New items at the top off nothing is kept as new, but the shelf still holds what comes in while the bags are open)." },
+		{ key = "hidden", kind = "list", default = 0, label = "Deleted sections", none = "Choose one to bring it back", items = "BagsHiddenLines",
 			pick = "BagsHiddenPick",
-			tip = "In Sections, right-click a section's title and choose Hide this section to hide it in both windows and for all your characters: every section of Flat UI's own but New items, Free slots and Other can be hidden, and your own sections are deleted instead. Its items go to the next section that takes them: a hidden kind of Equipment, Consumables or Trade goods sends them to the rest of its group while that shows (a hidden Potions to Consumables, Rings to Equipment, Weapons to Armour at Weapons, armour and jewellery), else on to the next section that takes them, and Other takes what is left, so nothing is lost. Hiding Junk only moves your junk into other sections: Sell junk, the junk coin and your sell list stay as they are, also when you drop junk on another section. Hiding Keep in place leaves your pins as they are, also when you drop a pinned item on another section, and shows those items by kind. Items you placed by hand in a hidden section come back to it when it shows again. Hidden (3) after the last section names them in its tooltip and opens a list to show one again, which says so in chat and flashes the section that comes back. Choose one here to show it again, or, with two or more hidden, the first line to show them all." },
+			tip = "In Sections, right-click a section's title and choose Delete this section, or choose it in Delete a section, to delete it in both windows and for all your characters: every section of Flat UI's own but New items, Free slots and Other can be deleted and brought back here, while a section of your own you delete comes back from Custom sections instead, which brings back the last one. Its items go to the next section that takes them: a deleted kind of Equipment, Consumables or Trade goods sends them to the rest of its group while that shows (a deleted Potions to Consumables, Rings to Equipment, Weapons to Armour at Weapons, armour and jewellery), else on to the next section that takes them, and Other takes what is left, so nothing is lost. Deleting Junk only moves your junk into other sections: Sell junk, the junk coin and your sell list stay as they are, also when you drop junk on another section. Deleting Keep in place leaves your pins as they are, also when you drop a pinned item on another section, and shows those items by kind. Items you placed by hand in a deleted section come back to it when you bring it back, and so do its place and its fold. Deleted (3) after the last section names them in its tooltip and opens a list to bring one back, which says so in chat and flashes the section that comes back. Choose one here to bring it back, or, with two or more deleted, the first line to bring them all back; one the rows do not show now, such as Jewellery with Equipment at Each kind, is marked (not in use now)." },
 		{ key = "custom", kind = "list", default = 0, label = "Custom sections", none = "Choose one", items = "BagsCustomLines", pick = "BagsCustomPick",
 			tip = "Sections of your own, with names you choose, at most 20. Click + New section after the last section in the bag window, choose New section from a section title's right-click menu, or choose Make a new section here, then type a name of up to 24 letters and press Enter (Escape cancels); drop an item on + New section to make one for that item, its kind (such as Mail) already typed in. Drop items on a section's title, its + slot or among its slots to keep them there, and right-click its title to rename it, give it a colour (its title and + take it; Flat UI's own sections take a colour from their title's menu too), empty it or delete it, or right-click + New section for all of yours. Deleting one puts its items back in their own sections; until the next delete or a reload, Bring back, first in + New section's menu and here, restores it with its items, its fold and its place. Your sections are the same in both windows and for all your characters, come after Keep in place, move with Section order, fold with a click, and the search finds them by name." },
 		{ section = "Pinned slots" },
 		{ key = "pinMoves", kind = "bool", default = true, label = "Put pinned items back",
-			tip = "Ctrl+right-click an item in your bags to pin its slot to it, and again to unpin it; Ctrl+left-click stays the dressing room. A pinned slot has a small square at its top right, its item's tooltip says it is pinned, and in Sections its items are in Keep in place, in the order of your bags and never sorted, with an empty pinned slot shown faded. Drop an item on Keep in place's title to pin its slot, or a pinned item on another section to unpin it (not while Keep in place is hidden). If Ctrl is your Auto Loot Key, Ctrl+right-click opens an item that holds loot instead, so drop that one on Keep in place. A pinned item comes off your sell list, and a grey one goes on your keep list, so it is never sold as junk; unpinning leaves both lists as they are. With this on, Flat UI puts each pinned item back in its slot after a clean up of your bags, and when that item comes into your bags while its slot holds something else or nothing, out of combat; a move inside your bags is left as you made it until then. A bag set to ignore clean up gets no other item. The game's clean up cannot leave single items alone, so they leave and come back, and the sort button stays busy until they are back. Right-click Keep in place's title to put them back now." },
+			tip = "Ctrl+right-click an item in your bags to pin its slot to it, and again to unpin it; Ctrl+left-click stays the dressing room. A pinned slot has a small square at its top right, its item's tooltip says it is pinned, and in Sections its items are in Keep in place, in the order of your bags and never sorted, with an empty pinned slot shown faded. Drop an item on Keep in place's title to pin its slot, or a pinned item on another section to unpin it (not while Keep in place is deleted). If Ctrl is your Auto Loot Key, Ctrl+right-click opens an item that holds loot instead, so drop that one on Keep in place. A pinned item comes off your sell list, and a grey one goes on your keep list, so it is never sold as junk; unpinning leaves both lists as they are. With this on, Flat UI puts each pinned item back in its slot after a clean up of your bags, and when that item comes into your bags while its slot holds something else or nothing, out of combat; a move inside your bags is left as you made it until then. A bag set to ignore clean up gets no other item. The game's clean up cannot leave single items alone, so they leave and come back, and the sort button stays busy until they are back. Right-click Keep in place's title to put them back now." },
 		{ key = "pins", kind = "list", default = 0, label = "Pinned slots", none = "Choose one to unpin it", items = "BagsPinLines", pick = "BagsPinPick",
 			tip = "This character's pinned slots, by bag and slot. Pins are kept per character, at most 100, in your bags only: not the keyring, the bank or another character's bags." },
 		{ section = "Slots" },
@@ -1911,7 +1887,6 @@ ns.PAGES = {
 		{ key = "bossScale", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Boss frame scale", live = true, get = "MoverScale", set = "SetMoverScale", frame = "BossTargetFrameContainer" },
 		{ key = "raidScale", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Raid frame scale", live = true, get = "MoverScale", set = "SetMoverScale", frame = "CompactRaidFrameContainer" },
 		{ section = "Portraits" },
-		-- UnitFrames.lua, ns.PortraitStyleChanged: a change the player makes here puts each frame's own Picture back at As Portrait style.
 		{ key = "portraitStyle", kind = "choice", default = "picture", label = "Portrait style",
 			tip = "Sets every frame's Picture to As Portrait style. A frame's own Picture can then pick another.", needs = "squarePortrait", changed = "PortraitStyleChanged",
 			choices = { { "picture", "Face" }, { "head", "3D head" }, { "icon", "Class icon" }, { "none", "None" } } },
@@ -1967,7 +1942,6 @@ ns.PAGES = {
 		{ key = "playerPowerText", kind = "choice", default = "game", label = "Power text", choices = ns.TEXT_FORMAT_CHOICES },
 		{ key = "combatIcon", kind = "bool", default = true, label = "Combat icon" },
 		{ key = "playerPowerBar", kind = "bool", default = true, label = "Power bar" },
-		-- UnitDruidMana.lua: a thin bar of Flat UI's own under the power bar of the player frame.
 		{ key = "druidMana", kind = "bool", default = true, label = "Druid mana in forms",
 			tip = "For a druid in Bear or Cat Form: a thin mana bar under the player frame's bars. In the other forms the frame's own bar shows mana." },
 		{ key = "druidManaText", kind = "choice", default = "pct", label = "Mana text", needs = "druidMana",
@@ -1977,6 +1951,8 @@ ns.PAGES = {
 			tip = "Changed out of combat." },
 		{ key = "druidManaShift", kind = "bool", default = true, label = "Mark the cost of a shift", needs = "druidMana",
 			tip = "A thin line on the bar at the mana a shift into the form you are in costs, for a powershift: fill past it pays for one." },
+		{ key = "manaRule", kind = "bool", default = false, label = "Five-second rule",
+			tip = "After you spend mana, a spark crosses your mana bar over 5 seconds. Spirit refills your mana again once it reaches the end. A druid in Bear or Cat Form sees it on the druid mana bar." },
 	},
 	{
 		key = "unitframesTarget", label = "Target frame", parent = "unitframes", owner = "unitframes",
@@ -2016,7 +1992,6 @@ ns.PAGES = {
 		{ key = "petPowerText", kind = "choice", default = "game", label = "Power text", choices = ns.TEXT_FORMAT_CHOICES },
 		{ key = "petHappiness", kind = "bool", default = true, label = "Happiness face" },
 		{ key = "petPowerBar", kind = "bool", default = true, label = "Power bar" },
-		-- UnitPetTarget.lua: a secure button of Flat UI's own for the pet's target, which the game shows while there is one. Off by default.
 		{ key = "petTarget", kind = "bool", default = false, label = "Pet target frame",
 			tip = "A small frame for what your pet attacks, with its health and name. A click targets it, Shift-click sets it as your focus. /flatui move places it." },
 		{ key = "petTargetWidth", kind = "number", default = 120, min = 60, max = 240, step = 10, unit = " px", label = "Pet target width", tip = "Changed out of combat.",
@@ -2034,7 +2009,6 @@ ns.PAGES = {
 			choices = { { "cut", "Cut with dots" }, { "shrink", "Smaller text" } } },
 		{ key = "totHealthBy", kind = "choice", default = "class", label = "Health bar colour", needs = "flat",
 			choices = { { "custom", "Health colour" }, { "class", "Class" }, { "reaction", "Reaction" } } },
-		-- UnitText.lua: the game draws no words on this bar, so As the game has it shows none.
 		{ key = "totHealthText", kind = "choice", default = "game", label = "Health text", tip = "On the target's and the focus's target. As the game has it shows none.",
 			choices = ns.TEXT_FORMAT_CHOICES },
 		{ key = "totPowerBar", kind = "bool", default = true, label = "Power bar" },
@@ -2054,7 +2028,7 @@ ns.PAGES = {
 		{ key = "partyPowerText", kind = "choice", default = "game", label = "Power text", choices = ns.TEXT_FORMAT_CHOICES },
 		{ key = "partyPowerBar", kind = "bool", default = true, label = "Power bar" },
 		{ section = "Range" },
-		{ key = "partyRangeDim", kind = "bool", default = false, label = "Dim members out of range", tip = "Also dims a member whose range the game does not report." },
+		{ key = "partyRangeDim", kind = "bool", default = false, label = "Dim members out of range", tip = "Darkens the member's picture, name and bars. Their pet's frame dims by its own range. Also dims a member whose range the game does not report." },
 		{ key = "partyRangeOpacity", kind = "number", default = 50, min = 10, max = 100, step = 5, unit = "%", label = "Out of range opacity", needs = "partyRangeDim" },
 	},
 	{
@@ -2078,16 +2052,12 @@ ns.PAGES = {
 	},
 	{
 		key = "unitframesBars", label = "All frames: bars and pictures", parent = "unitframes", owner = "unitframes",
-		-- UnitFrames.lua: Separate parts (the default) gives each part its own border and background; One frame draws a body of Flat UI's own behind
-		-- each unit frame but the raid frames, with one background and one border round the portrait, the name row and the bars. Any value but One
-		-- frame counts as Separate parts wherever the row is read.
 		{ section = "Frame" },
 		{ key = "frameStyle", kind = "choice", default = "parts", label = "Frame style",
 			tip = "One frame puts the portrait, the name row and the bars in one border and one background. Separate parts gives each its own.",
 			choices = { { "one", "One frame" }, { "parts", "Separate parts" } } },
 		{ key = "backdrop", kind = "bool", default = true, label = "Background", tip = "Behind the whole frame. In Separate parts, behind each bar." },
 		{ key = "barBorder", kind = "bool", default = true, label = "Border", tip = "Round the whole frame. In Separate parts, round each bar." },
-		-- UnitFrameLooks.lua: a white layer of Flat UI's own, added to the colours of the health bar under the mouse.
 		{ key = "hoverHighlight", kind = "bool", default = true, label = "Highlight under the mouse",
 			tip = "The health bar of the frame under the mouse brightens a little, so you see which frame a click hits. Also raid frames and the pet target frame." },
 		{ key = "powerSpace", kind = "number", default = 2, min = 0, max = 4, step = 1, unit = " px", label = "Space between parts",
@@ -2125,7 +2095,6 @@ ns.PAGES = {
 		{ key = "threatTanks", kind = "choice", default = "shown", label = "Threat border on tanks", needs = "threat",
 			tip = "A tank who holds aggro as planned keeps a plain border. A tank is a member with the tank role, or the Main Tank of a raid.",
 			choices = { { "shown", "Shown" }, { "hidden", "Not shown" } } },
-		-- HealthColour.lua: a border of Flat UI's own round the health bar, whose opacity is a step curve of the game's at the health left.
 		{ key = "lowHealth", kind = "bool", default = false, label = "Low health border",
 			tip = "Your own frame and your pet's, your party's and their pets', and your raid's, and with the row below your target's, focus's, boss's and target of target's: the health bar border takes this colour while the unit is below the limit, also in a fight. Never on a dead unit." },
 		{ key = "lowHealthAt", kind = "number", default = 20, min = 5, max = 50, step = 5, unit = "%", label = "Low health below", needs = "lowHealth" },
@@ -2210,9 +2179,6 @@ ns.PAGES = {
 		{ key = "totemTimer", kind = "bool", default = true, label = "Totem time left" },
 		{ key = "totemSwipe", kind = "bool", default = true, label = "Totem cooldown swipe" },
 		{ key = "totemTimeSize", kind = "number", default = 80, min = 50, max = 200, step = 5, unit = "%", label = "Totem time size", needs = "totemTimer" },
-		-- UnitGroupMarks.lua: the colour and the type of a debuff you can dispel, the raid marker of a raid or party frame, the resurrection icon and the
-		-- AFK word of a party frame, the leader and assistant icons of a raid frame and the outline of your target on a party frame. UnitFrames.lua: the
-		-- border of your target on a raid frame.
 		{ section = "Party and raid frames" },
 		{ key = "dispelBorder", kind = "bool", default = true, label = "Border colour of a debuff you can dispel",
 			tip = "The border of the health bar takes the colour of Magic, Curse, Disease or Poison while the member has a debuff of that type you can dispel." },
@@ -2229,21 +2195,24 @@ ns.PAGES = {
 		{ key = "raidFrameMarker", kind = "bool", default = true, label = "Raid marker on raid frames", tip = "The game's raid frames show none." },
 		{ key = "partyFrameMarker", kind = "bool", default = true, label = "Raid marker on party frames", tip = "The game's party frames show none." },
 		{ key = "partyRezIcon", kind = "bool", default = true, label = "Resurrection icon on party frames",
-			tip = "On the portrait of a dead member while someone resurrects them, also in a fight, breathing softly so two healers do not resurrect the same one. With Picture None it sits at the left end of the health bar, clear of the Dead word. The game's party frames show a summon already, and its raid frames both." },
+			tip = "On the portrait of a dead member while someone resurrects them, also in a fight, breathing softly so two healers do not resurrect the same one. With Picture None it sits in the empty picture square, or in One frame at the left end of the health bar, clear of the Dead word. The game's party frames show a summon already, and its raid frames both." },
 		{ key = "partyAfk", kind = "bool", default = true, label = "AFK on party frames",
-			tip = "A grey AFK at the bottom of the picture of a party member who is away, or at the left end of the health bar with Picture None, also in a fight. Hidden while they are dead or offline. The game's frames show none." },
+			tip = "A grey AFK at the bottom of the picture of a party member who is away, also of the empty picture square with Picture None, or in One frame at the left end of the health bar, also in a fight. It fades in, counts the time away from when Flat UI first saw the flag (AFK 3m, AFK 1h) and fades out as they come back. Hidden while they are dead or offline. The game's frames show none." },
+		{ key = "raidAfk", kind = "bool", default = true, label = "AFK on raid frames",
+			tip = "A grey AFK at the bottom of a raid member's cell, where the game's status text sits, while they are away, also in a fight. It fades and counts as on party frames. Hidden while they are dead or offline." },
 		{ key = "raidLeaderIcon", kind = "bool", default = true, label = "Leader and assistant icons on raid frames", tip = "The game's raid frames show none." },
 		{ key = "targetBorder", kind = "choice", default = "game", label = "Border for your target",
 			tip = "On raid frames, the border of your target. With Own colour the game's party frames get one too.",
 			choices = { { "game", "As the game has it" }, { "own", "Own colour" }, { "off", "Off" } } },
 		{ key = "targetColour", kind = "colour", default = "ffffffff", label = "Target border colour", needs = "targetBorder", needsIn = { "own" } },
-		-- UnitHots.lua: a square of its own colour for each heal over time of yours on a party or raid member.
 		{ key = "hotSquares", kind = "bool", default = false, label = "Squares for your heals over time",
 			tip = "A small square in a corner of a party or raid member's health bar for each heal over time of yours on them, such as Renew, Rejuvenation, Regrowth, Prayer of Mending, Power Word: Shield, Earth Shield or Sacred Shield, each in its own colour. In a fight, where the game hides which aura is which, a square read before the pull stays until its time runs out, while the member has at least as many of your buffs as then, and a new one waits for the end of the fight." },
 		{ key = "hotCorner", kind = "choice", default = "tr", label = "Square corner", needs = "hotSquares",
 			tip = "The corner of the health bar the squares sit in. On party frames a right-hand corner starts them just left of the debuff type icon.",
 			choices = { { "tl", "Top left" }, { "tr", "Top right" }, { "bl", "Bottom left" }, { "br", "Bottom right" } } },
-		{ key = "hotSize", kind = "number", default = 6, min = 4, max = 14, step = 1, label = "Square size", needs = "hotSquares", tip = "The side of each square. On party frames at most as tall as the health bar inside its border." },
+		{ key = "hotSize", kind = "number", default = 6, min = 4, max = 14, step = 1, label = "Square size", needs = "hotSquares", tip = "The side of each square. On party frames at most what fits inside the health bar, so 6 stays 6 there." },
+		{ key = "hotFade", kind = "bool", default = true, label = "Fade as one runs out", needs = "hotSquares",
+			tip = "A square fades over the last 3 seconds of its heal over time, so you see which to cast again. In a fight it fades by the end read before the pull." },
 	},
 	{
 		key = "hud", label = "Minimap", moduleLabel = "Minimap and HUD",
@@ -2261,7 +2230,6 @@ ns.PAGES = {
 		{ section = "Zone name" },
 		{ key = "zoneText", kind = "bool", default = true, label = "Zone name" },
 		{ key = "zoneSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Zone name size" },
-		-- Hud.lua hangs the zone name from the map (headerGap).
 		{ key = "zoneGapOwn", kind = "bool", default = false, label = "Close the gap under the zone name",
 			tip = "Brings the zone name, with the clock, calendar and tracking button beside it, to the map, which stays where it is. The mail icon and the addon list button, which the game puts between the zone name and the map, go to the other side of the zone name where they do not fit there. Off, the zone name keeps the game's place, which leaves room for the game's ring. With Edit Mode's Header underneath it comes up to the map. While the game's ring shows, and while Edit Mode is open, it keeps the game's place." },
 		{ key = "zoneGap", kind = "number", default = 0, min = 0, max = 40, step = 1, unit = " px", label = "Gap under the zone name", needs = "zoneGapOwn",
@@ -2274,13 +2242,11 @@ ns.PAGES = {
 		{ key = "btnAddons", kind = "bool", default = true, label = "Addon list button" },
 		{ key = "addonButtons", kind = "choice", default = "edge", label = "Addon buttons", tip = "Round buttons that other addons put on the minimap.", changed = "MapButtonsChanged",
 			choices = { { "leave", "Where each addon puts them" }, { "edge", "Column beside the map" }, { "bar", "Row under the map" } } },
-		-- Kept per account in FlatUIDB.mapButtons.keep (MapButtons.lua).
 		{ key = "addonButtonsKeep", kind = "list", default = 0, label = "Leave in place", none = "Choose a button", items = "MapButtonLines", pick = "MapButtonPick",
 			needs = "addonButtons", needsIn = { "edge", "bar" }, tip = "A button you tick stays where its addon puts it." },
 		{ key = "addonButtonsFlat", kind = "bool", default = true, label = "Flat addon buttons", changed = "MapButtonsChanged",
 			needs = "addonButtons", needsIn = { "edge", "bar" },
 			tip = "Gives each gathered button a square dark plate with a thin border in place of its round gold ring, and a light square when you point at it. A button you tick in Leave in place keeps its own art." },
-		-- MapText.lua draws these: lines of text above and below the map.
 		{ section = "Text around the map" },
 		{ key = "mapCoords", kind = "bool", default = true, label = "Coordinates", tip = "Your place on the zone map. Hidden in instances, where the game gives no position, and while the game's own coordinates show under the map (the game's Options, Interface, Coordinates), so you see one line; turn those off for this one. Point at it for the zone and subzone; a click opens the world map, in a fight as it ends, and Shift-click puts the zone and coordinates in the chat box." },
 		{ key = "mapCoordsPlace", kind = "choice", default = "below", label = "Coordinates place", needs = "mapCoords", choices = MAP_TEXT_PLACES },
@@ -2314,8 +2280,6 @@ ns.PAGES = {
 		{ key = "lookBack", kind = "colour", default = "ff0f0f0f", label = "Background colour", needs = "lookOwn" },
 		{ key = "lookBackAlpha", kind = "number", default = 85, min = 0, max = 100, step = 5, unit = "%", label = "Background opacity", needs = "lookOwn" },
 	},
-	-- Buffs and debuffs, Experience and menu bars, Quests and loot, Messages and timers and Hit table: rows of Minimap and HUD (saved as hud.*), each
-	-- on a page of its own in the sidebar with the switch of Minimap and HUD (Panel.lua, BuildModel).
 	{
 		key = "hudBuffs", label = "Buffs and debuffs", owner = "hud",
 		{ key = "auras", kind = "bool", default = true, label = "Buff and debuff borders", tip = "Square icons with a thin border. Debuffs take the colour of their type." },
@@ -2333,7 +2297,6 @@ ns.PAGES = {
 			choices = { { "game", "As the game has it (8 m)" }, { "tight", "No space (8m)" } } },
 		{ key = "durationColour", kind = "choice", default = "white", label = "Duration colour", tip = "Also the totem times under the player frame.",
 			choices = { { "game", "As the game has it (gold, white under 90 s)" }, { "white", "White" }, { "warn", "White, red near the end" } } },
-		-- AuraTime.lua: the seconds left under which White, red near the end turns the time red (0.5.39).
 		{ key = "durationWarn", kind = "number", default = 10, min = 3, max = 60, step = 1, unit = " s", label = "Red under", needs = "durationColour",
 			needsIn = { "warn" }, tip = "The time turns red once this little is left. Also the totem times under the player frame." },
 		{ key = "countSize", kind = "number", default = 100, min = 50, max = 250, step = 5, unit = "%", label = "Stack count size" },
@@ -2343,8 +2306,6 @@ ns.PAGES = {
 		{ section = "Experience and reputation bars" },
 		{ key = "xpOwn", kind = "choice", default = "flat", label = "Experience bar", tip = "The game's bar stays in place and is not drawn.",
 			choices = { { "flat", "Flat UI's" }, { "game", "The game's" } } },
-		-- Block 1 of the Bar block page places the bar under its bars at its width (XpBar.lua, BarBlock.lua); the Width row then says so (overText)
-		-- while it really does (ns.XpBarAtBlockWidth), and is live with its value while no block holds the bar.
 		{ key = "xpUnder", kind = "bool", default = true, label = "Experience bar under the bar block",
 			tip = "While the Bar block page is on: right under block 1, exactly as wide as the block, and it moves with the block. With that page off, as it is by default, or this row off, the bar keeps its own place in /flatui move and the Width below.",
 			needs = "xpOwn", needsIn = { "flat" } },
@@ -2398,7 +2359,6 @@ ns.PAGES = {
 		{ key = "xpFill", kind = "bool", default = true, label = "Flat fill", tip = "One plain colour in place of the default gloss. " .. KEPT,
 			needs = "xpOwn", needsIn = { "game" } },
 		{ key = "xpDividers", kind = "bool", default = true, label = "Hide bar dividers", tip = KEPT, needs = "xpOwn", needsIn = { "game" } },
-		-- XpStats.lua counts these and XpBar.lua draws them, on Flat UI's own bar only.
 		{ section = "Levelling" },
 		{ key = "xpQuest", kind = "bool", default = true, label = "Quests ready to hand in",
 			tip = "A stretch after the fill shows the experience of the finished quests in your log. The tooltip counts them and the whole log.",
@@ -2435,7 +2395,6 @@ ns.PAGES = {
 		{ key = "trackerHeaderSize", kind = "number", default = 100, min = 50, max = 200, step = 5, unit = "%", label = "Heading size" },
 		{ key = "trackerCombat", kind = "number", default = 100, min = 0, max = 100, step = 5, unit = "%", label = "Opacity in combat",
 			tip = "The objective tracker, and Questie's, eases to this opacity as a fight starts and back as it ends. Under the mouse it comes back to full." },
-		-- QuestieSkin.lua: the same rows, and Flat UI's fonts, on the Questie addon's tracker.
 		{ key = "trackerQuestie", kind = "bool", default = true, label = "Questie's tracker",
 			tip = "Gives the quest tracker of the Questie addon the look of the rows above: background, headings, Heading size on its zone headings, item buttons and Opacity in combat, and the fonts of the Fonts page while that page is on. Needs Questie: without it this row does nothing. Off gives Questie its own look back." },
 		{ section = "Loot" },
@@ -2448,7 +2407,6 @@ ns.PAGES = {
 			tip = "Plays once when a roll you have not rolled on has 5 seconds left. Picking one plays it.",
 			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
-		-- Hud.lua: the rolls hang from the box Loot rolls in /flatui move once it has a spot; the game lays them out until then.
 		{ key = "lootRollsGrow", kind = "choice", default = "up", label = "Rolls stack", choices = { { "up", "Up" }, { "down", "Down" } },
 			tip = "Which way more rolls stack from the spot you gave Loot rolls in /flatui move: Up, as the game stacks them, or Down. Until you move them the game places the rolls." },
 		{ key = "lootQualityText", kind = "bool", default = true, label = "Quality word on loot", needs = "lootWindow" },
@@ -2457,8 +2415,6 @@ ns.PAGES = {
 	},
 	{
 		key = "hudMessages", label = "Messages and timers", owner = "hud",
-		-- ErrorFilter.lua: the game's red error messages in the middle of the screen, hidden by kind. On by default since 0.5.27 (Jon Default), though
-		-- it takes away what the game tells you; each kind has the choice of a player levelling on Forever.
 		{ section = "Error messages" },
 		{ key = "errors", kind = "bool", default = true, label = "Hide error messages",
 			tip = "Only the kinds below that are on, with their sound and voice. Other red errors and the yellow quest messages show as usual, even while a macro or addon turns the game's error text off with UIErrorsFrame:UnregisterEvent." },
@@ -2484,8 +2440,6 @@ ns.PAGES = {
 			tip = "Also pacified, confused or charmed: the messages of a key you press while you cannot act." },
 		{ key = "errorForm", kind = "bool", default = false, label = "Wrong stance or form", needs = "errors",
 			tip = "Must be in Battle Stance, Can't use items while shapeshifted and the like: a key of a stance or form you are not in. Talking to an NPC while shapeshifted still says why it will not talk." },
-		-- ScreenText.lua: two more of the game's messages on the screen. Off by default, as the game shows them: the name tells a player new to
-		-- a zone where they are.
 		{ section = "Zone titles and talking head" },
 		{ key = "zoneTitle", kind = "bool", default = false, label = "Hide the zone title",
 			tip = "The big name that fades in near the top of the screen as you enter a zone, and its PvP line. The zone name on the minimap has its own row." },
@@ -2502,7 +2456,6 @@ ns.PAGES = {
 		{ key = "countdown", kind = "bool", default = true, label = "Countdown timers", tip = "Thin border and flat fill on pull and start timers." },
 		{ section = "Damage meter" },
 		{ key = "meter", kind = "bool", default = true, label = "Damage meter header", tip = "A flat band with a thin border in place of the default header." },
-		-- MeterClear.lua: the game's damage meter cleared as the player enters a dungeon or raid.
 		{ key = "meterClear", kind = "choice", default = "off", label = "Clear the damage meter",
 			choices = { { "off", "Off" }, { "enter", "When you enter a dungeon or raid" }, { "ask", "Ask when you enter one" } },
 			tip = "Not again for the same instance within an hour, so a reload or a run back after a wipe keeps the numbers." },
@@ -2512,13 +2465,6 @@ ns.PAGES = {
 		{ key = "queue", kind = "bool", default = true, label = "Queue status panel", tip = "Thin border in place of the default frame." },
 		{ key = "zoneBars", kind = "bool", default = true, label = "Zone event bars", tip = "Thin border on score and progress bars." },
 	},
-	-- HitTable.lua and HitTableCalc.lua: a table of Flat UI's own under the player frame with the player's chances against the target, worked out again
-	-- as stats, gear, weapon skill, buffs, form and the target change. By default it shows for a tank or a damage dealer and not for a healer, by the
-	-- role Flat UI setup reads (ns.PlayerRole, Core.lua); Always and Off hold whatever the role. Attacks, Special attacks, Where you stand and Hit cap
-	-- against a boss serve On enemy tooltips (HitTableTip.lua) too and need nothing; Only while Ctrl is held (0.5.28, on) and Text size on enemy
-	-- tooltips need On enemy tooltips, Hint while Ctrl is up (off) needs Only while Ctrl is held, and the other rows apply at either of the first
-	-- two choices of Hit table under the player frame. It was a tick in 0.5.18: a saved tick reads as Always
-	-- or Off (Core.lua, ns.MigrateText). Text size was a slider until 0.5.26: a saved number reads as the nearest size (Core.lua, Renamed).
 	{
 		key = "hudHitTable", label = "Hit table", owner = "hud",
 		{ key = "hitTable", kind = "choice", default = "role", label = "Hit table under the player frame",
@@ -2583,7 +2529,6 @@ ns.PAGES = {
 		{ key = "inputIdle", kind = "number", default = 35, min = 0, max = 100, step = 5, unit = "%", label = "Input box opacity when idle" },
 		{ key = "inputFocus", kind = "choice", default = "type", label = "Border while typing", needs = "editbox",
 			choices = { { "type", "Chat type colour" }, { "accent", "Highlight colour" }, { "plain", "Plain border" } } },
-		-- Chat.lua (Arrows): the input box's arrow key mode, a widget method (0.5.35).
 		{ key = "arrows", kind = "bool", default = true, label = "Arrow keys without Alt",
 			tip = "While you type, the arrow keys move the cursor and Up and Down bring back the lines you sent. Off, they turn and move your character as the game has it, and edit the text with Alt held." },
 		{ section = "Border and background" },
@@ -2618,10 +2563,8 @@ ns.PAGES = {
 			tip = "None older than an hour, and no more than three quarters of Lines kept per window, so that the other lines of a login stay in the window.", needs = "restore" },
 		{ key = "restoreChannels", kind = "bool", default = false, label = "Numbered channels too",
 			tip = "General, Trade and the other numbered channels: in Copy recent chat, and after a reload with Show recent chat after a reload." },
-		-- ChatHistory.lua: the lines heard this session in a box to copy from (0.5.39).
 		{ key = "copyChat", kind = "list", default = 0, label = "Copy recent chat", none = "Choose", items = "ChatCopyLines", pick = "ChatCopyPick",
 			tip = "Opens a box with the last lines Flat UI heard, ready for Ctrl+C: say, yell, emotes, party, raid, guild, officer and whispers. Numbered channels too adds General, Trade and the other numbered channels. Each reads as [21:04] [Party] [Mara]: text, links as their name in brackets. Not in a fight. /flatui copy does the same." },
-		-- ChatLinks.lua: a chat filter that puts the short label in place of the game's on numbered channel lines (0.5.35).
 		{ section = "Channels" },
 		{ key = "channelNames", kind = "choice", default = "short", label = "Channel names",
 			tip = "The label before a line of General, Trade, LocalDefense and the other numbered channels. A click on it still opens the channel.",
@@ -2631,7 +2574,6 @@ ns.PAGES = {
 			tip = "A web address in a chat line becomes a link. A click on it shows the address selected in a box, ready to copy. Not in a fight: chat then says to click it again after." },
 		{ key = "linkTips", kind = "bool", default = true, label = "Tooltips of chat links",
 			tip = "While the mouse is over an item, spell, achievement or quest link in a chat window, its tooltip shows. Not in a fight." },
-		-- ChatLinks.lua: a chat filter that colours the player's own name in other players' lines (0.5.36).
 		{ section = "Mentions" },
 		{ key = "mentions", kind = "bool", default = true, label = "Your name in chat",
 			tip = "Your name in what other players write in say, yell, emotes, party, raid, guild, officer and the numbered channels shows in a colour of its own. Not in whispers, and only the whole name." },
@@ -2646,8 +2588,6 @@ ns.PAGES = {
 			items = "ChatWordLines", pick = "ChatWordPick", needs = "mentions",
 			tip = "Add a word... opens a box: type the word and press Enter. Up to 20 for all your characters: whole words, any case, in Your name colour and with Sound when you are named. Choose a word to stop colouring it. /flatui words add tank does the same." },
 	},
-	-- Tooltips, Spell tooltips and Gear comparison: rows of Chat and tooltips (saved as chat.*), each on a page of its own in the sidebar with the
-	-- switch of Chat and tooltips (Panel.lua, BuildModel).
 	{
 		key = "chatTips", label = "Tooltips", owner = "chat",
 		{ section = "Tooltips" },
@@ -2723,12 +2663,10 @@ ns.PAGES = {
 			choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } } },
 		{ key = "enchantId", kind = "bool", default = true, label = "Temporary enchant ID", tip = "On a weapon you wear: the ID of its poison, oil, stone or imbue.", needs = "ids" },
 		{ key = "count", kind = "bool", default = true, label = "Item count in bags and bank" },
-		-- Chat.lua (ItemLevelLine): a gold line under the game's own lines of a weapon or a piece of armour (0.5.35).
 		{ key = "itemLevel", kind = "bool", default = true, label = "Item level", tip = "On armor and weapons, as Item level 63 in gold, also in the comparison beside them." },
 		{ key = "icons", kind = "bool", default = true, label = "Item and spell icons",
 			tip = "The icon before the name of an item, a spell, a buff or a debuff: not on the target and focus frames, whose buff tooltip is the game's own." },
 		{ key = "targetLine", kind = "bool", default = true, label = "Target of units", tip = "A line naming what a unit targets, in its class or reaction colour: You when it is you, in red while it is a unit you can attack." },
-		-- ChatTips.lua (TargetedBy): the targets of the party or raid members (0.5.35).
 		{ key = "targetedBy", kind = "bool", default = true, label = "Who in your group targets it",
 			tip = "In a party or raid, a grey line under a unit's tooltip naming the members whose target it is, in their class colours: at most six, then +N. Kept up to date while you point at the unit, and it shows as soon as a first member takes it." },
 		{ section = "Item comparison" },
@@ -2737,7 +2675,6 @@ ns.PAGES = {
 		{ key = "compareHint", kind = "bool", default = true, label = "Hint while Shift is up", needs = "compareShift",
 			tip = "An item you could wear ends its tooltip with a dim line, Shift: compare with what you wear, and your spells while the gear lines wait for the comparison. It goes once you hold Shift; not on the items you wear." },
 	},
-	-- SpellLines.lua (part of Chat and tooltips): spell power, attack power and threat in spell tooltips. The gear comparison has the page after it.
 	{
 		key = "chatSpells", label = "Spell tooltips", owner = "chat",
 		{ section = "Lines" },
@@ -2745,36 +2682,27 @@ ns.PAGES = {
 			tip = "What share of your spell damage, spell healing or attack power a spell or ability adds: a cast, a tick or a target, and for weapon abilities their weapon damage and the share of attack power the weapon's speed gives. WoW: Forever's own values, from the game's spell data and tooltips and, where they do not say, from tests in the game (many by wowsims/forever), Blizzard's notes and a few rules of the wowsims/forever simulator. ~ marks an estimate." },
 		{ key = "spellStats", kind = "bool", default = true, label = "With your stats",
 			tip = "How much that share is with your stats now, and the threat your attack power adds. The game withholds your stats in fights: then the numbers are those from before the fight, and a line says so." },
-		-- SpellLines.lua: a total line under the power lines, and a dim line of rates under it (SpellModel.lua works them out, G.Expect gives the
-		-- expected cast with crits, misses and a spell's Spell Piercing).
 		{ key = "spellTotal", kind = "bool", default = true, label = "Total of a cast", needs = "spellPower",
-			tip = "What one cast does now with your stats, base and bonus together, as in Total 973 a cast (556 + 417). A spell over time says its total over its duration and a tick, a channel its whole channel, a heal its healing, and a weapon strike one hit with the weapon you wear." },
+			tip = "What one cast does now with your stats, the rank's own base and what your stats add together, as in Total 973 a cast (556 + 417), or Shield Slam Rank 4 with 101 block value, Total 857 a hit (655 + 202). A spell over time says its total over its duration and a tick, a channel its whole channel, a heal its healing, and a weapon strike one hit with the weapon you wear." },
 		{ key = "spellRates", kind = "bool", default = true, label = "Average and rates", needs = "spellTotal",
-			tip = "A dim line under the total: what a cast does on average with crits, misses and, for a spell, the damage your Spell Piercing adds, against the enemy Against names under Gear comparison, and that for a second of cast time (the global cooldown for an instant) and for a point of mana, with how many casts a full bar of mana gives. Not for rage or energy." },
-		-- It needs no other row: the gear comparison counts it too, in item tooltips and the window (GearModel.lua), as Against and the rows after it
-		-- serve the window (design 2.5: the low rank factor while its row is on).
+			tip = "Dim lines under the total, each with its figure on the right: Expected, what that total does on average with crits, misses and, for a spell, the damage your Spell Piercing adds, against the enemy Against names under Gear comparison, so it is less than the total but for what crits add; Per second, of cast time (of the global cooldown for an instant); and for a spell that costs mana, Per mana, a point of mana, with how many casts a full bar of mana gives." },
 		{ key = "spellLowRank", kind = "bool", default = true, label = "Less for low ranks (estimate)",
 			tip = "On WoW: Forever a rank far below your level gets less of your spell damage and healing. Blizzard gave no formula, so Flat UI uses an estimate from players' tests on heals up to level 30: in full for 17 levels after the rank is learned, then 5% less a level. Marked ~." },
-		-- SpellLines.lua: one line after the spell lines with the rank after the one shown, from the rank's level in SpellData.lua (0.5.35).
 		{ key = "spellNextRank", kind = "bool", default = true, label = "Next rank",
 			tip = "On a spell with more ranks: the level of the next rank, as Next rank: Rank 6 at level 32, or in green that you can learn it now. A rank no trainer teaches, from the class books of Ahn'Qiraj, says it comes from a book. Not at the top rank or once you know a higher one, nor on talents, pet spells and judgements." },
 		{ key = "spellThreat", kind = "choice", default = "special", label = "Threat lines",
 			choices = { { "special", "Where threat is special or changed" }, { "all", "On every spell" }, { "off", "Off" } },
-			tip = "Where threat is special or changed: abilities with threat of their own, and spells whose threat your stance, form, Righteous Fury, talents or gear change, with what changes it; not a damage dealer's Battle Stance or Cat Form, nor heals at the usual half a point a point healed. Stances, forms and Righteous Fury say what their own text does not. A spell whose threat on WoW: Forever is not known, such as Whirlwind, Execute, Power Word: Shield and the absorbs, gets no line." },
+			tip = "Where threat is special or changed: abilities with threat of their own, and spells whose threat your stance, form, Righteous Fury, talents or gear change; not a damage dealer's Battle Stance or Cat Form, nor heals at the usual half a point a point healed. With your stats the line gives the threat of one hit or cast, from the same total as Total of a cast, and under it how it is made and each multiplier, as Shield Slam in Defensive Stance with Defiance 3/3: ~2,401 a hit, (damage + ~255) x 2.16, Defensive Stance x1.8, Defiance 3/3 x1.2. A flat threat gives its number too, as Sunder Armor's 552 with 1,000 attack power; a taunt and a rule with no number a hit say their rule in words. Stances, forms and Righteous Fury say what their own text does not. A spell whose threat on WoW: Forever is not known, such as Whirlwind, Execute, Power Word: Shield and the absorbs, gets no line." },
 		{ section = "Showing" },
 		{ key = "spellWhen", kind = "choice", default = "always", label = "Show spell lines",
 			choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } },
 			tip = "With a key, the lines come as it goes down over action bars, and in the spell book and over a link once you point at it again. A spell link you click in chat shows them at every choice: the game opens its tooltip only for a plain click and never builds it again as a key goes down." },
-		-- SpellLines.lua: one dim line naming the key while the spell lines wait for it (0.5.41).
 		{ key = "spellHint", kind = "bool", default = true, label = "Hint while the key is up", needs = "spellWhen", needsIn = { "shift", "ctrl", "alt" },
 			tip = "While Show spell lines waits for a key, a spell Flat UI has lines for ends its tooltip with one dim line, as Shift: your numbers for this spell, which goes as you hold the key and the lines come." },
-		-- SpellLines.lua, GearLines.lua and GearAvoid.lua: how many dim notes a block of lines keeps (M.Fmt).
 		{ key = "tipDetail", kind = "choice", default = "compact", label = "Notes under the lines",
 			choices = { { "compact", "Compact" }, { "full", "Full" } },
-			tip = "For spell and item tooltips alike. Compact keeps at most one dim line of notes under each block, its notes joined; Full shows every note, such as what a multiplier comes from or why a figure is an estimate." },
+			tip = "For spell and item tooltips alike. Compact keeps at most one dim line of notes under each block, its notes joined; Full shows every note, such as what a multiplier comes from or why a figure is an estimate. The rates under a spell's total and how its threat is made are short dim lines that show in both." },
 	},
-	-- GearLines.lua, GearModel.lua, GearAvoid.lua, GearWindow.lua and GearSearch.lua (parts of Chat and tooltips): what an item changes for the spells
-	-- you chose, in item tooltips and the Gear comparison window, and the item finder beside it.
 	{
 		key = "gearCompare", label = "Gear comparison", owner = "chat",
 		{ section = "Item tooltips" },
@@ -2785,7 +2713,6 @@ ns.PAGES = {
 				{ "alt", "While holding Alt" } },
 			tip = "With the game's comparison: while the items you wear show beside the tooltip, which is while you hold Shift with Compare items only while holding Shift on the Tooltips page (Combat and extra lines tab). On the Character window, while you hold Shift. An item link you click in chat shows them at every choice: the game opens its tooltip only for a plain click and never builds it again as a key goes down." },
 		{ key = "gearMost", kind = "number", default = 5, min = 1, max = 8, step = 1, unit = " spells", label = "Spells in an item tooltip", needs = "gear" },
-		-- GearLines.lua and GearWindow.lua: the Overall line, from G.Totals and A.Totals (GearModel.lua, GearAvoid.lua).
 		{ key = "gearTotals", kind = "choice", default = "weighted", label = "Overall change",
 			choices = { { "weighted", "Weighted" }, { "off", "Off" } },
 			tip = "One line at the top of an item's lines and of the Gear comparison window with what the item does overall: the change in what the spells you chose do in a minute, in damage, healing and threat, your swings and shots for the whole minute and each other spell as often as a minute of WoWSims' rotation for your class uses it (Heroic Strike and Maul on the share of your swings it gives them), where Flat UI has one for your class and talents, else for an even share of the global cooldowns, each times its weight (1 unless you set another in the window, from 0 to 5), and Damage taken where avoidance shows. Green is better, red worse, and the best and the worst spell are named in the window, whose Overall tooltip says which rotation counts." },
@@ -2800,11 +2727,9 @@ ns.PAGES = {
 			choices = { { "hittable", "As on the Hit table page" }, { "classic", "9% melee, 16% spells (Classic tests)" }, { "game", "8% melee, 17% spells (the game's tooltip)" } },
 			tip = "As on the Hit table page follows its Hit cap against a boss, also while the hit table is off. Which holds on WoW: Forever is not known yet." },
 		{ section = "Tanking" },
-		-- GearAvoid.lua: avoidance in item tooltips, the window's Avoidance view and /flatui status, while the role reads tank at its first choice.
 		{ key = "gearAvoid", kind = "choice", default = "role", label = "Avoidance",
 			choices = { { "role", "For tanks" }, { "on", "Always" }, { "off", "Off" } },
 			tip = "In item tooltips and the window's Avoidance view: how an item changes the chance that an enemy's swing misses you, is dodged, parried or blocked, crits or crushes, and what your armor and block value take off, against the enemy of Against. For tanks: while your role reads tank, as for the hit table. The rules of misses, crits and crushing blows are the game's; the rest are Classic's, marked ~." },
-		-- GearAvoid.lua (A.Totals): the hit block value is measured against in Damage taken.
 		{ key = "gearSwing", kind = "number", default = 1500, min = 200, max = 6000, step = 100, unit = "", label = "Enemy hit for block value",
 			needs = "gearAvoid", needsIn = { "role", "on" },
 			tip = "Damage taken counts an enemy's swing after misses, dodges, parries, blocks, crits and crushing blows and after your armor. A blocked swing loses your block value, at most the whole hit: this is the size of that hit before armor. Set it near what the enemies you tank hit for. It is an estimate." },
@@ -2822,7 +2747,6 @@ ns.PAGES = {
 		{ section = "Window" },
 		{ key = "gearOpen", kind = "list", default = 0, label = "Gear comparison window", none = "Choose", items = "GearOpenLines", pick = "GearOpenPick",
 			tip = "Every spell you chose, now and with an item you drop on it. /flatui gear opens it too, and so does an Alt-click on an item link in chat, with that item. Shift-click the item there to link it in chat, Ctrl-click to try it on. Drag its bottom right corner to size it, and set each spell's weight for the Overall line there." },
-		-- GearButton.lua: the Compare gear button of Flat UI's own on the title bar of the Character window.
 		{ key = "gearCharButton", kind = "bool", default = true, label = "Button on the Character window", changed = "GearButtonChanged",
 			tip = "A Compare gear button on the title bar of the Character window, left of the close button, opens and closes the Gear comparison window; its words light up while the window is open. With an item on the cursor, or one dropped on it, the window compares that item. Right-click opens the item finder. Move it with /flatui move (Compare gear button): it keeps its place on the Character window." },
 		{ key = "gearWinFont", kind = "number", default = 12, min = 10, max = 16, step = 1, label = "Window text size",
@@ -2830,7 +2754,6 @@ ns.PAGES = {
 		{ key = "gearWinReset", kind = "list", default = 0, label = "Reset the window", none = "Choose", items = "GearWindowResetLines", pick = "GearWindowResetPick",
 			tip = "Puts the Gear comparison window back at its first size and place." },
 		{ section = "Item finder" },
-		-- GearSearch.lua: the finder docked to the right of the window, over Flat UI's item index (ItemIndex.lua) and the record of Bags.
 		{ key = "gearFind", kind = "list", default = 0, label = "Item finder", none = "Choose", items = "GearFindLines", pick = "GearFindPick",
 			tip = "Opens the Gear comparison window with the item finder beside it: find items by name, slot, armor or weapon type, level and quality, among the armor and weapons of the game, in your bags and bank, or on your other characters. Click one to compare it, right-click to compare against it, Shift-click to link it, Ctrl-click to try it on. The Find button of the window opens it too." },
 		{ key = "gearFindLevel", kind = "choice", default = "near", label = "Levels the finder starts with",
@@ -2839,9 +2762,6 @@ ns.PAGES = {
 		{ key = "gearFindUsable", kind = "bool", default = true, label = "Only what you can wear",
 			tip = "The finder starts with only the armor and weapon types your class can learn, and items for your class. You can change it in the finder." },
 	},
-	-- TrinketQueue.lua, TrinketQueueWindow.lua and TrinketQueueButtons.lua: a list of trinkets for each trinket slot, put on by themselves out of a
-	-- fight. On by default, each slot's Auto queue off; the two Auto queue rows are kept per character beside the lists (get and set,
-	-- TrinketQueue.lua), never in a profile.
 	{
 		key = "trinkets", label = "Trinket queue",
 		{ key = "enabled", kind = "bool", default = true, label = "Trinket queue",
@@ -2866,8 +2786,6 @@ ns.PAGES = {
 		{ key = "slotButtons", kind = "bool", default = true, label = "Buttons by the trinket slots", changed = "TrinketButtonsChanged",
 			tip = "A small square right of each trinket slot: its colour says whether that slot's queue is on, waits for the end of a fight or for a delay, is held or paused, or is off; point at it for why; the tooltip follows each click and counts down. Click it for the window, Shift-click for Queue now on that slot, right-click to turn that slot's queue on or off, Shift-right-click to pause or resume every swap, drop a trinket on it to add it to that slot's list." },
 	},
-	-- Errands.lua and the Errands*.lua files: chores done when the game asks for them. On by default; each row has the choice of a player
-	-- levelling on Forever.
 	{
 		key = "errands", label = "Errands",
 		{ key = "enabled", kind = "bool", default = true, label = "Run errands",
@@ -2966,12 +2884,9 @@ ns.PAGES = {
 		{ section = "Waypoints" },
 		{ key = "wayCommand", kind = "bool", default = true, label = "Add the /way command",
 			tip = "/way 45 61 puts a pin on your map there and the game points you to it. /way Elwynn Forest 45 61, /way #1429 45 61 and /way clear work too. When another addon has /way it keeps it, and /flatui way does the same." },
-		-- The game's own showInGameNavigation, written out of combat with its own value kept and put back (ErrandsNavigation.lua).
 		{ key = "navigation", kind = "bool", default = true, label = "In-game navigation", changed = "ErrandsNavigationChanged",
 			tip = "A marker over the quest or map pin you track, with its distance, and an arrow at the edge of the screen while it is out of view, as the game's own option shows it in later expansions. Sets a game setting that Forever's options do not show. Turned off with /console showInGameNavigation 0, it stays off until you change this row. Turned off here, the game's own value is back." },
 	},
-	-- Consumables.lua: two macros of Flat UI's own in the account's macro list, written again out of combat when the bags or the level change.
-	-- On by default; both macros are kept, with the choices of a player levelling on Forever.
 	{
 		key = "consumables", label = "Drink and health macros",
 		{ key = "enabled", kind = "bool", default = true, label = "Keep drink and health macros",
@@ -2991,8 +2906,48 @@ ns.PAGES = {
 		{ key = "food", kind = "bool", default = true, label = "Eat out of combat", needs = "health",
 			tip = "Out of combat Flat UI Health eats the best food in your bags that your level allows, conjured food first." },
 	},
-	-- DataPanels.lua and DataStreams.lua: two panels of Flat UI's own, each a row of slots. On by default with neither panel shown; the top panel,
-	-- once shown, shows what a player levelling on Forever looks at most, and the bottom panel who is online.
+	{
+		key = "consumebar", label = "Consumables bar",
+		{ key = "enabled", kind = "bool", default = false, label = "Show the consumables bar",
+			tip = "A bar of buttons for your consumables: a click uses the item from whichever bag holds it, also in a fight. Each shows how many you carry, its cooldown and its tooltip. The first six have keys under Flat UI in the game's Key Bindings. /flatui move places it." },
+		{ section = "Buttons" },
+		{ key = "which", kind = "choice", default = "bags", label = "Buttons",
+			tip = "Every consumable in your bags: one button for each item, never from the bank, in the order of the Bags page at Each kind, then by name; Kinds in your bags leaves kinds out. Your list: only the items you chose, in your order. Your list, then the rest: your list first, then the other consumables of your bags.",
+			choices = { { "bags", "Every consumable in your bags" }, { "list", "Your list" }, { "both", "Your list, then the rest" } } },
+		{ key = "empty", kind = "choice", default = "dim", label = "An item of your list with none left", needs = "which", needsIn = { "list", "both" },
+			tip = "It stays on the bar, so its button keeps its place. A click on it says in chat that your bags hold none.",
+			choices = { { "dim", "Show it greyed with 0" }, { "hide", "Leave a gap" } } },
+		{ key = "count", kind = "bool", default = true, label = "Show count",
+			tip = "How many you carry across your bags. A stack of one shows no number, but on a button of your list; none shows a red 0." },
+		{ section = "Your list" },
+		{ key = "add", kind = "list", default = 0, label = "Add an item", none = "Choose an item", items = "ConsumeBarCandidates", pick = "ConsumeBarAdd",
+			tip = "The consumables in your bags that are not on your list, then the other items there with a use that you cannot wear, such as the Hearthstone. Or drop one on the bar out of a fight: on a button of your list it goes in that place, and while Buttons shows your list, a + at the end of the bar takes the item you hold. At most 24, kept for this character." },
+		{ key = "remove", kind = "list", default = 0, label = "Take an item off", none = "Choose an item", items = "ConsumeBarListed", pick = "ConsumeBarRemove",
+			tip = "Shift+right-click on its button does the same. Shift+right-click on another button puts it on your list." },
+		{ key = "left", kind = "list", default = 0, label = "Move an item left", none = "Choose an item", items = "ConsumeBarListed", pick = "ConsumeBarLeft",
+			tip = "One place earlier on the bar: further left while it grows right." },
+		{ key = "right", kind = "list", default = 0, label = "Move an item right", none = "Choose an item", items = "ConsumeBarListed", pick = "ConsumeBarRight",
+			tip = "One place later on the bar." },
+		{ section = "Kinds in your bags", chips = true },
+		{ key = "kindFood", kind = "bool", default = true, label = "Food and drink" },
+		{ key = "kindPotion", kind = "bool", default = true, label = "Potions" },
+		{ key = "kindElixir", kind = "bool", default = true, label = "Elixirs and flasks" },
+		{ key = "kindScroll", kind = "bool", default = true, label = "Scrolls" },
+		{ key = "kindBandage", kind = "bool", default = true, label = "Bandages" },
+		{ key = "kindEnhance", kind = "bool", default = true, label = "Enhancements", tip = "Oils, sharpening stones, weightstones and the like." },
+		{ key = "kindExplosive", kind = "bool", default = true, label = "Explosives and devices" },
+		{ key = "kindOther", kind = "bool", default = true, label = "Other consumables", tip = "Healthstones, mana gems and the rest. They come first on the bar." },
+		{ section = "Layout" },
+		{ key = "size", kind = "number", default = 36, min = 20, max = 64, step = 2, unit = " px", label = "Button size" },
+		{ key = "perRow", kind = "number", default = 12, min = 1, max = 24, step = 1, label = "Buttons per row", tip = "Per column while the bar grows up or down." },
+		{ key = "spacing", kind = "number", default = 2, min = 0, max = 12, step = 1, unit = " px", label = "Spacing" },
+		{ key = "grow", kind = "choice", default = "right", label = "Grow",
+			tip = "Which way the buttons go from the corner of the bar's box in /flatui move. Rows stack upward while it grows right or left; columns go right while it grows up or down.",
+			choices = { { "right", "Right" }, { "left", "Left" }, { "up", "Up" }, { "down", "Down" } } },
+		{ key = "fade", kind = "bool", default = false, label = "Fade out of a fight",
+			tip = "Out of a fight the buttons stay at Faded opacity, full while the mouse is over one and in a fight. They still take clicks and keys." },
+		{ key = "fadeAlpha", kind = "number", default = 40, min = 0, max = 90, step = 5, unit = "%", label = "Faded opacity", needs = "fade" },
+	},
 	{
 		key = "datapanels", label = "Data panels",
 		{ key = "enabled", kind = "bool", default = true, label = "Show data panels",
@@ -3094,8 +3049,6 @@ ns.PAGES = {
 		{ key = "windowSize", kind = "number", default = 100, min = 60, max = 150, step = 5, unit = "%", label = "Size of every window", tip = "Used with Every window together." },
 		{ key = "resetWindows", kind = "list", default = 0, label = "Reset windows", none = "Choose", items = "WindowResetLines", pick = "WindowsReset" },
 	},
-	-- Hide.lua: each tick puts a game frame under a hidden frame of Flat UI's own, out of combat, and the untick gives it back. The frames are the
-	-- game's HUD frames that /flatui move moves (its boxes and its list hide and show them too) and the parts of the minimap. Shown by default.
 	{
 		key = "hide", label = "Hidden frames",
 		{ key = "enabled", kind = "bool", default = true, label = "Hide the ticked frames",
@@ -3173,8 +3126,6 @@ ns.PAGES = {
 		{ key = "enabled", kind = "bool", default = false, label = "Group action bars into blocks",
 			tip = "Lines up the bars of each block below, at first action bars 3 and 4, action bar 2 and the main bar in block 1, top to bottom, with Flat UI's experience bar under them at the block's width (Experience bar under the bar block). /flatui move shows one box for each block, Action bar block, Action bar block 2 and 3, that moves its bars, with a tab on each bar to drag it to another place in its block or into another block. A bar of a block that the game's options have off is turned on there, at login and when you add it. Also while Leave the game's action bars alone is on, which then leaves only the bars in no block alone. Applies out of combat." },
 		{ section = "Block 1" },
-		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
-		-- Stacked upward from the first bar, the main bar is at the bottom and action bar 3 on top.
 		{ key = "bars1", kind = "text", hidden = true, default = "main,bar2,bar4,bar3", label = "Bars of block 1" },
 		{ key = "edit1", kind = "list", default = 0, label = "Bars", none = "Choose a bar to move or remove", items = "BarBlockLines1", pick = "BarBlockPick1",
 			tip = "The bars of the block, first bar first. A bar can be in one block only. In /flatui move, drag the tab on a bar up or down to change its place, or onto another block's box." },
@@ -3187,7 +3138,6 @@ ns.PAGES = {
 		{ key = "ownGap", kind = "bool", default = false, label = "Own gap between bars", tip = "Off: the gap between buttons is used." },
 		{ key = "barGap", kind = "number", default = 2, min = 0, max = 20, step = 1, unit = " px", label = "Gap between bars", needs = "ownGap" },
 		{ section = "Block 2" },
-		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
 		{ key = "bars2", kind = "text", hidden = true, default = "", label = "Bars of block 2" },
 		{ key = "edit2", kind = "list", default = 0, label = "Bars", none = "Choose a bar to move or remove", items = "BarBlockLines2", pick = "BarBlockPick2",
 			tip = "The bars of the block, first bar first. A bar can be in one block only. Off until it has a bar. In /flatui move, drag the tab on a bar up or down to change its place, or onto another block's box." },
@@ -3200,7 +3150,6 @@ ns.PAGES = {
 		{ key = "ownGap2", kind = "bool", default = false, label = "Own gap between bars", tip = "Off: the gap between buttons is used." },
 		{ key = "barGap2", kind = "number", default = 2, min = 0, max = 20, step = 1, unit = " px", label = "Gap between bars", needs = "ownGap2" },
 		{ section = "Block 3" },
-		-- The bars of the block, first bar first, as text the two rows under it and the tabs of /flatui move show and change (BarBlockLists.lua).
 		{ key = "bars3", kind = "text", hidden = true, default = "", label = "Bars of block 3" },
 		{ key = "edit3", kind = "list", default = 0, label = "Bars", none = "Choose a bar to move or remove", items = "BarBlockLines3", pick = "BarBlockPick3",
 			tip = "The bars of the block, first bar first. A bar can be in one block only. Off until it has a bar. In /flatui move, drag the tab on a bar up or down to change its place, or onto another block's box." },
@@ -3233,6 +3182,9 @@ ns.PAGES = {
 			tip = "The panel still fades with the block." },
 		{ section = "Fade" },
 		{ key = "fade", kind = "bool", default = false, label = "Fade the block", tip = "Faded bars still take clicks and are at full opacity while something is held on the cursor or a spell flyout is open, in Edit Mode and while /flatui move is open." },
+		{ key = "fadeWhich", kind = "choice", default = "all", label = "Blocks that fade", needs = "fade",
+			choices = { { "all", "Every block" }, { "first", "Block 1 only" }, { "others", "Blocks 2 and 3" } },
+			tip = "A block left out stays at full opacity, and the Fading page can fade its bars. Flat UI's experience bar under block 1 goes with block 1." },
 		{ key = "fadeTo", kind = "number", default = 30, min = 0, max = 90, step = 5, unit = "%", label = "Faded opacity", needs = "fade" },
 		{ key = "fadeDelay", kind = "number", default = 500, min = 0, max = 3000, step = 100, unit = " ms", label = "Wait before fading", needs = "fade",
 			tip = "How long the block stays at full opacity after the mouse leaves it or the fight ends, before it starts to fade. It comes back to full at once." },
@@ -3244,6 +3196,8 @@ ns.PAGES = {
 			tip = "For a pull with a ranged opener, or a buff on a friend, before the fight starts." },
 		{ key = "fadeCast", kind = "bool", default = false, label = "Full opacity as you cast", needs = "fade",
 			tip = "Each spell or item you use brings the faded block back while you cast, for a moment after each instant spell or item, and for Wait before fading after." },
+		{ key = "fadeProc", kind = "bool", default = true, label = "Full opacity while a proc is up", needs = "fade",
+			tip = "A block that holds the spell of a proc alert of the Trackers page, such as Overpower, Revenge or Execute, is at full opacity while the proc is up." },
 	},
 	{
 		key = "blocks", label = "Class and item bars",
@@ -3275,7 +3229,6 @@ ns.PAGES = {
 		{ key = "scope", kind = "choice", default = "all", label = "Applies to",
 			choices = { { "common", "Unit frames, action bars and the world" }, { "all", "Every tooltip" } } },
 	},
-	-- MountKey.lua: one key of the game's Key Bindings for a mount or a travel form. Off by default.
 	{
 		key = "mount", label = "Mount key",
 		{ key = "enabled", kind = "bool", default = false, label = "Mount key",
@@ -3347,12 +3300,11 @@ ns.PAGES = {
 		{ key = "target", kind = "bool", default = false, label = "With a target" },
 		{ key = "cast", kind = "bool", default = false, label = "While casting",
 			tip = "A spell or item you use brings faded frames back to full while you cast, for a moment after each instant spell or item, and for Wait before fading after." },
+		{ key = "proc", kind = "bool", default = true, label = "While a proc is up",
+			tip = "An action bar that holds the spell of a proc alert of the Trackers page, such as Overpower, Revenge or Execute, is at full opacity while the proc is up, and fades again after Wait before fading once it ends." },
 	},
 }
 
--- The frame styles Flat UI setup offers for the unit frames, each { id, label, line, values }, Separate parts first: the walk offers the first as
--- the suggestion (SetupWalk.lua). An id stays the same from one version to the next. values is a table of saved path to value; every style sets the
--- same paths, so its card shows what you get whatever you start from, and each value is one its row takes.
 ns.SETUP_FRAME_STYLES = {
 	{ id = "square", label = "Square portrait", line = "Portrait, name and bars side by side.", values = {
 		["unitframes.frameStyle"] = "parts", ["unitframes.portraitStyle"] = "picture", ["unitframes.classShape"] = "square" } },
@@ -3365,7 +3317,6 @@ ns.SETUP_FRAME_STYLES = {
 	{ id = "one", label = "One frame", line = "Portrait, name and bars on one dark background.", values = {
 		["unitframes.frameStyle"] = "one", ["unitframes.portraitStyle"] = "picture", ["unitframes.classShape"] = "square" } },
 }
--- Every style also turns on Flat UI portraits and each frame's portrait, and puts each frame's Picture at As Portrait style.
 for _, style in ipairs(ns.SETUP_FRAME_STYLES) do
 	style.values["unitframes.squarePortrait"] = true
 	for _, kind in ipairs({ "player", "target", "focus", "pet", "tot", "party", "partypet" }) do

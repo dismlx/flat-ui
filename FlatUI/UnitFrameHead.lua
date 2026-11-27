@@ -1,20 +1,11 @@
 local ADDON_NAME, ns = ...
 
--- Portrait style 3D head: a live model of the head of the unit in the picture square of the player, target, focus, pet and party frames. This file adds its work after
--- the picture of UnitFrames.lua through ns.UnitFrameExtra: a part that stops on errors counts as off here, and every function can run twice with the same result.
--- The model is made once for each frame, on the picture frame and at its level (the marks of the game are a level above it), and shows only while the client allows it: the identity of the unit must not be withheld
--- (C_Secrets.ShouldUnitIdentityBeSecret answers a plain false, Blizzard_APIDocumentationGenerated/SecretPredicateAPIDocumentation.lua:305-319) and SetUnit must not
--- raise (FrameAPICharacterModelBaseDocumentation.lua:239-247). Both are asked again at every draw. Where either fails, the picture shows as style Picture draws it
--- and /flatui status says why. A unit that is out of view or, for a party member, offline has no model to show: the picture shows then, with no line. The target of target keeps the picture: it is drawn again every 0.2 seconds.
-
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
 local PART = "3D head"
 
 local KINDS = { player = true, target = true, focus = true, pet = true, party = true, partypet = true }
--- The zoom of the portrait and the distance of the camera for each framing. These numbers are stand-ins until the author picks them.
 local FRAMING = { face = { 1, 0.8 }, head = { 1, 1 }, shoulders = { 0.6, 1.3 } }
--- The tint over the model for a unit that is low on health, a ghost or tapped: this share of the colour of the tint.
 local OVERLAY = 0.35
 local NOTE = { on = "3D head", withheld = "3D head not shown: identity withheld, picture shown", refused = "3D head not shown: the game refused the head, picture shown" }
 
@@ -22,11 +13,9 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- Every record that has a head, and how many frames say each line, so that a line stays on the status until the last frame that needs it no longer does.
 local heads, held = {}, {}
 local watcher
 
--- Says a line for one frame, or takes back what the frame said.
 local function Say(rec, text)
 	local pic = rec.pic
 	local old = pic.headNote
@@ -56,7 +45,6 @@ local function Number(value)
 	return type(value) == "number" and not ns.IsSecret(value)
 end
 
--- True while the unit is in view and, for a party member, connected: a model of any other unit is an empty square.
 local function Visible(rec, unit)
 	local ok, seen = pcall(UnitIsVisible, unit)
 	if not (ok and not ns.IsSecret(seen) and seen == true) then
@@ -69,7 +57,6 @@ local function Visible(rec, unit)
 	return true
 end
 
--- The GUID of the unit, nil while it is withheld.
 local function Guid(unit)
 	local ok, guid = pcall(UnitGUID, unit)
 	if ok and type(guid) == "string" and not ns.IsSecret(guid) then
@@ -77,8 +64,6 @@ local function Guid(unit)
 	end
 end
 
--- Nil while the identity of the unit is not withheld, else why the head cannot show: "withheld" when the client says so or does not answer a plain false, "refused" while
--- there is no way to ask.
 local function Identity(unit)
 	if type(C_Secrets) ~= "table" or ns.IsSecret(C_Secrets) or type(C_Secrets.ShouldUnitIdentityBeSecret) ~= "function" then
 		return "refused"
@@ -91,7 +76,6 @@ local function Identity(unit)
 end
 
 local Place
--- The game says a unit has a new model or came online, and the world is drawn again after a loading screen. The model is loaded again for each.
 local function Repaint(_, event, unit)
 	if ns.PartStopped(KEY, PART) then
 		return
@@ -104,8 +88,6 @@ local function Repaint(_, event, unit)
 	end
 end
 
-
--- The frame that hears the events, made with the first head.
 local function Watch()
 	if watcher == nil then
 		watcher = CreateFrame("Frame")
@@ -117,8 +99,6 @@ local function Watch()
 	end
 end
 
--- The model and the frame over it, made once for a frame, in this order and both at the level of the picture frame, below the marks of the game, which are a level
--- above it. The frame over the model holds what must be drawn over the head: the tint, the fade of the top of the picture and the lines of its inner border.
 local function Make(rec)
 	local pic = rec.pic
 	if pic.head ~= nil then
@@ -154,8 +134,6 @@ local function Make(rec)
 	return head
 end
 
--- What must be over the model goes to the frame over it while a head shows, and back to the picture frame while none does: the fade of the picture and the lines
--- inside its border, the rounded line of its border included. The four edges of the border are just outside the picture and stay where they are.
 local function Parents(rec, over)
 	local pic = rec.pic
 	local to = over and pic.head.over or pic.frame
@@ -181,7 +159,6 @@ local function Parents(rec, over)
 	end
 end
 
--- Hides the head, and the picture shows as the style Picture draws it.
 local function Fallback(rec, why)
 	local pic = rec.pic
 	local head = pic.head
@@ -195,7 +172,6 @@ local function Fallback(rec, why)
 	Say(rec, why and NOTE[why] and Line(rec, NOTE[why]) or nil)
 end
 
--- The tint of the picture for the state of the unit: grey with Desaturation, low health red, ghost blue and any other tint of the game as a colour over the head.
 local function State(rec, head)
 	local pic = rec.pic
 	local r, g, b = pic.r, pic.g, pic.b
@@ -208,8 +184,6 @@ local function State(rec, head)
 	head.tint:SetShown(tinted and true or false)
 end
 
--- The head of the frame drawn again: the unit, when it is not the one loaded or when asked to (force), then the framing and the tint. The alpha of the model is its
--- own 1: it is a child of the picture frame and follows the alpha of that frame and of the frames above it.
 function Place(rec, force)
 	local pic = rec.pic
 	local head = pic.head
@@ -256,7 +230,6 @@ function Place(rec, force)
 	end
 end
 
--- After each draw of a picture: a frame that has the style head and a picture to show has a model on it, and any other frame has none.
 local function Update(rec, on, shown)
 	local pic = rec.pic
 	if pic == nil then
@@ -278,7 +251,6 @@ end
 
 table.insert(X.after.picture, { part = PART, fn = Update })
 
--- The game tinted the portrait again: the head takes the new tint and desaturation at once.
 local function Retint(rec)
 	local head = rec.pic and rec.pic.head
 	if head ~= nil and head.showing and not ns.PartStopped(KEY, PART) then

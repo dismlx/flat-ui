@@ -1,18 +1,11 @@
 local ADDON_NAME, ns = ...
 
--- The search of the options window: the words of the field, which of the four tiers a row falls in, the order of the results, the pages whose names match,
--- and the index of Profiles, Flat UI setup and the window's own actions. The window draws the results and runs an action (Panel.lua).
-
 local Search = {}
 ns.PanelSearch = Search
 
--- The rows of the Profiles page, which have no rows in ns.PAGES.
 Search.PROFILE_ROWS = { "Profile in use", "New profile", "Duplicate profile", "Setup", "Copy from", "Delete profile", "Rename profile", "Reset profile", "In a dungeon", "In a raid",
 	"In a battleground or arena", "Everywhere else", "Export profile", "Import profile", "Export trackers", "Import trackers", "Export by module" }
--- A result that is a part of another row of the Profiles page opens that row: Duplicate is a button of New profile.
 Search.ALIAS = { ["Duplicate profile"] = "New profile" }
--- The window's own actions, found by their name and by the words of their tip: the Test mode switch, the sidebar's Move frames, the welcome screen
--- and its ready-made looks. Panel.lua (ui.actions) runs each by its id.
 Search.ACTIONS = {
 	{ id = "test", label = "Test mode", tip = "samples sample frames preview" },
 	{ id = "move", label = "Move frames", tip = "movers positions drag place" },
@@ -37,8 +30,6 @@ local function HasAll(text, words)
 	return true
 end
 
--- 1 the label starts with the words and holds them all, 2 the label holds them, 3 the label and the tip hold them, 4 the label, tip, section and page
--- name hold them. Nil when a word is in none.
 function Search.Tier(words, label, tip, section, page)
 	label = (label or ""):lower()
 	if HasAll(label, words) then
@@ -53,8 +44,6 @@ function Search.Tier(words, label, tip, section, page)
 	end
 end
 
--- Groups are { label, hits = { { tier, label, ... } } } in the order they were found. Orders the hits of each group by tier, then by the shorter label,
--- and the groups by their best tier. What ties keeps its place.
 function Search.Sort(groups)
 	for index, group in ipairs(groups) do
 		group.at = index
@@ -80,13 +69,11 @@ function Search.Sort(groups)
 	return groups
 end
 
--- The name a page is found by: its label, and the name of its module where that differs (Chat and tooltips finds the Chat page).
 local function Name(entry)
 	local module = entry.page and entry.page.moduleLabel
 	return (type(module) == "string" and (entry.label .. " " .. module) or entry.label):lower()
 end
 
--- The pages whose names hold every word, in the order of the model: Home, the pages, Profiles.
 function Search.Pages(words, model)
 	local list = {}
 	local function Add(entry)
@@ -102,7 +89,6 @@ function Search.Pages(words, model)
 	return list
 end
 
--- Up to three pages with the names closest to the words: a name that has the first three letters of a word. Best first.
 function Search.Closest(words, model)
 	local scored = {}
 	local function Add(entry, at)

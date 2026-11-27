@@ -1,101 +1,17 @@
 local _, ns = ...
 
--- Mount key (off by default): one key of the game's Key Bindings, Mount or travel form in the section Flat UI (Bindings.xml binds a click of the
--- button, CLICK FlatUIMountButton:LeftButton, as the game reads the keys of its own action buttons, Blizzard_ActionBar/Shared/ActionButton.lua:498-499,
--- and names the section after the category, Blizzard_SettingsDefinitions_Frame/Keybindings.lua:220-227 and 248). Pressed, it mounts a random mount
--- the character can ride; a druid takes Aquatic Form in water and Travel Form where a mount cannot be summoned, and a shaman Ghost Wolf. Pressed
--- again, it dismounts or leaves the form.
--- Mounts on Forever are spells of the mount journal, not items: the Collections window loads there with its Mounts tab (Blizzard_Collections.toc:13
--- and 25, Camelot/Blizzard_CollectionsTabs.xml:20), it summons a mount by its journal ID (Mainline/Blizzard_MountCollection.lua:818-834), and a
--- shift-click on a mount while the macro window is open writes the mount's spell name (Mainline/Blizzard_MountCollection.lua:873-875), which /cast
--- casts (Blizzard_ChatFrameBase/Shared/SlashCommands.lua:365-376). The key picks among the mounts the journal counts as the character's, collected
--- and not hidden on this character (Mainline/Blizzard_MountCollection.lua:632-638), that the game says can be used here: GetMountUsabilityByID
--- without its indoor check (MountJournalDocumentation.lua:340-357), so the macro does not change at every door and the game itself says when a
--- mount cannot be used indoors. With Favourite mounts first it picks among the favourites while one of them can be used. Forever hides the
--- journal's own Summon Random Favorite button (Camelot/Blizzard_CollectionsConstants.lua:1, Mainline/Blizzard_MountCollection.lua:1031-1033) but
--- keeps Favorite in the right-click menu of a mount (Mainline/Blizzard_MountCollection.lua:222-233). The pick is kept until the player mounts
--- (PLAYER_MOUNT_DISPLAY_CHANGED, UnitDocumentation.lua:3859-3863) or it can no longer be used, so each mount-up takes a new one.
--- The macro: /dismount [mounted] and /stopmacro [mounted] first, so the key dismounts when pressed again; the game takes the mount away when the
--- server answers, so the next lines still see it, as EnhanceQoL's own macro has it (MountActions.lua:304-307). For a druid or a shaman,
--- /cancelform [form] and /stopmacro [form] next: a form is left the same way, and a druid in Cat or Bear Form leaves it with the first press.
--- Another class is never given /cancelform, since a warrior's stance and a rogue's Stealth are forms as well (Blizzard_FrameXMLBase/Constants.lua:
--- 326-337). Then one /cast with its choices in order: Aquatic Form in water ([swimming]); Travel Form or Ghost Wolf in a fight ([combat]), where
--- no mount can be summoned; the mount (only out of a fight for a class with no form); else the form. While the player moves a mount's cast would
--- break, so a druid takes Travel Form instead, and a shaman Ghost Wolf if it is instant (castTime of C_Spell.GetSpellInfo,
--- SpellDocumentation.lua:416-431 and 1183-1194). The forms are those the spell book knows (C_SpellBook.IsSpellKnown, SpellBookDocumentation.lua:
--- 738-753), by the IDs EnhanceQoL uses (MountActions.lua:24, 27) and the game's Mainline tutorial names (Blizzard_NewPlayerExperience/Mainline/
--- Blizzard_TutorialData.lua:275, 341; Forever does not load it), and Aquatic Form, 1066; a form the book does not know by its ID is left out. The
--- macro casts them by their names (C_Spell.GetSpellName, SpellDocumentation.lua:518-533), the highest rank as /cast does.
--- The button: a secure button of Flat UI's own (SecureActionButtonTemplate), named FlatUIMountButton for the binding, made once, out of combat, the
--- first time the module is on while a key is bound to it (GetBindingKey, as ActionButton.lua:498-499 asks it). It is a child of UIParent with no
--- size and no point, so it shows nothing and takes no mouse. It hears the press and the release of the left button, and the game's
--- ActionButtonUseKeyDown decides which acts, as for its own action buttons (Blizzard_FrameXML/SecureTemplates.lua:792-811, ActionButton.lua:468).
--- Its type and macrotext (SecureTemplates.lua:450-463) are written only out of combat, after a fight for a change heard in one (ns.OutOfCombat),
--- and only when the macro changes: when the mounts, the forms, the bindings, the moving or the rows change. Nothing of Flat UI's runs in its click
--- (no PreClick, no PostClick), but for the two exceptions of Slow Fall or Levitate while falling below, which exist only while that row is on. The
--- moving is heard (PLAYER_STARTED_MOVING and PLAYER_STOPPED_MOVING, UnitDocumentation.lua:3944-3966) by a frame of the addon's own, only while the
--- button is made, a key is bound to it and the macro on the move differs, and read a frame later (IsPlayerMoving, PlayerScriptDocumentation.lua:
--- 1453-1460). The game sends UPDATE_BINDINGS when a key is set or cleared, as the rows of its Key Bindings window read
--- their keys again on it (KeyBindingsDocumentation.lua:175-179, Blizzard_Settings_Shared/Blizzard_SettingsPanel.lua:107, 153-154 and 975-977,
--- Blizzard_Keybindings.lua:453), so the moving is read when a key is bound, and no longer heard once none is.
--- Slow Fall or Levitate while falling (off by default): while the row is on and the spell book knows Slow Fall (130) or Levitate (1706), each a
--- spell this client has (C_Spell.DoesSpellExist, SpellDocumentation.lua:46-59; C_SpellBook.IsSpellKnown, as for the forms), the button has a
--- PreClick and a PostClick of the addon's own, which the game runs before and after its secure code runs a press, as for Flat UI's other secure
--- buttons (ErrandsRanks.lua and TrackerClicks.lua). The PreClick, only out of combat, puts /cast [@player] and the spell's name in the macrotext
--- while IsFalling plainly says the player falls and IsMounted plainly says the player is not mounted (UnitDocumentation.lua:405-418,
--- PlayerScriptDocumentation.lua:1399-1406, neither with a secret tag), so a press while mounted still dismounts, as EnhanceQoL puts the dismount
--- before the fall; any other answer, a withheld one included, leaves the key's macro. The PostClick, only out of combat too, puts the key's macro
--- back right after the press, so the falling macro never stays on the button for a fight that starts after the fall: in a fight neither changes an
--- attribute and the key does what its macro says. Each press is a press and a release, and each has its PreClick and its PostClick. Both scripts
--- are set and taken away out of combat only: when the row or the module goes off (the module also takes the macro away, as above) and when the
--- spell is no longer known. Both spells take a Light Feather, and the game says so when the bags have none.
--- Key (a list row): Press a key to set it shows a small prompt of the module's own in the middle of the screen (DIALOG strata, with the keyboard
--- while it shows, out of a fight only, as EnableKeyboard and SetPropagateKeyboardInput are protected in one; a fight that starts hides it). The
--- next key, with Shift, Ctrl or Alt held (CreateKeyChordStringUsingMetaKeyState, Blizzard_SharedXML/BindingUtil.lua:116-140), is kept in
--- FlatUIDB.mountKey for the account, and Escape or a left or right click on the prompt cancels (it is not placed with /flatui move and has no test
--- mode sample: it shows only while it waits for a key). A dim last line names the key in use now ("Now: Shift-Z"). The middle button, the side
--- buttons and the wheel over the prompt are keys too, as in the game's Key Bindings (BUTTON4 by GetConvertedKeyOrButton, BindingUtil.lua:66, and
--- MOUSEWHEELUP or MOUSEWHEELDOWN, with the modifiers held), which SetOverrideBindingClick takes and GetBindingText names ("Mouse Button 4"). A key
--- the player's own bindings make move the character or zoom the camera (MOVES: Move Forward, Jump, Zoom Out and the rest, read with
--- GetBindingAction) is taken only when pressed again, at least CONFIRM_GAP seconds after it last came: the prompt says first "W moves you
--- forward. Press it again to use it anyway, or press another key.", or "Mouse Wheel Down zooms the camera out. Turn it again ...", and keeps the
--- keyboard while it asks. While the module is on and the button is made, that key is
--- an override binding owned by a frame of the module's own (SetOverrideBindingClick, out of combat, as BagKey.lua does with SetOverrideBinding), so
--- the player's own binding of the key (GetBindingAction, named in chat: "it was Toggle Sheathe") stays and comes back when the module goes off
--- (ClearOverrideBindings). Clear Flat UI's key forgets it. A key bound in the game's Key Bindings works beside it, and Flat UI's key counts as
--- bound for the making of the button and the hearing of the moving.
--- With the module off its type and macro are taken away, so the key does nothing; the binding is the player's and stays. It writes none of the
--- player's bindings, no macro of the game's macro list and no field of a frame, and no global but the button's name and BINDING_NAME_CLICK
--- FlatUIMountButton:LeftButton, the name of the binding.
--- This follows the random mount key of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Submodules/MountActions.lua:
--- 25-26, 106-132, 225-246, 261-336, 376-424, 426-499, 553-569, 580-602; EnhanceQoL/Bindings.xml:12-15): the button the binding clicks, the usable
--- mounts of the journal and its favourites, the random pick, the combat lines, the druid and shaman forms while moving, and Slow Fall and Levitate
--- while falling. Left out on Forever, as its own Forever build leaves out Dracthyr Visage (MountActions.lua:245): the G-99 Breakneck, flying and
--- swimming mounts, the target's mount, Travel Form for a falling druid (MountActions.lua:230, the row is for the two spells that slow a fall),
--- Cat Form indoors (a cat is no faster on classic content) and /leavevehicle. Its macro is written in a PreClick before each press; here it is
--- written when what it depends on changes, so no code of Flat UI's runs in the click but the falling safety's.
-
 local KEY = "mount"
 local BUTTON = "FlatUIMountButton"
 local BINDING = "CLICK " .. BUTTON .. ":LeftButton"
--- Travel Form, Aquatic Form and Ghost Wolf.
 local TRAVEL, AQUATIC, WOLF = 783, 1066, 2645
--- Slow Fall and Levitate, in the order they are looked for (EnhanceQoL/Submodules/MountActions.lua:25-26).
 local FALLS = { 130, 1706 }
--- A burst of events writes the macro once, this long after the first.
 local STEP = 0.2
 local MOVING = { "PLAYER_STARTED_MOVING", "PLAYER_STOPPED_MOVING" }
 local LINE_UNBOUND = "Mount key: no key is bound yet. Pick Press a key to set it in the row Key, or bind one to Mount or travel form under Flat UI in the game's Key Bindings."
 local LINE_KEY = "Mount key: %s is Flat UI's key for it."
 local LINE_KEY_REFUSED = "Mount key: the game would not bind %s to it."
 local LINE_IN_FIGHT = "Flat UI: not in a fight. Pick it again after the fight."
--- The keys that are only held with another (CreateKeyChordStringUsingMetaKeyState puts them in front of it).
 local META = { LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true, LALT = true, RALT = true, LMETA = true, RMETA = true }
--- The actions of the game's Key Bindings that move the character (Bindings.xml of the game, the Movement Keys section) or zoom the camera (the
--- wheel's own, CAMERAZOOMIN and CAMERAZOOMOUT, Blizzard_FrameXML/Bindings_Standard.xml:1507-1520), with what a key bound to one does: such a key
--- is taken only when it is pressed a second time, so a slip or a scroll over the box never takes the player's forward, jump or zoom. A second
--- press counts only CONFIRM_GAP seconds after the one before, so a held key's repeats and the notches of one scroll are one press. MOUSE_KEYS:
--- the keys of the mouse buttons the prompt takes, where the client lacks GetConvertedKeyOrButton (Blizzard_SharedXML/BindingUtil.lua:28-66).
 local MOVES = { MOVEFORWARD = "moves you forward", MOVEBACKWARD = "moves you back", STRAFELEFT = "strafes left", STRAFERIGHT = "strafes right",
 	TURNLEFT = "turns you left", TURNRIGHT = "turns you right", JUMP = "makes you jump", TOGGLEAUTORUN = "turns on auto-run",
 	MOVEANDSTEER = "moves and steers you", CAMERAZOOMIN = "zooms the camera in", CAMERAZOOMOUT = "zooms the camera out" }
@@ -103,12 +19,8 @@ local CONFIRM_GAP = 0.4
 local MOUSE_KEYS = { MiddleButton = "BUTTON3", Button4 = "BUTTON4", Button5 = "BUTTON5" }
 local PROMPT = "Press the key for Mount or travel form, or a mouse button or the wheel over this box.\nEscape or a left click cancels."
 local PROMPT_MOVES = "%s %s.\n%s it again to use it anyway, or press another key."
--- The dim line under the prompt with the key in use now.
 local PROMPT_NOW = "\n|cffa9ae9fNow: %s|r"
 local LINE_NOTHING = "Mount key: no mount or travel form to use yet."
--- The character has mounts in the journal, but the game lets none of them be used now: GetMountUsabilityByID answers false with the reason as
--- useError (MountJournalDocumentation.lua:340-357), and the journal shows that reason on the tooltip of its Mount button, also while the button
--- is disabled (Mainline/Blizzard_MountCollection.lua:853-859, Mainline/Blizzard_MountCollection.xml:568 and 575).
 local LINE_UNUSABLE = "Mount key: none of your mounts can be used here and now. The tooltip of the Mount button in the mount journal says why."
 local LINE_BROKEN = "Mount key: the game did not make the button of the key, so the key does nothing until /reload."
 local LINE_JOURNAL = "Mount key: this client has no mount journal, so the key takes travel forms only."
@@ -116,20 +28,10 @@ local LINE_WAITS = "Mount key: a change of the key waits for the end of the figh
 local LINE_FALL = "Mount key: falling safety armed: out of a fight, pressed while you fall and are not mounted, the key casts %s on you. It takes a Light Feather."
 local LINE_NO_FALL = "Mount key: falling safety on, but this character knows neither Slow Fall nor Levitate."
 
--- The name of the binding in the game's Key Bindings.
 _G["BINDING_NAME_" .. BINDING] = "Mount or travel form"
 
 local IsSecret = ns.IsSecret
 
--- button: the secure button once made, broken: it could not be made and is not tried again. text: the macro on it, nil while it has none.
--- texts: the macro standing (still) and on the move (moving). cast: the macro casts something. mount: the spell name of the mount it casts.
--- list: the character's mounts of the journal, read again when dirty. pick: the name of the mount picked. moving: the player moves, as last read.
--- listener: the frame that hears the moving, hearing: it does, soonMove: a read of the moving waits for the next frame. soon: a write waits a
--- moment; later: one waits for the end of the fight. fall: the name of the spell of the falling safety, nil while it is off; fallText: its macro.
--- scripted: the button has the PreClick and the PostClick of the safety. held: the button holds the falling macro, which the PostClick takes away.
--- owner: the frame that owns the override binding of Flat UI's key; chord: the key bound now, refused: the key the game would not bind. prompt:
--- the frame that waits for a key; confirm: the key that moves the character, pressed once, which a second press takes; confirmAt: when it was
--- last pressed, held or turned (GetTime).
 local S = { button = nil, broken = false, text = nil, texts = nil, cast = false, mount = nil, list = nil, dirty = true, pick = nil, moving = false,
 	listener = nil, hearing = false, soonMove = false, soon = false, later = false, fall = nil, fallText = nil, scripted = false, held = false,
 	owner = nil, chord = nil, refused = nil, prompt = nil, confirm = nil, confirmAt = nil }
@@ -139,7 +41,6 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- The first answer of a call of the client, or nil when the call is missing, raises or the answer is withheld.
 local function Ask(fn, ...)
 	if type(fn) ~= "function" then
 		return nil
@@ -151,18 +52,14 @@ local function Ask(fn, ...)
 	return nil
 end
 
--- True for a plain true of the game; a withheld answer is none.
 local function Yes(value)
 	return not IsSecret(value) and value == true
 end
 
--- A timer of the client, false when there is none or it raises.
 local function After(seconds, fn)
 	return type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, seconds, fn)
 end
 
--- True in combat lockdown (RestrictedActionsDocumentation.lua:45-52), when nothing may change on a secure button. A withheld answer counts as a
--- fight, so nothing is written then.
 local function Fighting()
 	if type(InCombatLockdown) ~= "function" then
 		return false
@@ -171,7 +68,6 @@ local function Fighting()
 	return not ok or IsSecret(value) or value == true
 end
 
--- The journal, when the client has the calls the key reads.
 local function Journal()
 	local journal = C_MountJournal
 	if type(journal) == "table" and not IsSecret(journal) and type(journal.GetMountIDs) == "function" and type(journal.GetMountInfoByID) == "function" then
@@ -180,25 +76,21 @@ local function Journal()
 	return nil
 end
 
--- Flat UI's key, kept for the account (FlatUIDB.mountKey), or nil.
 local function OwnKey()
 	local db = ns.Account()
 	local chord = type(db) == "table" and db.mountKey or nil
 	return type(chord) == "string" and chord ~= "" and chord or nil
 end
 
--- The key of the game's Key Bindings that clicks the button (without overrides, so Flat UI's own is not counted), or nil.
 local function GameKey()
 	local key = Ask(GetBindingKey, BINDING)
 	return type(key) == "string" and key ~= "" and key or nil
 end
 
--- True while a key of the game's Key Bindings clicks the button, or Flat UI's key is set (M.Update binds it once the button is made).
 local function Bound()
 	return GameKey() ~= nil or OwnKey() ~= nil
 end
 
--- A key as the game writes it ("Shift-Z", GetBindingText), or as it is kept where the client does not say.
 local function KeyText(chord)
 	local text = Ask(GetBindingText, chord)
 	if type(text) == "string" and text ~= "" then
@@ -215,14 +107,12 @@ local function SpellName(id)
 	return type(name) == "string" and name ~= "" and name or nil
 end
 
--- The player's book (SpellBookConstantsDocumentation.lua:35-45), 0 where the client gives no enum.
 local function Bank()
 	local banks = type(Enum) == "table" and Enum.SpellBookSpellBank or nil
 	local value = type(banks) == "table" and banks.Player or nil
 	return type(value) == "number" and value or 0
 end
 
--- The name of a form the spell book knows, or nil.
 local function Form(id)
 	local book = C_SpellBook
 	if type(book) ~= "table" or not Yes(Ask(book.IsSpellKnown, id, Bank())) then
@@ -231,7 +121,6 @@ local function Form(id)
 	return SpellName(id)
 end
 
--- True when a spell has no cast time, so it can be cast on the move.
 local function Instant(id)
 	local spells = C_Spell
 	local info = type(spells) == "table" and Ask(spells.GetSpellInfo, id) or nil
@@ -242,7 +131,6 @@ local function Instant(id)
 	return ns.Finite(cast) and cast == 0
 end
 
--- The name of Slow Fall or Levitate when this client has the spell and the spell book knows it, else nil.
 local function Fall()
 	local spells = C_Spell
 	if type(spells) ~= "table" then
@@ -259,7 +147,6 @@ local function Fall()
 	return nil
 end
 
--- The class file of the player (UnitDocumentation.lua:911-928).
 local function Class()
 	if type(UnitClass) ~= "function" then
 		return nil
@@ -271,9 +158,6 @@ local function Class()
 	return nil
 end
 
--- The mounts ---------------------------------------------------------------------------------------------------------------------------------
-
--- The character's mounts of the journal, { id, spell, favourite } each, read again only after the journal changed.
 local function Collected()
 	if S.list and not S.dirty then
 		return S.list
@@ -300,7 +184,6 @@ local function Collected()
 	return list
 end
 
--- Whether the game lets the character use a mount here, leaving indoors to the game's own answer at the press.
 local function Usable(entry)
 	local journal = C_MountJournal
 	if type(journal.GetMountUsabilityByID) == "function" then
@@ -313,8 +196,6 @@ local function Usable(entry)
 	return ok and Yes(usable)
 end
 
--- The spell name of the mount the key casts, or nil when the character has none to use: the one picked before while it can still be used, else a
--- new one at random.
 local function Pick()
 	local all, favourites = {}, {}
 	for _, entry in ipairs(Collected()) do
@@ -336,9 +217,6 @@ local function Pick()
 	return S.pick
 end
 
--- The macro ----------------------------------------------------------------------------------------------------------------------------------
-
--- What the key can cast now: the forms of the class and the mount.
 local function Plan()
 	local plan, class = {}, Class()
 	if class == "DRUID" then
@@ -351,7 +229,6 @@ local function Plan()
 	return plan
 end
 
--- The macro of the key, standing or on the move, and whether it casts anything.
 local function Macro(plan, moving)
 	local lines, choices = { "/dismount [mounted]", "/stopmacro [mounted]" }, {}
 	if plan.aquatic then
@@ -380,9 +257,6 @@ local function Macro(plan, moving)
 	return table.concat(lines, "\n"), true
 end
 
--- The button ---------------------------------------------------------------------------------------------------------------------------------
-
--- Made once, out of combat. Its type is set with its first macro.
 local function Build()
 	if S.button then
 		return true
@@ -404,7 +278,6 @@ local function Build()
 	return true
 end
 
--- A write asked for in a fight waits for its end, once.
 local function Later()
 	if S.later then
 		return
@@ -416,14 +289,11 @@ local function Later()
 	end)
 end
 
--- Binds Flat UI's key to a click of the button (want, or nothing), as an override owned by a frame of the module's own: the player's own binding
--- of the key stays under it. Out of combat only; in one it waits for the end of the fight.
 local function BindKey(want)
 	if want == nil and S.chord == nil then
 		S.refused = nil
 		return
 	end
-	-- A key the game refused is not asked again until it changes, since each call fires UPDATE_BINDINGS, which runs this again.
 	if want == S.chord or want == S.refused then
 		return
 	end
@@ -450,7 +320,6 @@ local function BindKey(want)
 	end
 end
 
--- Puts the macro of now on the button, if it is not there yet.
 local function Apply()
 	if not S.button or not S.texts then
 		return
@@ -472,10 +341,6 @@ local function Apply()
 	end
 end
 
--- The falling safety ---------------------------------------------------------------------------------------------------------------------------
-
--- Before the game's secure code runs a press or a release, out of combat: the falling macro in place of the key's while the player plainly falls
--- and is plainly not mounted. Any other answer leaves the key's macro.
 local function PreClick(self)
 	if S.fallText == nil or S.text == nil or Fighting() then
 		return
@@ -488,8 +353,6 @@ local function PreClick(self)
 	end
 end
 
--- Right after the press or the release, out of combat: the key's macro back on the button. A fight cannot start between the two, which run in
--- one click; if the game refuses the write, the next write after the fight puts the macro back (Apply).
 local function PostClick(self)
 	if not S.held then
 		return
@@ -501,7 +364,6 @@ local function PostClick(self)
 	S.held = false
 end
 
--- The PreClick and the PostClick on the button while the safety has a spell, none while it has not. Set and taken away out of combat only.
 local function Arm(name)
 	S.fall = name
 	S.fallText = name and ("/cast [@player] " .. name) or nil
@@ -522,7 +384,6 @@ local function Arm(name)
 	end
 end
 
--- The moving, read a frame after the game said it changed.
 function M.Moved()
 	S.soonMove = false
 	S.moving = Ask(IsPlayerMoving) == true
@@ -541,7 +402,6 @@ local function OnMove()
 	end
 end
 
--- Hears the moving, or stops: M.Update asks it only while a key can press the button and the macro on the move is another.
 local function Hear(on)
 	if on == S.hearing then
 		return
@@ -572,7 +432,6 @@ local function Hear(on)
 	end
 end
 
--- Takes the type and the macro off the button, so the key does nothing.
 function M.Off()
 	Hear(false)
 	S.texts, S.cast, S.mount = nil, false, nil
@@ -608,19 +467,14 @@ function M.Update()
 	if not S.button and bound and not Build() and not S.broken then
 		Later()
 	end
-	-- No key presses the button while none is bound or the button is not made, so the moving is not heard then. Setting or clearing the key runs
-	-- this again (UPDATE_BINDINGS, KeyBindingsDocumentation.lua:175-179), and the hearing reads the moving as it starts.
 	Hear(moving ~= still and S.button ~= nil and bound)
-	-- Flat UI's key, once the button it clicks is made.
 	if S.button then
 		BindKey(OwnKey())
 	end
 	Apply()
-	-- The falling safety, with the spell the book knows now: learning or losing it runs this again (SPELLS_CHANGED).
 	Arm(Opt("falling") == true and Fall() or nil)
 end
 
--- Writes again a moment later, once for a burst of events.
 function M.Soon()
 	if S.soon then
 		return
@@ -633,13 +487,11 @@ function M.Soon()
 	end
 end
 
--- The journal changed: its mounts are read again.
 local function Changed()
 	S.dirty = true
 	M.Soon()
 end
 
--- Turned on, a row changed or the module stopped: the mounts are read and picked again.
 function M.Refresh()
 	S.dirty, S.pick = true, nil
 	M.Update()
@@ -663,7 +515,6 @@ function M.Status()
 	if not Journal() then
 		lines[#lines + 1] = LINE_JOURNAL
 	end
-	-- The mounts as the last update read them for the macro, so the line matches the macro and the status reads nothing of the journal.
 	if not S.cast and S.list and #S.list > 0 then
 		lines[#lines + 1] = LINE_UNUSABLE
 	elseif not S.cast then
@@ -684,9 +535,6 @@ function M.Status()
 	return lines
 end
 
--- The key row ------------------------------------------------------------------------------------------------------------------------------
-
--- The key pressed with the Shift, Ctrl and Alt held now, as the game's Key Bindings write it ("SHIFT-Z").
 local function Chord(key)
 	if type(CreateKeyChordStringUsingMetaKeyState) == "function" then
 		local ok, chord = pcall(CreateKeyChordStringUsingMetaKeyState, key)
@@ -704,7 +552,6 @@ local function Chord(key)
 	return table.concat(parts, "-")
 end
 
--- What the player's own bindings do with a key, by the game's name of it ("Toggle Sheathe"), or nil when nothing or the button itself.
 local function WasBound(chord)
 	local action = Ask(GetBindingAction, chord)
 	if type(action) ~= "string" or action == "" or action == BINDING then
@@ -714,13 +561,11 @@ local function WasBound(chord)
 	return type(name) == "string" and not IsSecret(name) and name ~= "" and name or action
 end
 
--- What a key does when the player's own bindings make it move the character ("moves you forward"), or nil.
 local function Moves(chord)
 	local action = Ask(GetBindingAction, chord)
 	return type(action) == "string" and MOVES[action] or nil
 end
 
--- The key of a mouse button as the game's Key Bindings write it (Button4 is BUTTON4), or nil for the left and right buttons, which cancel.
 local function MouseKey(button)
 	if IsSecret(button) or type(button) ~= "string" or button == "LeftButton" or button == "RightButton" then
 		return nil
@@ -732,8 +577,6 @@ local function MouseKey(button)
 	return nil
 end
 
--- A key, a mouse button or the wheel was pressed while the prompt waited (it is hidden by now): Escape cancels, any other key, with Shift, Ctrl
--- or Alt if held, becomes Flat UI's key.
 local function OnKey(key)
 	if key == "ESCAPE" then
 		print("Flat UI: Mount key not changed.")
@@ -757,8 +600,6 @@ local function OnKey(key)
 	ns.Try(KEY, M.Update)
 end
 
--- The prompt that waits for a key, made the first time it is asked for: a frame of the module's own in the middle of the screen, over the options
--- window, with the keyboard while it shows. Nil when the client refuses it.
 local function Prompt()
 	if S.prompt then
 		return S.prompt
@@ -783,7 +624,6 @@ local function Prompt()
 	if not pcall(frame.EnableKeyboard, frame, true) then
 		return nil
 	end
-	-- The dim last line: the key in use now, Flat UI's own else the one of the game's Key Bindings, or nothing with none.
 	local function Now()
 		local ok, line = pcall(function()
 			local chord = OwnKey() or GameKey()
@@ -791,7 +631,6 @@ local function Prompt()
 		end)
 		return ok and line or ""
 	end
-	-- Each showing starts with the plain line and no key waiting for a second press.
 	frame:SetScript("OnShow", function()
 		S.confirm, S.confirmAt = nil, nil
 		text:SetText(PROMPT .. Now())
@@ -799,10 +638,6 @@ local function Prompt()
 	frame:SetScript("OnHide", function()
 		S.confirm, S.confirmAt = nil, nil
 	end)
-	-- A key that moves the character or zooms the camera waits for a second press, with the prompt and its keyboard kept: "Turn it again" for the
-	-- wheel. The same key within CONFIRM_GAP seconds of the last time it came (a held key's repeat, another notch of one scroll) is not the second
-	-- press, and waits on. Any other key hides the prompt first, whatever follows, so the keyboard is never kept by an error. Nothing but reads runs
-	-- before the hide.
 	local function Take(self, key)
 		if key ~= "ESCAPE" then
 			local ok, chord, does = pcall(function()
@@ -825,7 +660,6 @@ local function Prompt()
 		self:Hide()
 		ns.Try(KEY, OnKey, key)
 	end
-	-- Shift, Ctrl and Alt alone wait on.
 	frame:SetScript("OnKeyDown", function(self, key)
 		local plain = not IsSecret(key) and type(key) == "string"
 		if plain and META[key] then
@@ -837,7 +671,6 @@ local function Prompt()
 		end
 		Take(self, key)
 	end)
-	-- The middle button and the side buttons become the key, as in the game's Key Bindings; a left or right click cancels.
 	frame:SetScript("OnMouseDown", function(self, button)
 		local key = MouseKey(button)
 		if not key then
@@ -847,14 +680,12 @@ local function Prompt()
 		end
 		Take(self, key)
 	end)
-	-- The wheel, with Shift, Ctrl or Alt if held.
 	frame:SetScript("OnMouseWheel", function(self, delta)
 		if IsSecret(delta) or not ns.Finite(delta) or delta == 0 then
 			return
 		end
 		Take(self, delta > 0 and "MOUSEWHEELUP" or "MOUSEWHEELDOWN")
 	end)
-	-- A fight takes the keyboard from it as it starts, the last moment that may, and the key is not changed.
 	frame:SetScript("OnEvent", function(self)
 		if self:IsShown() then
 			self:Hide()
@@ -866,7 +697,6 @@ local function Prompt()
 	return frame
 end
 
--- The lines of the row Key: set a key, with the one in use now, and clear Flat UI's key while there is one.
 function ns.MountKeyLines()
 	local own, game = OwnKey(), GameKey()
 	local now = own and KeyText(own) or game and (KeyText(game) .. ", from Key Bindings") or "none"
@@ -877,7 +707,6 @@ function ns.MountKeyLines()
 	return lines
 end
 
--- A pick of the row Key, out of a fight only.
 function ns.MountKeyPick(id)
 	if Fighting() then
 		return false, LINE_IN_FIGHT
@@ -902,7 +731,6 @@ function ns.MountKeyPick(id)
 	return true
 end
 
--- The button and the macro, for the test.
 function ns.MountKeyState()
 	return S
 end
@@ -914,15 +742,11 @@ ns.Register(KEY, {
 	Refresh = M.Refresh,
 	Status = M.Status,
 	events = {
-		-- The mounts of the journal (MountJournalDocumentation.lua:642-662, PetJournalInfoDocumentation.lua:342-349); a favourite marked or
-		-- unmarked updates the search of the journal, as EnhanceQoL hears it (MountActions.lua:594-599).
 		PLAYER_ENTERING_WORLD = Changed,
 		NEW_MOUNT_ADDED = Changed,
 		COMPANION_LEARNED = Changed,
 		COMPANION_UNLEARNED = Changed,
 		MOUNT_JOURNAL_SEARCH_UPDATED = Changed,
-		-- Where a mount can be used, the forms of the book, riding at a new level and the keys of the Key Bindings (MountJournalDocumentation.lua:
-		-- 648-651, SpellBookDocumentation.lua:968, 996-1000, UnitDocumentation.lua:3832, KeyBindingsDocumentation.lua:175-179).
 		MOUNT_JOURNAL_USABILITY_CHANGED = function()
 			M.Soon()
 		end,
@@ -938,7 +762,6 @@ ns.Register(KEY, {
 		UPDATE_BINDINGS = function()
 			M.Soon()
 		end,
-		-- Mounted: the next press takes another mount.
 		PLAYER_MOUNT_DISPLAY_CHANGED = function()
 			if Yes(Ask(IsMounted)) then
 				S.pick = nil

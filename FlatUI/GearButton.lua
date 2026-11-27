@@ -1,78 +1,16 @@
 local _, ns = ...
 
--- The Compare gear button on the Character window: the part "gear button" of Chat and tooltips, while Button on the Character window is on
--- (chat.gearCharButton, Window and finder tab of Gear comparison). It is a button of Flat UI's own, FlatUIGearButton, made on UIParent (CreateFrame,
--- WL/apis.yaml:35213): Flat UI's gear icon left of the words Compare gear, 20 high, in the Windows page look. It is never parented to the
--- Character window and writes nothing on it: of CharacterFrame it reads whether it shows (IsShown, WL/uiobjects.yaml:7680), where it is (GetRect
--- and GetEffectiveScale, :7307, :7223), its strata (GetFrameStrata, :4217), whether the game protects it
--- (IsProtected, :7487), and the width of its title text (the fields TitleContainer and TitleText, read with rawget; GetStringWidth, :3716).
--- Where it hangs. By default from the window's top right (SetPoint with CharacterFrame as the frame it hangs from, :7586): on the title bar,
--- right-aligned 6 clear of the close cross. The window is a PortraitFrameBaseTemplate (Blizzard_UIPanels_Game/Camelot/CharacterFrame.xml:403):
--- its title bar (TitleContainer) runs from 1 under its top for 20, from 58 in on the left to 24 in on the right, and its title text is centred
--- in it (Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.xml:600-614); the close cross is 28 by 28 at the window's top right, its top 3
--- above the window's (CharacterFrame.xml:405, Blizzard_SharedXML/Camelot/SharedUIPanelTemplates.lua:1-4); the stats pane toggle is 28 by 28 at
--- 6 left and 6 under the top right of the left pane, which starts 20 under the window's top (CharacterFrame.xml:407-411, 553-557), so it is under
--- the title bar: the button, 1 under the window's top and 20 high, ends 5 above it. The window is 631 wide with the stats pane and 398 without
--- (Camelot/CharacterFrameConstants.lua:4, 7); where the title text (the player's name with a PvP rank, CharacterFrame.lua:376-382) would come
--- within 6 of the button, as a long name in the narrow window can, the words fold away and the button is its icon alone, right-aligned the same.
--- The movers size windows from 60 to 150 (Movers.lua, WIN), so the button takes the window's scale against UIParent's (SetScale, :7702, on its
--- own frame): its offsets, height and room are in the window's units, and it stays on the title bar and clear of the close cross, the title text
--- and the pane toggle at any size of the window.
--- The movers place it too: the entry Compare gear button (Movers.lua) has a handle while the window shows and the button is wanted
--- (ns.GearButtonShown); its spot is measured from the window's top left corner (from), so a saved spot hangs the button from the window's top
--- left at that spot and it goes with the window. With no spot saved the handle's box is where the button hangs by default (ns.GearButtonStart),
--- and a spot saved or put back is told here (ns.GearButtonMoved).
--- It shows while the Character window shows. A driver of its own, a frame whose OnUpdate looks four times a second, reads whether the window
--- shows while the row and Chat and tooltips are on, so the button comes and goes with the window however it opened, also when it was open before
--- login ended or the interface was reloaded; while the row, the module or this part is off it hides the button and stops looking. The game opens
--- the window with ShowUIPanel and closes it with HideUIPanel (ToggleCharacter, Camelot/CharacterFrame.lua:3-30; the close cross,
--- Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.lua:152-161; Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua:871, 905), which
--- this file follows (ns.FollowGlobal, hooksecurefunc) to start the driver at once, so the button comes and goes on the next frame, as do the row's
--- change (ns.GearButtonChanged, Config.lua), each refresh of Chat and tooltips (Chat.lua), which comes as the module goes on or off, and a change
--- of the spot. It registers no event.
--- A left click opens or closes the Gear comparison window (ns.GearWindowToggle, GearWindow.lua). With an item on the cursor (GetCursorInfo,
--- WL/apis.yaml:36258), or one dropped on the button (OnReceiveDrag), the window opens with that item (ns.GearWindowShow): the window opened from
--- here starts on the item the cursor holds and the slots it takes, else as it was. An item lifted from a bag, the bank or a worn slot, where it
--- stays locked while it rides the cursor (C_Cursor.GetCursorItem, :10071, and C_Item.IsLocked, :17097), goes back there (ClearCursor, :34956, not
--- protected), as the window gives a dropped item back; any other stays on the cursor. A right click opens the item finder beside the window
--- (ns.GearFindLines and ns.GearFindPick, GearSearch.lua), or closes it while it shows (ns.GearSearchShown, ns.GearSearchToggle). These are looked
--- up when called, since those files load after this one or may fail; a message they give back is printed.
--- Its tooltip is GameTooltip (SetOwner, AddLine, Show, and Hide only while IsOwned says the button owns it, WL/uiobjects.yaml:4942), never in a
--- fight, as the Gear comparison window's tooltips wait.
--- The look is the Windows page's, as the Gear comparison window has it: the Button and slot colour behind Flat UI's own icon (the TOC's
--- IconTexture, INV_Misc_Gear_01) cut by Icon crop (SetTexCoord) and the words in GameFontHighlight, a thin border in the general border colour
--- (ns.Outline, whose page is the Windows page), and the Highlight colour under the cursor. The words are light grey, white under the cursor, and
--- light up in the Highlight colour while the Gear comparison window is open. The button is one strata above the window's (MEDIUM: HIGH), looked
--- at each time, so it is above the window, its title bar, close cross and pane toggle (510: SharedUIPanelTemplates.xml:134, 600;
--- CharacterFrame.xml:553) and the movers' title strip whatever their levels: the window is toplevel, and the game raises a toplevel frame it is
--- clicked in above every frame of its strata, this button too were it in that strata, which left the button under the window's background and its
--- clicks to the title strip (0.5.22, the owner: "unable to click compare gear button").
--- A fight is InCombatLockdown's answer (WL/apis.yaml:39650), a withheld one counting as a fight. Camelot's CharacterFrame is not protected (it and
--- its template mark nothing protected, CharacterFrame.xml:403), so the button changes in a fight too. A frame anchored to a protected frame is
--- protected too, so while the game protects the window in a fight the button is made, anchored, sized, levelled, shown and hidden only after it
--- (ns.OutOfCombat), and meanwhile only its alpha changes (SetAlpha). The colours are painted each time the driver starts and as the Gear
--- comparison window opens or closes. Everything runs through ns.EachPart, so three faults stop the button alone with a line for /flatui status,
--- and the button hides then. Every frame, texture and font string here is Flat UI's own.
-
 local KEY, PART, ROW = "chat", "gear button", "chat.gearCharButton"
 local NAME = "FlatUIGearButton"
 local WORDS = "Compare gear"
--- The button: its height and least width with its words (the width of its box in the movers), the icon's side, the gap between the icon and the
--- words, the room at each end, and the width of the words while the client will not say.
 local HEIGHT, WIDE, ICON_SIDE, GAP, ROOM, WORDS_WIDTH = 20, 112, 14, 5, 6, 76
--- Its top right corner from the Character window's by default: 6 clear of the close cross (28 wide at the window's top right) and 1 under the
--- window's top, where the title bar starts.
 local X, Y = -34, -1
--- The least room between the title text and the button before the words fold away.
 local CLEAR = 6
--- The stratas from the lowest, the one above the window's is the button's (never TOOLTIP); and the button's level in it.
 local STRATA = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG" }
 local LEVEL = 20
--- How often the driver looks.
 local EVERY = 0.25
 local FONT = "GameFontHighlight"
 local ICON = "Interface\\Icons\\INV_Misc_Gear_01"
--- The alpha of the light under the cursor.
 local HOVER = 0.18
 local TITLE = "Gear comparison"
 local TIPS = {
@@ -83,9 +21,6 @@ local TIPS = {
 }
 local DIM, PLAIN, WORD = { 0.66, 0.68, 0.62 }, { 1, 1, 1 }, { 0.9, 0.9, 0.88 }
 
--- The button and its parts, made once; the frame it hangs from and how (point, x, y, folded, scale); the strata and level it has; whether the
--- Gear comparison window was open at the last paint; whether the cursor is over it; the driver and its clock; whether the window shows and
--- whether the button is wanted at the last look; whether a change waits for the end of a fight.
 local B = { button = nil, icon = nil, words = nil, hover = nil, outline = nil, anchored = nil, point = nil, x = nil, y = nil, folded = nil,
 	scale = nil, strata = nil, level = nil, open = nil, over = false, driver = nil, clock = 0, shown = false, wanted = false, waiting = false }
 
@@ -99,7 +34,6 @@ local function Finite(value)
 	return ns.Finite(value)
 end
 
--- A function of a table, or nil.
 local function Fn(source, name)
 	if type(source) ~= "table" or IsSecret(source) then
 		return nil
@@ -108,7 +42,6 @@ local function Fn(source, name)
 	return type(fn) == "function" and fn or nil
 end
 
--- Runs fn as this part (ns.EachPart, Core.lua): true when it ran without a fault.
 local function Run(fn, ...)
 	return ns.EachPart(KEY, PART, fn, ...)
 end
@@ -122,7 +55,6 @@ local function Fighting()
 	return not ok or IsSecret(fighting) or fighting == true
 end
 
--- True when the game would refuse a change to this frame now: in a fight, one it protects, or one that will not say.
 local function Blocked(frame)
 	if not Fighting() then
 		return false
@@ -131,7 +63,6 @@ local function Blocked(frame)
 	return not ok or IsSecret(protected) or protected == true
 end
 
--- The Character window, once the game has made it, while addons may read it.
 local function Character()
 	local frame = _G.CharacterFrame
 	if type(frame) ~= "table" or IsSecret(frame) or ns.Forbidden(frame) then
@@ -145,7 +76,6 @@ local function Shows(frame)
 	return ok and not IsSecret(shown) and shown == true
 end
 
--- A frame or region held in a field of a frame, read with rawget and never written, or nil.
 local function Field(frame, key)
 	if type(frame) ~= "table" or IsSecret(frame) or ns.Forbidden(frame) then
 		return nil
@@ -157,7 +87,6 @@ local function Field(frame, key)
 	return value
 end
 
--- Units of UIParent for each unit of a frame or region, or nil.
 local function Ratio(object)
 	local ok, scale = pcall(object.GetEffectiveScale, object)
 	local okBase, base = pcall(UIParent.GetEffectiveScale, UIParent)
@@ -167,7 +96,6 @@ local function Ratio(object)
 	return scale / base
 end
 
--- Left, bottom, width and height of a frame or region in the units of UIParent, or nil.
 local function Rect(object)
 	local k = Ratio(object)
 	local ok, left, bottom, width, height = pcall(object.GetRect, object)
@@ -177,7 +105,6 @@ local function Rect(object)
 	return left * k, bottom * k, width * k, height * k
 end
 
--- The Gear comparison window is open (ns.GearWindowOpen, GearWindow.lua).
 local function WindowOpen()
 	local open = Fn(ns, "GearWindowOpen")
 	if not open then
@@ -187,7 +114,6 @@ local function WindowOpen()
 	return ok and answer == true
 end
 
--- Calls a function of another file by its name, and prints the message it gives back, as the options window prints a list's (Panel.lua:784-789).
 local function Call(name, ...)
 	local fn = Fn(ns, name)
 	if not fn then
@@ -204,8 +130,6 @@ local function Call(name, ...)
 	return done ~= false
 end
 
--- Looks ----------------------------------------------------------------------------------------------------------------------------------------
-
 local function RGB(path, r, g, b)
 	local ok, cr, cg, cb = pcall(ns.Colour, path)
 	if ok and Finite(cr) and Finite(cg) and Finite(cb) then
@@ -214,13 +138,11 @@ local function RGB(path, r, g, b)
 	return r, g, b
 end
 
--- Icon crop of the Windows page: the share of the icon's side cut from each edge.
 local function Crop()
 	local value = ns.Get("windows.crop")
 	return (Finite(value) and math.max(0, math.min(15, value)) or 8) / 100
 end
 
--- The width the words take in their font now, or WORDS_WIDTH while the client will not say.
 local function WordsWidth()
 	local words = B.words
 	local ok, width = false, nil
@@ -233,12 +155,10 @@ local function WordsWidth()
 	return WORDS_WIDTH
 end
 
--- The width of the button with its words: the icon, the gap and the words with room at each end, at least WIDE.
 local function WideWidth()
 	return math.max(WIDE, ROOM + ICON_SIDE + GAP + WordsWidth() + ROOM)
 end
 
--- The words: in the Highlight colour while the Gear comparison window is open, white under the cursor, else light grey.
 local function PaintWords()
 	if B.open == true then
 		local ar, ag, ab = RGB("windows.accent", 0.85, 0.85, 0.85)
@@ -260,8 +180,6 @@ local function Paint()
 	PaintWords()
 end
 
--- The tooltip ----------------------------------------------------------------------------------------------------------------------------------
-
 local function Tooltip()
 	local tip = _G.GameTooltip
 	if type(tip) ~= "table" or IsSecret(tip) or ns.Forbidden(tip) then
@@ -281,7 +199,6 @@ local function Untip()
 	end
 end
 
--- A title and dim lines, never in a fight. SetOwner leaves the tooltip empty, as the game's own tooltips start with AddLine after it.
 local function Say()
 	local tip = Tooltip()
 	if Fighting() or not tip or not pcall(tip.SetOwner, tip, B.button, "ANCHOR_BOTTOMLEFT") then
@@ -294,9 +211,6 @@ local function Say()
 	pcall(tip.Show, tip)
 end
 
--- Clicks and drops -----------------------------------------------------------------------------------------------------------------------------
-
--- The item on the cursor: its link, else its item string, or nil.
 local function Held()
 	if type(GetCursorInfo) ~= "function" then
 		return nil
@@ -314,8 +228,6 @@ local function Held()
 	return nil
 end
 
--- True when the item on the cursor was lifted from a bag, the bank or a worn slot, so ClearCursor puts it back there (header): the place
--- C_Cursor.GetCursorItem gives is a bag slot or a worn slot, and the item there is locked, as it is while it rides the cursor.
 local function Lifted()
 	local get = Fn(_G.C_Cursor, "GetCursorItem")
 	local locked = Fn(_G.C_Item, "IsLocked")
@@ -341,7 +253,6 @@ local function Lifted()
 	return okLocked and not IsSecret(held) and held == true
 end
 
--- The window opens with the item on the cursor, which goes back to its slot when it was lifted from one. False when the cursor holds no item.
 local function Compare()
 	local item = Held()
 	if not item then
@@ -354,7 +265,6 @@ local function Compare()
 	return true
 end
 
--- The item finder: closed while it shows beside the open window, else opened with the window as its row opens it (its first line).
 local function Finder()
 	local shown = Fn(ns, "GearSearchShown")
 	local okShown, open = false, false
@@ -378,7 +288,6 @@ local function Finder()
 	end
 end
 
--- After a click or a drop the driver looks on the next frame, so the words light up or go out as the window opens or closes.
 local function Click(mouse)
 	if not Compare() then
 		if mouse == "RightButton" then
@@ -396,8 +305,6 @@ local function Drop()
 	Compare()
 	Start()
 end
-
--- Making and placing ---------------------------------------------------------------------------------------------------------------------------
 
 local function Texture(parent, layer)
 	local texture = parent:CreateTexture(nil, layer)
@@ -448,8 +355,6 @@ local function Make()
 	Paint()
 end
 
--- Sizes the button and lays out its icon and words: with the words, the icon and the words together in the middle of the button; folded, the
--- icon alone in a square.
 local function Layout(folded)
 	local button, icon, words = B.button, B.icon, B.words
 	icon:ClearAllPoints()
@@ -467,8 +372,6 @@ local function Layout(folded)
 	words:Show()
 end
 
--- The right edge of the window's title text, in the units of UIParent from the screen's left, or nil while it cannot be read: the title text
--- spans the title bar and its words are centred in it (header).
 local function TitleRight(frame)
 	local text = Field(Field(frame, "TitleContainer"), "TitleText")
 	if not text then
@@ -483,9 +386,6 @@ local function TitleRight(frame)
 	return left + width / 2 + math.min(wide * k, width) / 2
 end
 
--- The spot saved in the movers, as offsets of the button's top left corner from the window's top left corner (left, top), in the units of
--- UIParent, which the button on UIParent has; nil while none is saved. ns.MoverSpot gives that corner on the screen, measured from the window
--- (Movers.lua, from).
 local function Saved(left, top)
 	local saved, spot = Fn(ns, "MoverSaved"), Fn(ns, "MoverSpot")
 	if not (saved and spot) then
@@ -502,14 +402,11 @@ local function Saved(left, top)
 	return x - left, y - top
 end
 
--- The window's scale against UIParent's, to a thousandth, which the button takes (header), or nil.
 local function Scale(frame)
 	local k = Ratio(frame)
 	return k and math.floor(k * 1000 + 0.5) / 1000 or nil
 end
 
--- Where the button hangs from the window: the point of both, the offsets in the window's units, whether the words fold away and the scale the
--- button takes; nil while the window has no place.
 local function Spot(frame)
 	local left, bottom, width, height = Rect(frame)
 	local k = Scale(frame)
@@ -524,7 +421,6 @@ local function Spot(frame)
 	return "TOPRIGHT", X, Y, title ~= nil and title + CLEAR * k > left + width + (X - WideWidth()) * k, k
 end
 
--- Hangs the button from the window as Spot says, when that changed: false while the game would refuse it or the window has no place.
 local function Place(frame)
 	local point, x, y, folded, k = Spot(frame)
 	if not point then
@@ -548,8 +444,6 @@ local function Place(frame)
 	return true
 end
 
--- The strata above the window's, at a level of its own: whatever level the game raises the window (toplevel) to, the button stays above it.
--- The window's strata is looked at each time.
 local function Level(frame)
 	if Blocked(B.button) then
 		return
@@ -575,7 +469,6 @@ local function Level(frame)
 	end
 end
 
--- After a fight the driver looks again, so a change the fight held back is made (once, however many waited).
 local function Later()
 	if not B.waiting then
 		B.waiting = true
@@ -586,7 +479,6 @@ local function Later()
 	end
 end
 
--- Shows or hides the button; while the game would refuse it, only its alpha changes until the fight ends.
 local function Shown(shown)
 	local button = B.button
 	if not button then
@@ -607,7 +499,6 @@ local function Shown(shown)
 	end
 end
 
--- One look of the driver: B.wanted says whether the button is wanted at all (else the driver stops), B.shown whether the Character window shows.
 local function Look()
 	local frame = Character()
 	B.wanted = Wanted()
@@ -639,7 +530,6 @@ local function Look()
 	Shown(true)
 end
 
--- Hides the button at once, whatever the state of the part, as the part stops.
 local function Off()
 	if B.button then
 		pcall(Shown, false)
@@ -666,8 +556,6 @@ local function Drive(_, elapsed)
 	end
 end
 
--- Starts the driver, which looks on the next frame and then four times a second while the button is wanted; the first look lays the button out
--- and hangs it again, and paints it in the Windows page's colours of now.
 function Start()
 	if not B.driver then
 		B.driver = CreateFrame("Frame")
@@ -679,27 +567,21 @@ function Start()
 	B.driver:Show()
 end
 
--- ShowUIPanel or HideUIPanel ran on the Character window: the driver starts at once, so the button comes or goes on the next frame.
 local function Panel(frame)
 	if frame ~= nil and not IsSecret(frame) and rawequal(frame, _G.CharacterFrame) then
 		Start()
 	end
 end
 
--- Button on the Character window changed (its row's changed, Config.lua), or Chat and tooltips refreshed (Chat.lua): the driver looks at once.
 function ns.GearButtonChanged()
 	Start()
 end
 
--- The gate of the movers' entry Compare gear button (Movers.lua): true while the Character window shows and the button is wanted.
 function ns.GearButtonShown()
 	local frame = Character()
 	return frame ~= nil and Wanted() and Shows(frame)
 end
 
--- Where the button starts while the movers keep no spot of it (start): the offsets of its top left corner, with its words, from the window's top
--- left corner in the units of UIParent, right-aligned left of the close cross on the window as wide and as large as it is now; else the entry's
--- x and y.
 function ns.GearButtonStart(x, y)
 	local frame = Character()
 	if not frame then
@@ -713,7 +595,6 @@ function ns.GearButtonStart(x, y)
 	return width + (X - WideWidth()) * k, Y * k
 end
 
--- The movers saved or forgot the button's spot (changed): it hangs from the spot now, or on the title bar again.
 function ns.GearButtonMoved()
 	Start()
 end

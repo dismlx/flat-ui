@@ -1,10 +1,5 @@
 local ADDON_NAME, ns = ...
 
--- What a row says about itself in the options window: a dot and a reset button on a changed row, the reason on a row that is off, a tooltip beside
--- the control, and the count of changed settings on the tab. The tooltip of the reset button names the value it puts back (Trust.DefaultLine), in
--- the words Trust.ValueText gives a value, which Home's Recent changes and the reload notice (Reload.lua) use too. The widgets are the ones of
--- ns.PanelKit.
-
 local Trust = {}
 ns.PanelTrust = Trust
 
@@ -13,7 +8,6 @@ local SWATCH = "|TInterface\\Buttons\\WHITE8X8:12:12:0:0:8:8:0:8:0:8:%d:%d:%d|t"
 local TIP_W, TIP_PAD, TIP_DELAY = 280, 10, 0.35
 local tip, token = nil, 0
 
--- True while a saved setting is not at its default.
 function Trust.Changed(item)
 	local kit = ns.PanelKit
 	if not item.key or item.read or item.default == nil or item.kind == "list" or item.kind == "entries" or ns.RowLive(item) then
@@ -23,7 +17,6 @@ function Trust.Changed(item)
 	return ok and value ~= item.default
 end
 
--- The settings of the page of an entry that are not at their default.
 function Trust.Count(entry)
 	local count = 0
 	for _, item in ipairs(entry and entry.page or {}) do
@@ -34,20 +27,16 @@ function Trust.Count(entry)
 	return count
 end
 
--- The line the strip shows while no tip or message does; a click on it goes to each changed row in turn (Panel.lua, ui.NextChanged).
 function Trust.Status(entry)
 	local count = entry and not entry.home and not entry.profiles and Trust.Count(entry) or 0
 	return count > 0 and ("%d changed on this tab. Click to go to each."):format(count) or ""
 end
 
--- The question of Reset page, which asks only while something on the tab is changed.
 function Trust.Question(entry, name)
 	local count = Trust.Count(entry)
 	return ("Reset %d setting%s on %s?"):format(count, count == 1 and "" or "s", name)
 end
 
--- The line a row that is off shows: the setting it needs, with the value when the row needs one choice of a setting, or off when it needs a switch
--- off. The values a row lists are those of the setting it names itself, not of one further along. The name is in the accent.
 function Trust.Reason(path, item)
 	local def = ns.Def(path)
 	local name = def and def.label or path
@@ -93,7 +82,6 @@ function Trust.Hide()
 	end
 end
 
--- The words the tooltip shows now: the body, then the line of the setting it needs. Nil while it is hidden.
 function Trust.Current()
 	if tip and tip:IsShown() then
 		return tip.body:GetText(), tip.need:GetText()
@@ -131,7 +119,6 @@ local function Place(owner, body, need)
 	frame:Show()
 end
 
--- Shows the tooltip above a control after a short wait: body in the dim text, need in the warning colour. Nothing shows for no words.
 function Trust.Show(owner, body, need)
 	Trust.Hide()
 	if (not body or body == "") and (not need or need == "") then
@@ -150,7 +137,6 @@ function Trust.Show(owner, body, need)
 	end
 end
 
--- The text of a choice's value, or nil when the row lists no text for it.
 local function ChoiceLabel(def, value)
 	if value == nil then
 		return nil
@@ -168,9 +154,6 @@ local function IsColour(value)
 	return type(value) == "string" and value:find("^%x%x%x%x%x%x%x%x$") ~= nil
 end
 
--- The words for a value of a row: On or Off, the text of a choice, a number with its unit ("300 ms"), a swatch and the code of a colour
--- ("#1E1E1E", with "at 80%" for a colour with alpha), else the value itself. A row with no kind, as Home's record keeps for a change made on
--- Home, is read as its setting's row in Config.lua (ns.Def).
 function Trust.ValueText(item, value)
 	local def = type(item) == "table" and item or {}
 	if def.kind == nil and type(def.path) == "string" and type(ns.Def) == "function" then
@@ -201,8 +184,6 @@ function Trust.ValueText(item, value)
 	return value == nil and "None" or "changed"
 end
 
--- The tooltip of a row's reset button: the default it puts back, as "Reset to default: On", "Reset to default: 300 ms" or "Reset to default: Soft
--- shade", and for a colour a swatch of it and its code, as "Reset to the default colour: #1E1E1E". Plain "Reset to default" for anything else.
 function Trust.DefaultLine(item)
 	local value = item.default
 	if item.kind == "colour" and IsColour(value) then
@@ -215,8 +196,16 @@ function Trust.DefaultLine(item)
 	return "Reset to default"
 end
 
--- Gives a row its dot and reset button. Returns the function that sets them: it takes the unmet need of the row, or nil. A row of setup or of the tracker editor
--- reads and writes a value of its own, so it has no dot and no reset.
+function Trust.ResetText(item)
+	local value, words = item.default, nil
+	if (item.kind == "colour" and IsColour(value)) or (item.kind == "bool" and type(value) == "boolean") or (item.kind == "number" and ns.Finite(value))
+		or (item.kind == "choice" and ChoiceLabel(item, value)) then
+		words = Trust.ValueText(item, value)
+	end
+	return ("Reset %s: back to %s. Ctrl+Z puts it back."):format(type(item.label) == "string" and item.label or "the setting",
+		words and words ~= "changed" and words or "its default")
+end
+
 function Trust.Attach(row, item)
 	local kit = ns.PanelKit
 	local dot, reset
@@ -242,6 +231,7 @@ function Trust.Attach(row, item)
 					Trust.Hide()
 					kit.Write(item, item.default)
 					kit.Refresh()
+					kit.Say(Trust.ResetText(item))
 				end
 			end)
 			reset:SetHeight(16)
@@ -250,12 +240,18 @@ function Trust.Attach(row, item)
 			glyph:SetSize(10, 10)
 			glyph:SetPoint("CENTER", reset, "CENTER", 0, 0)
 			ns.PanelNav.Cell(glyph, "reset")
-			kit.Painted(function()
-				glyph:SetVertexColor(ns.PanelLook.Colour("text-dim"))
-			end)
-			-- row.Hover keeps the fill of the button and then shows the tooltip.
+			local lit = false
+			local function Paint()
+				glyph:SetVertexColor(ns.PanelLook.Colour(lit and "text" or "text-dim"))
+			end
+			kit.Painted(Paint)
 			row.Hover(reset, function()
+				lit = true
+				Paint()
 				Trust.Show(reset, Trust.DefaultLine(item))
+			end, function()
+				lit = false
+				Paint()
 			end)
 		end
 		if reset then

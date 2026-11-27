@@ -1,15 +1,5 @@
 local _, ns = ...
 
--- The ready-made profiles of Flat UI setup. Kept by hand, since tools/dev/setup_profiles.py, which first wrote it from
--- research/flatui-profiles/profiles.json, is not in the repository, and neither is that file. A profile is { id, label, line, values, movers,
--- screen, base }; values is a table of saved path to value, only the settings that differ from the defaults. movers, when a profile has positions,
--- is a list of { frame, point, x, y, scale, kind, label }, and screen the screen they were laid out on, { width, height, scale } as the first line of
--- an exported profile has them (Core.lua, HeaderLine): the positions are fitted to the player's screen when the profile is put in use (ns.FitSpots).
--- Setup.lua checks every value again when it first reads them (S.Presets). Jon Default, the author's own profile, is the baseline: its settings
--- are the defaults of Config.lua, listed here all the same, and with base it gives its positions to every new profile (Core.lua, BaseSpots).
--- Its Bar block settings (barblock.enabled off, barblock.bars1 main,bar2,bar4,bar3) are only the defaults: no ready-made profile sets a row of
--- that page (S.Presets leaves one out and says so).
-
 ns.SETUP_PROFILES = {
 	{ id = "standard", label = "Standard", line = "Every setting at its default, as Jon Default has it.", values = {
 	} },

@@ -1,9 +1,5 @@
 local ADDON_NAME, ns = ...
 
--- The colour picker of the options window: a square for saturation and brightness, a bar for the hue, an optional bar for the opacity, a hex
--- field and the last colours applied. A change shows at once through onChange, Cancel gives the opening colour back and Apply keeps the change
--- and adds it to the recent colours (kept in the account, FlatUIDB.panel.recent). The widgets are the ones of ns.PanelKit.
-
 local Colour = {}
 ns.PanelColour = Colour
 
@@ -19,9 +15,6 @@ local HEX = "^%x%x%x%x%x%x%x%x$"
 local ui
 local state
 
--- Colour maths ------------------------------------------------------------------------------------
-
--- Hue, saturation and brightness (each 0 to 1) of a colour of red, green and blue (0 to 1).
 function Colour.ToHSV(r, g, b)
 	local top, low = math.max(r, g, b), math.min(r, g, b)
 	local spread, hue = top - low, 0
@@ -61,12 +54,10 @@ local function Byte(x)
 	return math.floor(kit.Clamp(x, 0, 1) * 255 + 0.5)
 end
 
--- Red, green, blue and opacity (0 to 1) of an AARRGGBB value.
 local function Split(value)
 	return tonumber(value:sub(3, 4), 16) / 255, tonumber(value:sub(5, 6), 16) / 255, tonumber(value:sub(7, 8), 16) / 255, tonumber(value:sub(1, 2), 16) / 255
 end
 
--- Red, green and blue (0 to 1) of a typed hex: six digits or three, with or without the #. Nil for anything else.
 function Colour.Parse(text)
 	if not kit.IsText(text) then
 		return nil
@@ -81,7 +72,6 @@ function Colour.Parse(text)
 	return Split("ff" .. digits)
 end
 
--- The colours applied before, newest first.
 function Colour.Recent()
 	local store = Look.Store(false)
 	local list = {}
@@ -113,9 +103,6 @@ local function Value()
 	return ("%02x%02x%02x%02x"):format(state.a, state.r, state.g, state.b)
 end
 
--- Drawing ---------------------------------------------------------------------------------------
-
--- A gradient from the low colour (bottom, or left) to the high one. False when the client has none.
 local function Grade(texture, orientation, low, high)
 	if type(CreateColor) ~= "function" or type(texture.SetGradient) ~= "function" then
 		return false
@@ -126,7 +113,6 @@ local function Grade(texture, orientation, low, high)
 	end)
 end
 
--- A check pattern behind an area that shows opacity: a light ground with dark squares on every other cell.
 local function Checker(parent, width, height)
 	local ground = kit.Fill(parent, "BACKGROUND")
 	ground:SetAllPoints(parent)
@@ -149,7 +135,6 @@ local function Checker(parent, width, height)
 	end)
 end
 
--- follow runs on the press and on every frame until the left button is up, while a colour is held.
 local function Dragging(frame, follow)
 	kit.Drag(frame, function()
 		if state then
@@ -158,7 +143,6 @@ local function Dragging(frame, follow)
 	end)
 end
 
--- Where the cursor is over a frame, left to right and bottom to top, 0 to 1. Nil when the client will not say.
 local function Where(frame)
 	local x, y = kit.Cursor()
 	local left, bottom, width, height = kit.Rect(frame)
@@ -184,7 +168,6 @@ local function Thumb(bar)
 	return thumb
 end
 
--- What the pieces show for the colour held: the square, both bars, the hex and the new swatch.
 local function Paint()
 	local r, g, b = state.r / 255, state.g / 255, state.b / 255
 	local hr, hg, hb = Colour.ToRGB(state.h, 1, 1)
@@ -203,7 +186,6 @@ local function Paint()
 	ui.hex:SetText(("#%02X%02X%02X"):format(state.r, state.g, state.b))
 end
 
--- The player changes the colour: the pieces follow and the row is told.
 local function Changed()
 	Paint()
 	if state.onChange then
@@ -211,7 +193,6 @@ local function Changed()
 	end
 end
 
--- The bytes are the colour. The hue stays when the colour has none (grey, black).
 local function FromBytes()
 	local h, s, v = Colour.ToHSV(state.r / 255, state.g / 255, state.b / 255)
 	if s > 0 and v > 0 then
@@ -225,7 +206,6 @@ local function FromHSV()
 	state.r, state.g, state.b = Byte(r), Byte(g), Byte(b)
 end
 
--- Builds the picker once, hidden, over the window.
 local function Build()
 	if ui then
 		return true
@@ -236,7 +216,6 @@ local function Build()
 	end
 	local base = window:GetFrameLevel()
 	ui = {}
-	-- A click outside the picker is Cancel.
 	local shade = kit.Frame(window)
 	shade:SetAllPoints(window)
 	shade:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -270,7 +249,6 @@ local function Build()
 	popup:Hide()
 	ui.popup = popup
 
-	-- The square: the hue at full strength, white fading to nothing from left to right, and black rising from the bottom edge to nothing.
 	local square = kit.Frame(popup)
 	square:SetSize(SQ, SQ)
 	square:SetPoint("TOPLEFT", popup, "TOPLEFT", PAD, -PAD)
@@ -317,7 +295,6 @@ local function Build()
 		end
 	end)
 
-	-- The hue bar: the six steps of the colour wheel, red at the top and again at the bottom.
 	local hue = kit.Frame(popup)
 	hue:SetSize(BAR, SQ)
 	hue:SetPoint("TOPLEFT", square, "TOPRIGHT", 10, 0)
@@ -342,7 +319,6 @@ local function Build()
 		end
 	end)
 
-	-- The opacity bar, over a check pattern: clear at the bottom, full at the top. Only a row that uses the opacity shows it.
 	local bar = kit.Frame(popup)
 	bar:SetSize(BAR, SQ)
 	bar:SetPoint("TOPLEFT", hue, "TOPRIGHT", 10, 0)
@@ -361,7 +337,6 @@ local function Build()
 	ui.alphaText = kit.Dim(kit.Label(popup, "GameFontHighlightSmall", "CENTER", 44))
 	ui.alphaText:SetPoint("TOP", bar, "BOTTOM", 0, -8)
 
-	-- The hex field, and the colour held beside the colour it opened with.
 	ui.hex = kit.Field(popup, 96, 7, function()
 		if state and not Colour.Hex(ui.hex:GetText()) then
 			Paint()
@@ -371,7 +346,6 @@ local function Build()
 	ui.hex:SetScript("OnEnterPressed", function(self)
 		self:ClearFocus()
 	end)
-	-- Escape drops what was typed.
 	ui.hex:SetScript("OnEscapePressed", function(self)
 		if state then
 			Paint()
@@ -438,10 +412,6 @@ local function Build()
 	return true
 end
 
--- Use -------------------------------------------------------------------------------------------
-
--- Opens the picker on an AARRGGBB value. onChange(value) runs on every change and again with the opening value on Cancel. With alpha the
--- opacity bar shows and the opacity is part of the change; without it the opacity of the value stays. False when the window is not there.
 function Colour.Open(value, alpha, onChange)
 	if not kit.IsText(value) or not value:match(HEX) or not Build() then
 		return false
@@ -485,7 +455,6 @@ function Colour.Shown()
 	return state ~= nil
 end
 
--- Sets the colour from red, green, blue (0 to 1) and, when the row uses the opacity, the opacity.
 function Colour.Pick(r, g, b, a)
 	if not state then
 		return
@@ -498,7 +467,6 @@ function Colour.Pick(r, g, b, a)
 	Changed()
 end
 
--- A typed hex. False (and nothing changes) when it is not a colour.
 function Colour.Hex(text)
 	local r, g, b = Colour.Parse(text)
 	if not state or not r then
@@ -517,7 +485,6 @@ local function Close()
 	return was
 end
 
--- Keeps the change and puts the colour among the recent ones.
 function Colour.Apply()
 	if state and ui.hex:HasFocus() then
 		Colour.Hex(ui.hex:GetText())
@@ -531,7 +498,6 @@ function Colour.Apply()
 	end
 end
 
--- Gives the opening colour back.
 function Colour.Cancel()
 	local was = state and Close()
 	if was and was.onChange then
@@ -539,7 +505,6 @@ function Colour.Cancel()
 	end
 end
 
--- The pieces, for the checks.
 function Colour.Parts()
 	return ui
 end

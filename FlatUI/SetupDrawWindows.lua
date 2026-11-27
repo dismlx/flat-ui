@@ -1,13 +1,5 @@
 local _, ns = ...
 
--- Setup drawings for the windows steps: mock-window (Window look and controls, Window backdrops), mock-window-set (Which windows) and mock-bag-slots (Bags and
--- items). Each is { build(stage), draw(stage), parts }. build makes the frames of one drawing on a stage once, all marked ns.Own so that no module restyles them;
--- draw reads only ns.Get and paints the frames again, so run under the draft view it draws the draft. parts maps a saved path to the region of the drawing it
--- changes, for the mark on a hovered row. A frame the windows module would style is drawn in one of two looks: flat (an ns.Outline with the fill the module gives
--- it, FUI/Windows.lua Fill 484-494) or the game's, which is what stays when a switch is off (Windows.lua IsOn 513-516). The game's look is the atlas of the part when
--- C_Texture.GetAtlasInfo answers, else a plain grey, with one Game look label at the corner of the drawing (design.md 4.4).
--- The numbers are fixed samples, drawn at 80 percent of the real size.
-
 local KEY = "windows"
 local Own = ns.Own
 
@@ -15,7 +7,6 @@ local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
 end
 
--- True when the module would restyle a frame: the page is on, the window's switch is on when it has one, and the part's own row is on.
 local function Live(group, option)
 	return Opt("enabled") == true and (group == nil or Opt(group) == true) and (option == nil or Opt(option) == true)
 end
@@ -24,8 +15,6 @@ local EDGE, GREY = { 0.62, 0.62, 0.62 }, { 0.3, 0.3, 0.3 }
 local GOLD, WHITE = { 1, 0.82, 0 }, { 1, 1, 1 }
 local HOVER = { 1, 1, 1, 0.3 }
 local ICONS = { 134400, 135940, 135964, 136089 }
-
--- Frames and regions --------------------------------------------------------------------------------------------------
 
 local function Frame(parent, width, height)
 	local frame = CreateFrame("Frame", nil, parent)
@@ -60,7 +49,6 @@ local function Put(region, point, relative, relativePoint, x, y)
 	region:SetPoint(point, relative, relativePoint or point, x or 0, y or 0)
 end
 
--- A texture over a rectangle of its parent.
 local function Patch(parent, layer, sub, x, y, width, height)
 	local texture = Tex(parent, layer, sub)
 	texture:SetSize(width, height)
@@ -72,7 +60,6 @@ local function Paint(texture, colour, alpha)
 	texture:SetColorTexture(colour[1], colour[2], colour[3], alpha or colour[4] or 1)
 end
 
--- A text at a place on its parent, in a colour.
 local function Label(parent, x, y, width, font, justify, colour)
 	local text = Text(parent, font, justify, width)
 	Put(text, "TOPLEFT", parent, "TOPLEFT", x, -y)
@@ -82,10 +69,6 @@ local function Label(parent, x, y, width, font, justify, colour)
 	return text
 end
 
--- Plates -----------------------------------------------------------------------------------------------------------
-
--- The colour and opacity a kind of fill has in the module: the window colour at the Window opacity, a solid window colour for a menu or list that lies over other
--- windows, or the button and slot colour.
 local function FillOf(kind)
 	if kind == "panel" then
 		local r, g, b = ns.Colour(KEY .. ".panel")
@@ -95,7 +78,6 @@ local function FillOf(kind)
 	return r, g, b, kind == "solid" and 0.95 or Opt("opacity") / 100
 end
 
--- A frame with both looks: an outline for the flat one, two textures for the game's.
 local function Plate(parent, x, y, width, height, fill, bare)
 	local frame = Frame(parent, width, height)
 	Put(frame, "TOPLEFT", parent, "TOPLEFT", x, -y)
@@ -112,7 +94,6 @@ local function Plate(parent, x, y, width, height, fill, bare)
 	return plate
 end
 
--- True while a drawing has a part in the game's look; the Game look label shows then.
 local gameShown = false
 
 local function AtlasAnswers(atlas)
@@ -124,7 +105,6 @@ local function AtlasAnswers(atlas)
 	return ok and type(info) == "table" and not ns.IsSecret(info)
 end
 
--- Draws a plate flat, or in the game's look: the atlas of the part when the client answers for it, else a plain grey.
 local function Look(plate, flat, atlas)
 	if flat then
 		if plate.bare then
@@ -151,7 +131,6 @@ local function Look(plate, flat, atlas)
 	end
 end
 
--- Glyphs: a chevron, a cross or a tick of two lines, as the module draws them (Windows.lua SHAPES 396-403, Glyph 413-425).
 local SHAPES = {
 	x = { { -1, 1, 1, -1 }, { -1, -1, 1, 1 } },
 	up = { { -1, -0.5, 0, 0.5 }, { 0, 0.5, 1, -0.5 } },
@@ -182,7 +161,6 @@ local function Shape(glyph, shape, colour, alpha, shown, size)
 	end
 end
 
--- The title of a window: size and colour from the rows when the module restyles the window, else the game's.
 local function Title(text, flat)
 	local spec = {}
 	if flat then
@@ -195,7 +173,6 @@ local function Title(text, flat)
 	ns.TextStyle(text, spec)
 end
 
--- The colour of an item quality, the game's when it answers (Items.lua LevelColour 232-252).
 local QUALITY = { [0] = { 0.62, 0.62, 0.62 }, { 1, 1, 1 }, { 0.12, 1, 0 }, { 0, 0.44, 0.87 }, { 0.64, 0.21, 0.93 } }
 
 local function QualityColour(quality)
@@ -214,7 +191,6 @@ local function Crop(texture, fraction)
 	texture:SetTexCoord(fraction, 1 - fraction, fraction, 1 - fraction)
 end
 
--- The two notes at the foot of a drawing: the size it is shown at, and Game look while any part is left to the game.
 local function Notes(S, root)
 	S.size = Label(root, 0, 0, 200, nil, "RIGHT", { 0.7, 0.7, 0.7 })
 	Put(S.size, "TOPRIGHT", root, "BOTTOMRIGHT", 0, -4)
@@ -237,9 +213,6 @@ local function Register(id, drawing)
 	ns.SetupDrawings[id] = drawing
 end
 
--- mock-window -----------------------------------------------------------------------------------------------------------
-
--- The icon side of a side tab for each size, as drawn here: the module's 42, 36 and 30 and the game's 50 (Windows.lua TAB_ICONS 786), at 0.8 like the rest of the drawing.
 local TAB_SIDE = { game = 40, large = 34, medium = 29, small = 24 }
 local TAB_GAME_W, TAB_GAME_H = 44, 48
 local CORNERS = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }
@@ -249,7 +222,6 @@ local function BuildChrome(S, win)
 	S.title = Label(frame, 0, 0, 200, "GameFontNormal", "CENTER")
 	Put(S.title, "TOP", frame, "TOP", 0, -8)
 	S.title:SetText("Mail")
-	-- The game's round picture at the top left.
 	local portrait = Frame(frame, 30, 30)
 	Put(portrait, "TOPLEFT", frame, "TOPLEFT", 6, -6)
 	local picture = Tex(portrait, "ARTWORK", 0)
@@ -259,14 +231,12 @@ local function BuildChrome(S, win)
 		pcall(SetPortraitTexture, picture, "player")
 	end
 	S.portrait = portrait
-	-- Close button.
 	S.close = Plate(frame, 272, 6, 18, 18, "panel", true)
 	S.closeGlyph = Glyph(S.close.frame, S.close.frame, 10)
 end
 
 local function BuildControls(S, win)
 	local frame = win.frame
-	-- Text box and dropdown.
 	S.edit = Plate(frame, 12, 46, 150, 20, "panel")
 	S.editText = Label(S.edit.frame, 6, 4, 130, nil, "LEFT", WHITE)
 	S.editText:SetText("Priestly")
@@ -275,16 +245,13 @@ local function BuildControls(S, win)
 	S.dropText:SetText("All")
 	S.dropArrow = Glyph(S.drop.frame, S.drop.frame, 8, 62, 0)
 	S.dropBox = Patch(S.drop.frame, "ARTWORK", 1, 130, 2, 18, 16)
-	-- Check box.
 	S.check = Plate(frame, 12, 100, 16, 16, "panel")
 	S.tick = Patch(S.check.frame, "OVERLAY", 1, 4, 4, 8, 8)
 	S.checkText = Label(frame, 34, 102, 100, nil, "LEFT", WHITE)
 	S.checkText:SetText("Auto")
-	-- Progress bar.
 	S.bar = Plate(frame, 12, 124, 150, 14, "window")
 	S.barFill = Patch(S.bar.frame, "ARTWORK", 0, 0, 0, 96, 14)
 	Paint(S.barFill, { 0.15, 0.6, 0.25 })
-	-- Buttons, the first with the pointer over it.
 	S.accept = Plate(frame, 12, 146, 70, 20, "panel")
 	S.acceptText = Label(S.accept.frame, 0, 4, 70, nil, "CENTER", WHITE)
 	S.acceptText:SetText("Accept")
@@ -292,7 +259,6 @@ local function BuildControls(S, win)
 	S.cancel = Plate(frame, 92, 146, 70, 20, "panel")
 	S.cancelText = Label(S.cancel.frame, 0, 4, 70, nil, "CENTER", WHITE)
 	S.cancelText:SetText("Cancel")
-	-- Two item slots with a picture each.
 	S.slots = {}
 	for index = 1, 2 do
 		local slot = Plate(frame, 176 + (index - 1) * 36, 46, 30, 30, "panel")
@@ -300,7 +266,6 @@ local function BuildControls(S, win)
 		slot.icon:SetTexture(ICONS[index + 1])
 		S.slots[index] = slot
 	end
-	-- Scroll bar.
 	local scroll = Frame(frame, 14, 106)
 	Put(scroll, "TOPLEFT", frame, "TOPLEFT", 264, -44)
 	S.scroll = scroll
@@ -339,7 +304,6 @@ local function BuildTabs(S, win)
 end
 
 local function BuildLists(S, root)
-	-- A right-click menu, a name completion list and a toast.
 	S.menu = Plate(root, 346, 0, 100, 58, "solid")
 	S.menuLines = {}
 	for index, name in ipairs({ "Whisper", "Invite", "Ignore" }) do
@@ -358,7 +322,6 @@ local function BuildLists(S, root)
 	S.toastHead:SetText("Battle.net")
 	S.toastBody = Label(S.toast.frame, 8, 21, 84, nil, "LEFT", WHITE)
 	S.toastBody:SetText("Mara is online")
-	-- A list with a header and two lines, the second with the pointer over it.
 	S.header = Plate(root, 346, 66, 312, 16, "panel")
 	S.headerText = {}
 	for index, spot in ipairs({ { 8, "Name" }, { 170, "Level" }, { 230, "Zone" } }) do
@@ -434,7 +397,6 @@ local function BuildWindow(stage)
 	return S
 end
 
--- The window is titled Mail, so it is restyled only while the group of vendor, mail, quest, trade and trainer windows is on (Windows.lua IsOn 513-516).
 local function Mail(option)
 	return Live("npc", option)
 end
@@ -470,14 +432,12 @@ local function DrawControls(S)
 	local r, g, b = ns.Colour(KEY .. ".accent")
 	S.acceptHover:SetColorTexture(r, g, b, 0.25)
 	S.acceptHover:SetShown(flat)
-	-- Item slots.
 	flat = Mail("slots")
 	local crop = flat and Opt("crop") / 100 or 0
 	for _, slot in ipairs(S.slots) do
 		Look(slot, flat)
 		Crop(slot.icon, crop)
 	end
-	-- Scroll bar.
 	flat = Mail("scroll")
 	if flat then
 		Paint(S.track, { 0, 0, 0 }, 0.3)
@@ -505,7 +465,6 @@ local function DrawTabs(S)
 	local r, g, b = ns.Colour(KEY .. ".accent")
 	S.tabHover:SetColorTexture(r, g, b, 0.25)
 	S.tabHover:SetShown(flat)
-	-- Side tabs: a flat box round the icon at the chosen size, or the game's larger tab.
 	flat = Mail("sideTabs")
 	local square = flat and Opt("squareTabs") == true
 	local side = TAB_SIDE[Opt("sideTabSize")] or TAB_SIDE.game
@@ -562,7 +521,6 @@ local function DrawLists(S)
 	end
 end
 
--- The game's picture shows when the window is left to the game or the row asks for it (Windows.lua Kind fades 690-700).
 local function ArtShown(group, option)
 	return not Live(group) or Opt(option) == true
 end
@@ -605,7 +563,6 @@ function window.draw(stage)
 		return
 	end
 	Begin()
-	-- Window size (Positions page) sets the size of the windows the add-on moves; the drawing follows it.
 	local percent = ns.Get("movers.windowSize")
 	percent = type(percent) == "number" and percent > 0 and percent or 100
 	S.win.frame:SetScale(percent / 100)
@@ -620,9 +577,6 @@ end
 
 Register("mock-window", window)
 
--- mock-window-set -----------------------------------------------------------------------------------------------------
-
--- Each kind of window by the saved key of its switch, and the name under it.
 local SET = {
 	{ "character", "Character" }, { "groupfinder", "Looking For Group" }, { "social", "Friends" }, { "npc", "Vendor and mail" },
 	{ "bags", "Bags and bank" }, { "spells", "Spellbook" }, { "menus", "Game menu" }, { "auction", "Auction house" },
@@ -682,9 +636,6 @@ end
 
 Register("mock-window-set", set)
 
--- mock-bag-slots -------------------------------------------------------------------------------------------------------------
-
--- Samples: quality 0 to 4, stack count, item level, and the flags j (poor item with a vendor price) and n (new item).
 local ITEMS = {
 	{ 2, nil, 23 }, { 1, 12 }, { 4, nil, 41 }, { 0, nil, nil, "j" }, { 3, nil, 36 }, { 1, 20 }, { 2, 5 }, { 0, 3, nil, "j" },
 	{ 2, nil, 21, "n" }, { 3, nil, 34 }, { 1 }, { 4, nil, 45 }, { 1, 8 }, { 2, nil, 26 }, { 3, 2 }, { 0, nil, nil, "j" },
@@ -769,7 +720,6 @@ local function BuildBags(stage)
 	return S
 end
 
--- One slot in a window at a place: flat or the game's, with the border, glow, dim, count and item level the rows give it.
 local function DrawSlot(slot, flat, bag)
 	local live = Opt("enabled") == true
 	local quality, count, level, flags = slot.sample[1], slot.sample[2], slot.sample[3], slot.sample[4]

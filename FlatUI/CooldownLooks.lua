@@ -1,33 +1,5 @@
 local _, ns = ...
 
--- The rows and the per-icon looks of Cooldown icons, beside Cooldowns.lua, which lays the rows out and reads this file through ns.CooldownShared.
--- Show rules: each row has When it shows, Always (the default), In combat, Out of combat, In a group, In a dungeon or raid or Not mounted, asked as
--- Fading asks its When shown rules (Fade.lua:183-253) and as EnhanceQoL's panels ask their visibility rules (EnhanceQoL/EnhanceQoL.lua:880-884,
--- 904-928, 1290-1345; CooldownPanels.lua:26942-27267). A row the rule hides has no opacity and takes no mouse; Row opacity out of combat, Hide while
--- mounted and Hide in cities and inns still apply to every row.
--- Row of one icon puts an icon on row 2, 3 or 4, and When one icon shows makes one icon show As its row, Only on cooldown, Only when ready, or always
--- with a border in Border on cooldown colour while it cools down: two lists of one icon, as Sound of one icon is, saved per character in
--- FlatUICharDB.cooldownRowOf and FlatUICharDB.cooldownShowOf by the key of the icon's sound. They follow the per-entry hide on cooldown, show on
--- cooldown and border visibility of EnhanceQoL's Cooldown Panels (CooldownPanels.lua:8932-8941, 13490-13497, 29559-29576).
--- Glow when ready: a pulsing border of Flat UI's own round an icon from the end of its cooldown until it is used, as EnhanceQoL's ready glow stays
--- on until the cooldown runs again (CooldownPanels.lua:10679-10703, 26692-26760; its glow time is always 0, 28202-28203), in its gold
--- (CooldownPanels_Helper.lua:272-276). Glow on procs: while a proc alert of Trackers is up (Procs.lua starts and stops it through ns.ProcGlowStart and
--- ns.ProcGlowStop, which call ns.CooldownProcs), the icons of the spells it is for, every rank by name, glow in the look Glow style of the Trackers
--- page gives the action button (ProcGlow.lua): Soft, a gold ring of Flat UI's own round the icon that breathes slowly, or As the game has it, the
--- game's proc loop art on a frame of Flat UI's own over the icon, as EnhanceQoL glows an icon while its spell's proc is up (CooldownPanels.lua:8752-8756,
--- 32945-32991); Forever has no spell activation overlay of the game's (Procs.lua:5-7), so Flat UI's own proc alerts say when. Buff time on icons: while the buff a spell or a
--- trinket, gear or item gives is on you, a picture of the icon and a Cooldown of Flat UI's own over it show the time the buff has left with a
--- reverse sweep in Buff time colour at 55%, as EnhanceQoL's spell aura overlay covers its icon (CooldownPanels_AuraContainers.lua:1743-1926;
--- CooldownPanels.lua:10953-11075; CooldownPanels_Helper.lua:25, 340-341). It is read only while the game says the aura of that spell is not secret
--- (C_Secrets.ShouldSpellAuraBeSecret, SecretPredicateAPIDocumentation.lua:139-153): a buff the game hides shows nothing extra, and no value of an
--- aura is read that the game withholds (C_UnitAuras.GetPlayerAuraBySpellID and GetAuraDataBySpellName are SecretWhenUnitAuraRestricted:
--- UnitAuraDocumentation.lua:245-262, 397-412). A frame of this file hears UNIT_AURA for the player only while Buff time on icons is on and an icon has
--- a spell with a buff. These follow the Cooldown Panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
--- Test mode (TestMode.lua) shows every row with sample cooldowns, the last part of this file, and so does the look preview for 4 seconds after a
--- change of a row of the look, out of combat with the options window open and test mode off (ns.CooldownLookChanged).
--- Every frame here is Flat UI's own, made, sized and levelled out of combat when the rows are laid out; in a fight only their alpha, their
--- animations, their Cooldown and Show and Hide change, which the game allows on frames that are not protected, as Cooldowns.lua's sweep and flash do.
-
 local R = ns.CooldownShared
 if type(R) ~= "table" then
 	return
@@ -36,14 +8,6 @@ local KEY = R.KEY
 local IsSecret = ns.IsSecret
 local Opt, Ask, Field, Plain, Whole = R.Get, R.Ask, R.Field, R.Plain, R.Whole
 
--- MAX_ROWS: the rows. SHOWS: the choices of When one icon shows by their line, and what each is called. BACK: the line back to the icons.
--- GLOW_PART, AURA_PART: the parts of the module for /flatui status. PROC: the game's proc loop, a flipbook of 6 rows and 5 columns, 30 pictures in
--- a second, on a frame 1.4 times the size of its button (Blizzard_ActionBar/Shared/ActionButtonSpellAlerts.xml:13 and 24,
--- ActionButtonSpellAlerts.lua:19-20). PULSE: the ready glow from full to 35% and back in half a second, 2 pixels wide. SOFT: the soft proc glow
--- from 25% to 60% and back, 1.2 seconds each way, as on the action button (ProcGlow.lua). AURA_ALPHA: the opacity
--- of the buff time's sweep, EnhanceQoL's (CooldownPanels_Helper.lua:25). TRAVEL: a druid's travel, aquatic and flight form by GetShapeshiftFormID,
--- which count as mounted (Fade.lua:108-109). procs: by the id of a proc alert that is up, the IDs and the names of its spells. rowFor, showFor: the
--- icon whose row or show the list offers next. itemSpells: by item ID, its use spell and the spell's name, or false for an item without one.
 local L = {
 	MAX_ROWS = 4, BACK = -1,
 	SHOWS = { [2] = "cooling", [3] = "ready", [4] = "border" },
@@ -56,15 +20,6 @@ local L = {
 	procs = {}, rowFor = nil, showFor = nil, itemSpells = {}, pending = false, watching = false, playerOnly = false,
 }
 
--- Show rules -------------------------------------------------------------------------------------------------------------------------
-
--- Each rule is true while its row is to show; Always is none. A withheld answer counts as the rule holding, so the row shows, and a call that
--- fails as the rule not holding, as in Fade.lua. In combat is the row's own (PLAYER_REGEN_DISABLED to PLAYER_REGEN_ENABLED, R.Fighting), so the
--- row shows before the lockdown, when its icons can still take the mouse (Cooldowns.lua, Tip.Mouse). In a group is IsInGroup, as the game's
--- group headers ask (Blizzard_RestrictedAddOnEnvironment/SecureGroupHeaders.lua:268). In a dungeon or raid is IsInInstance and its kind, "party"
--- or "raid" (InstanceDocumentation.lua:170-178), as Chat.lua and MeterClear.lua ask it. Not mounted is IsMounted (PlayerScriptDocumentation.lua:
--- 1399-1406) and no travel form (GetShapeshiftFormID, Blizzard_SharedXMLBase/ModelSceneUtil.lua:23), as EnhanceQoL counts the travel form as a
--- mount (EnhanceQoL/EnhanceQoL.lua:880-884). None of these calls marks a return secret.
 local RULES = {}
 
 function RULES.combat()
@@ -113,7 +68,6 @@ function RULES.unmounted()
 	return true
 end
 
--- False while the Show rule of a row hides it (Idle in Cooldowns.lua writes the alpha). Test mode shows every row (R.Testing, below).
 function R.Shows(row)
 	if R.Testing() then
 		return true
@@ -126,7 +80,6 @@ function R.Shows(row)
 	return ok and holds == true
 end
 
--- True while a row that is on has a rule that an event of this file can change.
 local function Ruled()
 	for row = 1, L.MAX_ROWS do
 		if R.RowOn(row) and RULES[R.Opt(row, "show")] then
@@ -136,11 +89,6 @@ local function Ruled()
 	return false
 end
 
--- Row of one icon and When one icon shows -------------------------------------------------------------------------------------------
-
--- A list of one icon per character (FlatUICharDB.cooldownRowOf, FlatUICharDB.cooldownShowOf), by the key of the icon's sound (Cooldowns.lua,
--- SoundKey: its spell, its kind, slot:N for a trinket or gear, item:ID). Nothing is saved for an icon on row 1 or shown as its row, and a table
--- goes with its last entry, as the sounds do.
 local function Saved(name)
 	local saved = ns.Character()
 	local list = saved and saved[name]
@@ -166,7 +114,6 @@ local function Put(name, key, value)
 	end
 end
 
--- The row Row of one icon gives an icon (2 to 4), or nil for row 1.
 function R.Assigned(key)
 	local list = Saved("cooldownRowOf")
 	local row = list and key ~= nil and list[key] or nil
@@ -176,12 +123,10 @@ function R.Assigned(key)
 	return nil
 end
 
--- The row an entry of the list is laid out on; Layout puts it on row 1 while its own row is off.
 function R.RowOf(entry)
 	return R.Assigned(R.KeyOf(entry)) or 1
 end
 
--- What When one icon shows gives an icon: "cooling", "ready", "border", or nil for As its row, which every icon is in test mode.
 function R.ShowOf(record)
 	if R.Testing() then
 		return nil
@@ -194,13 +139,11 @@ function R.ShowOf(record)
 	return nil
 end
 
--- An icon taken off the list takes its row and its show with it.
 function R.Forget(key)
 	Put("cooldownRowOf", key, nil)
 	Put("cooldownShowOf", key, nil)
 end
 
--- ", row 2, only on cooldown" for an icon in /flatui cooldown list.
 function R.Said(key)
 	local text, row = "", R.Assigned(key)
 	if row then
@@ -214,7 +157,6 @@ function R.Said(key)
 	return text
 end
 
--- The icons of the list, and the one chosen first when it is still on the list.
 local function Chosen(wanted)
 	local rows, chosen = R.Entries(), nil
 	for _, row in ipairs(rows) do
@@ -225,8 +167,6 @@ local function Chosen(wanted)
 	return rows, chosen
 end
 
--- Row of one icon is one list for two choices, made again each time it opens: the icons, each with its row when it is not row 1, and once one is
--- chosen, the four rows for it.
 function ns.CooldownRowLines()
 	local rows, chosen = Chosen(L.rowFor)
 	local lines = {}
@@ -245,7 +185,6 @@ function ns.CooldownRowLines()
 	return lines
 end
 
--- Works in combat and with the page off, as Sound of one icon does; the row changes at the next layout, when combat allows.
 function ns.CooldownRowPick(id)
 	local rows, chosen = Chosen(L.rowFor)
 	if not chosen then
@@ -270,7 +209,6 @@ function ns.CooldownRowPick(id)
 	return true, ("%s is on row %d, which is off: until Show row %d is on (Rows 2 to 4), it is on row 1."):format(chosen[2], id, id)
 end
 
--- When one icon shows is the same kind of list: the icons, each with its choice when it has one, and once one is chosen, the four choices.
 function ns.CooldownShowLines()
 	local rows, chosen = Chosen(L.showFor)
 	local lines = {}
@@ -291,7 +229,6 @@ function ns.CooldownShowLines()
 	return lines
 end
 
--- The opacity changes at once, also in combat (Look in Cooldowns.lua); the frame of the border is made at the next layout.
 function ns.CooldownShowPick(id)
 	local rows, chosen = Chosen(L.showFor)
 	if not chosen then
@@ -322,9 +259,6 @@ function ns.CooldownShowPick(id)
 	return true, ("%s shows %s."):format(chosen[2], L.SAID[mode])
 end
 
--- The frames of an icon ---------------------------------------------------------------------------------------------------------------
-
--- An outline of Flat UI's own round a frame, its edges only (Core.lua, ns.Outline); a colour of its own keeps it drawn when Borderless is on.
 local function Ring(frame, px)
 	local outline = ns.Outline(frame, frame)
 	ns.SetOutline(outline, true, false)
@@ -341,7 +275,6 @@ local function Layer(parent)
 	return frame
 end
 
--- A ring that pulses: its frame's alpha goes from full to PULSE_TO and back, an animation of Flat UI's own frame (Cooldowns.lua's flash is one).
 local function Pulse(parent)
 	local holder = Layer(parent)
 	holder:SetAlpha(0)
@@ -368,9 +301,6 @@ local function HasAtlas()
 	return L.atlas
 end
 
--- The proc glow, in two looks made together. As the game has it: the game's proc loop on a frame of Flat UI's own 1.4 times the icon, played by a
--- FlipBook animation of its own texture (SimpleAnimFlipBookAPIDocumentation.lua; the game plays the same atlas so, ActionButtonSpellAlerts.xml:13
--- and 24). Soft: a gold ring round the icon that breathes slowly; a client that has not the atlas or the animation gets it for both.
 local function MakeProc(deco)
 	local frame = CreateFrame("Frame", nil, deco)
 	ns.Own[frame] = true
@@ -418,8 +348,6 @@ local function MakeProc(deco)
 	return proc
 end
 
--- The buff time: a picture of the icon, opaque over the icon and its sweep, and a Cooldown of Flat UI's own over the picture with a reverse sweep.
--- Its countdown has the size, colour, place and tenths of the row's (Cooldowns.lua, NumbersFont and Looks.Numbers, run on its own record look).
 local function MakeAura(record)
 	local frame = CreateFrame("Frame", nil, record.frame)
 	ns.Own[frame] = true
@@ -435,7 +363,6 @@ local function MakeAura(record)
 	cooldown:SetDrawBling(false)
 	cooldown:SetReverse(true)
 	local aura = { frame = frame, texture = texture, cooldown = cooldown, look = { cooldown = cooldown } }
-	-- The buff ran out between two readings.
 	cooldown:SetScript("OnCooldownDone", function()
 		aura.key = nil
 		frame:Hide()
@@ -443,8 +370,6 @@ local function MakeAura(record)
 	return aura
 end
 
--- The spell whose buff an icon shows: a spell icon's own, and an item's use (C_Item.GetItemSpell, ItemDocumentation.lua:970-985: its name, then
--- its ID), kept once the game has said; nothing for a potion or a healthstone, whose kinds give no buff. The name finds another rank.
 local function AuraSpell(record)
 	if record.kind then
 		return nil
@@ -477,9 +402,6 @@ local function AuraSpell(record)
 	return nil
 end
 
--- The frames an icon needs now, made the first time and kept, then sized and levelled: Layout calls these out of combat for each icon of a row.
--- Over the icon's texts (record.top, at level t) the buff time at t + 1 and its Cooldown at t + 2, then the glows at t + 3: the interrupt border
--- of Interrupt.lua is at t + 1, outside the icon, and stays under the glows.
 local function Decorate(record, size)
 	local level = Ask(record.top.GetFrameLevel, record.top)
 	level = Plain(level, "number") and level or 0
@@ -532,7 +454,6 @@ local function DecorateAura(record)
 		ns.EachPart(KEY, R.NUMBERS_PART, R.Numbers, aura.look)
 		local crop = R.Crop()
 		aura.texture:SetTexCoord(crop, 1 - crop, crop, 1 - crop)
-		-- The icon may show another spell or item now: the next reading sets the buff again.
 		aura.key = nil
 	end
 end
@@ -546,11 +467,6 @@ function R.Decorate(record, size)
 	end
 end
 
--- The glows ---------------------------------------------------------------------------------------------------------------------------
-
--- Shows a frame of the glows while it is wanted and the icon is in its state: cooling for Border on cooldown, ready for the ready glow. A state the
--- game withholds goes to SetAlphaFromBoolean unread (SimpleFrameAPIDocumentation.lua:1145-1155), as the opacity of the icon does (Look). True while
--- the frame may show.
 local function ByState(frame, wanted, onCooldown, cooling, secret, active)
 	if not wanted then
 		frame:SetAlpha(0)
@@ -569,7 +485,6 @@ local function ByState(frame, wanted, onCooldown, cooling, secret, active)
 	return on
 end
 
--- A proc alert that is up and lights the spell of an icon: by the spell's ID or by its name, so every rank glows.
 local function ProcUp(spellID)
 	if next(L.procs) == nil then
 		return false
@@ -583,7 +498,6 @@ local function ProcUp(spellID)
 	return false
 end
 
--- The look of a glow that is on: the game's loop with Glow style As the game has it, while the client has it, else the soft ring.
 local function ProcLook(proc)
 	return proc.game and ns.Get("trackers.glowStyle") == "game" and "game" or "soft"
 end
@@ -610,7 +524,6 @@ local function Proc(record)
 	end
 	if look == "soft" then
 		proc.ring:Show()
-		-- Resumes where it was held, so a proc that comes again carries on.
 		proc.soft:Play()
 	else
 		if look == "game" then
@@ -623,7 +536,6 @@ local function Proc(record)
 	proc.frame:SetShown(look ~= false)
 end
 
--- Takes every glow of an icon away, for a part that stopped on errors.
 local function Off(record)
 	if record.cool then
 		pcall(record.cool.frame.SetAlpha, record.cool.frame, 0)
@@ -662,7 +574,6 @@ local function Glows(record, borderOn, cooling, secret, active)
 	end
 end
 
--- Look in Cooldowns.lua runs this for every icon each time its state is drawn, also in a fight.
 function R.Glows(record, borderOn, cooling, secret, active)
 	if ns.PartStopped(KEY, L.GLOW_PART) then
 		Off(record)
@@ -671,8 +582,6 @@ function R.Glows(record, borderOn, cooling, secret, active)
 	ns.EachPart(KEY, L.GLOW_PART, Glows, record, borderOn, cooling, secret, active)
 end
 
--- Procs.lua's alerts, through ProcGlow.lua: on is true when one starts and false when it ends. The alerts are kept whatever the page says, so the
--- glow is right as soon as the rows show; the icons on the screen take it now, in a fight too.
 function ns.CooldownProcs(entry, on)
 	if type(entry) ~= "table" or entry.id == nil then
 		return
@@ -697,8 +606,6 @@ function ns.CooldownProcs(entry, on)
 	ns.CooldownProcLook()
 end
 
--- The icons on the screen take the proc alerts that are up and the look of Glow style, now, in a fight too: also when that row changes
--- (ProcGlow.lua, ns.ProcGlowChanged).
 function ns.CooldownProcLook()
 	if not ns.Enabled(KEY) or ns.PartStopped(KEY, L.GLOW_PART) then
 		return
@@ -710,10 +617,6 @@ function ns.CooldownProcLook()
 	end
 end
 
--- The buff time ------------------------------------------------------------------------------------------------------------------------
-
--- True while the game says an aura of the spell would not be secret (C_Secrets.ShouldSpellAuraBeSecret); without the call, out of combat, as
--- Trackers.lua asks (IsHidden).
 local function Readable(id)
 	local call = type(C_Secrets) == "table" and C_Secrets.ShouldSpellAuraBeSecret
 	if type(call) ~= "function" then
@@ -723,7 +626,6 @@ local function Readable(id)
 	return ok and not IsSecret(secret) and secret == false
 end
 
--- True while auras are not secret in general (C_Secrets.ShouldAurasBeSecret, SecretPredicateAPIDocumentation.lua:119-127), for the reading by name.
 local function Open()
 	local call = type(C_Secrets) == "table" and C_Secrets.ShouldAurasBeSecret
 	if type(call) ~= "function" then
@@ -733,7 +635,6 @@ local function Open()
 	return ok and not IsSecret(secret) and secret == false
 end
 
--- When an aura ends, how long it lasts and how fast its time runs, from plain numbers alone; nothing for a buff with no end.
 local function Times(aura)
 	if IsSecret(aura) or type(aura) ~= "table" then
 		return nil
@@ -745,8 +646,6 @@ local function Times(aura)
 	return nil
 end
 
--- The buff of an icon's spell on the player: by the spell's ID (C_UnitAuras.GetPlayerAuraBySpellID), else by its name among the player's buffs
--- (GetAuraDataBySpellName with HELPFUL), as Trackers.lua reads a buff (ns.AuraReading).
 local function Read(record)
 	local id, name = AuraSpell(record)
 	local units = C_UnitAuras
@@ -771,7 +670,6 @@ local function Read(record)
 	return nil
 end
 
--- The buff time of one icon: shown with the time left while its buff can be read, hidden otherwise. The Cooldown is set only when the buff changed.
 local function Aura(record)
 	local aura = record.aura
 	if not aura then
@@ -821,7 +719,6 @@ local function AuraAll()
 	end
 end
 
--- UNIT_AURA comes often in a fight: the icons are read once on the next frame however many come.
 local function Soon()
 	if L.pending then
 		return
@@ -840,8 +737,6 @@ local function Soon()
 	end
 end
 
--- The frame that hears the player's UNIT_AURA, only while an icon shows buff time (RegisterUnitEvent for the player, as Defensives.lua hears it;
--- every unit's, read for the player alone, on a client without it).
 local function Watch()
 	local want = false
 	if ns.Enabled(KEY) and Opt("auraTime") == true and not ns.PartStopped(KEY, L.AURA_PART) then
@@ -874,7 +769,6 @@ local function Watch()
 	L.watching = want
 end
 
--- After each layout of the rows: the proc glow and the buff time of the icons as they are now.
 function R.AfterLayout()
 	if not ns.PartStopped(KEY, L.GLOW_PART) then
 		for _, record in ipairs(R.Shown()) do
@@ -887,21 +781,6 @@ function R.AfterLayout()
 	AuraAll()
 end
 
--- Test mode (TestMode.lua) --------------------------------------------------------------------------------------------------------------
--- While it is on, out of combat, with the page on: every row shows whatever its rule (R.Shows), each icon as its row (R.ShowOf), a row that is on
--- and has no icon holds the three samples of IconRow.lua (R.Samples, laid out by Cooldowns.lua), and each icon draws a sample cooldown in place of
--- its own (Update in Cooldowns.lua asks R.Held first): 6 to 15 seconds by its place, started at staggered moments, then ready for a moment and
--- started again by the ticker of test mode while Moving is on (H.Tick), so the dimming, the opacities, the border colours, the flash and the glows
--- show as in play. The first icon stays ready, with Glow when ready when that is on. The icon of the class interrupt (CooldownData.lua, every rank
--- and name) has the gold border Interrupt.lua gives it while an enemy casts, with Glow on your interrupt on: a ring of this file's own in the same
--- gold and width. No ready sound plays and no cooldown of the game's is asked for (Ready and Recheck in Cooldowns.lua wait); the counts keep what
--- they showed. Off and a fight end it: the next Update draws each icon from the game again and the layout after it takes the samples away.
--- The look preview: out of combat, with the options window open and test mode off, a change of a row of the look (ns.CooldownLookChanged, the
--- changed of those rows in Config.lua) shows the same samples for PREVIEW seconds, as test mode draws them, and a change while it is up keeps it up
--- until PREVIEW seconds after the last one, with the same sweeps (its token). Its end, a fight and test mode coming on take it away; the icons it
--- held forget they were dimmed, so the real icons come back with no flash and no ready sound.
--- READY: the seconds a sample stays ready before its sweep starts again. PX: the width of the interrupt's border, Interrupt.lua's. preview: the
--- preview that is up, { token, ends }, or nil; token: the count of previews, for the epoch of their samples.
 local H = { READY = 1.5, PX = 2, PREVIEW = 4, interrupts = nil, preview = nil, token = 0 }
 
 local function TestOn()
@@ -909,7 +788,6 @@ local function TestOn()
 	return type(test) == "table" and test.IsOn() == true
 end
 
--- The epoch of the samples: test mode's, else the preview's.
 local function Epoch()
 	if TestOn() then
 		return ns.TestMode.Epoch()
@@ -924,7 +802,6 @@ function R.Testing()
 	return TestOn() or (H.preview ~= nil and GetTime() < H.preview.ends)
 end
 
--- Every icon the samples held forgets that it was dimmed, so the real look comes back with no flash, and Ready plays nothing for it.
 local function Forget()
 	for _, record in ipairs(R.Shown()) do
 		if record.held then
@@ -942,7 +819,6 @@ local function PreviewEnd()
 	ns.RefreshModule(KEY)
 end
 
--- The changed of the look rows: the module is refreshed as for any row, with the preview up first when it can be.
 function ns.CooldownLookChanged()
 	if not InCombatLockdown() and ns.Enabled(KEY) and type(ns.PanelShown) == "function" and ns.PanelShown() and not TestOn()
 		and C_Timer ~= nil and C_Timer.After ~= nil then
@@ -967,7 +843,6 @@ function ns.CooldownLookChanged()
 	ns.RefreshModule(KEY)
 end
 
--- Each row that is on and has no icon gets the three samples, while test mode is on.
 function R.Samples(lists)
 	if not R.Testing() then
 		return
@@ -979,7 +854,6 @@ function R.Samples(lists)
 	end
 end
 
--- The spell IDs and names of the interrupts of the player's class, as Interrupt.lua finds them (ns.ABILITIES of the kind "interrupt").
 local function Interrupts()
 	if H.interrupts then
 		return H.interrupts
@@ -1010,7 +884,6 @@ local function Interrupts()
 	return set
 end
 
--- The gold border of the interrupt in test mode: a ring of this file's own over the icon's texts, made the first time.
 local function Border(record, on)
 	local ring = record.heldRing
 	if on and not ring then
@@ -1035,7 +908,6 @@ local function IsInterrupt(spell)
 	return set.ids[spell] == true or (name ~= nil and set.names[name] == true)
 end
 
--- Draws the sample of an icon and answers true while test mode is on; else takes the sample away and answers false.
 function R.Held(record)
 	if not R.Testing() then
 		if record.held then
@@ -1068,14 +940,13 @@ function R.Held(record)
 		pcall(cooldown.Clear, cooldown)
 	end
 	if record.sample then
-		record.count:SetText("")
+		record.count:SetText(record.sample == 3 and Opt("useCount") == true and "5" or "")
 	end
 	R.Look(record, cooling, false, nil)
 	Border(record, IsInterrupt(record.spell))
 	return true
 end
 
--- The ticker of test mode, while Moving is on: a sweep that has ended shows ready for READY seconds, then starts again.
 function H.Tick(now)
 	if not R.Testing() then
 		return
@@ -1105,7 +976,6 @@ ns.TestMode.Register(KEY, {
 	every = 0.5,
 	Tick = H.Tick,
 })
--- Test mode coming on takes the preview's place: its own refresh draws its samples.
 ns.TestMode.Watch(function(on)
 	if on and H.preview then
 		Forget()
@@ -1116,7 +986,6 @@ ns.AddEvent(KEY, "PLAYER_REGEN_DISABLED", PreviewEnd, function()
 	return H.preview ~= nil
 end)
 
--- The events: the rules of a group, an instance and a travel form change with these, and a fight can make a buff secret or plain again.
 for _, event in ipairs({ "GROUP_ROSTER_UPDATE", "ZONE_CHANGED_NEW_AREA", "UPDATE_SHAPESHIFT_FORM" }) do
 	ns.AddEvent(KEY, event, function()
 		R.Idle()
@@ -1128,7 +997,6 @@ for _, event in ipairs({ "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
 	end)
 end
 
--- /flatui status: the rows that are on, a row its rule hides now, and how many proc alerts and buffs show.
 ns.AddStatus(KEY, function()
 	local lines = {}
 	if R.hidden[1] then

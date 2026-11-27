@@ -1,35 +1,9 @@
 local _, ns = ...
 
--- The large art beside the character while a proc is up. The game's own overlay (SpellActivationOverlay.lua) is not built in Forever
--- (Blizzard_FrameXML.toc:109-110), so the pieces are drawn here on frames of the addon, laid out as the game lays them out
--- (SpellActivationOverlay.lua:75-127): a holder of 204.8 square at the middle of the box Proc art of /flatui move (FlatUIProcArt, Movers.lua; the
--- middle of the screen until it is moved), raised by Art height, a piece 102.4 by 204.8 to the left of it, its
--- mirror to the right, 204.8 by 102.4 above and below, 102.4 square at the corners, all times Art size, which is 150% by default (the game's
--- is 100%), and the holder at Art opacity, 40% by default (the game's is 65%), so the art is large and faint. With Glow style Soft (the
--- default) a piece fades in over 0.4 s and pulses gently while the proc is up, 1.035 times and back over a second each way; with As the game
--- has it it fades in over 0.2 s and pulses as the game's does, 1.08 times and back over half a second each way (SpellActivationOverlay.xml:3-24).
--- Either way it fades out over 0.1 s. Each piece has both looks made with it and plays the one the row asks for. Procs.lua calls
--- ns.ProcArtShow when a proc comes up, with again true when the same proc came again soon after it ended (then the art is there at once,
--- with no fade-in), and ns.ProcArtHide when it ends. Every call here is a frame, texture or animation call on a frame of the addon that is not
--- protected, so all of it is allowed in combat; the holder is made out of combat like every Flat UI frame. A change of Art beside the character,
--- Art size, Art opacity or Art height with the options window open shows the first proc of the class for 4 s (ns.ProcPreview, Procs.lua).
--- A second way to draw, for a proc whose buff the game hides in a fight: ns.ProcArtParts makes the same pieces as textures that are children of
--- the button of the game's own icon of the buff (TrackerSlots.lua), inside the function the game calls while it builds the slot. The game shows
--- that button exactly while the buff is up, so these pieces show exactly then. While that icon is on show the pieces of the holder stay hidden.
--- The art of the class data (ProcData.lua) is the client's own overlay art, drawn by FileDataID, white unless the row gives a colour or the proc
--- has a colour of its own, at the row's scale and opacity; side art turned a quarter for the Top is drawn with the eight corners of SetTexCoord.
--- A proc with no art of its own has the plain arc in the proc's colour.
-
 local KEY = "trackers"
 local IsSecret = ns.IsSecret
--- The box of the art in /flatui move.
 local MOVER = "FlatUIProcArt"
 
--- LONG, SHORT: the long and short side of a piece, units. FADE_IN, FADE_OUT, PULSE_UP, PULSE_DOWN, PULSE_TIME: the game's animation.
--- SOFT_FADE_IN, SOFT_UP, SOFT_DOWN, SOFT_TIME: the softer one of Glow style Soft. SIZE, ALPHA: Art size and Art opacity when the row gives no
--- number. MAX: procs drawn at once. POOL: pieces made with the holder. ARC: the plain arc of a proc with no art. FALLBACK: the colour when nothing
--- gives one. SIDES: pieces of a location that stands for two. NAMES: what the check says. BY_NUMBER: Enum.ScreenLocationType by value
--- (ScreenLocationConstantsDocumentation.lua:13-24).
 local K = {
 	LONG = 204.8, SHORT = 102.4,
 	FADE_IN = 0.2, FADE_OUT = 0.1, PULSE_UP = 1.08, PULSE_DOWN = 0.9259, PULSE_TIME = 0.5,
@@ -50,8 +24,6 @@ local K = {
 	MAX_SCALE = 5, MAX_SECONDS = 120,
 }
 
--- GEOMETRY: by piece, its width and height in units, the point of the piece and the point of the holder it hangs on, the offset along x,
--- whether the picture is mirrored across or down, and the way a second proc on the same place moves out (dx, dy: -1, 0 or 1).
 local G = {
 	Center = { w = K.LONG, h = K.LONG, point = "CENTER", rel = "CENTER", x = 0, dx = 0, dy = 1 },
 	Left = { w = K.SHORT, h = K.LONG, point = "RIGHT", rel = "LEFT", x = 0, dx = -1, dy = 0 },
@@ -64,9 +36,6 @@ local G = {
 	TopLeft = { w = K.SHORT, h = K.SHORT, point = "BOTTOMRIGHT", rel = "TOPLEFT", x = 0, dx = -1, dy = 0 },
 }
 
--- holder: the frame everything hangs on, made out of combat. pool: pieces not in use. ups: the procs drawn, in the order they came up.
--- fading: pieces that are fading out. last: what each entry was last drawn with, for the check. PlaceHolder is declared here and made below, so
--- ns.ProcArtMoved, which comes before it, calls the local and not a global.
 local holder, PlaceHolder
 local pool, ups, fading, last = {}, {}, {}, {}
 
@@ -86,7 +55,6 @@ local function On()
 	return ns.Get(KEY .. ".art") == true
 end
 
--- The look of the art's animation: "game" with Glow style As the game has it, else "soft".
 local function Look()
 	return ns.Get(KEY .. ".glowStyle") == "game" and "game" or "soft"
 end
@@ -95,26 +63,20 @@ function ns.ProcArtOn()
 	return On()
 end
 
--- The gate of the box Proc art in /flatui move: the Trackers page and Art beside the character are on.
 function ns.ProcArtShown()
 	return ns.Enabled(KEY) and On()
 end
 
--- The box Proc art was moved or put back: the holder goes to its new spot.
 function ns.ProcArtMoved()
 	if holder then
 		PlaceHolder()
 	end
 end
 
--- The pieces a location stands for.
 local function Locations(location)
 	return K.SIDES[location] or { location }
 end
 
--- What a proc is drawn with, from what Procs.lua gives: the file, the location, the scale, the colour, the opacity of the art (alpha), its
--- quarter turn (turn 1 clockwise, -1 the other way), whether it pulses and how many seconds it shows. A proc with no file is the arc on the left
--- and the right. A location the game does not have is left and right.
 local function Normalise(data)
 	data = type(data) == "table" and data or {}
 	local file, location, scale = data.file, data.location, data.scale
@@ -151,7 +113,6 @@ local function Normalise(data)
 		seconds = seconds }
 end
 
--- The proc's colour (ns.ProcColour, Procs.lua: its own, else the page's, else gold), or nil.
 local function ProcRgb(entry)
 	if type(ns.ProcColour) == "function" then
 		local ok, r, g, b = pcall(ns.ProcColour, entry)
@@ -162,8 +123,6 @@ local function ProcRgb(entry)
 	return nil
 end
 
--- The colour of a proc's art. A colour the proc has of its own (/flatui tracker proc colour) tints any art; the plain arc takes the proc's colour;
--- the game's own art is white, as the game draws it, unless it came with a colour (Victory Rush is red).
 local function ColourOf(entry, art)
 	local own = type(entry) == "table" and entry.colour
 	if (Plain(own, "string") or art.arc) and ProcRgb(entry) then
@@ -178,9 +137,6 @@ local function ColourOf(entry, art)
 	return 1, 1, 1
 end
 
--- The corners of the picture of a piece: mirrored across or down as the geometry says, and turned a quarter as the art says, with the eight
--- corners SetTexCoord takes (upper left, lower left, upper right, lower right, each x and y), the turn SpellActivationOverlay by ennvina gives
--- its locations "(CW)" and "(CCW)" (SpellActivationOverlay.lua, SpellActivationOverlay_ShowOverlay, MIT licence; README.md, Credits).
 local function Corners(texture, g, turn)
 	local left, right = g.flipH and 1 or 0, g.flipH and 0 or 1
 	local top, bottom = g.flipV and 1 or 0, g.flipV and 0 or 1
@@ -192,8 +148,6 @@ local function Corners(texture, g, turn)
 		texture:SetTexCoord(left, right, top, bottom)
 	end
 end
-
--- The pieces ---------------------------------------------------------------------------------------------------------------------
 
 local function Release(piece)
 	piece.live = false
@@ -208,7 +162,6 @@ local function Release(piece)
 	pool[#pool + 1] = piece
 end
 
--- A pulse of a piece: up by `up`, then by `down` back to its size, `seconds` each, eased at both ends, again and again.
 local function Pulse(piece, up, down, seconds)
 	local group = piece:CreateAnimationGroup()
 	group:SetLooping("REPEAT")
@@ -223,7 +176,6 @@ local function Pulse(piece, up, down, seconds)
 	return group
 end
 
--- A fade-in of a piece over `seconds`, then its pulse while the proc is up and the art pulses.
 local function FadeIn(piece, seconds, pulse)
 	local group = piece:CreateAnimationGroup()
 	local fadeIn = group:CreateAnimation("Alpha")
@@ -242,7 +194,6 @@ local function FadeIn(piece, seconds, pulse)
 	return group
 end
 
--- Gives a piece the fade-in and the pulse of a look (piece.animIn, piece.pulse); those of the other look stop.
 local function UseLook(piece, look)
 	piece.look = look
 	for name, set in pairs(piece.looks) do
@@ -291,8 +242,6 @@ local function Acquire()
 	return piece
 end
 
--- Where the pieces of a proc go and how large: the game's place for the first proc, moved out by a piece for the second, and above
--- for the third. The offset of an outside piece is the game's, a short side, and is not scaled.
 local function Spot(name, art, slot)
 	local g = G[name]
 	local size = Setting("artSize", K.SIZE) / 100 * art.scale
@@ -319,15 +268,12 @@ local function Place(piece, name, art, slot)
 	piece.tex:SetAlpha(art.alpha)
 end
 
--- True while the game's own icon of the proc is on show with the art made on its button, so the pieces of the holder are not drawn twice.
 local function GameIcon(entry)
 	local slots = ns.TrackerSlots
 	local call = type(slots) == "table" and slots.InUse
 	return type(call) == "function" and call(entry) == true
 end
 
--- Draws a proc's pieces with what it has now, for a proc that came up and for a setting that changed. again: the proc came again soon after it
--- ended, so a new piece is there at once, with no fade-in. A piece that is up when Glow style changes takes the other look at once.
 local function Layout(rec, again)
 	local r, g, b = ColourOf(rec.entry, rec.art)
 	local game = GameIcon(rec.entry)
@@ -361,7 +307,6 @@ local function Layout(rec, again)
 			local ok = pcall(piece.tex.SetTexture, piece.tex, rec.art.file)
 			rec.drew = rec.drew and ok
 			piece.tex:SetVertexColor(r, g, b)
-			-- Art that does not pulse (Clearcasting's arcs) stays still once faded in.
 			piece.pulses = rec.art.pulse
 			local look = Look()
 			if piece.look ~= look then
@@ -400,8 +345,6 @@ local function Layout(rec, again)
 	end
 end
 
--- The holder: 204.8 square at the middle of its box in /flatui move (the middle of the screen while the movers give no spot), as far above it as
--- Art height says, and as clear as Art opacity says. A frame of the addon's own, so it may move at any time.
 function PlaceHolder()
 	local x, y
 	if type(ns.MoverSpot) == "function" then
@@ -441,7 +384,6 @@ local function Build()
 	return true
 end
 
--- The lowest place 1 to 3 that no other proc up has a piece of the same location in.
 local function SlotFor(rec)
 	local taken = {}
 	for _, other in ipairs(ups) do
@@ -480,11 +422,6 @@ local function Find(entry)
 	end
 end
 
--- The calls for Procs.lua ---------------------------------------------------------------------------------------------------------
-
--- A proc came up, or its art changed. data is what Procs.lua gives: file, location, scale, r, g, b, all optional. again: the proc came again
--- soon after it ended (Procs.lua, Start), so its art is there at once, with no fade-in. Nothing is drawn with the art off, and nothing beyond
--- three procs at once.
 function ns.ProcArtShow(entry, data, again)
 	if type(entry) ~= "table" or not On() then
 		return false
@@ -515,7 +452,6 @@ function ns.ProcArtShow(entry, data, again)
 			end
 		end)
 	end
-	-- Art of an alert that lasts (Execute) shows only for its seconds; the glow of the button stays.
 	rec.token = (rec.token or 0) + 1
 	if art.seconds and type(C_Timer) == "table" and type(C_Timer.After) == "function" then
 		local token = rec.token
@@ -529,7 +465,6 @@ function ns.ProcArtShow(entry, data, again)
 	return true
 end
 
--- A proc ended: its pieces fade out and the others keep their places. now: stop at once, with no fade.
 function ns.ProcArtHide(entry, now)
 	local rec, index = Find(entry)
 	if not rec then
@@ -551,7 +486,6 @@ function ns.ProcArtHide(entry, now)
 	return true
 end
 
--- Pieces in the pool and pieces fading, for the test.
 function ns.ProcArtCounts()
 	return #pool, (function()
 		local n = 0
@@ -562,7 +496,6 @@ function ns.ProcArtCounts()
 	end)()
 end
 
--- Everything back: no proc up, no animation running, every piece hidden.
 function ns.ProcArtReset()
 	while #ups > 0 do
 		ns.ProcArtHide(ups[1].entry, true)
@@ -572,9 +505,6 @@ function ns.ProcArtReset()
 	end
 end
 
--- A row of Proc alerts changed: the art goes at once when it is off, else the holder and the pieces take the new size, height or opacity, and
--- the look of Glow style (ns.ProcGlowChanged calls this for that row). Then the preview of Procs.lua (ns.ProcPreview) shows the first proc of the
--- class in that look for 4 s, while the options window shows, out of combat and with test mode off.
 function ns.ProcArtChanged()
 	if holder then
 		if not On() then
@@ -586,26 +516,20 @@ function ns.ProcArtChanged()
 			end
 		end
 	end
-	-- The pieces made on the game's buttons take the new row when the game says buffs are open, else at the end of the fight.
 	local slots = ns.TrackerSlots
 	if type(slots) == "table" and type(slots.Flush) == "function" then
 		slots.Flush()
 	end
-	-- With the options window open and test mode off, the first proc of the class shows for a moment in the new look (Procs.lua).
 	if type(ns.ProcPreview) == "function" then
 		ns.ProcPreview()
 	end
 end
 
--- The pieces on the game's button -------------------------------------------------------------------------------------------------
-
--- REL: the point of the holder a piece hangs on (G's rel), as a step of half the holder's side along x and y.
 local REL = {
 	CENTER = { 0, 0 }, LEFT = { -1, 0 }, RIGHT = { 1, 0 }, TOP = { 0, 1 }, BOTTOM = { 0, -1 },
 	TOPLEFT = { -1, 1 }, TOPRIGHT = { 1, 1 },
 }
 
--- The lowest place 1 to 3 that none of the placed procs (each { art, slot }) has a piece of the same location in.
 local function Lowest(art, placed)
 	local taken = {}
 	for _, other in ipairs(placed) do
@@ -625,8 +549,6 @@ local function Lowest(art, placed)
 	return K.MAX
 end
 
--- The place of a proc whose pieces are on the game's button: fixed by the order of the proc trackers, as the proc trackers before it take places,
--- so two procs never stack and the place does not depend on which is up.
 local function FixedSlot(entry, art)
 	local list = type(ns.ProcEntries) == "function" and ns.ProcEntries() or {}
 	local placed = {}
@@ -640,7 +562,6 @@ local function FixedSlot(entry, art)
 				if give then
 					ok, data = pcall(give, other)
 				end
-				-- A proc with no art (only the glow) takes no place.
 				if not (ok and data == false) then
 					local theirs = Normalise(ok and data or nil)
 					placed[#placed + 1] = { art = theirs, slot = Lowest(theirs, placed) }
@@ -651,8 +572,6 @@ local function FixedSlot(entry, art)
 	return Lowest(art, placed)
 end
 
--- The size of the button against the screen's: a piece on the button is drawn in the button's units, so it is divided by this to be the size
--- the holder's piece is.
 local function Ratio(button)
 	local ok, mine = pcall(button.GetEffectiveScale, button)
 	local fine, base = pcall(UIParent.GetEffectiveScale, UIParent)
@@ -662,17 +581,12 @@ local function Ratio(button)
 	return 1
 end
 
--- What the pieces on the button are drawn with, as one text: the row's state, size, opacity and height, the colour, the place and the file.
 local function Key(entry, art, slot)
 	local r, g, b = ColourOf(entry, art)
 	return table.concat({ On() and "on" or "off", Setting("artSize", K.SIZE), Setting("artAlpha", K.ALPHA), Setting("artY", 0), r, g, b, slot,
 		tostring(art.file), art.location }, "|")
 end
 
--- Makes the pieces of a proc's art as textures of the game's button, the same pieces the holder has (G and K), each anchored to the middle of the
--- screen, and returns what TrackerSlots.lua needs to keep them right: Pending, Apply and Shown. Run by TrackerSlots.lua inside the function the game
--- calls while it builds the slot; it raises when the game refuses a texture, which TrackerSlots.lua takes as "refused by the game". The pieces
--- have no animation: the button is closed to addon code in a fight, and a piece shows when the button does. With the row off they are clear.
 function ns.ProcArtParts(rec, button, entry)
 	if type(entry) ~= "table" then
 		error("no proc to draw", 0)
@@ -683,7 +597,6 @@ function ns.ProcArtParts(rec, button, entry)
 		local ok, got = pcall(given, entry)
 		data = ok and got or nil
 	end
-	-- A proc with no art (only the glow) has no pieces on the button.
 	if data == false then
 		local none = { pieces = {} }
 		function none.Pending()
@@ -735,7 +648,6 @@ function ns.ProcArtParts(rec, button, entry)
 	function handle.Apply()
 		Put()
 	end
-	-- The game's icon started or stopped being on show: the proc's pieces on the holder are drawn again, or hidden.
 	function handle.Shown()
 		local found = Find(entry)
 		if found and holder then
@@ -745,12 +657,10 @@ function ns.ProcArtParts(rec, button, entry)
 	return handle
 end
 
--- The line of /flatui tracker check for a proc entry.
 function ns.ProcArtLine(entry)
 	if not On() then
 		return "Art: off"
 	end
-	-- A proc of the class data with no art (noArt, Hammer of Wrath) has the glow alone.
 	local given = type(ns.ProcArtData) == "function" and ns.ProcArtData
 	if given and type(entry) == "table" then
 		local ok, data = pcall(given, entry)
@@ -766,7 +676,6 @@ function ns.ProcArtLine(entry)
 		tostring(seen.arc and "arc" or seen.file), K.NAMES[seen.location] or seen.location, seen.drew and "yes" or "no")
 end
 
--- The holder is made at login, out of combat (or when combat ends after a /reload in combat), so the first proc of a fight draws at once.
 local boot = CreateFrame("Frame")
 boot:RegisterEvent("PLAYER_LOGIN")
 boot:SetScript("OnEvent", function(self)

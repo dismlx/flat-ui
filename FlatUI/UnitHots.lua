@@ -1,69 +1,13 @@
 local _, ns = ...
 
--- Heal over time squares (off by default, All frames: icons and auras, Party and raid frames): on the game's party and raid frames, a small square of
--- Flat UI's own in a corner of the member's health bar for each heal over time of yours on that member, each in a colour of its own, as healers' raid
--- frames have them. The game's raid frames show your heals over time among the member's buff icons (displayBuffs, Shared/CompactUnitFrame.lua:1650;
--- Mainline/CompactUnitFrameOptions.lua:17), its party frames do not, and neither tells them apart at a glance.
---
--- The heals over time are those of the player's class on Forever, each found by the name the client gives one of its spells, so every rank counts:
--- Renew (139), Power Word: Shield (17) and the rune Prayer of Mending (401859) for a priest; Rejuvenation (774), Regrowth (8936), and the runes
--- Lifebloom (408124) and Wild Growth (408120) for a druid; the runes Riptide (408521) and Earth Shield (408514) for a shaman; the rune Sacred Shield
--- (412019) for a paladin, whose aura is found by its name whichever of its IDs it carries (412019 or 412018, CooldownData.lua). The shields count as
--- the buffs of the player's that healers watch on a tank, and Prayer of Mending's square moves with the bounce, since the aura stays the caster's. At
--- most four for a class, the squares the drawings of the setup and test mode make (SetupDrawUnits.lua MakeMarks). Every rank of Rejuvenation and
--- Regrowth is in ProcData.lua, which is read from the DB2 tables of build 1.60.1; Renew's ranks, Lifebloom, Wild Growth and Riptide are in the
--- client's SkillLineAbility table (Holy 56, the druid runes 573, Restoration 374), Power Word: Shield's ranks, Earth Shield and Sacred Shield in
--- CooldownData.lua, Sacred Shield also in ClassData.lua (SpellName_1.60.1.70245.csv), and Power Word: Shield and Prayer of Mending in
--- tools/dev/spelltips/client_spells.json (build 70938). A spell the client does not name (C_Spell.GetSpellName
--- gives nil for one it does not have, SpellDocumentation.lua:518-533) has no square, so each is checked in the game.
--- A class without one, or a client that does not read auras by slot, makes nothing. Each heal over time has a place of its own in a row from the
--- corner (Square corner), so a square never moves while the others come and go; Square size is its side in units, with a dark rim of one screen pixel,
--- and the row sits just inside the dispel border of UnitGroupMarks.lua (2 screen pixels inside the health bar). On a party frame, whose health bar is
--- 10 units high (Blizzard_UnitFrame/Camelot/PartyMemberFrame.lua:9-11), the side is at most the bar's height less the row's inset and the dispel
--- border on the far side, so a large size picked for raid cells stays inside the bar; raid cells keep the full size. On a party frame with Debuff type icon
--- on party frames and Top right or Bottom right, the row starts just left of the spot of the type icon at the right end of the bar, so the two show
--- side by side; raid frames, where the game draws its own type icons, keep the corner.
---
--- What shows is read only from the auras the game lets addons read. C_UnitAuras.GetAuraSlots(unit, "HELPFUL|PLAYER") gives the slots of the buffs
--- the player (or the player's pet) cast on the member (AuraUtil.lua:272-274) and carries no secret predicate (UnitAuraDocumentation.lua:304-322);
--- GetAuraDataBySlot is withheld while auras are restricted (SecretWhenUnitAuraRestricted, UnitAuraDocumentation.lua:227-243): in a fight, an
--- encounter, a challenge mode or a PvP match, unless the game flags the spell as never secret (SecretPredicatesDocumentation.lua:80-82). A withheld
--- aura, or one whose spell ID is withheld, is never read further; the member is read again when the fight or the restriction ends
--- (PLAYER_REGEN_ENABLED, and ADDON_RESTRICTION_STATE_CHANGED with Inactive, RestrictedActionsDocumentation.lua:96-107), as UnitGroupMarks.lua reads
--- its debuffs again. The number of slots GetAuraSlots gives is a plain answer too, and a plain read also gives each heal over time's end
--- (expirationTime, 0 for one that never ends). So in a fight, where the game hides which aura is which, each square of the last plain read stays until
--- its time runs out, while the member has at least as many auras of yours as that read less those whose time ran out since: a Sunder, a debuff or
--- another healer's buff changes nothing, and nor does a buff of yours that comes and goes in the fight (Inspiration, a bounce of Prayer of Mending, a
--- Lifebloom), since the count to hold is never raised in the fight. A square whose time ran out goes, and the count to hold drops by one with it, so
--- a heal over time that ends on time leaves the others lit and is never counted twice. When the number drops below the count to hold one of yours
--- ended early (a shield used up), and as the game does not say which, the squares it hides go and only those read plainly now stay, the new number
--- the count to hold; a new heal over time cast in the fight waits for its end, and one recast in the fight loses its square at its old end. An end
--- sends UNIT_AURA (the aura goes), so no timer runs. Each frame
--- hears UNIT_AURA for its own unit on a frame of the addon's own (RegisterUnitEvent), whose payload is never read; a burst is read once, a moment
--- after the first. A frame the game hid hears nothing until the game draws it again, through the same calls UnitGroupMarks.lua follows.
---
--- The squares are textures of the addon's own on a frame of its own over the health bar, made and placed out of combat on a frame the game protects;
--- in a fight only whether each shows changes. A new Square corner or Square size, or Debuff type icon on party frames turned on or off, waits for
--- the end of a fight, and while the options window is open chat says so once a fight (Tell). Nothing of the game's is changed.
--- This follows EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoLUnitFrames/UF_GroupFrames_HealerBuffs.lua:250-253, 260,
--- 270, its heal over time families of Renew, Rejuvenation, Regrowth, Lifebloom, Wild Growth and Riptide; :1923-1949, a heal over time counts only when
--- it is the player's (HELPFUL|PLAYER) and a withheld spell ID counts for none; :2324-2339, its Square style, a white texture in the colour of each):
--- its square indicators on group frames, here on the game's frames. Its retail spell IDs of Lifebloom, Wild Growth and Riptide are Forever's runes
--- here; its rules, its other styles and its editor are left out.
-
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
 local PART = "Heal over time squares"
 local FILTER = "HELPFUL|PLAYER"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
--- The dispel border's thickness in screen pixels (UnitGroupMarks.lua), which the row stays inside, the wait before a burst of events is read, and
--- how many times a read asks the game for more slots.
 local RIM_PX, SOON, MOST_ASKS = 2, 0.1, 4
--- How soon before its end time a kept heal over time counts as run out when the member is read in a fight: the read comes the wait above after the
--- aura went, and the end the game gave and the moment it goes can differ by the server's timing.
+local FADE_FOR, FADE_LOW, FADE_STEP = 3, 0.35, 0.1
 local LATE = 0.5
--- The heals over time of each class by the class file UnitClass gives, in the order of their places from the corner: the spell the name comes from,
--- and the colour of its square with the word /flatui status says for it.
 local HOTS = {
 	PRIEST = { { id = 139, colour = { 0.3, 0.9, 0.35 }, word = "green" }, { id = 17, colour = { 1, 1, 1 }, word = "white" },
 		{ id = 401859, colour = { 1, 0.85, 0.2 }, word = "yellow" } },
@@ -72,8 +16,6 @@ local HOTS = {
 	SHAMAN = { { id = 408521, colour = { 0.25, 0.55, 1 }, word = "blue" }, { id = 408514, colour = { 1, 0.55, 0.1 }, word = "orange" } },
 	PALADIN = { { id = 412019, colour = { 1, 0.75, 0.2 }, word = "gold" } },
 }
--- The colours of the squares of a class file in the order of their places, for the setup's drawing of Bex (SetupDrawUnits.lua Sample), or nil for a
--- class with none. A new list each time, so the drawing cannot change HOTS.
 function X.hotColours(class)
 	local list = HOTS[class]
 	if list == nil then
@@ -85,9 +27,7 @@ function X.hotColours(class)
 	end
 	return colours
 end
--- The point of the health bar each Square corner puts the first square on, and the signs of its offsets across and up, which keep the row inside.
 local CORNERS = { tl = { "TOPLEFT", 1, -1 }, tr = { "TOPRIGHT", -1, -1 }, bl = { "BOTTOMLEFT", 1, 1 }, br = { "BOTTOMRIGHT", -1, 1 } }
--- What chat says, once a fight and only while the options window is open, when the squares wait for the end of the fight (Tell).
 local TELL_MOVE, TELL_MAKE = "Flat UI: the heal over time squares move when the fight ends.", "Flat UI: the heal over time squares show when the fight ends."
 local NOTE_KEPT = "Unit frames: Heal over time squares: the game keeps your auras on a member from addons now, so a square read before stays until one of your buffs there ends, and a new one waits for the end of the fight."
 
@@ -102,10 +42,6 @@ local function Own(object)
 	return object
 end
 
--- The heals over time --------------------------------------------------------------------------------------------------------------------------
-
--- kinds: the heals over time of the player's class that the client names, { name, colour, word }, nil until the class is known. byName: the place of
--- each by its name. byId: the place of each spell ID read so far, false for one that is none of them.
 local kinds, byName, byId = nil, {}, {}
 
 local function SpellName(id)
@@ -120,7 +56,6 @@ local function SpellName(id)
 	return nil
 end
 
--- The class file of the player, plain (UnitClass, UnitDocumentation.lua:911-928), or nil.
 local function PlayerClass()
 	if type(UnitClass) ~= "function" then
 		return nil
@@ -151,7 +86,6 @@ local function Kinds()
 	return kinds
 end
 
--- The place of the heal over time a spell ID is, or false.
 local function KindOf(id)
 	local kind = byId[id]
 	if kind == nil then
@@ -162,15 +96,11 @@ local function KindOf(id)
 	return kind
 end
 
--- True when the client has the calls that read the auras of a unit by slot. Without them nothing is made.
 local function Readable()
 	local units = C_UnitAuras
 	return type(units) == "table" and not IsSecret(units) and type(units.GetAuraSlots) == "function" and type(units.GetAuraDataBySlot) == "function"
 end
 
--- Reading a member --------------------------------------------------------------------------------------------------------------------------------
-
--- The end time of a plain aura (expirationTime, AuraUtil.lua), 0 for one that never ends or whose end cannot be read.
 local function EndOf(aura)
 	local ok, ends = pcall(function()
 		return aura.expirationTime
@@ -181,8 +111,6 @@ local function EndOf(aura)
 	return 0
 end
 
--- One aura of the player's on a unit: the place of its heal over time, false for another aura or a slot that went, or nil when the game withheld it,
--- and for a heal over time its end time (EndOf).
 local function KindOfSlot(unit, slot)
 	if not ns.Finite(slot) then
 		return nil
@@ -191,7 +119,6 @@ local function KindOfSlot(unit, slot)
 	if not got or IsSecret(aura) then
 		return nil
 	elseif aura == nil then
-		-- The slot went between the two calls (AuraUtil.lua:100).
 		return false
 	elseif type(aura) ~= "table" then
 		return false
@@ -209,10 +136,6 @@ local function KindOfSlot(unit, slot)
 	return kind, kind and EndOf(aura) or nil
 end
 
--- The slots of one answer of GetAuraSlots: its continuation token first, then the slots (AuraUtil.lua:93-114). Marks the heals over time found, with
--- the end of each in ends (0 when one of them never ends, else the latest), and returns the token to ask with again (nil when the answer was the
--- last), whether one aura was withheld, and how many slots the answer gave, nil when the game gave no answer. The number of slots is plain: the call
--- carries no secret predicate.
 local function Batch(found, ends, unit, ok, token, ...)
 	if not ok or IsSecret(token) then
 		return nil, true, nil
@@ -234,8 +157,6 @@ local function Batch(found, ends, unit, ok, token, ...)
 	return token, withheld, count
 end
 
--- The heals over time of the player's on a unit, by place, whether the game withheld any of the player's auras there, how many auras of the
--- player's the unit has (nil when the game would not say), and the end time of each heal over time found, by place.
 local function Scan(unit)
 	local found, ends, withheld, token, count = {}, {}, false, nil, 0
 	for _ = 1, MOST_ASKS do
@@ -250,7 +171,6 @@ local function Scan(unit)
 	return found, withheld, count, ends
 end
 
--- A line for /flatui status while a frame waits for auras the game withheld: the frames it holds for.
 local keeping = setmetatable({}, { __mode = "k" })
 
 local function Say(rec, on)
@@ -262,14 +182,11 @@ local function Say(rec, on)
 	end
 end
 
--- The rows that apply to a frame now: a party or raid frame Flat UI styles, the row on, the part not stopped, a client that reads auras by slot and a
--- class with a heal over time the client names.
 local function Wanted(rec, on)
 	return on and rec.made and (rec.kind == "party" or rec.kind == "raid") and not ns.PartStopped(KEY, PART) and Opt("hotSquares") == true
 		and Readable() and #Kinds() > 0
 end
 
--- The unit a frame shows: the one a raid frame displays (a vehicle), else its own (UnitGroupMarks.lua does the same).
 local function UnitOfFrame(rec)
 	local ok, shown = pcall(function()
 		return rec.frame.displayedUnit
@@ -280,16 +197,11 @@ local function UnitOfFrame(rec)
 	return X.unitOf(rec)
 end
 
--- True when the game hid the frame itself, read from its own flag as UnitGroupMarks.lua reads it: nothing on it can be seen, so it hears no auras.
 local function Hidden(rec)
 	local ok, shown = pcall(rec.frame.IsShown, rec.frame)
 	return ok and not IsSecret(shown) and shown == false
 end
 
--- The squares ------------------------------------------------------------------------------------------------------------------------------------
-
--- The frame over the health bar of a frame, four levels above it (the dispel border is three, UnitGroupMarks.lua), and one square for each heal over
--- time: a dark rim and the colour inside it, a sublevel above. Made out of combat, as a child of the bar.
 local function Make(rec)
 	local entry = rec.byRole.health
 	local box = entry and entry.target
@@ -312,13 +224,12 @@ local function Make(rec)
 		fill:SetPoint("TOPLEFT", back, "TOPLEFT", px, -px)
 		fill:SetPoint("BOTTOMRIGHT", back, "BOTTOMRIGHT", -px, px)
 		fill:Hide()
-		h.squares[index] = { back = back, fill = fill }
+		h.squares[index] = { back = back, fill = fill, alpha = 1 }
 	end
 	rec.hots = h
 	return h
 end
 
--- The height of a party frame's health bar in its units, plain, or nil (and nil on a raid frame, whose squares keep their full size).
 local function Tall(h)
 	if not h.party then
 		return nil
@@ -330,27 +241,20 @@ local function Tall(h)
 	return nil
 end
 
--- The side of a square: Square size, and on a party frame at most the room the health bar has from the row's inset to the dispel border on its far
--- side, so a size picked for raid cells does not hang out of the 10-unit party bar over the name row or the power bar.
 local function Side(h, px)
 	local size, tall = tonumber(Opt("hotSize")) or 6, Tall(h)
 	if tall ~= nil then
-		size = math.max(2, math.min(size, tall - px * (RIM_PX + 1) - px * RIM_PX))
+		size = math.max(2, math.min(size, tall - px * (RIM_PX + 1) - px))
 	end
 	return size
 end
 
--- What the corner, the size, the screen pixel, the type icon row and the height of a party frame's health bar give now, as one key.
 local function Key(h)
 	local tall = Tall(h)
 	return ("%s:%s:%.4f:%s:%s"):format(tostring(Opt("hotCorner")), tostring(Opt("hotSize")), ns.Pixels(h.holder, 1), tostring(Opt("dispelIcon")),
 		tall and ("%.1f"):format(tall) or "-")
 end
 
--- How far across from the corner the first square sits: just inside the dispel border, or on a party frame with Debuff type icon on party frames and
--- a right-hand corner, one screen pixel left of the spot of the type icon, which UnitGroupMarks.lua puts ICON_ROOM[1] units wide, ICON_ROOM[2] unit
--- and the border in from the right end of the bar (PlaceDispel), so a square never covers the icon a healer dispels by. The spot is kept whether a
--- debuff is there or not, so the squares never move in a fight.
 local ICON_ROOM = { 12, 1 }
 
 local function Across(h, corner, px)
@@ -360,8 +264,6 @@ local function Across(h, corner, px)
 	return px * (RIM_PX + 1)
 end
 
--- Anchors the squares out of combat, again only when the corner, the size, the size of a screen pixel or the type icon row changed. Each has its
--- place in the row.
 local function Place(h)
 	local key = Key(h)
 	if h.placed == key then
@@ -382,15 +284,96 @@ local function Place(h)
 	end
 end
 
-local function Draw(h, found)
+local fading = setmetatable({}, { __mode = "k" })
+local fader, fadeWait, fadeWaited = nil, 0, 0
+
+local function Now()
+	local ok, now = pcall(GetTime)
+	if ok and ns.Finite(now) then
+		return now
+	end
+	return nil
+end
+
+local function Fade(h, now)
+	local on, soon = Opt("hotFade") == true and now ~= nil, nil
+	for index, square in ipairs(h.squares) do
+		local ends = h.shownEnds and h.shownEnds[index]
+		local alpha = 1
+		if on and square.lit and ns.Finite(ends) and ends > 0 then
+			local left = ends - now
+			if left < FADE_FOR then
+				alpha = FADE_LOW + (1 - FADE_LOW) * math.max(0, left) / FADE_FOR
+			end
+			if left > 0 then
+				local wait = math.max(0, left - FADE_FOR)
+				soon = soon and math.min(soon, wait) or wait
+			end
+		end
+		if square.alpha ~= alpha then
+			square.alpha = alpha
+			square.back:SetAlpha(alpha)
+			square.fill:SetAlpha(alpha)
+		end
+	end
+	return soon
+end
+
+local function FadeAll()
+	local now, soonest = Now(), nil
+	for h in pairs(fading) do
+		local soon = h.lit and Fade(h, now) or nil
+		if soon == nil then
+			fading[h] = nil
+		else
+			soonest = soonest and math.min(soonest, soon) or soon
+		end
+	end
+	fadeWaited = 0
+	if soonest == nil then
+		fader:Hide()
+	else
+		fadeWait = math.max(FADE_STEP, soonest)
+	end
+end
+
+local function Faded(h)
+	local soon = Fade(h, Now())
+	if soon == nil then
+		fading[h] = nil
+		return
+	end
+	fading[h] = true
+	if fader == nil then
+		fader = Own(CreateFrame("Frame"))
+		fader:Hide()
+		fader:SetScript("OnUpdate", function(_, elapsed)
+			fadeWaited = fadeWaited + (ns.Finite(elapsed) and elapsed or 0)
+			if fadeWaited >= fadeWait then
+				X.run(PART, FadeAll)
+			end
+		end)
+	end
+	if not fader:IsShown() then
+		fadeWaited, fadeWait = 0, math.max(FADE_STEP, soon)
+		fader:Show()
+	else
+		fadeWait = math.min(fadeWait, math.max(FADE_STEP, soon))
+	end
+end
+
+local function Draw(h, found, ends)
 	local lit = false
 	for index, square in ipairs(h.squares) do
 		local on = found[index] == true
 		square.back:SetShown(on)
 		square.fill:SetShown(on)
+		square.lit = on
 		lit = lit or on
 	end
 	h.lit = lit or nil
+	h.shownEnds = lit and ends or nil
+	Faded(h)
 end
 
 local function Clear(h)
@@ -398,7 +381,6 @@ local function Clear(h)
 	Draw(h, {})
 end
 
--- The heals over time found, with those kept from the last plain read where the game withheld an aura.
 local function Merged(found, kept)
 	local all = {}
 	for index in pairs(kept) do
@@ -410,8 +392,6 @@ local function Merged(found, kept)
 	return all
 end
 
--- The squares kept from the last plain read whose time has not run out (an end of 0 never does, nor one with no time to compare), and how many of the
--- kept ones ran out.
 local function Live(h)
 	local live, gone = {}, 0
 	local ok, now = pcall(GetTime)
@@ -429,7 +409,6 @@ end
 
 local Hear
 
--- Reads the unit of a frame and shows the squares of what it found. A frame with nothing to show, or that the game hid, stops hearing its unit.
 local function Read(rec)
 	local h = rec.hots
 	if h == nil then
@@ -444,10 +423,6 @@ local function Read(rec)
 	local found, withheld, count, ends = Scan(h.unit)
 	h.withheld = withheld or nil
 	Say(rec, withheld)
-	-- A plain read is what the member has, and is kept with the end of each. Where the game withheld an aura of yours, a kept square whose time ran
-	-- out goes, and the others stay while the member has at least as many auras of yours as at the last plain read less those that ran out: fewer
-	-- means one of yours ended early, and the game does not say which, so only those read plainly now stay, and the count to hold is the new one.
-	-- With no count at all only the squares whose time ran out go.
 	if not withheld then
 		h.kept, h.count, h.ends = found, count, ends
 	else
@@ -456,9 +431,6 @@ local function Read(rec)
 		if count == nil then
 			found = Merged(found, live)
 		elseif h.kept and hold and count >= hold then
-			-- The count to hold stays that of the last plain read (or of the last drop), less the heals over time that ran out: a buff of yours that
-			-- comes and goes in the fight, such as Inspiration, Prayer of Mending bouncing off or a Lifebloom that ends, takes the count back to it and
-			-- leaves the squares alone. Those that ran out leave the kept squares and the count, so an end is never counted twice.
 			found = Merged(found, live)
 			if gone > 0 then
 				h.kept, h.count = live, hold
@@ -467,10 +439,19 @@ local function Read(rec)
 			h.kept, h.count, h.ends = found, count, ends
 		end
 	end
-	Draw(h, found)
+	local times = ends
+	if h.ends ~= ends then
+		times = {}
+		for index, at in pairs(h.ends or {}) do
+			times[index] = at
+		end
+		for index, at in pairs(ends) do
+			times[index] = at
+		end
+	end
+	Draw(h, found, times)
 end
 
--- The frames whose unit changed its auras, read together a moment after the first.
 local dirty, pending = setmetatable({}, { __mode = "k" }), false
 
 local function Pass()
@@ -496,7 +477,6 @@ local function Soon(rec)
 	end
 end
 
--- The frame of the addon's own that hears UNIT_AURA for the unit of one game frame, and nothing once it has no unit.
 function Hear(rec, h, unit)
 	if h.unit == unit and (h.heard or unit == nil) then
 		return
@@ -511,7 +491,6 @@ function Hear(rec, h, unit)
 	end
 	pcall(ear.UnregisterAllEvents, ear)
 	if h.unit ~= unit then
-		-- A new member, or none: nothing read of the last one is kept.
 		h.kept, h.count, h.ends = nil, nil, nil
 	end
 	h.unit, h.heard = unit, nil
@@ -522,7 +501,6 @@ function Hear(rec, h, unit)
 		local ok, done = pcall(ear.RegisterUnitEvent, ear, "UNIT_AURA", unit)
 		h.heard = ok and (IsSecret(done) or done ~= false) or nil
 	end
-	-- A client that cannot hear one unit: every change of auras reads this frame again.
 	if not h.heard then
 		h.heard = pcall(ear.RegisterEvent, ear, "UNIT_AURA") or nil
 	end
@@ -530,9 +508,6 @@ end
 
 local Squares
 
--- While the options window is open, chat says once a fight that the squares wait for its end, as Hide.lua and /flatui move say theirs, so a new
--- Square corner or Square size in a fight does not look broken. A frame made or read in a fight with the window closed (zoning, a change of the
--- group) stays silent. The flag goes once the fight is over.
 local told = false
 
 local function Tell(line)
@@ -546,7 +521,6 @@ local function Tell(line)
 	end)
 end
 
--- Runs Squares again once the fight is over, once however often it is asked in the fight.
 local function AfterFight(rec)
 	if rec.hotsQueued then
 		return
@@ -572,7 +546,6 @@ function Squares(rec, on)
 		return
 	end
 	if h == nil then
-		-- Made out of combat, on a frame the game protects.
 		if InCombatLockdown() then
 			Tell(TELL_MAKE)
 			AfterFight(rec)
@@ -586,7 +559,6 @@ function Squares(rec, on)
 	elseif not InCombatLockdown() then
 		Place(h)
 	elseif h.placed ~= Key(h) then
-		-- A new corner or size, or the type icon row turned on or off, waits for the end of the fight; the squares keep their places until then.
 		Tell(TELL_MOVE)
 		AfterFight(rec)
 	end
@@ -594,8 +566,6 @@ function Squares(rec, on)
 	Soon(rec)
 end
 
--- What the game withheld is read again once the restriction that withheld it ends: the end of a fight, or of an encounter, a challenge mode or a PvP
--- match that outlasts it (as UnitGroupMarks.lua does for its debuffs).
 local function Reread()
 	for _, rec in pairs(X.records) do
 		if rec.hots and rec.hots.withheld then
@@ -616,7 +586,6 @@ end
 ns.AddEvent(KEY, "PLAYER_REGEN_ENABLED", Reread)
 ns.AddEvent(KEY, "ADDON_RESTRICTION_STATE_CHANGED", Reread, AurasOpenAgain)
 
--- A frame that has a new unit hears that unit and is read again.
 local wasUnit = X.unitChanged
 function X.unitChanged(rec)
 	if wasUnit ~= nil then
@@ -627,7 +596,6 @@ function X.unitChanged(rec)
 	end
 end
 
--- The line of /flatui status while the row is on: the heals over time of your class in their colours and the frames that show a square now.
 ns.AddStatus(KEY, function()
 	if not ns.Enabled(KEY) or ns.IsStopped(KEY) or Opt("hotSquares") ~= true then
 		return {}
@@ -648,7 +616,5 @@ ns.AddStatus(KEY, function()
 	return { ("Heal over time squares: %s; on %d %s now"):format(table.concat(names, ", "), lit, lit == 1 and "frame" or "frames") }
 end)
 
--- A party frame is drawn again through UnitFrame_Update (X.unitChanged, above) and a raid frame through CompactUnitFrame_UpdateAll (after.raid), as
--- for the marks of UnitGroupMarks.lua.
 table.insert(X.after.apply, { part = PART, fn = Squares })
 table.insert(X.after.raid, { part = PART, fn = Squares })

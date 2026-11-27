@@ -1,36 +1,7 @@
 local _, ns = ...
 
--- The paint of Flat UI's own action buttons (design 3.4, 3.6, 3.7, 6.3, research/own-buttons/design.md). OwnBars.lua makes the buttons; this file works out
--- what each one shows from the slot it holds and draws it: icon, count, macro name, hotkey, cooldown, charges, loss of control, usable and range colours,
--- checked, the blink of Attack while it swings and of Auto Shot or Shoot while it repeats (the button's Flash texture, on and off every 0.4 s, as on the
--- game's buttons), equipped, proc, the pulse of a spell pointed at in the spellbook or the talents (STEP.spellmark), empty-slot opacity, the pressed look from a key, the tooltip (set again every 0.2 s while it is up, as the game's buttons
--- set theirs, so a cooldown remaining counts down, and at once when a modifier key goes down or up) and the repaint after a click. The look modules colour through painters (ns.OwnPainter) and take proc changes through ns.OnOwnProc; nothing here hooks a function of
--- the game. ns.OnOwnReady tells them when a cooldown longer than the global cooldown has ended on a button (Flash when ready, ButtonStates.lua): seen
--- between two passes, or as the button's own cooldown frame finishes its swipe (OnCooldownDone, hooked on Flat UI's own frame), once a cooldown. When
--- the global cooldown outlasts the end of such a cooldown, the action reads as on the global cooldown while it still cools; the call then waits for
--- the end of that sweep, when the button really is ready. Each call says how long the cooldown ran, measured from the pass that saw it start (st.cdSince).
--- A cooldown found already running (after a stance, form, Stealth or page change, a drag or a reload) takes the start seen for its spell on another slot
--- while that lies within the spell's base cooldown (GetSpellBaseCooldown), and otherwise the base cooldown as its length; only an item's, or a spell's
--- without a base cooldown, has none.
--- The cooldown sweep shows for the global cooldown too unless Global cooldown sweep (actionbars.sweepGcd, on by default) is off while Restyle action bars is
--- on: a button that only waits for the global cooldown then shows no sweep, and real cooldowns still do, also one whose last moments the global
--- cooldown covers, whose sweep runs to the end of the global cooldown and ends with its ready call. The countdown numbers follow the game's Show
--- numbers on cooldowns (the CVar countdownForCooldowns, as ActionButton.lua:857-860 does it for the game's buttons), set on each button as it is
--- hooked and again when the CVar changes (CVAR_UPDATE), each time only when the answer changed.
--- Calls on a button are plain ones (textures, text, alpha, SetChecked, Cooldown calls), so a pass in a fight touches nothing protected. Flat UI writes no
--- field on a button: every table here is keyed by the button. The game's twins and OverrideActionBar are only read.
--- Never called on a button, a twin or a game table: Update, UpdateAction, UpdateFlyout, SetShowGrid, RegisterActionUIButton, ShowAlert and
--- EnableActionRangeCheck (the game's own range and usable frames keep watching the same slots through the twins).
--- The state of a button (ns.OwnState) and its painters:
---   state: slot, has, texture, usable, noMana, inRange (true, false or nil), checksRange, cdActive, cdOnGCD, checked, flash, equipped, proc, empty, grid,
---   hotkey.
---   painter "icon" and "hotkey": fn(button, state) returns r, g, b[, a] or nil for the game's look.
---   painter "empty": fn(button, state) returns the opacity of an empty button (a number, or r, g, b, a with the opacity as a), nil for normal.
--- This file is not a module. It works while ns.OwnOn() is true.
-
 local WEAK = { __mode = "k" }
 local ORDER = { "slot", "icon", "text", "hotkey", "cooldown", "usable", "range", "checked", "flash", "equipped", "proc", "empty", "spellmark" }
--- The events that start the work, and the events it listens for once it runs (design 3.4).
 local FIRST = { "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED" }
 local EVENTS = { "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_UPDATE_STATE", "ACTIONBAR_UPDATE_COOLDOWN", "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES",
 	"SPELL_UPDATE_ICON", "ACTION_USABLE_CHANGED", "ACTION_RANGE_CHECK_UPDATE", "PLAYER_TARGET_CHANGED", "UPDATE_BINDINGS", "GAME_PAD_ACTIVE_CHANGED",
@@ -38,7 +9,6 @@ local EVENTS = { "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_UPDATE_STATE", "ACTIONBAR_
 	"START_AUTOREPEAT_SPELL", "STOP_AUTOREPEAT_SPELL", "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW",
 	"SPELL_ACTIVATION_OVERLAY_GLOW_HIDE", "ACTIONBAR_SHOWGRID", "ACTIONBAR_HIDEGRID", "MODIFIER_STATE_CHANGED", "PLAYER_ENTER_COMBAT",
 	"PLAYER_LEAVE_COMBAT", "CVAR_UPDATE" }
--- The steps one event repaints. A slot change repaints every step.
 local SETS = {
 	state = { checked = true, flash = true },
 	cooldown = { cooldown = true },
@@ -51,23 +21,17 @@ local SETS = {
 	items = { checked = true, text = true, usable = true },
 	spellmark = { spellmark = true },
 }
--- The steps that end in a colour on the icon, and in the colour of the hotkey.
 local COLOUR = { icon = true, cooldown = true, usable = true, range = true }
 local HOTKEY = { hotkey = true, range = true }
 local DOT = "\226\151\143"
 
--- All of this file's state. A table keyed by a button is weak.
 local P = {
 	state = setmetatable({}, WEAK),
 	hooked = setmetatable({}, WEAK),
-	-- the last Hide countdown numbers given to each button's cooldown, from Show numbers on cooldowns
 	numbersHidden = setmetatable({}, WEAK),
 	pressed = setmetatable({}, WEAK),
 	alpha = setmetatable({}, WEAK),
-	-- the buttons whose spell highlight (the pulse of a spell pointed at in the spellbook) is shown now
 	marked = setmetatable({}, WEAK),
-	-- the buttons that blink now, the time since the last blink, and whether auto attack is on (PLAYER_ENTER_COMBAT and PLAYER_LEAVE_COMBAT; nil
-	-- until one of them is heard)
 	flashing = setmetatable({}, WEAK),
 	flashClock = 0,
 	attacking = nil,
@@ -75,11 +39,8 @@ local P = {
 	painters = { icon = {}, hotkey = {}, empty = {} },
 	procs = {},
 	ready = {},
-	-- the start (GetTime) of the last cooldown longer than the global one seen to start, by spell ID, for one found cooling after a stance or page change
 	starts = {},
-	-- true while a pass sets or clears a cooldown frame, whose OnCooldownDone is then not a cooldown that ended
 	sweeping = false,
-	-- tip: the Flat UI button whose tooltip is up, set again every TOOLTIP_UPDATE_TIME (tipClock) while it owns GameTooltip; nil when none
 	tip = nil,
 	tipClock = 0,
 	list = {},
@@ -87,7 +48,6 @@ local P = {
 	grid = false,
 	started = false,
 	subscribed = false,
-	-- true once ActionBarController_UpdateAllSpellHighlights is followed
 	marks = false,
 	pending = false,
 	since = 1,
@@ -112,7 +72,6 @@ local function On()
 	return type(ns.OwnOn) == "function" and ns.OwnOn() == true
 end
 
--- A call of the game's, by C_ActionBar first and then the global of the same name. Returns the first three answers, nothing when it fails.
 local function Call(name, ...)
 	local fn = C_ActionBar and C_ActionBar[name]
 	if type(fn) ~= "function" then
@@ -165,7 +124,6 @@ local function SlotOf(button)
 	return nil
 end
 
--- The first colour a painter gives: r, g, b, a.
 local function Painted(part, button, st)
 	for _, fn in ipairs(P.painters[part]) do
 		local ok, r, g, b, a = pcall(fn, button, st)
@@ -187,7 +145,6 @@ local function StateFor(button)
 	return st
 end
 
--- The colour of the icon: a painter's, else the game's three (ActionButton.lua:728-734).
 local function Colour(button, st)
 	local icon = button.icon
 	if icon == nil or not st.has then
@@ -228,7 +185,6 @@ local function Red()
 	return 1, 0.1, 0.1
 end
 
--- The hotkey text and its colour: the game's rule for the range dot and the red out of range (ActionButton.lua:1289-1308), or a painter's colour.
 local function DrawHotkey(button, st)
 	local hk = button.HotKey
 	if hk == nil then
@@ -252,7 +208,6 @@ local function DrawHotkey(button, st)
 	end
 end
 
--- Whether the glow of a spell is up on the slot's action, for the spell, the macro's spell and a flyout's spells.
 local function Glowing(st)
 	local kind, id, sub = Call("GetActionInfo", st.slot)
 	if not Plain(id, "number") then
@@ -293,7 +248,6 @@ local function SetProc(button, st, on)
 	end
 end
 
--- The slot and whether it holds an action.
 function STEP.slot(button, st)
 	st.slot = SlotOf(button)
 	st.has = st.slot ~= nil and Bool(Call("HasAction", st.slot)) == true
@@ -317,7 +271,6 @@ function STEP.icon(button, st)
 	end
 end
 
--- The count (a withheld one goes through unread) and the macro name (the rule of ActionButton.lua:625-630).
 function STEP.text(button, st)
 	if button.Count ~= nil then
 		local count = st.has and Call("GetActionDisplayCount", st.slot) or nil
@@ -335,7 +288,6 @@ function STEP.text(button, st)
 	end
 end
 
--- The key of the twin's command, else the key bound by a click on this button (ActionButton.lua:480-519).
 function STEP.hotkey(button, st)
 	local key, command = nil, CommandOf(button)
 	if command ~= nil then
@@ -369,8 +321,6 @@ local function Sweep(frame, show, name, slot)
 	end
 end
 
--- The spell of a slot, for the length of a cooldown whose start was not seen: a spell, or a macro's spell (not a macro that uses an item), as ButtonEffects.lua
--- UsesSpell reads it. nil for an item or anything else.
 local function SpellOf(slot)
 	local kind, id, sub = Call("GetActionInfo", slot)
 	if not Plain(kind, "string") or not Plain(id, "number") then
@@ -381,7 +331,6 @@ local function SpellOf(slot)
 	return nil
 end
 
--- The base cooldown of a spell in seconds (GetSpellBaseCooldown, as Cooldowns.lua reads it), or nil when it has none or the game cannot say.
 local function BaseOf(spellID)
 	if spellID == nil or type(GetSpellBaseCooldown) ~= "function" then
 		return nil
@@ -393,9 +342,6 @@ local function BaseOf(spellID)
 	return nil
 end
 
--- A cooldown longer than the global cooldown ended on a button: the listeners hear it once for that cooldown (cdFired, cleared when the next one starts),
--- with how long it ran in seconds, measured from its start on Flat UI's side (cdSince); for one whose start was not seen, its spell's base cooldown
--- (cdBase), or nil when that is not known either (an item, a spell with no base cooldown).
 local function Ready(button, st)
 	if st.cdFired then
 		return
@@ -410,8 +356,6 @@ local function Ready(button, st)
 	end
 end
 
--- Whether the last cooldown pass found a cooldown longer than the global one, on the slot and icon the button holds now: a page, a drag or an empty
--- slot is no cooldown that ended.
 local function WasLong(st)
 	return st.cdActive == true and st.cdOnGCD ~= true and st.cdSlot == st.slot and st.cdTexture == st.texture
 end
@@ -424,10 +368,8 @@ local function ClearSweeps(button)
 	end
 end
 
--- Cooldown, charges and loss of control by duration objects. isActive and isOnGCD are never withheld; the other fields are never read.
 function STEP.cooldown(button, st)
 	local was = WasLong(st)
-	-- A pass on another slot or icon than the last: a cooldown found running now did not start in sight, and its length is not known.
 	local seen = st.cdSlot ~= nil and st.cdSlot == st.slot and st.cdTexture == st.texture
 	if not seen then
 		st.cdWait = nil
@@ -450,8 +392,6 @@ function STEP.cooldown(button, st)
 	st.cdOnGCD = type(cooldown) == "table" and Bool(cooldown.isOnGCD) == true
 	local long = st.cdActive and not st.cdOnGCD
 	if was and not long and st.cdActive then
-		-- The global cooldown outlasts what was left of the cooldown, so the action reads as on the global cooldown while the button still cools:
-		-- Ready waits for the real end (cdWait), seen by a later pass or as the swipe finishes (CooldownDone).
 		st.cdWait = true
 	elseif was and not long then
 		Ready(button, st)
@@ -460,9 +400,6 @@ function STEP.cooldown(button, st)
 		Ready(button, st)
 	elseif long and not was then
 		st.cdFired, st.cdWait = false, nil
-		-- Its start, on Flat UI's own clock (a plain number), for Shortest cooldown that flashes, kept per spell too (P.starts). One that did not start in
-		-- sight (a stance, form, Stealth or page change, a drag, a reload) takes the start kept for its spell while that lies within the spell's base
-		-- cooldown; otherwise cdSince is false and its length is the base cooldown (cdBase).
 		local spell = SpellOf(slot)
 		if seen then
 			st.cdSince, st.cdBase = GetTime(), nil
@@ -478,8 +415,6 @@ function STEP.cooldown(button, st)
 			end
 		end
 	end
-	-- Global cooldown sweep off: a button that only waits for the global cooldown shows no sweep. A button whose real cooldown ends under the global
-	-- one (cdWait) keeps its sweep to the end of it, so it does not look ready before it is and its swipe's end says when it is (CooldownDone).
 	local gcdOff = st.cdOnGCD and not st.cdWait and ns.Enabled("actionbars") and ns.Get("actionbars.sweepGcd") == false
 	P.sweeping = true
 	local ok, err = pcall(Sweep, button.cooldown, st.cdActive and not replace and not gcdOff, "GetActionCooldownDuration", slot)
@@ -491,7 +426,6 @@ function STEP.cooldown(button, st)
 	if type(loss) == "table" then
 		Sweep(button.lossOfControlCooldown, Bool(loss.isActive) == true, "GetActionLossOfControlCooldownDuration", slot)
 	elseif button.lossOfControlCooldown ~= nil then
-		-- No plain answer to ask: a duration of zero clears the swipe by itself.
 		local object = Call("GetActionLossOfControlCooldownDuration", slot)
 		if type(object) == "nil" then
 			button.lossOfControlCooldown:Clear()
@@ -519,7 +453,6 @@ function STEP.range(_, st)
 	st.inRange, st.checksRange = inRange, inRange ~= nil
 end
 
--- Checked is the game's rule (ActionButton.lua:715-719).
 function STEP.checked(button, st)
 	local checked = false
 	if st.has then
@@ -530,8 +463,6 @@ function STEP.checked(button, st)
 	button:SetChecked(checked)
 end
 
--- Attack blinks while auto attack is on, Auto Shot and Shoot while they repeat (the rule of ActionButton.lua:1314-1328 and its PLAYER_ENTER_COMBAT and
--- PLAYER_LEAVE_COMBAT, 1018-1025). The blink is the clock of OnUpdate; a button that stops blinking hides its Flash at once.
 function STEP.flash(button, st)
 	local on = false
 	if st.has then
@@ -556,7 +487,6 @@ function STEP.flash(button, st)
 	end
 end
 
--- The green border of an equipped item (ActionButton.lua:612-620).
 function STEP.equipped(button, st)
 	st.equipped = st.has and Bool(Call("IsEquippedAction", st.slot)) == true
 	local border = button.Border
@@ -575,11 +505,6 @@ function STEP.proc(button, st)
 	SetProc(button, st, st.has and Glowing(st) or false)
 end
 
--- The pulse the game gives the buttons of a spell pointed at in the spellbook or the talents: the spellbook marks the slots that hold it
--- (UpdateOnBarHighlightMarksBySpell, ActionButton.lua:86-88, a slot to an index) and asks the game's buttons to show it
--- (ActionBarController_UpdateAllSpellHighlights, followed in Start). GetOnBarHighlightMark only reads that mark. The button's own
--- SpellHighlightTexture and SpellHighlightAnim (ActionButtonTemplate.xml:61-77), as SharedActionButton_RefreshSpellHighlight shows them on the
--- game's buttons; texture and animation calls, so also in a fight.
 function STEP.spellmark(button, st)
 	local on = false
 	if st.has and type(GetOnBarHighlightMark) == "function" then
@@ -603,7 +528,6 @@ function STEP.spellmark(button, st)
 	end
 end
 
--- An empty button is drawn at its painter's opacity, and normal while an action is on the cursor. Alpha is not protected.
 function STEP.empty(button, st)
 	local want = 1
 	if st.empty and not st.grid then
@@ -620,7 +544,6 @@ function STEP.empty(button, st)
 	end
 end
 
--- Runs the steps of set (all of them for nil) on a button, in order, then the colours they end in.
 local function Refresh(button, set)
 	local st = StateFor(button)
 	local colour, hotkey = false, false
@@ -666,8 +589,6 @@ local function ForSlot(slot, fn)
 	end
 end
 
--- The point of the tooltip box that GameTooltip_SetDefaultAnchor reads and compares (SharedTooltipTemplates.lua:87-114). Called by the addon, the
--- function runs tainted, so a secret point there would raise. True when the point and the offsets read as plain values.
 local function BoxReadable()
 	local box = GameTooltipDefaultContainer or SharedTooltipDefaultContainer
 	if type(box) ~= "table" or ns.IsSecret(box) or type(box.GetPoint) ~= "function" then
@@ -677,14 +598,11 @@ local function BoxReadable()
 	return ok and Plain(point, "string") and Plain(x, "number") and Plain(y, "number")
 end
 
--- True when the tooltip's owner is this button. An owner that cannot be read is not.
 local function Owns(tip, button)
 	local ok, owner = pcall(tip.GetOwner, tip)
 	return ok and not ns.IsSecret(owner) and rawequal(owner, button)
 end
 
--- The tooltip of the slot, set as the game's button does (ActionButton.lua:1114-1130), from the attribute slot, else the slot of the last paint.
--- The game's default anchor is used only when the box can be read; otherwise, or when it fails, the tooltip goes to the right of the button.
 local function ShowTip(button)
 	local tip = GameTooltip
 	local st = P.state[button]
@@ -707,7 +625,6 @@ local function ShowTip(button)
 	if not ok then
 		Failed("tooltip", answer)
 	end
-	-- As the game's button, the tooltip is set again while it is up only when SetAction gave one (ActionButton.lua:1125-1129).
 	P.tip, P.tipClock = (ok and Bool(answer) ~= false) and button or nil, 0
 end
 
@@ -721,9 +638,6 @@ local function HideTip(button)
 	end
 end
 
--- Every TOOLTIP_UPDATE_TIME (0.2 s) while a Flat UI button owns the shown GameTooltip, its tooltip is set again through the same calls as OnEnter, as
--- the game's tooltip does for the game's buttons (GameTooltip.lua:450-463, owner:UpdateTooltip): the cooldown remaining counts down and the red lines
--- (not enough mana, out of range) follow. No field is written on the button and RefreshData is not called. Another owner, or a hidden tooltip, ends it.
 local function TipTick(elapsed)
 	if P.tip == nil then
 		return
@@ -746,8 +660,6 @@ local function TipTick(elapsed)
 	end
 end
 
--- The swipe of a button's cooldown finished: a cooldown longer than the global one has ended (Ready), also one whose end the global cooldown covered
--- (cdWait), and the button is painted again on the next frame.
 local function CooldownDone(button)
 	if P.sweeping then
 		return
@@ -761,7 +673,6 @@ local function CooldownDone(button)
 	P.pending = true
 end
 
--- The game's Show numbers on cooldowns, as a plain answer: true to hide the numbers, nil when it cannot be read.
 local function NumbersOff()
 	local read = C_CVar and C_CVar.GetCVarBool or GetCVarBool
 	if type(read) ~= "function" then
@@ -774,8 +685,6 @@ local function NumbersOff()
 	return on ~= true
 end
 
--- The countdown numbers of a button's cooldown hidden or shown as the game's setting says (Cooldown:SetHideCountdownNumbers on Flat UI's own
--- cooldown frame), written only when the answer changed. hide may be given, read once for all the buttons.
 local function NumbersHidden(button, hide)
 	if hide == nil then
 		hide = NumbersOff()
@@ -789,8 +698,6 @@ local function NumbersHidden(button, hide)
 	end
 end
 
--- The hooks on a button: the tooltip, a repaint on the next frame after a click, and the end of its cooldown's swipe (the cooldown is a child of Flat
--- UI's own button). They only paint. The countdown numbers take the game's setting here, once for each button.
 local function Hook(button)
 	if P.hooked[button] then
 		return
@@ -814,7 +721,6 @@ local function Hook(button)
 	end
 end
 
--- The buttons that have a key on their twin: the pressed look follows the twin's button state, which the game sets on a key (ActionButton.lua:146-174).
 local function Keys()
 	local keys = {}
 	for _, button in ipairs(P.list) do
@@ -845,7 +751,6 @@ local function Pressed()
 	end
 end
 
--- The buttons Flat UI has made: hooks and a full paint for a new one. Returns true when the list changed.
 local function Sync()
 	local list = Buttons()
 	local same = #list == #P.list
@@ -876,7 +781,6 @@ local function Sync()
 	return true
 end
 
--- The slot of a button changed (a page, a bonus bar, a drag): every button whose slot moved is painted again. Fed by OwnBars.lua's slot watch.
 local function SlotsChanged()
 	if not On() then
 		return
@@ -898,7 +802,6 @@ function H.ACTIONBAR_SLOT_CHANGED(slot)
 		All()
 		return
 	end
-	-- A button that holds the slot now, or held it until now.
 	for _, button in ipairs(P.list) do
 		local st = P.state[button]
 		if SlotOf(button) == slot or (st ~= nil and st.slot == slot) then
@@ -936,7 +839,6 @@ end
 function H.UPDATE_SHAPESHIFT_FORM() All() end
 function H.PLAYER_MOUNT_DISPLAY_CHANGED() All() end
 
--- Show numbers on cooldowns changed in the game's options: the numbers on every button follow at once.
 function H.CVAR_UPDATE(name)
 	if not Plain(name, "string") or name:lower() ~= "countdownforcooldowns" then
 		return
@@ -947,10 +849,6 @@ function H.CVAR_UPDATE(name)
 	end
 end
 
--- A modifier key went down or up: the tooltip of the Flat UI button that owns it is set again at once, through the same calls as OnEnter, so a line
--- that waits for a key (Show IDs of ChatTips.lua, the comparison of an item, a macro's [mod] choice) follows the key before the next 0.2 s setting of
--- TipTick, which does what the game's buttons do with UpdateTooltip (ActionButton.lua:1114-1130, GameTooltip.lua:451-463); a Flat UI button has no
--- UpdateTooltip. A hidden tooltip has no owner and is left alone.
 function H.MODIFIER_STATE_CHANGED()
 	local tip = GameTooltip
 	if tip == nil then
@@ -995,7 +893,6 @@ function H.UPDATE_BINDINGS()
 end
 H.GAME_PAD_ACTIVE_CHANGED = H.UPDATE_BINDINGS
 
--- A glow shows or hides on a spell: the buttons whose action holds that spell change state (ActionButton.lua:1037-1058).
 local function ProcEvent(spell, on)
 	if not Plain(spell, "number") then
 		return
@@ -1032,7 +929,6 @@ end
 
 local frame = CreateFrame("Frame")
 
--- The blinking buttons' Flash, shown and hidden in turn every ATTACK_BUTTON_FLASH_TIME (0.4 s), all on one clock. Texture calls on Flat UI's own buttons.
 local function Blink(elapsed)
 	if next(P.flashing) == nil then
 		P.flashClock = 0
@@ -1052,7 +948,6 @@ local function Blink(elapsed)
 	end
 end
 
--- The one OnUpdate pass: a look at the list of buttons four times a second, the repaint a click asked for, the blink and the pressed look.
 local function OnUpdate(_, elapsed)
 	if not On() then
 		return
@@ -1076,7 +971,6 @@ local function OnUpdate(_, elapsed)
 	Pressed()
 end
 
--- The spellbook and the talents ask the game's buttons to show their spell highlight; Flat UI's take it from the same marks.
 local function FollowMarks()
 	if not P.marks and ns.FollowGlobal("ActionBarController_UpdateAllSpellHighlights", function()
 		if On() then
@@ -1115,7 +1009,6 @@ local function Start()
 	return true
 end
 
--- The buttons may be made after the first events (a login in a fight, a build that runs after this file's handler): look again a few times.
 local function Try()
 	if Start() then
 		return
@@ -1144,7 +1037,6 @@ for _, event in ipairs(FIRST) do
 	pcall(frame.RegisterEvent, frame, event)
 end
 
--- The state of a Flat UI button, read only; nil for any other frame.
 function ns.OwnState(button)
 	if button == nil then
 		return nil
@@ -1157,7 +1049,6 @@ function ns.OwnState(button)
 	return st
 end
 
--- part: "icon", "hotkey" or "empty". fn(button, state) returns r, g, b[, a], or nil for the game's look. The first painter that answers wins.
 function ns.OwnPainter(part, fn)
 	if P.painters[part] == nil or type(fn) ~= "function" then
 		return false
@@ -1170,7 +1061,6 @@ function ns.OwnPainter(part, fn)
 	return true
 end
 
--- One button, or every Flat UI button for nil, painted again now.
 function ns.OwnRepaint(button)
 	if not On() then
 		return
@@ -1183,23 +1073,18 @@ function ns.OwnRepaint(button)
 	end
 end
 
--- fn(button, on) when the glow of the slot's spell comes up or goes.
 function ns.OnOwnProc(fn)
 	if type(fn) == "function" then
 		P.procs[#P.procs + 1] = fn
 	end
 end
 
--- fn(button, seconds) once when a cooldown longer than the global cooldown has ended on one of Flat UI's buttons. seconds is how long it ran, from the
--- pass that saw it start to its end. One already running when first seen (at login, after a stance, form or page change, or a drag) gives the start seen
--- for its spell on another slot when there is one, else its spell's base cooldown, and nil only for an item or a spell with no base cooldown.
 function ns.OnOwnReady(fn)
 	if type(fn) == "function" then
 		P.ready[#P.ready + 1] = fn
 	end
 end
 
--- How many passes failed, and the last failure; for the status line.
 function ns.OwnPaintError()
 	return P.failed, P.last
 end

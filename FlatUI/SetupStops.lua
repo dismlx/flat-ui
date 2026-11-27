@@ -1,15 +1,5 @@
 local _, ns = ...
 
--- The stops of Flat UI setup, in the order the walk visits them (SetupWalk.lua shows them, Setup.lua lists them). A stop is { id, title, line,
--- draw, spot, more, parts }: draw is the drawing of its cards and of its picture on Your screen, spot is its place on the screen map at the top of
--- the list (left, top, width and height as shares of the screen), and more lists the steps of SetupSteps.lua that More settings opens.
--- A part is { id, label, note, kind, owns, styles, cards }. kind is "cards" (one of them, each drawn), "chips" (one of them, a small button each,
--- shown on the cards while pointed at) or "ticks" (each on or off). A part owns every path its cards name and the paths in owns: a card sets each
--- to its own value, else to the setting's default. With styles, the cards are those of ns.SETUP_FRAME_STYLES when that table has any.
--- A card is { id, label, line, values, suggest, icon, action }: suggest names the facts that make it the suggestion (SetupWalk.lua, Walk.Facts;
--- "else" is always true and counts last), icon names a cell of the sidebar's icons (PanelNav.lua), and action is a list pick that a tick queues
--- for Finish. SetupWalk.lua checks every value the first time it reads the table, as Setup.lua checks the ready-made profiles.
-
 local U = "unitframes."
 
 ns.SETUP_STOPS = {
@@ -18,9 +8,7 @@ ns.SETUP_STOPS = {
 		draw = "mock-player", spot = { 0.03, 0.05, 0.22, 0.12 },
 		more = { "uf-portraits", "uf-bars", "uf-row", "uf-text", "uf-player", "look", "bars" },
 		parts = {
-			-- The unit frame styles (Config.lua, ns.SETUP_FRAME_STYLES); while there are none, this part has no cards and Picture takes its place.
 			{ id = "frame", label = "Frame", kind = "cards", styles = true, owns = { U .. "enabled", U .. "player" }, cards = {} },
-			-- Every path here is also a path of the styles, so this part goes while the styles are there.
 			{ id = "picture", label = "Picture", kind = "cards", owns = { U .. "enabled", U .. "player" }, cards = {
 				{ id = "face", label = "Face", line = "Your face beside the bars.", suggest = { "else" },
 					values = { [U .. "portraitStyle"] = "picture" } },
@@ -69,7 +57,6 @@ ns.SETUP_STOPS = {
 		},
 	},
 	{
-		-- Not "bars": that is the id of the step Bar texture and colours, and ns.OpenSetup takes the id of a stop or of a step.
 		id = "actionbars", title = "Your action bars", line = "Your spells, bottom middle. Pick how the buttons look.",
 		draw = "mock-action-row", spot = { 0.3, 0.84, 0.4, 0.12 },
 		more = { "ab-bars", "ab-text", "ab-colours", "ab-effects", "ab-block", "ab-places", "cb-look", "cb-size", "cb-text" },
