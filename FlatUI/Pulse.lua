@@ -18,7 +18,8 @@ local _, ns = ...
 -- nor the global cooldown, nor what is left out. While test mode is on (TestMode.lua) a test pulse shows at each spot in use every 3 seconds, with
 -- the sound the first time only. Out of combat, a change of a row of the look or of Pulse spots shows a test pulse in the new look
 -- (ns.PulseLookChanged), and a pick of Sound or Spot of one spell or item pulses that one at its spot with its sound (P.Preview), an item's
--- name in its quality colour as its real pulse has it.
+-- name in its quality colour as its real pulse has it; a new pick takes the place of a test pulse that shows there. The test pulses at two or
+-- three spots each show another of the spells watched, named "Spot 2: Frost Nova" while more than one spot is in use (P.Test).
 --
 -- The end of a cooldown is found without reading what the game withholds in a fight. The flags of a spell's cooldown are never withheld
 -- (isEnabled, isActive and isOnGCD, SpellSharedDocumentation.lua:19-31), and isOnGCD is believed only inside SPELL_UPDATE_COOLDOWN, the one
@@ -1562,33 +1563,47 @@ function P.Resolve(text)
 	return nil
 end
 
--- One test pulse at each spot in use, with the icon of the first spell watched by name; quiet: no sound, else the sound with the first alone.
+-- One test pulse at each spot in use, each with another of the spells watched, the first three by name (the first again when fewer are
+-- watched), and while more than one spot is in use a name that says which spot it is: "Spot 2: Frost Nova". quiet: no sound, else the sound
+-- with the first alone.
 function P.Test(quiet)
-	local first
-	for name, entry in pairs(P.spells) do
-		if not first or name < first.name then
-			first = entry
-		end
+	local names = {}
+	for name in pairs(P.spells) do
+		names[#names + 1] = name
 	end
-	local icon = first and P.Icon(first) or UNKNOWN_ICON
-	for index = 1, P.InUse() do
-		P.Queue({ kind = "test", key = "test", name = "a test", label = first and first.name or "Cooldown pulse", icon = icon, spot = index,
+	table.sort(names)
+	local count = P.InUse()
+	for index = 1, count do
+		local name = names[index] or names[1]
+		local entry = name and P.spells[name]
+		local label = name or "Cooldown pulse"
+		if count > 1 then
+			label = ("Spot %d: %s"):format(index, label)
+		end
+		P.Queue({ kind = "test", key = "test", name = "a test", label = label, icon = entry and P.Icon(entry) or UNKNOWN_ICON, spot = index,
 			quiet = quiet == true or index > 1 })
 	end
 end
 
 -- A pick of Sound of one spell or item or Spot of one spell or item (chosen: { line ID, name, key } of P.Chosen), out of combat with the page on
 -- and test mode off: a test pulse of that spell or item, with its own icon and name, at its spot and with its own sound (soundKey, which
--- P.Show reads), none for no sound. Kind test keeps it out of the real queues, and P.TestEnd takes it away as the other tests.
+-- P.Show reads), none for no sound. Kind test keeps it out of the real queues, and P.TestEnd takes it away as the other tests. A test pulse
+-- that shows or waits at that spot goes first (P.DropTests), so a new pick takes the place of the one that shows.
 function P.Preview(chosen)
 	local mode = ns.TestMode
 	if InCombatLockdown() or not ns.Enabled(KEY) or (mode and mode.IsOn()) or type(chosen) ~= "table" or not P.Plain(chosen[1], "number") then
 		return
 	end
 	local id = chosen[1]
+	-- The spot as P.SpotOf finds it: its own while that spot is in use, else spot 1.
+	local index = P.OwnSpot(chosen[3]) or 1
+	if index > P.InUse() then
+		index = 1
+	end
+	P.DropTests(P.Spot(index))
 	-- An item's name in its quality colour (P.NameColour); the kind stays test, so the test's own rules hold for it.
 	P.Queue({ kind = "test", key = "test", name = "a test", label = chosen[2], icon = P.Icon({ kind = id > 0 and "spell" or "item", id = math.abs(id) }),
-		spot = P.OwnSpot(chosen[3]) or 1, soundKey = chosen[3], item = id < 0 and -id or nil })
+		spot = index, soundKey = chosen[3], item = id < 0 and -id or nil })
 end
 
 -- A row of the look changed (Icon size, How long it shows, Opacity, Sound, Name under the icon, Grow as it fades, Pulse spots, the sizes of
@@ -1610,17 +1625,22 @@ function P.TestStep()
 	P.Test(not (mode ~= nil and mode.Sound("pulse")))
 end
 
+-- The test pulses that wait at a spot go, and one that shows there makes way for the next real one.
+function P.DropTests(spot)
+	for index = #spot.queue, 1, -1 do
+		if spot.queue[index].kind == "test" then
+			table.remove(spot.queue, index)
+		end
+	end
+	if spot.current and spot.current.kind == "test" then
+		spot.token = spot.token + 1
+		P.Next(spot)
+	end
+end
+
 function P.TestEnd()
 	for _, spot in pairs(P.spots) do
-		for index = #spot.queue, 1, -1 do
-			if spot.queue[index].kind == "test" then
-				table.remove(spot.queue, index)
-			end
-		end
-		if spot.current and spot.current.kind == "test" then
-			spot.token = spot.token + 1
-			P.Next(spot)
-		end
+		P.DropTests(spot)
 	end
 end
 
