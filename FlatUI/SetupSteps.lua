@@ -569,6 +569,7 @@ ns.SETUP_STEPS = {
 		{ "castbars.interruptFar", "r", "mock-cast-bar" },
 		{ "castbars.interruptStrip", "r", "mock-cast-bar" },
 		{ "castbars.kickedSound", "o", "behaviour", "Plays a sound as an enemy interrupts your cast or channel; None at first." },
+		{ "castbars.focusSound", "o", "behaviour", "Plays a sound as the enemy you focus starts a cast while your interrupt is ready and in range; None at first." },
 	} },
 	{ id = "cb-size", area = "Cast bars and timers", title = "Cast bar size", draw = "mock-cast-bar", built = true, rows = {
 		{ "castbars.playerMatch", "o", "mock-cast-bar" },

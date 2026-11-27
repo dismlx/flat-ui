@@ -1002,6 +1002,10 @@ ns.PAGES = {
 			tip = "Plays as an enemy's Kick, Counterspell, Pummel, Earth Shock or stun stops your cast or channel. Moving, jumping or Escape plays nothing. Plays once as you pick it.",
 			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
+		{ key = "focusSound", kind = "choice", default = "none", label = "Sound when your focus casts", changed = "CastKickedSoundPicked", needs = "interrupt",
+			tip = "Plays as the enemy you focus starts a cast or channel while your interrupt is ready and in range, at most once a second, so you hear when to kick without watching the focus bar. Needs Interrupt readiness on enemy casts. A cast that cannot be interrupted may play it too, as the game does not always say. Plays once as you pick it.",
+			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
+				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
 	{
 		key = "castbarsSize", label = "Size", parent = "castbars", owner = "castbars",

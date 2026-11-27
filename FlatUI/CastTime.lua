@@ -73,6 +73,12 @@ local _, ns = ...
 -- interruptedBy (UnitDocumentation.lua:4627-4640, 4742-4755) names someone: withheld, which says it is there and is never compared, or a plain GUID
 -- that is not the player's. The game's bar takes a stop without it for a plain one (Shared/CastingBarFrame.lua:137-139), so moving, jumping,
 -- Escape and a channel run to its end play nothing. Picking a sound plays it once while the options window shows. /flatui status counts the sounds.
+-- Sound when your focus casts (None at first, main tab of Cast bars; 0.5.42): while the row names a sound and the page and Interrupt readiness on
+-- enemy casts are on, a second frame of the block's own hears UNIT_SPELLCAST_START and UNIT_SPELLCAST_CHANNEL_START of the focus alone
+-- (RegisterUnitEvent on "focus", so the unit the event gives, which may be withheld for an enemy, is never compared), and a frame later, once the
+-- game's focus bar has taken the cast (C_Timer.After 0), plays the sound while ns.InterruptReady("focus") is a plain true (ready and in range of
+-- an enemy) and the focus bar's BorderShield does not plainly show, at most once a second. Started and stopped with KickListen; picking a sound
+-- plays it once (ns.CastKickedSoundPicked). /flatui status counts the sounds.
 local OWN_ROW, MINE_ROW, PLATE_ROW, PUSH_ROW = "castbars.ownTime", "castbars.playerTime", "nameplates.castTime", "castbars.pushback"
 local TOTAL_ROW, AIM_ROW = "castbars.timeTotal", "castbars.castTarget"
 local EVERY = 0.1
@@ -1127,11 +1133,13 @@ end
 -- Sound when you are interrupted --------------------------------------------------------------------------
 
 -- K: frame (the block's own, false when it could not be made), on (the events are heard), at (GetTime of the last sound), played (the sounds
--- played, for /flatui status).
-local K = { frame = nil, on = false, at = nil, played = 0 }
+-- played, for /flatui status). The same for Sound when your focus casts (0.5.42): focusFrame, focusOn, focusAt, focusPlayed, and focusByUnit
+-- (its events went by unit, so the unit they give is never compared).
+local K = { frame = nil, on = false, at = nil, played = 0, focusFrame = nil, focusOn = false, focusAt = nil, focusPlayed = 0, focusByUnit = false }
 local KickListen
 do
-	local KICK_ROW, KICK_GAP = "castbars.kickedSound", 1
+	local KICK_ROW, KICK_GAP, FOCUS_ROW = "castbars.kickedSound", 1, "castbars.focusSound"
+	local FOCUS_EVENTS = { "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START" }
 	-- The places of the sound choices in ns.SOUNDS (IconRow.lua), as CombatCues.lua has them.
 	local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 	local KICK_EVENTS = { "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_CHANNEL_STOP" }
@@ -1178,8 +1186,86 @@ do
 		end
 	end
 
-	-- The events are heard only while the row is not None and the page is on.
+	-- Sound when your focus casts (0.5.42): while the row names a sound, the page and Interrupt readiness on enemy casts are on.
+	local function FocusOn()
+		return ns.Enabled("castbars") and KITS[Get(FOCUS_ROW)] ~= nil and Get("castbars.interrupt") == true
+	end
+
+	-- A frame after the focus starts a cast or a channel, once the game's bar has taken it: the sound plays while the player's interrupt is ready
+	-- and in range of the focus (ns.InterruptReady a plain true; "far", false and nil play nothing) and the focus bar's shield does not plainly
+	-- show, at most once in KICK_GAP seconds.
+	local function FocusLook()
+		if not (K.focusOn and FocusOn()) or type(ns.InterruptReady) ~= "function" or ns.InterruptReady("focus") ~= true then
+			return
+		end
+		local bar = PlayerBar("FocusFrameSpellBar")
+		local shield = bar and bar.BorderShield
+		if shield ~= nil and not ns.IsSecret(shield) and type(shield) == "table" then
+			local ok, shown = pcall(shield.IsShown, shield)
+			if ok and Flag(shown) then
+				return
+			end
+		end
+		local now = GetTime()
+		if K.focusAt and now >= K.focusAt and now - K.focusAt < KICK_GAP then
+			return
+		end
+		local kit = KITS[Get(FOCUS_ROW)]
+		local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
+		if sound and type(ns.PlayKit) == "function" then
+			K.focusAt = now
+			if ns.PlayKit(sound[1], "castbars") then
+				K.focusPlayed = K.focusPlayed + 1
+			end
+		end
+	end
+
+	-- The unit of an event heard by unit is the focus, and is never compared; heard without, only a plain "focus" counts.
+	local function FocusEvent(_, _, unit)
+		if not K.focusOn then
+			return
+		end
+		if not K.focusByUnit and (ns.IsSecret(unit) or unit ~= "focus") then
+			return
+		end
+		pcall(C_Timer.After, 0, function()
+			pcall(FocusLook)
+		end)
+	end
+
+	local function FocusListen()
+		local on = FocusOn()
+		if on == K.focusOn then
+			return
+		end
+		if K.focusFrame == nil then
+			local ok, frame = pcall(CreateFrame, "Frame")
+			K.focusFrame = ok and not ns.IsSecret(frame) and type(frame) == "table" and frame or false
+			if K.focusFrame then
+				ns.Own[frame] = true
+				frame:SetScript("OnEvent", FocusEvent)
+			end
+		end
+		local frame = K.focusFrame
+		if not frame then
+			return
+		end
+		K.focusOn = on
+		local byUnit = true
+		for _, event in ipairs(FOCUS_EVENTS) do
+			if not on then
+				pcall(frame.UnregisterEvent, frame, event)
+			elseif not (frame.RegisterUnitEvent and pcall(frame.RegisterUnitEvent, frame, event, "focus")) then
+				pcall(frame.RegisterEvent, frame, event)
+				byUnit = false
+			end
+		end
+		K.focusByUnit = on and byUnit
+	end
+
+	-- The events of both rows are heard only while their row is not None and the page is on (and, for the focus, Interrupt readiness).
 	function KickListen()
+		pcall(FocusListen)
 		local on = KickOn()
 		if on == K.on then
 			return
@@ -1330,6 +1416,9 @@ function ns.StatusLines()
 	end
 	if K.on then
 		lines[#lines + 1] = ("Sound when you are interrupted: %d played."):format(K.played)
+	end
+	if K.focusOn then
+		lines[#lines + 1] = ("Sound when your focus casts: %d played."):format(K.focusPlayed)
 	end
 	return lines
 end
