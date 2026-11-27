@@ -77,16 +77,17 @@ local _, ns = ...
 -- (yours), which go through B.Custom.Delete, so Bring back of Custom sections and of + New section's menu still brings the last one back; and each
 -- of Flat UI's own that can be hidden (B.Categories.Hideable: never New items, Free slots or Other), is not hidden and that the rows show now
 -- (B.Categories.Exists), which goes through SetHidden as Delete this section does. While the row of Equipment, Consumables or Trade goods splits
--- its group (B.Categories.GroupBase, any choice but One section), the group's sections are listed together where its first one stands, its base,
--- which holds the group's rest, marked (the rest), after one line that deletes them all at once ("Equipment: all 8 kinds", while two or more of its
--- kinds can be deleted), which also hides the group's base when its row does not show it (Equipment at Weapons, armour and jewellery), so the group
--- stays deleted under every choice of its row. Other, which takes what no other section does, is never listed, and neither are New items and Free
--- slots, shelves no row turns off (New items at the top off keeps nothing as new, but the shelf still takes what comes in while the bags are open,
--- and Free slots has only its two kinds). A pick says one line in chat; nothing here refuses in a fight, as neither SetHidden nor B.Custom.Delete
--- does. The rows Deleted sections (ns.BagsHiddenLines, ns.BagsHiddenPick), which also lists a deleted section the rows do not show now marked (not
--- in use now), and Folded sections, which marks a folded section that is deleted (deleted), or one the rows do not show now (not in use now), are
--- on the Bags page too. A delete or a bring back lays both windows out again and, from a window, draws the rows of an open options window again
--- (ns.RefreshPanel); from a row, the options window draws its rows again itself.
+-- its group (B.Categories.GroupBase, any choice but One section), the group's sections are listed together where the first of them stands, its
+-- base, which holds the group's rest, marked (the rest), after one line that deletes the whole group at once ("Equipment: all 8 kinds", while two
+-- or more of its kinds can be deleted), which also hides every section of the group its row does not show now (Equipment, Shields and the rest at
+-- Weapons, armour and jewellery, Jewellery at Each kind), so the group stays deleted under every choice of its row. Other, which takes what no
+-- other section does, is never listed, and neither are New items and Free slots, shelves no row turns off (New items at the top off keeps nothing
+-- as new, but the shelf still takes what comes in while the bags are open, and Free slots has only its two kinds). A pick says one line in chat;
+-- nothing here refuses in a fight, as neither SetHidden nor B.Custom.Delete does. The rows Deleted sections (ns.BagsHiddenLines,
+-- ns.BagsHiddenPick), which also lists a deleted section the rows do not show now marked (not in use now), and Folded sections, which marks a
+-- folded section that is deleted (deleted), or one the rows do not show now (not in use now), are on the Bags page too. A delete or a bring back
+-- lays both windows out again and, from a window, draws the rows of an open options window again (ns.RefreshPanel); from a row, the options
+-- window draws its rows again itself.
 -- Groups: on a section of a group (B.Categories.GroupRow: Equipment, Consumables or Trade goods), the menu writes that group's row of the Bags page
 -- as the options window does (ns.Set, Core.lua, which refreshes the module and so lays both windows out again, then ns.RefreshPanel), and notes
 -- the change as the options window does (ns.PanelHome.Noted), so Home's Recent changes lists it and Ctrl+Z takes it back: with two choices
@@ -186,7 +187,7 @@ local REMOVE = {
 	all = "%s: all %d kinds",
 	none = "Every section that can be deleted is deleted. Deleted sections brings one back.",
 	one = "Flat UI: deleted %s from the bags. Deleted sections on the Bags page brings it back.",
-	group = "Flat UI: deleted %s from the bags, all %d of its sections. Deleted sections on the Bags page brings them back.",
+	group = "Flat UI: deleted %s from the bags, %d sections in all. Deleted sections on the Bags page brings them back.",
 	gone = "Flat UI: that section is deleted already, or not in use now.",
 }
 -- The words a section brought back flashes (B.Custom.Took), and how many deleted sections the tooltip of the Deleted button names before "and 3
@@ -1239,12 +1240,13 @@ end
 
 -- Every section a delete takes away now, in the order the windows show them (Order.List): the player's own, marked (yours) with how many items
 -- are placed in it, and Flat UI's own that can be deleted (Deletable). The sections of a group its row splits come together where the first of
--- them stands, after one line that deletes them all while two or more of its kinds can go ("Equipment: all 8 kinds"), its base marked (the rest).
--- Other, New items and Free slots are never listed (see the top of the file); with nothing to delete, one line that says so.
+-- them that can be deleted stands, after one line that deletes the whole group while two or more of its kinds can go ("Equipment: all 8 kinds"),
+-- its base marked (the rest). Other, New items and Free slots are never listed (see the top of the file); with nothing to delete, one line that
+-- says so.
 function ns.BagsRemoveLines()
 	local list = Order.List()
 	local groups = SplitSections(list)
-	local lines, done = {}, {}
+	local lines = {}
 	for _, key in ipairs(list) do
 		if IsMine(key) then
 			local okCount, count = pcall(Call, B.Custom, "Count", key)
@@ -1255,8 +1257,7 @@ function ns.BagsRemoveLines()
 			local base = SplitBase(key)
 			local keys = base and groups[base] or nil
 			if keys then
-				if not done[base] then
-					done[base] = true
+				if key == keys[1] then
 					local kinds = KindCount(base, keys)
 					if kinds >= 2 then
 						lines[#lines + 1] = { "group:" .. base, (kinds == 2 and REMOVE.both or REMOVE.all):format(SectionLabel(base), kinds) }
@@ -1279,8 +1280,9 @@ end
 -- Deletes what a line of Delete a section names, with the page on or off, and says one line in chat (the second answer, Panel.lua's AddList): a
 -- section of the player's own through B.Custom.Delete, which says its own line and keeps it for Bring back; one of Flat UI's own through
 -- SetHidden, as Delete this section does, so its items go to the next section that takes them, Junk keeps the sell list, Keep in place keeps the
--- pins and both windows are laid out again; a group's line each section of it a delete takes away now, and its base, so the group stays deleted
--- under every choice of its row. A window that shows is laid out again.
+-- pins and both windows are laid out again; a group's line every section of the group, those its row does not show now too (Jewellery at Each
+-- kind, Equipment and Shields at Weapons, armour and jewellery), so the group stays deleted under every choice of its row, and its chat line
+-- counts the sections that went from the windows. A window that shows is laid out again.
 function ns.BagsRemovePick(id)
 	if type(id) ~= "string" then
 		return false
@@ -1304,19 +1306,24 @@ function ns.BagsRemovePick(id)
 	if not base then
 		return false
 	end
-	local count = 0
-	for _, kind in ipairs(SplitSections(Order.List())[base] or {}) do
-		if SetHidden(kind, true, true) then
-			count = count + 1
+	-- changed: the sections this pick hid; count: those of them the rows showed (B.Categories.Exists), which the windows lost.
+	local changed, count = 0, 0
+	for _, section in ipairs(Order.List()) do
+		local okBase, of = pcall(Call, B.Categories, "GroupBase", section)
+		if okBase and of == base then
+			local okExists, exists = pcall(Call, B.Categories, "Exists", section)
+			if SetHidden(section, true, true) then
+				changed = changed + 1
+				if okExists and exists == true then
+					count = count + 1
+				end
+			end
 		end
 	end
-	if SetHidden(base, true, true) then
-		count = count + 1
-	end
-	if count == 0 then
+	if changed == 0 then
 		return false, REMOVE.gone
 	end
-	if count == 1 then
+	if count < 2 then
 		return true, REMOVE.one:format(SectionLabel(base))
 	end
 	return true, REMOVE.group:format(SectionLabel(base), count)

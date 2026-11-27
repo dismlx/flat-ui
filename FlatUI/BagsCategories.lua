@@ -35,11 +35,11 @@ local _, ns = ...
 -- base at One section), and Of files an item in the sections the rows show.
 --
 -- Hidden sections: the player may hide any section of Flat UI's own but New items, Free slots and Other, which the player's words call deleting
--- (Delete this section in a title's right-click menu and the row Delete a section, which also deletes a split group's every kind at once; the
--- row Deleted sections and Deleted (3) after the last section bring one back, BagsOrder.lua), in both windows and for every character, a set of
--- keys for the whole account in FlatUIDB.bags.hidden, { [key] = true }, beside the order and the folds, read with a type test at each use; an
--- empty set is not kept. A hidden section is passed by as if it were not there: its items go to the
--- next rule that takes them, a hidden kind of a split group to the section that holds the group's rest under its row's choice while that shows
+-- (Delete this section in a title's right-click menu and the row Delete a section, which also deletes every section of a split group at once,
+-- those its row does not show now too; the row Deleted sections and Deleted (3) after the last section bring one back, BagsOrder.lua), in both
+-- windows and for every character, a set of keys for the whole account in FlatUIDB.bags.hidden, { [key] = true }, beside the order and the folds,
+-- read with a type test at each use; an empty set is not kept. A hidden section is passed by as if it were not there: its items go to the next
+-- rule that takes them, a hidden kind of a split group to the section that holds the group's rest under its row's choice while that shows
 -- (Potions to Consumables, Rings to Equipment, Weapons to Armour at Weapons, armour and jewellery), and Other at worst; the explosives and devices
 -- of Trade goods, which Consumables only claims, go on to Trade goods' rule then. Junk hidden changes only where junk shows (IsJunk, the sell list,
 -- Sell junk and the junk coin stay, and a drop takes no item off the sell list), and Keep in place hidden leaves the pins as they are, their items
@@ -588,7 +588,8 @@ function Categories.GroupRow(key)
 end
 
 -- The base of the group of section key ("gear", "consumable", "trade") and true while its row splits it now (any choice but One section); nil for
--- a key of no group. The row Delete a section (BagsOrder.lua) asks it for the line that deletes a whole split group before its kinds.
+-- a key of no group. The row Delete a section (BagsOrder.lua) asks it which sections its line for a whole split group lists and deletes: that
+-- line deletes every section of the group, those its row does not show now too.
 function Categories.GroupBase(key)
 	local group = type(key) == "string" and GROUP_OF[key] or nil
 	if not group then
