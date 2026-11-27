@@ -935,6 +935,23 @@ function D.SetBack(n, id)
 	end
 end
 
+function D.Forget()
+	local store = Q.Store(false)
+	local riding = store and store.riding
+	if type(riding) ~= "table" then
+		return
+	end
+	local keep = D.RidingSlot()
+	for _, n in ipairs(ORDER) do
+		if n ~= keep then
+			riding[n] = nil
+		end
+	end
+	if next(riding) == nil then
+		store.riding = nil
+	end
+end
+
 function D.Riding(n, now, threshold, blocked, blockedAt, quiet)
 	local slot = SLOTS[n]
 	local worn, otherWorn = R.Worn(slot), R.Worn(SLOTS[OTHER[n]])
@@ -1002,6 +1019,7 @@ function D.Pass()
 	local quiet = now < S.quietUntil
 	local wake, before = nil, D.Signature()
 	local riding = Q.Running() and not Q.Paused() and D.RidingSlot()
+	D.Forget()
 	for _, n in ipairs(ORDER) do
 		local why, at, item, copy = nil, nil, nil, nil
 		if riding == n then
@@ -1062,6 +1080,7 @@ end
 function D.Idle()
 	S.token = S.token + 1
 	R.Ear(false)
+	D.Forget()
 	for _, n in ipairs(ORDER) do
 		local why = D.Static(n) or "auto"
 		S.rode[n] = nil

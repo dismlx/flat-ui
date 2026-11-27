@@ -67,7 +67,7 @@ local T = {
 }
 
 local W = { frame = nil, n = "top", offset = 0, addOffset = 0, version = -1, painted = nil, runs = 0, faults = {}, elapsed = 0, message = nil,
-	messageAt = 0, rows = {}, cells = {}, owners = {}, rules = {}, strokes = {}, dims = {}, plains = {}, words = {}, panels = {}, icons = {},
+	messageAt = 0, rows = {}, rowFrames = {}, cells = {}, owners = {}, rules = {}, strokes = {}, dims = {}, plains = {}, words = {}, panels = {}, icons = {},
 	edges = {}, placed = nil, dropped = nil, moving = false, opening = false, queued = false, look = nil, fade = nil, held = nil, quiet = nil }
 local U, Z = {}, {}
 
@@ -666,6 +666,7 @@ function U.MakeRow(frame, index)
 	row.frame:SetSize(SIZE.W - 2 * L.PAD - 4, L.ROW)
 	row.frame:EnableMouse(true)
 	W.owners[#W.owners + 1] = row.frame
+	W.rowFrames[row.frame] = true
 	U.Drops(row.frame, true)
 	row.hover = U.Texture(row.frame, "BACKGROUND", 2)
 	row.hover:SetAllPoints(row.frame)
@@ -1479,10 +1480,10 @@ function ns.TrinketWindowOwns(owner)
 	if frame == nil then
 		return false
 	end
-	for _ = 1, 8 do
-		if owner == nil or IsSecret(owner) or type(owner) ~= "table" then
+	for _ = 1, 3 do
+		if owner == nil or IsSecret(owner) or type(owner) ~= "table" or rawequal(owner, frame) then
 			return false
-		elseif rawequal(owner, frame) then
+		elseif W.rowFrames[owner] then
 			return true
 		end
 		local ok, parent = pcall(owner.GetParent, owner)
@@ -1491,7 +1492,7 @@ function ns.TrinketWindowOwns(owner)
 		end
 		owner = parent
 	end
-	return not IsSecret(owner) and rawequal(owner, frame)
+	return false
 end
 
 function ns.TrinketWindowLines()
