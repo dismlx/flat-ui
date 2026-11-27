@@ -989,6 +989,7 @@ ns.SETUP_STEPS = {
 		{ "chat.spellNextRank", "o", "behaviour", "Adds to a spell's tooltip the level of its next rank, that you can learn it now, or that it comes from a book." },
 		{ "chat.spellThreat", "c", "behaviour", "Adds a spell's threat where it is special or your stance, form, aura, talents or gear change it, or to every spell whose threat is known." },
 		{ "chat.spellWhen", "o", "behaviour", "Chooses whether the spell lines show always or only while Shift, Ctrl or Alt is held." },
+		{ "chat.spellHint", "o", "behaviour", "Adds a dim line to a spell's tooltip naming the key its lines wait for, while that key is up." },
 		{ "chat.tipDetail", "r", "behaviour", "Chooses whether spell and item tooltips keep one dim line of notes under each block or show every note." },
 		{ "chat.gear", "c", "behaviour", "Adds to an item's tooltip how wearing it changes the damage, healing or threat of the spells you chose." },
 		{ "chat.gearWhen", "o", "behaviour", "Chooses whether the gear lines show with the game's item comparison, always, or while a key is held." },

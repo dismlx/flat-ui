@@ -2719,6 +2719,9 @@ ns.PAGES = {
 		{ key = "spellWhen", kind = "choice", default = "always", label = "Show spell lines",
 			choices = { { "always", "Always" }, { "shift", "While holding Shift" }, { "ctrl", "While holding Ctrl" }, { "alt", "While holding Alt" } },
 			tip = "With a key, the lines come as it goes down over action bars, and in the spell book and over a link once you point at it again. A spell link you click in chat shows them at every choice: the game opens its tooltip only for a plain click and never builds it again as a key goes down." },
+		-- SpellLines.lua: one dim line naming the key while the spell lines wait for it (0.5.41).
+		{ key = "spellHint", kind = "bool", default = true, label = "Hint while the key is up", needs = "spellWhen", needsIn = { "shift", "ctrl", "alt" },
+			tip = "While Show spell lines waits for a key, a spell Flat UI has lines for ends its tooltip with one dim line, as Shift: your numbers for this spell, which goes as you hold the key and the lines come." },
 		-- SpellLines.lua, GearLines.lua and GearAvoid.lua: how many dim notes a block of lines keeps (M.Fmt).
 		{ key = "tipDetail", kind = "choice", default = "compact", label = "Notes under the lines",
 			choices = { { "compact", "Compact" }, { "full", "Full" } },
