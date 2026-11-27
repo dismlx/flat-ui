@@ -14,6 +14,7 @@ local CELLS = { general = 0, fonts = 1, unitframes = 2, nameplates = 3, resource
 	bags = 39, hide = 30, absorbs = 12, gearCompare = 27, chatSpells = 21, hudHitTable = 11, hudBuffs = 13, hudBars = 5, hudTracker = 26, hudMessages = 34,
 	chatTips = 21, windowsItems = 8, generalWorld = 23, trinkets = 10 }
 CELLS.consumebar = 36
+CELLS.charges = 20
 local COLUMNS, ROWS = 8, 8
 Nav.CELLS = CELLS
 
@@ -21,7 +22,7 @@ Nav.GROUPS = {
 	{ label = "Look", "general", "fonts" },
 	{ label = "Frames and bars", "unitframes", "nameplates", "castbars", "resource", "swing" },
 	{ label = "Action bars", "actionbars", "barblock", "blocks" },
-	{ label = "Combat", "cooldowns", "trackers", "defensives", "absorbs", "enemycd", "combattext" },
+	{ label = "Combat", "cooldowns", "trackers", "defensives", "absorbs", "charges", "enemycd", "combattext" },
 	{ label = "Group", "partycd", "threat", "healermana", "grouptools", "pingbar" },
 	{ label = "Character and gear", "gearCompare", "chatSpells", "hudHitTable", "trinkets" },
 	{ label = "HUD", "hud", "hudBuffs", "hudTracker", "hudMessages", "hudBars", "datapanels" },

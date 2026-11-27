@@ -271,6 +271,7 @@ ns.SETUP_PROFILES = {
 		{ frame = "FlatUIBags", point = "BOTTOMRIGHT", x = -5.7777099609375, y = 110.0000381469727, kind = "hud" },
 		{ frame = "FlatUIBank", point = "TOPLEFT", x = 1143.22216796875, y = -449.55535888671881, kind = "hud" },
 		{ frame = "FlatUIBarBlock", point = "BOTTOM", x = 0, y = 50.749969482421882, kind = "hud" },
+		{ frame = "FlatUICharges", point = "CENTER", x = 0, y = -216.7, kind = "hud" },
 		{ frame = "FlatUICombatOut", point = "CENTER", x = 429.22214508056641, y = -3.499883651733398, kind = "hud" },
 		{ frame = "FlatUICombatSelf", point = "CENTER", x = -295.99980163574219, y = 70.000177383422852, kind = "hud" },
 		{ frame = "FlatUICooldowns", point = "CENTER", x = -7.6353549957275391e-05, y = -137.9999352097511, kind = "hud" },

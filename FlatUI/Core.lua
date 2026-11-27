@@ -1,6 +1,6 @@
 local ADDON_NAME, ns = ...
 
-local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "trinkets", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "consumebar", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
+local MODULE_ORDER = { "nameplates", "combattext", "actionbars", "resource", "ownbuffs", "swing", "castbars", "cooldowns", "trackers", "defensives", "absorbs", "charges", "partycd", "enemycd", "windows", "bags", "unitframes", "hud", "chat", "trinkets", "movers", "barblock", "blocks", "tooltip", "errands", "datapanels", "threat", "pulse", "healermana", "consumables", "consumebar", "mount", "grouptools", "pingbar", "fonts", "fade", "hide" }
 local LEGACY_MODULES = { "nameplates", "actionbars", "resource", "swing", "castbars" }
 local MAX_FAILURES = 5
 local MAX_PART_FAILURES = 3
