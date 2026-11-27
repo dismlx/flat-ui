@@ -5,7 +5,7 @@ local _, ns = ...
 -- is followed on a global function of the game through ns.FollowGlobal (Core.lua's one hooksecurefunc for each global), with HookScript on
 -- GameTooltip, and with EventRegistry for the input box; no
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
--- from the lines the kind of a unit, an item level, the hint that Shift compares, an ID (and a creature's NPC ID, 0.5.39) and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
+-- from the lines the kind of a unit, an item level, the hint that Shift compares, an ID (and a creature's NPC ID, 0.5.39, a quest's or a currency's ID, 0.5.41) and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
 -- and the hit table lines of HitTableTip.lua (called from the post call after them, on an enemy's GameTooltip), and nothing is created on one in
 -- combat. The size of a tooltip, the height of its health bar and the place of the input box are changed out of combat only. With Arrow keys
 -- without Alt (on by default) each input box gets the widget method SetAltArrowKeyMode(false), so the arrow keys edit the text (Arrows below).
@@ -941,6 +941,12 @@ local function Extras(tooltip, data)
 	elseif not (item or spell) and IsData(data, "Unit") and type(ns.ChatTipNpcId) == "function" then
 		-- The NPC ID of a creature or a vehicle (ChatTips.lua, 0.5.39), once for each build as the other lines here.
 		ns.ChatTipNpcId(lines, data)
+	elseif not (item or spell) and type(ns.ChatTipOtherId) == "function" then
+		-- The ID of a quest (a chat link's tooltip) or a currency (ChatTips.lua, 0.5.41), once for each build too.
+		local kind = (IsData(data, "Quest") and "Quest") or (IsData(data, "Currency") and "Currency") or nil
+		if kind then
+			ns.ChatTipOtherId(lines, data, kind)
+		end
 	end
 	local ok, shown = pcall(tooltip.NumLines, tooltip)
 	local record = X.extras[tooltip]
