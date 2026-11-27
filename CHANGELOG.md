@@ -1,6 +1,15 @@
 ## 0.5.42
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- Bags: an item you place in a section by hand now stays there: every stack of it shows in that section, in the bag and bank windows and for all your characters, until you place it somewhere else, put it back, or delete that section if it is one of your own.
+- Bags: a placed item you loot again goes straight to its section instead of New items, and still glows while it is new; it stops being new along with the rest when you close the bags.
+- Bags: a placed item that comes into your bags or bank while the window is open, such as from the bank or moved to an empty slot, goes to the end of its section instead of under Added.
+- Bags: dropping an item on the section it would go to anyway now keeps it there, so bringing back a deleted section, or changing **Equipment**, **Consumables** or **Trade goods** to a choice that still shows that section, no longer moves it.
+- Bags: an item placed in Potions that you drop on Consumables while **Consumables** shows one section stays placed in Potions, so it goes back to Potions when the row splits again.
+- Bags: while Junk is not deleted, a grey item you place in a section also goes on your keep list, so none of its stacks turns up in Junk. A placed item you put on your sell list another way shows in Junk until it comes off, then returns to its section.
+- Bags: bringing back the items you put back now counts one you have placed in that same section again as back, instead of saying it is in another section.
+- Bags: up to 2000 items can be placed by hand (was 500).
+- Bags: Place the 7 items that match the search here now also places matching items from New items.
 - New **Consumables bar** (off), under **Helpers**: a bar of Flat UI buttons for your consumables. A click uses the item from whichever bag holds it, also in a fight. Each button shows how many you carry across your bags, its cooldown sweep and its tooltip, tinted while you cannot use it now. The first six have keys under **Flat UI** in the game's Key Bindings (**Consumables bar button 1** to **6**), shown short in their corner.
 - **Buttons** chooses **Every consumable in your bags**, **Your list** or **Your list, then the rest**. Every consumable in your bags gives one button per item, never from the bank, in the order of the Bags page at Each kind, then by name. The **Kinds in your bags** chips leave kinds such as scrolls out.
 - Your list is kept for each character, up to 24 items, and takes any item with a use that you cannot wear, such as the Hearthstone, not only consumables. Drop one on the bar out of a fight: on a button of your list it takes that place, and while **Buttons** shows your list, a + at the end of the bar takes the item you hold. You can also pick one under **Add an item**, or Shift+right-click a button to take it off or put it on. **Take an item off**, **Move an item left** and **Move an item right** do the same from the page.
