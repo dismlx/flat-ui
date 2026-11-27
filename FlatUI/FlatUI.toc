@@ -102,6 +102,7 @@ UnitFrameHead.lua
 UnitText.lua
 UnitParts.lua
 UnitExtras.lua
+UnitFrameSpots.lua
 UnitGroupMarks.lua
 UnitDruidMana.lua
 UnitManaRule.lua

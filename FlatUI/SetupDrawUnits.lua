@@ -898,7 +898,7 @@ local function Settings(root)
 		noPowerText = Get("lookNoPowerText") == true, ownTextWhen = Get("ownTextWhen"),
 		pvpFlag = Get("pvpFlag"), pvpCorner = Get("pvpCorner"), pvpTimer = Get("pvpTimer") == true, pvpIcon = Get("pvpIcon") == true,
 		leaderIcon = Get("leaderIcon") == true, roleIcon = Get("roleIcon") == true, raidMarker = Get("raidMarker") == true, deadText = Get("deadText") == true,
-		combatIcon = Get("combatIcon") == true, petHappiness = Get("petHappiness") == true, restAnimation = Get("restAnimation"), auras = Get("auras") == true,
+		combatIcon = Get("combatIcon") == true, iconSpot = Get("statusIconSpot"), petHappiness = Get("petHappiness") == true, restAnimation = Get("restAnimation"), auras = Get("auras") == true,
 		auraCrop = Get("auraCrop"), auraTypeColours = Get("auraTypeColours") == true, auraCountSize = Get("auraCountSize"),
 		auraNumbers = Get("auraNumbers") == true, lookShadow = Get("lookShadow") == true, radius = RADIUS[Get("corners")], fit = { tot = Get("totNameFit"), pet = Get("petNameFit"), party = Get("partyNameFit"), partypet = Get("partyNameFit"), boss = Get("bossNameFit") } }
 	g.t = ns.Pixels(root, ns.Get("general.thickness"))
@@ -1551,6 +1551,7 @@ end
 
 function E.icons(o, g, L)
 	local s, k, root = o.s, o.k, o.root
+	o.above = nil
 	o.top:SetAllPoints(root)
 	for _, icon in ipairs({ o.leader, o.attack, o.role, o.plateIcon, o.marker, o.happy }) do
 		icon:Hide()
@@ -1597,7 +1598,13 @@ function E.icons(o, g, L)
 		end
 		if shown and s.kind == "player" and s.state and g.combatIcon then
 			Art(o.attack, "attack")
-			Mark(o.attack, root, px + side - ICON + 4, py - 5)
+			if L.drawn and g.iconSpot ~= "game" then
+				local top = (L.joined and L.bodyTop or py) - ICON - L.t - 2
+				Mark(o.attack, root, px + side - ICON, top)
+				o.above = top < 0 and -top or nil
+			else
+				Mark(o.attack, root, px + side - ICON + 2, py + side - ICON + 2)
+			end
 		end
 		if shown and s.role and g.roleIcon and RoleShown(s.role) then
 			Art(o.role, s.role)
@@ -2300,7 +2307,7 @@ local MARK = {
 	auras = { "target", "aura" }, auraCrop = { "target", "aura" }, auraTypeColours = { "target", "aura" }, auraCountSize = { "party1", "count" },
 	auraNumbers = { "party1", "time" }, pvpFlag = { "player", "plate" }, pvpCorner = { "player", "plate" }, pvpTimer = { "player", "timer" }, leaderIcon = { "player", "leader" },
 	roleIcon = { "party1", "role" }, pvpIcon = { "player", "plate" }, raidMarker = { "target", "marker" }, deadText = { "boss2", "dead" }, totemTimer = { "totem", "time" },
-	totemSwipe = { "totem", "swipe" }, combatIcon = { "player", "attack" }, petHappiness = { "pet", "happy" }, restAnimation = { "player", "pic" },
+	totemSwipe = { "totem", "swipe" }, combatIcon = { "player", "attack" }, statusIconSpot = { "player", "attack" }, petHappiness = { "pet", "happy" }, restAnimation = { "player", "pic" },
 	playerPicture = { "player", "pic" }, playerName = { "player", "name" }, playerLevel = { "player", "level" }, playerHealthBy = { "player", "health" },
 	playerHealthText = { "player", "healthText" }, playerPowerText = { "player", "powerText" }, playerPowerBar = { "player", "power" },
 	targetPicture = { "target", "pic" }, targetName = { "target", "name" }, targetLevel = { "target", "level" }, targetHealthBy = { "target", "health" },
@@ -2310,7 +2317,7 @@ local MARK = {
 	petPicture = { "pet", "pic" }, petName = { "pet", "name" }, petNameFit = { "pet", "name" }, petHealthBy = { "pet", "health" }, petHealthText = { "pet", "healthText" },
 	petPowerText = { "pet", "powerText" }, petPowerBar = { "pet", "power" },
 	totPicture = { "tot", "pic" }, totName = { "tot", "name" }, totNameFit = { "tot", "name" }, totHealthBy = { "tot", "health" }, totHealthText = { "tot", "healthText" },
-	totPowerBar = { "tot", "power" },
+	totPowerBar = { "tot", "power" }, totSpot = { "tot", "root" },
 	partyPicture = { "party1", "pic" }, partypetPicture = { "partypet1", "pic" }, partyName = { "party1", "name" }, partyNameFit = { "party1", "name" }, partyHealthBy = { "party1", "health" },
 	partyHealthText = { "party1", "healthText" }, partyPowerText = { "party1", "powerText" }, partyPowerBar = { "party1", "power" },
 	partyRangeDim = { "party4", "root" }, partyRangeOpacity = { "party4", "root" },
@@ -2388,15 +2395,23 @@ local function Place(scene, rows, scaled, g)
 	local gap, rowGap, caption = 18, 6, 12
 	local y, width = 0, 0
 	for _, row in ipairs(rows) do
-		local x, rowHeight = 0, 0
+		local x, rowHeight, lift = 0, 0, 0
+		for _, entry in ipairs(row) do
+			for _, id in ipairs(type(entry) == "table" and entry or { entry }) do
+				local item = scene.items[id]
+				local scale = scaled and ScaleOf(id, g) or 1
+				item.root:SetScale(scale)
+				item.draw(item, g)
+				lift = math.max(lift, (tonumber(item.above) or 0) * scale)
+			end
+		end
+		y = y + lift
 		for _, entry in ipairs(row) do
 			local stack = type(entry) == "table" and entry or { entry }
 			local entryWidth, entryY = 0, 0
 			for _, id in ipairs(stack) do
 				local item = scene.items[id]
 				local scale = scaled and ScaleOf(id, g) or 1
-				item.root:SetScale(scale)
-				item.draw(item, g)
 				item.root:ClearAllPoints()
 				item.root:SetPoint("TOPLEFT", scene.root, "TOPLEFT", x / scale, -(y + entryY) / scale)
 				local w, h = item.width * scale, item.height * scale
