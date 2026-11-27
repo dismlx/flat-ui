@@ -9,7 +9,9 @@ local _, ns = ...
 -- record of the changes made in the window, which Panel.lua feeds; Ctrl+Z on any page puts back the newest line (Home.UndoNewest), and Ctrl+Y or
 -- Ctrl+Shift+Z makes again what Undo or Ctrl+Z took back, a batch in one press, until a new change is made (Home.Redo). A change whose value was
 -- taken away since (Reset profile, Copy from, an import, setup's Finish) is left off the list until the value comes back, and a renamed profile
--- keeps its changes (Home.Renamed).
+-- keeps its changes (Home.Renamed); Ctrl+Z with nothing to undo then says that the Profiles page's Bring back puts the profile back (ns.LostProfile).
+-- Undo, Ctrl+Z and Ctrl+Y give the change they made with their words, so the window can show its row (Panel.lua, ui.ShowChange). Each line of Needs
+-- a reload has an Undo of its own, dimmed in a fight, that puts that change alone back to its value at login (Home.UndoReload).
 
 local Home = {}
 ns.PanelHome = Home
@@ -184,15 +186,16 @@ function Home.UndoText(entry)
 	return ("Undid %s: back to %s."):format(LabelOf(entry), old)
 end
 
--- Puts a setting back to the value it had before the change, and keeps the change for Ctrl+Y. Returns what the strip says.
+-- Puts a setting back to the value it had before the change, and keeps the change for Ctrl+Y. Returns what the strip says, and the change, whose row
+-- Ctrl+Z shows (Panel.lua, ui.ShowChange).
 function Home.Undo(entry)
 	Take(entry)
 	undone[#undone + 1] = { entries = { entry } }
-	return Home.UndoText(entry)
+	return Home.UndoText(entry), entry
 end
 
--- Puts back every change of a batch that Log (or list) still shows, newest first, as one step of Ctrl+Y. Returns what the strip says: a batch of one
--- change says it as that change's Undo does.
+-- Puts back every change of a batch that Log (or list) still shows, newest first, as one step of Ctrl+Y. Returns what the strip says, a batch of one
+-- change saying it as that change's Undo does, and the oldest change it put back: the first row of a Reset page.
 function Home.UndoBatch(batch, list)
 	local taken = {}
 	for _, other in ipairs(list or Home.Log()) do
@@ -206,17 +209,23 @@ function Home.UndoBatch(batch, list)
 	end
 	undone[#undone + 1] = { entries = taken, batch = batch }
 	if #taken == 1 then
-		return Home.UndoText(taken[1])
+		return Home.UndoText(taken[1]), taken[1]
 	end
-	return ("Undid %s: %d settings back."):format(batch.label or "Reset page", #taken)
+	return ("Undid %s: %d settings back."):format(batch.label or "Reset page", #taken), taken[#taken]
 end
 
 -- Ctrl+Z on the options pages (Panel.lua, BuildKeys): the newest line of Recent changes goes back, as its Undo does, and each press goes one line
--- further back. A Reset page goes back whole in one press, every row it reset. Returns what the strip says.
+-- further back. A Reset page goes back whole in one press, every row it reset. Returns what the strip says, and the change (Home.Undo). With
+-- nothing to undo while Reset profile, Copy from, an import or setup's Finish took the profile in use this session, it says that Bring back of
+-- the Profiles page puts it back (ns.LostProfile, Core.lua).
 function Home.UndoNewest()
 	local list = Home.Log()
 	local entry = list[1]
 	if not entry then
+		local lost = type(ns.LostProfile) == "function" and ns.LostProfile() or nil
+		if type(lost) == "table" and lost.inUse then
+			return ("Nothing to undo. Profiles > Bring back puts %s back as it was before %s."):format(lost.name, lost.what)
+		end
 		return "Nothing to undo."
 	end
 	if entry.batch then
@@ -236,7 +245,7 @@ end
 
 -- Ctrl+Y or Ctrl+Shift+Z on the options pages (Panel.lua, BuildKeys): the newest step that Undo or Ctrl+Z took back is made again, a whole batch in
 -- one press, and goes back into Recent changes where it was. A step of another profile waits for that profile; a new change ends them all (Noted).
--- Returns what the strip says.
+-- Returns what the strip says, and the oldest change it made again (the first row of a Reset page), whose row Ctrl+Y shows (Panel.lua, ui.ShowChange).
 function Home.Redo()
 	for index = #undone, 1, -1 do
 		local group = undone[index]
@@ -258,17 +267,44 @@ function Home.Redo()
 			if #redo == 1 then
 				local new = ValueOf(redo[1], redo[1].new)
 				if new == "changed" then
-					return ("Redid %s."):format(LabelOf(redo[1]))
+					return ("Redid %s."):format(LabelOf(redo[1])), redo[1]
 				end
-				return ("Redid %s: %s again."):format(LabelOf(redo[1]), new)
+				return ("Redid %s: %s again."):format(LabelOf(redo[1]), new), redo[1]
 			end
-			return ("Redid %s: %d settings again."):format(group.batch and group.batch.label or "the change", #redo)
+			return ("Redid %s: %d settings again."):format(group.batch and group.batch.label or "the change", #redo), redo[#redo]
 		elseif group.entries[1] and group.entries[1].profile == Where(group.entries[1].item) then
 			-- Its settings were changed since by something else (a slash command, setup's Finish): it cannot come back.
 			table.remove(undone, index)
 		end
 	end
 	return "Nothing to redo."
+end
+
+-- The Undo of a line of Needs a reload: that change alone goes back to the value the game runs since login, so it needs no reload, by the rule of the
+-- reload notice's Undo (Reload.lua, NoticeUndo): not in a fight. It goes into the record as a change of its own, so Recent changes, Ctrl+Z and Ctrl+Y
+-- can make the change again, and the line and the notice go once nothing needs a reload.
+function Home.UndoReload(entry)
+	if type(entry) ~= "table" then
+		return
+	end
+	if InCombatLockdown() then
+		kit.Say("Undo after the fight.")
+		return
+	end
+	local label, path, now, was = entry[1], entry[3], entry[4], entry[5]
+	if type(path) ~= "string" or was == nil then
+		return
+	end
+	local done, err = pcall(ns.Set, path, was)
+	if not done then
+		geterrorhandler()(err)
+	elseif ns.Get(path) == was then
+		local item = ns.Def(path) or { path = path, label = label }
+		Home.Noted(item, now, was)
+		kit.Say(("Undid %s: back to %s. It needs no reload now."):format(type(label) == "string" and label or "a setting",
+			ns.PanelTrust.ValueText(item, was)))
+	end
+	kit.Refresh()
 end
 
 -- A change made on Home goes into the record like the same change on the Flat UI page: with the row of Config.lua of the key.
@@ -373,6 +409,8 @@ local function Crumb(model, item)
 	local frame = ns.PanelTabs.FrameName(entry)
 	return top.label .. " > " .. (ns.PanelTabs.Label(model, entry) or entry.label) .. (frame and " > " .. frame or "")
 end
+-- The strip names it after Ctrl+Z or Ctrl+Y on another tab (Panel.lua, ui.ShowChange).
+Home.Crumb = Crumb
 
 -- How many characters use a profile; the profile in use counts this character at least. The title bar of the window says it too (Panel.lua).
 function Home.UserCount(name)
@@ -590,9 +628,26 @@ function Home.Build(host)
 		frame:SetPoint("TOPLEFT", reload, "TOPLEFT", 12, -(30 + (index - 1) * 22))
 		frame:SetPoint("TOPRIGHT", reload, "TOPRIGHT", -12, -(30 + (index - 1) * 22))
 		local line = { frame = frame }
-		line.label = kit.Label(frame, "GameFontHighlight", "LEFT", inner - 32)
+		line.label = kit.Label(frame, "GameFontHighlight", "LEFT", inner - 32 - 70)
 		line.label:SetPoint("LEFT", frame, "LEFT", 4, 0)
 		Opens(frame, line)
+		-- Undo puts back this change alone (Home.UndoReload); its tip in the strip names the value it puts back.
+		line.undo = kit.Button(frame, "Undo", 60, function()
+			Home.UndoReload(line.entry)
+		end)
+		line.undo:SetHeight(20)
+		line.undo:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+		line.undo:HookScript("OnEnter", function()
+			local entry = line.entry
+			if type(entry) == "table" and entry[5] ~= nil then
+				local item = ns.Def(entry[3]) or { path = entry[3], label = entry[1] }
+				kit.Tip(("Puts back %s: %s, as at login, so it needs no reload."):format(type(entry[1]) == "string" and entry[1] or "this setting",
+					ns.PanelTrust.ValueText(item, entry[5])))
+			end
+		end)
+		line.undo:HookScript("OnLeave", function()
+			kit.Tip("")
+		end)
 		reloadLines[index] = line
 	end
 
@@ -785,15 +840,18 @@ function Home.Build(host)
 		end
 		-- What needs a reload
 		local needed = Home.ReloadLines()
+		local fight = InCombatLockdown() == true
 		for index, line in ipairs(reloadLines) do
 			local entry = needed[index]
 			if index == #reloadLines and #needed > #reloadLines then
 				line.label:SetText(("%d more"):format(#needed - #reloadLines + 1))
-				line.path = nil
+				line.path, line.entry = nil, nil
 			else
 				line.label:SetText(entry and ReloadText(entry) or "")
-				line.path = entry and entry[3]
+				line.path, line.entry = entry and entry[3], entry
 			end
+			line.undo:SetShown(line.entry ~= nil and line.entry[5] ~= nil)
+			line.undo:SetAlpha(fight and 0.4 or 1)
 			line.frame:SetShown(entry ~= nil)
 		end
 		-- The modules

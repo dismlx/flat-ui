@@ -32,10 +32,11 @@ local ADDON_NAME, ns = ...
 -- Opacity in combat and out of combat are the alpha of the panel's frame (SetAlpha, which the game does not protect:
 -- SimpleFrameAPIDocumentation.lua:1133-1143), set at the start and the end of a fight (PLAYER_REGEN_DISABLED, PLAYER_REGEN_ENABLED), at each
 -- refresh, which asks InCombatLockdown, and when a stream drawn again makes a panel or shows it again. A panel under the mouse, or whose menu is
--- open, is at full opacity: the frame is asked IsMouseOver, which needs no mouse on it, on a ticker every HOVER seconds that runs only while a
--- shown panel rests below full opacity, so slots that let clicks through still do. A change eases, rising over RISE seconds and falling over
--- FALL (each times the share of the way), by an OnUpdate of the panel's own frame that runs only while it eases; a panel just made or shown
--- takes its alpha at once. The alpha is written only when it changes.
+-- open, is at full opacity, and so is every panel while /flatui move or Edit Mode is open (P.Lining), so a panel at 0% is not an empty box as it
+-- is lined up: the frame is asked IsMouseOver, which needs no mouse on it, and the movers and Edit Mode whether they are open, on a ticker every
+-- HOVER seconds that runs only while a shown panel rests below full opacity, so slots that let clicks through still do. A change eases, rising
+-- over RISE seconds and falling over FALL (each times the share of the way), by an OnUpdate of the panel's own frame that runs only while it
+-- eases; a panel just made or shown takes its alpha at once. The alpha is written only when it changes.
 -- While test mode is on (TestMode.lua), a slot whose stream has nothing to show shows the stream's sample, the widest text it shows (P.TextOf).
 -- The lines around the minimap write the tooltips of the same streams on buttons of their own (P.TipAt, MapText.lua), also with the panels off.
 -- Built on the data panels of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission: its streams, the bridge to LibDataBroker,
@@ -873,9 +874,11 @@ function P.Fill(panel, wanted)
 		end
 		P.Style(slot)
 		P.Draw(slot, texts[index])
-		-- A feed and a stream with a click of its own (Equipment set, Bag space, Time and the others) keep their clicks while the tooltips are off.
+		-- A feed and a stream with a click of its own (Equipment set, Bag space, Time and the others) keep their clicks while the tooltips are off;
+		-- one marked through (Gold, whose Ctrl-click goes with its tooltip) lets clicks through then.
 		local stream = P.StreamOf(slot.id)
-		slot.frame:EnableMouse(slot.id ~= nil and (tips or slot.feed ~= nil or (stream ~= nil and type(stream.Click) == "function")))
+		local clicks = stream ~= nil and type(stream.Click) == "function" and not stream.through
+		slot.frame:EnableMouse(slot.id ~= nil and (tips or slot.feed ~= nil or clicks))
 	end
 	ns.SetOutline(panel.outline, Opt("background") == true, Opt("background") == true)
 	-- The layer of the panel's own frame; its slots follow it.
@@ -992,10 +995,20 @@ local function SetAlpha(panel, alpha)
 	end
 end
 
--- Gives a panel's frame the opacity it should have now: full while it is shown under the mouse or its menu is open, so its tooltips and clicks
--- stay usable at 0%, else the resting one. It eases there from where it is, up over RISE and down over FALL, each times the share of the way
--- (P.Ease); a call while it eases only aims it again. A frame that is hidden, or that P.Layout has just shown, takes it at once, so a new panel
--- never fades down from full on screen.
+-- True while /flatui move (Movers.lua) or the game's Edit Mode is open, so a faded panel is seen whole as its box is lined up, as Fade.lua
+-- keeps its frames (MoversOpen and Wanted there).
+function P.Lining()
+	local kit = ns.MoverKit
+	if type(kit) == "table" and type(kit.IsOpen) == "function" and kit.IsOpen() == true then
+		return true
+	end
+	return type(ns.EditModeOpen) == "function" and ns.EditModeOpen() == true
+end
+
+-- Gives a panel's frame the opacity it should have now: full while it is shown under the mouse or its menu is open, or while the movers or Edit
+-- Mode are open (P.Lining), so its tooltips and clicks stay usable at 0%, else the resting one. It eases there from where it is, up over RISE
+-- and down over FALL, each times the share of the way (P.Ease); a call while it eases only aims it again. A frame that is hidden, or that
+-- P.Layout has just shown, takes it at once, so a new panel never fades down from full on screen.
 function P.Fade(panel)
 	local frame = panel.frame
 	if not frame then
@@ -1003,7 +1016,7 @@ function P.Fade(panel)
 	end
 	local alpha = P.Rest()
 	local menu = P.menu
-	if alpha < 1 and panel.shown and ((menu and menu.slot and menu.slot.panel == panel) or Under(frame)) then
+	if alpha < 1 and panel.shown and ((menu and menu.slot and menu.slot.panel == panel) or Under(frame) or P.Lining()) then
 		alpha = 1
 	end
 	local snap = panel.snap
@@ -1276,7 +1289,8 @@ end
 -- after FLOAT.fade, as the bag window's footer does (GoldFloat, BagsWindow.lua). It is a frame, a font string and an animation group of the
 -- slot's own, made the first time, in the panels' face, size and outline; a change that comes while one plays adds to it and starts it again,
 -- so a Sell junk pass or a pack's loot reads as one growing sum. It hides with the slot. The gold stream calls it on PLAYER_MONEY, never at
--- login, after a loading screen or in test mode (DataStreams.lua).
+-- login, after a loading screen or in test mode (DataStreams.lua); in test mode, while its Moving is on, the module's Tick floats a sample
+-- instead, "+38s 2c" and then "-1g 4s" every 5 seconds (at the end of this file).
 local FLOAT = { rise = 10, seconds = 1.2, fade = 0.6 }
 
 local function MakeFloat(slot)
@@ -1456,7 +1470,8 @@ function P.Retip(slot)
 	end
 end
 
--- The tooltip of a feed: its OnEnter when it has one, which shows its own, else GameTooltip with the lines of its OnTooltipShow or its tooltip text.
+-- The tooltip of a feed: its OnEnter when it has one, which shows its own, else GameTooltip with the lines of its OnTooltipShow or its tooltip text,
+-- and then a dim line for the slot's menu, which Alt-right-click opens on a feed (P.Click).
 function P.FeedEnter(slot)
 	local name, object = slot.feed, P.FeedObject(slot.feed)
 	if not object then
@@ -1478,6 +1493,7 @@ function P.FeedEnter(slot)
 	else
 		pcall(tip.SetText, tip, P.Text(P.Field(object, "tooltiptext")) or P.Text(P.Field(object, "label")) or name, 1, 1, 1, 1, true)
 	end
+	pcall(tip.AddLine, tip, "Alt-right-click: choose what this slot shows.", DIM_RGB[1], DIM_RGB[2], DIM_RGB[3])
 	pcall(tip.Show, tip)
 end
 
@@ -1526,9 +1542,15 @@ end
 -- A click on a slot: a feed's own OnClick, with the slot and the button, or the Click of a stream of Flat UI's own that has one (Equipment set, Bag
 -- space, Time, Coordinates, Quest log, Experience, Reputation, Friends, Guild, Durability), with the slot and the button. A right click on a slot
 -- of Flat UI's own opens the slot's menu of what it shows (P.SlotMenu, below), or closes it when it is open; another menu open on the slot
--- closes first. Any other click on a slot of Flat UI's own does nothing.
+-- closes first. On a feed, whose clicks are its own, Alt-right-click does that (a plain right click still goes to the feed), and any other
+-- click closes the slot's menu before it goes on to the feed. Any other click on a slot of Flat UI's own does nothing.
 function P.Click(slot, button)
-	if not slot.feed then
+	local alt = false
+	if slot.feed and button == "RightButton" and type(IsAltKeyDown) == "function" then
+		local ok, down = pcall(IsAltKeyDown)
+		alt = ok and not ns.IsSecret(down) and down == true
+	end
+	if not slot.feed or alt then
 		local stream = P.StreamOf(slot.id)
 		if button == "RightButton" and stream then
 			if P.MenuOpen(slot) and P.menu.stream == P.SLOT_MENU then
@@ -1539,6 +1561,15 @@ function P.Click(slot, button)
 			if Owned(slot) then
 				pcall(_G.GameTooltip.Hide, _G.GameTooltip)
 			end
+			-- A feed's own tooltip, from its OnEnter, goes as it would when the mouse leaves.
+			local entered = slot.entered
+			if entered then
+				slot.entered = nil
+				local leave = P.Field(entered, "OnLeave")
+				if type(leave) == "function" then
+					P.Call(slot.feed or "", leave, slot.frame)
+				end
+			end
 			P.SlotMenu(slot)
 			return
 		end
@@ -1546,6 +1577,9 @@ function P.Click(slot, button)
 			P.Run(stream, stream.Click, slot, button)
 		end
 		return
+	end
+	if P.MenuOpen(slot) then
+		P.CloseMenu()
 	end
 	local object = P.FeedObject(slot.feed)
 	local click = object and P.Field(object, "OnClick")
@@ -1563,8 +1597,12 @@ end
 -- with a thin line in the border colour between two, so every line can be clicked with many feeds or a large Text size. The title is over the
 -- first column. A line is { text, pick = function, inert = true for a line that does nothing }. A click on a line closes the menu and runs its pick
 -- as a part of the stream. A press anywhere else (GLOBAL_MOUSE_DOWN, heard on a frame of Flat UI's own only while the menu is shown), a second
--- click on the slot, the start of a fight, the slot hiding or showing another stream and the module going off close it; a refresh keeps the
--- slot's menu, drawn again. Nothing of the game's is used for it: neither the game's menus nor its list of the windows that Escape closes.
+-- click on the slot, Escape, the start of a fight, the slot hiding or showing another stream and the module going off close it; a refresh keeps
+-- the slot's menu, drawn again. For Escape the menu's own frame takes the keyboard while it is open out of a fight (EnableKeyboard), and its
+-- OnKeyDown keeps Escape from going on (SetPropagateKeyboardInput false) and lets every other key go on to the game, as the movers' keys and the
+-- options window's do (MoversMode.lua, Panel.lua); the menu is at DIALOG, over the options window (HIGH), so it hears the key first. The keyboard
+-- goes as the menu closes, which the start of a fight does before the lockdown begins, and a menu opened in a fight takes no keyboard. Nothing
+-- of the game's is used for it: neither the game's menus nor its list of the windows that Escape closes.
 local EDGE = 4
 -- The light behind the line under the cursor.
 local LIGHT = { 1, 1, 1, 0.08 }
@@ -1591,6 +1629,7 @@ function P.CloseMenu()
 		slot.hover:Hide()
 	end
 	pcall(menu.listener.UnregisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
+	pcall(menu.frame.EnableKeyboard, menu.frame, false)
 	menu.frame:Hide()
 	-- The panel held at full opacity for its menu rests again once the mouse is off it.
 	if panel then
@@ -1617,6 +1656,17 @@ local function MenuFrame()
 	-- A click on the edge of the menu stays on it.
 	frame:EnableMouse(true)
 	pcall(frame.SetClampedToScreen, frame, true)
+	pcall(frame.EnableKeyboard, frame, false)
+	-- Escape closes the menu and goes no further; every other key goes on to the game.
+	frame:SetScript("OnKeyDown", function(self, key)
+		local escape = key == "ESCAPE" and P.MenuOpen()
+		if not InCombatLockdown() then
+			pcall(self.SetPropagateKeyboardInput, self, not escape)
+		end
+		if escape then
+			ns.Try(KEY, P.CloseMenu)
+		end
+	end)
 	frame:Hide()
 	local menu = { frame = frame, outline = ns.Outline(frame, frame, true), lines = {}, dividers = {} }
 	menu.title = ns.OwnText(frame, "OVERLAY", "GameFontHighlightSmall")
@@ -1769,6 +1819,11 @@ function P.OpenMenu(slot, stream, title, items)
 	ns.SetOutline(menu.outline, true, true)
 	menu.slot, menu.stream = slot, stream
 	menu.frame:Show()
+	-- Escape closes it, out of a fight only; every other key still goes to the game.
+	if not InCombatLockdown() then
+		pcall(menu.frame.EnableKeyboard, menu.frame, true)
+		pcall(menu.frame.SetPropagateKeyboardInput, menu.frame, true)
+	end
 	-- The panel stays at full opacity while its menu is open, wherever the mouse goes.
 	P.Fade(slot.panel)
 	pcall(menu.listener.RegisterEvent, menu.listener, "GLOBAL_MOUSE_DOWN")
@@ -1779,24 +1834,29 @@ function P.OpenMenu(slot, stream, title, items)
 	return true
 end
 
--- The menu of a slot: a right click on a slot of Flat UI's own opens it, titled with the panel and the slot ("Top panel, third slot"). It lists
--- None, every stream and the feeds, as the slot's row on the options page does (ns.DataPanelChoices), the one the slot shows now in gold with a
--- tick, which does nothing; a pick sets the slot's row (ns.Set, and Home's Recent changes as for a change on the page, so Ctrl+Z and the reset
--- arrow take it back) and the module's refresh draws the panel again. A stream of Flat UI's own that shows nothing for this character now (its
--- Text run as the slot would, without test mode's sample) reads dim with its idle words, as "Soul shards (only for a warlock)", and can still be
--- picked. A pick that leaves the slot with no room (None, or such a stream) says so in chat with print, as the data panels have no chat switch:
--- "Flat UI: Soul shards shows nothing for this character now (only for a warlock), so the third slot of the top panel takes no room.", and that
--- the panel hides when it has nothing left to show. While the panel has a slot set to None, "Add a slot after this one" (before, for a free slot
--- before it) opens a second menu at the same slot for the first such slot after it, else before it, titled "Top panel, new fifth slot", listing
--- every choice but None, whose pick sets that slot's row. Its last line opens the Data panels page of the options (ns.OpenPanelPage, Panel.lua;
--- in a fight the window says it opens after it). SLOT_MENU stands for a stream in P.OpenMenu, for the label of its part; menu.target is the
--- slot the second menu fills.
+-- The menu of a slot: a right click on a slot of Flat UI's own opens it, or Alt-right-click on another addon's feed, titled with the panel and the
+-- slot ("Top panel, third slot"). It lists None, every stream and the feeds, as the slot's row on the options page does (ns.DataPanelChoices), the
+-- one the slot shows now in gold with a tick, which does nothing; a pick sets the slot's row (ns.Set, and Home's Recent changes as for a change on
+-- the page, so Ctrl+Z and the reset arrow take it back) and the module's refresh draws the panel again. A stream of Flat UI's own that shows
+-- nothing for this character now (its Text run as the slot would, without test mode's sample) reads dim with its idle words, as "Soul shards (only
+-- for a warlock)", and can still be picked. A pick that leaves the slot with no room (None, or such a stream) says so in chat with print, as the
+-- data panels have no chat switch: "Flat UI: Soul shards shows nothing for this character now (only for a warlock), so the third slot of the top
+-- panel takes no room.", and that the panel hides when it has nothing left to show. "Move left" and "Move right" swap the slot's row with that of
+-- its nearest neighbour that takes room now (a None slot, or one with nothing to show, is passed over; a line is left out at either end) and open
+-- the menu again on the slot that now holds the moved kind, so each press moves it on. While the panel has a slot set to None, "Add a slot after
+-- this one" (before, for a free slot before it) opens a second menu at the same slot for the first such slot after it, else the nearest before it,
+-- titled with the place the new slot lands ("Top panel, new third slot"), listing every choice but None. Its pick lands right beside the slot
+-- clicked: the rows between it and the free slot shift one place toward the free slot, and the pick is written next to the slot clicked. A move or
+-- an add is one batch in Recent changes (SetSlot), one line there and one Ctrl+Z. Its last line opens the Data panels page of the options
+-- (ns.OpenPanelPage, Panel.lua; in a fight the window says it opens after it). SLOT_MENU stands for a stream in P.OpenMenu, for the label of its
+-- part; menu.target is the free slot the second menu fills.
 P.SLOT_MENU = { label = "Slot menu" }
 local ORDINALS = { "first", "second", "third", "fourth", "fifth", "sixth" }
 local TICK = " |TInterface\\Buttons\\UI-CheckBox-Check:0|t"
 
--- Sets the row of a slot, and notes the change in Home's Recent changes with the row of Config.lua, as a change made on the page is noted.
-local function SetSlot(path, id)
+-- Sets the row of a slot, and notes the change in Home's Recent changes with the row of Config.lua, as a change made on the page is noted. With
+-- batch ({ label, what }), every change of one move or add goes back in one Undo or Ctrl+Z (Home.Noted and Home.UndoBatch, PanelHome.lua).
+local function SetSlot(path, id, batch)
 	local before = ns.Get(path)
 	ns.Set(path, id)
 	local home = ns.PanelHome
@@ -1806,7 +1866,7 @@ local function SetSlot(path, id)
 	for _, page in ipairs(ns.PAGES) do
 		for _, row in ipairs(page) do
 			if type(row) == "table" and row.path == path then
-				home.Noted(row, before, ns.Get(path))
+				home.Noted(row, before, ns.Get(path), batch)
 				return
 			end
 		end
@@ -1848,19 +1908,61 @@ local function SayEmpty(slot, label, why)
 	print(line)
 end
 
--- The slot "Add a slot" fills: the first of the panel set to None after this one, else the first before it, or nil; and whether it is after.
+-- The slot "Add a slot" fills: the first of the panel set to None after this one, else the nearest before it, or nil; and whether it is after.
 local function FreeSlot(slot)
-	local spec, first = slot.panel.spec, nil
+	local spec, nearest = slot.panel.spec, nil
 	for index = 1, SLOTS do
 		if index ~= slot.index and Opt(spec.id .. index) == "none" then
 			if index > slot.index then
 				return index, true
 			end
-			first = first or index
+			nearest = index
 		end
 	end
-	return first, false
+	return nearest, false
 end
+
+-- The nearest slot of the panel from index in the direction step (-1 left, 1 right) that takes room now, or nil.
+local function Neighbour(panel, index, step)
+	local at = index + step
+	while at >= 1 and at <= SLOTS do
+		local other = panel.slots[at]
+		if other and other.width then
+			return at
+		end
+		at = at + step
+	end
+	return nil
+end
+
+-- Fills the free slot free (set to None) with id so that it lands right beside slot index: the rows from the free slot back to the one beside
+-- index each take the row next to them toward index, then id is written beside index. One batch.
+local function AddBeside(spec, index, free, id)
+	local batch = { label = "Add a slot", what = "adding the slot" }
+	local step = free > index and 1 or -1
+	local landing = index + step
+	for at = free, landing + step, -step do
+		SetSlot(KEY .. "." .. spec.id .. at, Opt(spec.id .. (at - step)), batch)
+	end
+	SetSlot(KEY .. "." .. spec.id .. landing, id, batch)
+end
+
+-- Swaps the rows of slots index and other, and opens the menu again on other, which now holds the moved kind. One batch.
+local function Swap(panel, index, other)
+	local spec = panel.spec
+	local batch = { label = "Move a slot", what = "the move" }
+	local mine, theirs = Opt(spec.id .. index), Opt(spec.id .. other)
+	SetSlot(KEY .. "." .. spec.id .. other, mine, batch)
+	SetSlot(KEY .. "." .. spec.id .. index, theirs, batch)
+	local moved = panel.slots[other]
+	P.SlotMenu(moved)
+	-- The light marks the slot the menu is on now, as a refresh keeps it.
+	if moved.hover and P.MenuOpen(moved) then
+		moved.hover:Show()
+	end
+end
+
+local MOVES = { { -1, "Move left" }, { 1, "Move right" } }
 
 -- Opens the menu of a slot, or with target the second menu, which fills that slot of the panel while it is still set to None.
 function P.SlotMenu(slot, target)
@@ -1872,8 +1974,10 @@ function P.SlotMenu(slot, target)
 	if target and not (panel.slots[target] and Opt(spec.id .. target) == "none") then
 		target = nil
 	end
-	local filled = target and panel.slots[target] or slot
-	local path, now = KEY .. "." .. spec.id .. filled.index, target and "none" or (slot.id or "none")
+	-- The slot the pick lands in: beside the one clicked for the second menu.
+	local landing = target and (target > slot.index and slot.index + 1 or slot.index - 1) or slot.index
+	local filled = panel.slots[landing] or slot
+	local path, now = KEY .. "." .. spec.id .. slot.index, target and "none" or (slot.id or "none")
 	local items = {}
 	for _, choice in ipairs(ns.DataPanelChoices()) do
 		local id, label = choice[1], choice[2]
@@ -1891,7 +1995,11 @@ function P.SlotMenu(slot, target)
 				end
 			end
 			items[#items + 1] = { text = text, inert = shown, pick = function()
-				SetSlot(path, id)
+				if target then
+					AddBeside(spec, slot.index, target, id)
+				else
+					SetSlot(path, id)
+				end
 				SayEmpty(filled, id ~= "none" and label or nil, why)
 			end }
 		end
@@ -1899,6 +2007,16 @@ function P.SlotMenu(slot, target)
 	local free, after = nil, false
 	if not target then
 		free, after = FreeSlot(slot)
+		if slot.width then
+			for _, move in ipairs(MOVES) do
+				local other = Neighbour(panel, slot.index, move[1])
+				if other then
+					items[#items + 1] = { text = move[2], pick = function()
+						Swap(panel, slot.index, other)
+					end }
+				end
+			end
+		end
 	end
 	if free then
 		items[#items + 1] = { text = after and "Add a slot after this one" or "Add a slot before this one", pick = function()
@@ -1911,7 +2029,7 @@ function P.SlotMenu(slot, target)
 		end
 	end }
 	local name = spec.id == "top" and "Top" or "Bottom"
-	local title = target and ("%s panel, new %s slot"):format(name, ORDINALS[target] or tostring(target))
+	local title = target and ("%s panel, new %s slot"):format(name, ORDINALS[landing] or tostring(landing))
 		or ("%s panel, %s slot"):format(name, ORDINALS[slot.index] or tostring(slot.index))
 	if P.OpenMenu(slot, P.SLOT_MENU, title, items) and target then
 		P.menu.target = target
@@ -2014,6 +2132,10 @@ function ns.DataPanelsMoved()
 			ns.Try(KEY, P.Place, panel)
 		end
 	end
+	-- Their opacity follows the movers too (P.Lining).
+	if ns.Enabled(KEY) then
+		ns.Try(KEY, P.FadeAll)
+	end
 end
 
 -- Another file changed what a stream reads without an event the stream hears (Errands' Show the reputation you gain switches the faction of
@@ -2051,7 +2173,15 @@ ns.Register(KEY, {
 	},
 })
 
--- Test mode: On, Off and a pause refresh the page, so an empty slot shows its stream's sample while it is on (P.TextOf) and goes after.
+-- Test mode: On, Off and a pause refresh the page, so an empty slot shows its stream's sample while it is on (P.TextOf) and goes after. While
+-- its Moving is on, a shown Gold slot floats a sample change every SAMPLE_GOLD seconds, a gain and then a loss in turn (P.Float); the money and
+-- the session count are left alone, and a real change floats nothing then (DataStreams.lua).
 if ns.TestMode then
-	ns.TestMode.Register("datapanels", { module = KEY, label = "Data panels", refresh = true })
+	local SAMPLE_GOLD, GAIN, LOSS = 5, 3802, -10400
+	local loss = false
+	ns.TestMode.Register("datapanels", { module = KEY, label = "Data panels", refresh = true,
+		every = SAMPLE_GOLD, Tick = function()
+			P.Float("gold", loss and LOSS or GAIN)
+			loss = not loss
+		end })
 end

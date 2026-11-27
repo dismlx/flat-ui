@@ -35,10 +35,13 @@ local _, ns = ...
 -- Shared/CastingBarFrame.lua:231-242). At a start it keeps the end of the cast (UnitCastingInfo, else UnitChannelInfo, in milliseconds: plain for
 -- the player and tested with ns.Finite all the same) and its castGUID (a plain string, else none); at each delay or channel update it adds how far
 -- the end moved, so a cast pushed back twice by half a second reads +1.0 and a channel cut short -0.8 (%+.1f), hidden while the total is under
--- 0.05 either way. A stop or an interrupt empties it when its castGUID is the one kept, or once the player no longer casts or channels: one of
+-- 0.05 either way. A stop or an interrupt ends it when its castGUID is the one kept, or once the player no longer casts or channels: one of
 -- another cast (a queued one, a key pressed during the cast) leaves it, as the game's bar ignores a stop whose castID is not its cast
--- (Shared/CastingBarFrame.lua:448, 530). A channel's stop empties it at once, and a failed cast once the player no longer casts or channels (a
--- second cast tried during one fails and leaves it). Each new delay that makes the total larger by PUSH_LEAST or more pops the text that shows
+-- (Shared/CastingBarFrame.lua:448, 530). A channel's stop ends it at once, and a failed cast once the player no longer casts or channels (a
+-- second cast tried during one fails and leaves it). Since 0.5.41 an end starts the count again but leaves the total shown, a child of the bar
+-- that fades with it through its finish flash and its Interrupted or Failed hold (Shared/CastingBarFrame.lua:443-472, 541-560), until the next
+-- cast starts or PUSH_HOLD (1.5) seconds pass (C_Timer.After, whose token an older timer finds replaced); the row going off or an error still
+-- hides it at once. Each new delay that makes the total larger by PUSH_LEAST or more pops the text that shows
 -- (0.5.39): a Scale animation in Vertex mode of its own, made with the font string, from 130% down to its size in 0.15 seconds, grown from its
 -- left end, as CombatCues.lua pops +Combat; a client that will not make it shows the text still. Only SetText, SetFont, SetTextColor, Show, Hide
 -- and the Stop and Play of that animation group reach it in a fight. /flatui status names the last pushback shown.
@@ -49,8 +52,18 @@ local _, ns = ...
 -- bar icon puts it right of the bar (anchored again out of a fight when that row changes). On each look of the poll, while the unit is plainly an
 -- enemy (UnitCanAttack) and its bar casts or channels, UnitShouldDisplaySpellTargetName (a plain answer, UnitDocumentation.lua:3116-3130) says
 -- whether to show it, and UnitSpellTargetName, a withheld return (:3165-3180), goes to SetFormattedText untouched, never compared or joined in
--- Lua; it is white, since the class of that target (UnitSpellTargetClass) is withheld too. It takes the font of the bar's spell name and
--- empties as the cast ends. /flatui status counts the casts that named their target.
+-- Lua. Since 0.5.41 it takes the class colour of that target, as the game colours that name on its own bars (Shared/CastingBarFrame.lua:950-952):
+-- UnitSpellTargetClass, withheld too (UnitDocumentation.lua:3148-3163), goes untouched to C_ClassColor.GetClassColor, which takes a withheld
+-- argument (ClassColorDocumentation.lua:11-25), and its colour to SetTextColor, which does too (SimpleFontStringAPIDocumentation.lua:675-686), as
+-- PlateThreatText.lua colours the name of an enemy's target; never compared or used as a key, and white whenever a step raises (no class given).
+-- It takes the font of the bar's spell name and empties as the cast ends. /flatui status counts the casts that named their target, and how many
+-- of those names showed in a class colour.
+-- Sound when you are interrupted (None at first, main tab of Cast bars; 0.5.41): while the row names a sound and the page is on, a frame of its own
+-- hears the player's UNIT_SPELLCAST_INTERRUPTED and UNIT_SPELLCAST_CHANNEL_STOP (RegisterUnitEvent, started and stopped by ns.CastTimeSync and the
+-- row's changed handler, ns.CastKickedSoundPicked) and plays the sound (ns.PlayKit, ns.SOUNDS of IconRow.lua, at most once a second) when their
+-- interruptedBy (UnitDocumentation.lua:4627-4640, 4742-4755) names someone: withheld, which says it is there and is never compared, or a plain GUID
+-- that is not the player's. The game's bar takes a stop without it for a plain one (Shared/CastingBarFrame.lua:137-139), so moving, jumping,
+-- Escape and a channel run to its end play nothing. Picking a sound plays it once while the options window shows. /flatui status counts the sounds.
 local OWN_ROW, MINE_ROW, PLATE_ROW, PUSH_ROW = "castbars.ownTime", "castbars.playerTime", "nameplates.castTime", "castbars.pushback"
 local TOTAL_ROW, AIM_ROW = "castbars.timeTotal", "castbars.castTarget"
 local EVERY = 0.1
@@ -63,8 +76,9 @@ local MINE = { { "PlayerCastingBarFrame", "player" }, { "OverlayPlayerCastingBar
 -- failed: casts both ways failed on. worked: a time was written once. stopped: the part is off for the session, with the reason. missed: the
 -- casts that showed no time, as their bar's font string could not be made yet in a fight.
 -- noTotal: a cast whose whole the game would not give, written as its seconds left alone.
--- aimed: the casts on the target and focus bars whose target was named (Target of enemy casts).
-local state = { failed = 0, worked = false, stopped = false, why = nil, missed = 0, noTotal = false, aimed = 0 }
+-- aimed: the casts on the target and focus bars whose target was named (Target of enemy casts); aimClass: those whose name first showed in the
+-- class colour of that target, the rest white.
+local state = { failed = 0, worked = false, stopped = false, why = nil, missed = 0, noTotal = false, aimed = 0, aimClass = 0 }
 -- recs: per cast bar, its record: fs (the font string inside the bar), out (a nameplate bar's one past its end), write (the one the cast writes),
 -- font (the font last copied from the spell name). byFrame: per nameplate unit frame, the record of its cast bar. faded: the player's and the pet's
 -- bars whose own CastTimeText Flat UI faded.
@@ -480,6 +494,12 @@ local function AimWrite(fs, unit)
 	fs:SetFormattedText("> %s", UnitSpellTargetName(unit))
 end
 
+-- The class colour of the cast's target on the name, the withheld class and its colour passed on untouched; raises when the game gives no class.
+local function AimColour(fs, unit)
+	local colour = C_ClassColor.GetClassColor(UnitSpellTargetClass(unit))
+	fs:SetTextColor(colour.r, colour.g, colour.b)
+end
+
 -- True for a unit the player can attack, a plain answer.
 local function Hostile(unit)
 	local ok, hostile = pcall(UnitCanAttack, "player", unit)
@@ -511,10 +531,17 @@ local function AimLook(bar, unit, on)
 		AimHide(aim)
 		return
 	end
+	local classed = pcall(AimColour, aim.fs, unit)
+	if not classed then
+		pcall(aim.fs.SetTextColor, aim.fs, 1, 1, 1)
+	end
 	if not aim.shown then
 		aim.fs:Show()
 		aim.shown = true
 		state.aimed = state.aimed + 1
+		if classed then
+			state.aimClass = state.aimClass + 1
+		end
 	end
 end
 
@@ -609,15 +636,18 @@ local PUSH_BARS = { "PlayerCastingBarFrame", "OverlayPlayerCastingBarFrame" }
 -- takes to settle.
 local PUSH_COLOUR, PUSH_LEAST, PUSH_COLOUR_ROW = { 1, 0.3, 0.3 }, 0.05, "castbars.pushbackColour"
 local PUSH_POP, PUSH_POP_TIME = 1.3, 0.15
+-- PUSH_HOLD: the seconds the total of a cast that ended stays on the bar, through its finish flash and its Interrupted hold (0.5.41).
+local PUSH_HOLD = 1.5
 local PUSH_EVENTS = { UNIT_SPELLCAST_START = "start", UNIT_SPELLCAST_CHANNEL_START = "start", UNIT_SPELLCAST_DELAYED = "move",
 	UNIT_SPELLCAST_CHANNEL_UPDATE = "move", UNIT_SPELLCAST_STOP = "ended", UNIT_SPELLCAST_CHANNEL_STOP = "stop",
 	UNIT_SPELLCAST_INTERRUPTED = "ended", UNIT_SPELLCAST_FAILED = "failed" }
 -- texts: per bar, its two font strings (near and after). queued: per bar, a make waits for the end of the fight. P: frame (the file's own, false
 -- when it could not be made), on (the events are heard), lastEnd and chan (the end in milliseconds of the cast now and whether it is a channel),
--- guid (the castGUID of its start, a plain string, else nil), total (the seconds it moved), last (the last total shown, for /flatui status).
+-- guid (the castGUID of its start, a plain string, else nil), total (the seconds it moved), last (the last total shown, for /flatui status), hold
+-- (the token of the timer that hides the total of a cast that ended; an older one does nothing).
 -- pushPops: per font string, its pop (an animation group), false when the client would not make one.
 local pushTexts, pushQueued, pushPops = setmetatable({}, weak), setmetatable({}, weak), setmetatable({}, weak)
-local P = { frame = nil, on = false, lastEnd = nil, chan = nil, guid = nil, total = 0, last = nil }
+local P = { frame = nil, on = false, lastEnd = nil, chan = nil, guid = nil, total = 0, last = nil, hold = nil }
 
 local function PushOn()
 	return Get(PUSH_ROW) == true and ns.Enabled("castbars")
@@ -761,6 +791,7 @@ end
 -- Writes the total on both bars, or hides it while it is under PUSH_LEAST either way. restyle: a new cast, whose font and colour are set first.
 -- grew: a delay made the total larger, which pops the text that shows.
 local function PushShow(restyle, grew)
+	P.hold = nil
 	local shown = math.abs(P.total) >= PUSH_LEAST
 	for _, name in ipairs(PUSH_BARS) do
 		local bar = PlayerBar(name)
@@ -790,8 +821,7 @@ local function PushShow(restyle, grew)
 	end
 end
 
-local function PushClear()
-	P.lastEnd, P.chan, P.guid, P.total = nil, nil, nil, 0
+local function PushHide()
 	for _, entry in pairs(pushTexts) do
 		if entry then
 			pcall(entry.near.Hide, entry.near)
@@ -799,6 +829,30 @@ local function PushClear()
 				pcall(entry.after.Hide, entry.after)
 			end
 		end
+	end
+end
+
+-- At once: the row went off, or an event raised.
+local function PushClear()
+	P.lastEnd, P.chan, P.guid, P.total, P.hold = nil, nil, nil, 0, nil
+	PushHide()
+end
+
+-- The cast ended: the count starts again, but the total shown stays on the bar, a child of it that fades and hides with it, for PUSH_HOLD
+-- seconds or until the next cast starts (PushShow), whichever comes first; at once without a timer.
+local function PushEnd()
+	P.lastEnd, P.chan, P.guid, P.total = nil, nil, nil, 0
+	local token = {}
+	P.hold = token
+	local ok = type(C_Timer) == "table" and type(C_Timer.After) == "function" and pcall(C_Timer.After, PUSH_HOLD, function()
+		if P.hold == token then
+			P.hold = nil
+			pcall(PushHide)
+		end
+	end)
+	if not ok then
+		P.hold = nil
+		PushHide()
 	end
 end
 
@@ -831,12 +885,12 @@ local function PushHeard(what, guid)
 		-- leaves its cast; one of this cast, or any once the player casts nothing, clears it.
 		local plain = PlainGuid(guid)
 		if (plain ~= nil and plain == P.guid) or CastEnd() == nil then
-			PushClear()
+			PushEnd()
 		end
 	elseif what == "stop" or CastEnd() == nil then
-		-- A channel's stop clears at once. A failed cast clears only once the player casts nothing: a second cast tried during one fails and
+		-- A channel's stop ends it at once. A failed cast ends it only once the player casts nothing: a second cast tried during one fails and
 		-- leaves it.
-		PushClear()
+		PushEnd()
 	end
 end
 
@@ -876,6 +930,98 @@ local function PushListen(on)
 	end
 	if not on then
 		PushClear()
+	end
+end
+
+-- Sound when you are interrupted --------------------------------------------------------------------------
+
+-- K: frame (the block's own, false when it could not be made), on (the events are heard), at (GetTime of the last sound), played (the sounds
+-- played, for /flatui status).
+local K = { frame = nil, on = false, at = nil, played = 0 }
+local KickListen
+do
+	local KICK_ROW, KICK_GAP = "castbars.kickedSound", 1
+	-- The places of the sound choices in ns.SOUNDS (IconRow.lua), as CombatCues.lua has them.
+	local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
+	local KICK_EVENTS = { "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_CHANNEL_STOP" }
+
+	local function KickOn()
+		return ns.Enabled("castbars") and KITS[Get(KICK_ROW)] ~= nil
+	end
+
+	-- True when someone other than the player stopped the cast: interruptedBy (the fourth payload, UnitDocumentation.lua:4627-4640, 4742-4755) is
+	-- withheld, which says it is there and is never compared, or a plain GUID that is not the player's. Moving, jumping, Escape and a channel run
+	-- to its end give none (Shared/CastingBarFrame.lua:137-139).
+	local function Kicked(by)
+		if ns.IsSecret(by) then
+			return true
+		end
+		if type(by) ~= "string" or by == "" then
+			return false
+		end
+		local ok, mine = pcall(UnitGUID, "player")
+		return not (ok and not ns.IsSecret(mine) and mine == by)
+	end
+
+	local function KickHeard(by)
+		if not Kicked(by) then
+			return
+		end
+		local now = GetTime()
+		if K.at and now >= K.at and now - K.at < KICK_GAP then
+			return
+		end
+		local kit = KITS[Get(KICK_ROW)]
+		local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
+		if sound and type(ns.PlayKit) == "function" then
+			K.at = now
+			if ns.PlayKit(sound[1], "castbars") then
+				K.played = K.played + 1
+			end
+		end
+	end
+
+	local function KickEvent(_, _, unit, _, _, by)
+		if K.on and not ns.IsSecret(unit) and unit == "player" then
+			pcall(KickHeard, by)
+		end
+	end
+
+	-- The events are heard only while the row is not None and the page is on.
+	function KickListen()
+		local on = KickOn()
+		if on == K.on then
+			return
+		end
+		if K.frame == nil then
+			local ok, frame = pcall(CreateFrame, "Frame")
+			K.frame = ok and not ns.IsSecret(frame) and type(frame) == "table" and frame or false
+			if K.frame then
+				ns.Own[frame] = true
+				frame:SetScript("OnEvent", KickEvent)
+			end
+		end
+		local frame = K.frame
+		if not frame then
+			return
+		end
+		K.on = on
+		for _, event in ipairs(KICK_EVENTS) do
+			if not on then
+				pcall(frame.UnregisterEvent, frame, event)
+			elseif not (frame.RegisterUnitEvent and pcall(frame.RegisterUnitEvent, frame, event, "player")) then
+				pcall(frame.RegisterEvent, frame, event)
+			end
+		end
+	end
+
+	-- The changed handler of Sound when you are interrupted (Config.lua): the events start or stop with it, and the sound picked plays once while
+	-- the options window shows (ns.CombatCueSoundPicked, CombatCues.lua).
+	function ns.CastKickedSoundPicked(path)
+		pcall(KickListen)
+		if type(ns.CombatCueSoundPicked) == "function" then
+			ns.CombatCueSoundPicked(path)
+		end
 	end
 end
 
@@ -945,6 +1091,7 @@ function ns.CastTimeSync()
 		pcall(AimAhead)
 	end
 	pcall(PushListen, PushOn())
+	pcall(KickListen)
 	-- A change of Pushback colour reaches a total that shows at once.
 	for _, entry in pairs(pushTexts) do
 		if entry then
@@ -979,10 +1126,14 @@ function ns.StatusLines()
 		lines[#lines + 1] = line
 	end
 	if AimOn() then
-		lines[#lines + 1] = ("Target of enemy casts: %d casts named their target."):format(state.aimed)
+		lines[#lines + 1] = ("Target of enemy casts: %d casts named their target, %d in its class colour and %d in white."):format(state.aimed,
+			state.aimClass, state.aimed - state.aimClass)
 	end
 	if PushOn() then
 		lines[#lines + 1] = P.last and ("Pushback on your bar: the last shown was %+.1f."):format(P.last) or "Pushback on your bar: no pushback seen yet."
+	end
+	if K.on then
+		lines[#lines + 1] = ("Sound when you are interrupted: %d played."):format(K.played)
 	end
 	return lines
 end

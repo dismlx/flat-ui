@@ -15,11 +15,14 @@ local _, ns = ...
 -- is drawn as missing only when the player can cast it, since only the player's own cast can end that.
 -- A tracker that Show brings or takes away fades in over 0.2 seconds and out over 0.25 (K.Fade). Row direction lays the trackers out in a row,
 -- or with Column, downward or upward, in a left-aligned column. Close up the gaps (off by default) puts the trackers that show together out of
--- combat, and in a fight nothing moves (K.Arrange). Hide while mounted or flying also hides them on a flight path (UnitOnTaxi). Tracker tooltips (Out of combat only by default) shows, with the mouse over a
+-- combat, and in a fight nothing moves (K.Arrange). Hide while mounted or flying also hides them on a flight path (UnitOnTaxi). Show at a ready
+-- check (on by default) shows every low or missing tracker for 12 seconds after a ready check, whatever Show and those rows say, and names them in
+-- one chat line (K.ReadyCheck). Tracker tooltips (Out of combat only by default) shows, with the mouse over a
 -- tracker on screen, its name, its state with the time left and charges, and a kind's own lines (a group buff: who lacks it); the frame takes no
 -- click, so a click goes through to the world, and a tracker that cannot be seen (a proc that is down, one the game's own icon hides) takes no mouse. Sound when it turns low plays the kit of Sound once as a tracker goes from fine to low.
 -- Out of combat, a change of a row of Look and position or of When missing shows every tracker that is on as its sample in the new look for 4
--- seconds after the last change, and a change of a tracker's own look in Edit a tracker shows that tracker alone (K.Preview). A tracker you fix,
+-- seconds after the last change, and a change of a tracker's own look in Edit a tracker shows that tracker alone (K.Preview), as do switching it
+-- on and Clear own settings; adding, importing or moving a tracker shows the whole row in its new order (K.RowPreview). A tracker you fix,
 -- low or missing to fine where the addon reads it, flashes green for 0.6 seconds and stays up for that time before Show takes it away (K.Fixed).
 
 local KEY = "trackers"
@@ -955,11 +958,13 @@ function ns.TrackerAddClass(pick)
 	end
 	if added > 0 then
 		QueueLayout()
+		K.RowPreview()
 	end
 	return added > 0, table.concat(parts, " ")
 end
 
--- All four work in combat and with the page off, since they change what is saved and nothing on screen.
+-- All four work in combat and with the page off, since they change what is saved. Out of combat, with the page on, the row then shows every
+-- tracker that is on as its sample for a moment, the new one in its place (K.RowPreview).
 function ns.TrackerAddBuff(spellID)
 	local name = Whole(spellID) and SpellName(spellID)
 	if not name then
@@ -997,6 +1002,7 @@ function ns.TrackerAddBuff(spellID)
 	list[#list + 1] = entry
 	edited = false
 	QueueLayout()
+	K.RowPreview()
 	return true, ("Added %s."):format(name)
 end
 
@@ -1040,6 +1046,7 @@ function ns.TrackerAddKind(kind, argument)
 	fields.id, fields.kind = NewId(taken), kind
 	list[#list + 1] = fields
 	QueueLayout()
+	K.RowPreview()
 	return true, Plain(message, "string") and message or "Added."
 end
 
@@ -1241,7 +1248,8 @@ function ns.TrackerSet(index, word, text)
 			entry[key] = nil
 		end
 		entry.happy, entry.health = nil, nil
-		return Done(("Tracker %d: every setting follows the pages."):format(index))
+		-- The tracker takes its sample in the page's look (K.OwnPreview).
+		return Done(("Tracker %d: every setting follows the pages."):format(index), "shape")
 	end
 	if word == "clear" then
 		word, text = text:lower(), "clear"
@@ -1421,7 +1429,8 @@ function ns.TrackerClear(index)
 	return ns.TrackerSet(index, "clear", "")
 end
 
--- Moves a tracker up (delta -1) or down (1) the list, past the next one that is a tracker here.
+-- Moves a tracker up (delta -1) or down (1) the list, past the next one that is a tracker here. Out of combat the row shows its samples in the
+-- new order for a moment (K.RowPreview).
 function ns.TrackerMove(index, delta)
 	local entries = Entries()
 	local entry = Whole(index) and entries[index]
@@ -1447,6 +1456,7 @@ function ns.TrackerMove(index, delta)
 	edited = true
 	QueueLayout()
 	Dirty()
+	K.RowPreview()
 	return true
 end
 
@@ -2146,6 +2156,10 @@ local function Wanted(entry, state, how)
 			return alpha
 		end
 	end
+	-- Show at a ready check: for K.READY seconds after one, a tracker read low or missing shows whatever Show and the three rows say (K.ReadyCheck).
+	if K.readyUntil and how == "live" and (state == "low" or state == "missing") and Now() < K.readyUntil then
+		return 1
+	end
 	local show = Value(entry, "show")
 	if show == "low" then
 		-- Trackers that show only when low or missing are hidden on a mount or a flight path, in a city or an inn and in a fight, as the three rows
@@ -2206,6 +2220,7 @@ local function Draw(entry, reading)
 	local record = records[entry.id]
 	if record then
 		record.how = how
+		record.sample = nil
 		local alpha, reason = 0, nil
 		if how == "hidden" then
 			Pulse(record, false)
@@ -3267,7 +3282,7 @@ local function Release(wanted)
 			if record.hid and record.hid.Leave then
 				pcall(record.hid.Leave)
 			end
-			record.how = nil
+			record.how, record.sample = nil, nil
 			-- The next tracker on the record starts with a white countdown (Apply).
 			record.cdTint = nil
 			-- The next tracker on the record takes its first alpha at once (Draw), and a fade of this one ends with it.
@@ -3751,6 +3766,12 @@ function K.TipState(entry, record)
 			return reading.hidden and "Not known: the game hides it in a fight." or "Not known yet.", K.TIP.dim
 		end
 	end
+	local text, colour, state = K.TipWords(entry, reading)
+	return prefix .. text, colour, state
+end
+
+-- The words of a reading that is known, its colour and its state: "Low, 0:18 left, 2 charges" in amber.
+function K.TipWords(entry, reading)
 	local state, words = reading.state, {}
 	if state == "missing" then
 		words[1] = K.TIP_MISSING[entry.kind] or "Missing"
@@ -3759,7 +3780,7 @@ function K.TipState(entry, record)
 		words[#words + 1] = K.TipTime(reading)
 		words[#words + 1] = K.TipCount(entry, reading)
 	end
-	return prefix .. table.concat(words, ", "), K.TIP[state] or K.TIP.dim, K.TIP[state] and state or nil
+	return table.concat(words, ", "), K.TIP[state] or K.TIP.dim, K.TIP[state] and state or nil
 end
 
 -- The lines of a tracker's tooltip, on a tooltip its owner was set for: the name, the state with the time left and charges, the kind's own lines
@@ -3772,9 +3793,9 @@ function K.TipLines(entry, tip, noClick)
 	local kind = KINDS[entry.kind]
 	local what = kind and kind.what or "buff on you"
 	tip:AddLine((what:gsub("^%l", string.upper)), dim[1], dim[2], dim[3])
-	-- Test mode paints samples only out of combat (K.HeldDraw), and the test of /flatui tracker test its own looks.
-	if (K.held and not InCombatLockdown() and (not K.held.only or K.held.only == entry.id)) or testing[entry.id] then
-		tip:AddLine("A sample of the test.", dim[1], dim[2], dim[3])
+	-- A sample says what it shows and where it comes from: test mode and the look preview paint theirs only out of combat (K.HeldDraw), and the
+	-- test of /flatui tracker test its own looks (Paint, Bare). A tracker with no sample drawn keeps its real lines.
+	if K.SampleTip(entry, tip) then
 		return
 	end
 	local text, colour, state = K.TipState(entry, records[entry.id])
@@ -3795,6 +3816,26 @@ function K.TipLines(entry, tip, noClick)
 		tip:AddLine("Out of combat, a click fixes it.", dim[1], dim[2], dim[3], true)
 	end
 end
+-- The lines of a tracker's sample, when one is drawn now: true then.
+function K.SampleTip(entry, tip)
+	local record = records[entry.id]
+	local sample, dim = record and record.sample, K.TIP.dim
+	local held = K.held and not InCombatLockdown() and K.held or nil
+	if not (sample and (held or testing[entry.id])) then
+		return false
+	end
+	if sample.game then
+		tip:AddLine("Sample: the game's own icon, as in a fight.", dim[1], dim[2], dim[3], true)
+	else
+		local text, colour = K.TipWords(entry, sample)
+		tip:AddLine("Sample: " .. text, colour[1], colour[2], colour[3], true)
+	end
+	local source = testing[entry.id] and "The test of /flatui tracker test."
+		or (held.preview and "A preview of the look you are setting." or "Test mode: fine, low and missing in turn.")
+	tip:AddLine(source, dim[1], dim[2], dim[3], true)
+	return true
+end
+
 function ns.TrackerTipLines(entry, tip, noClick)
 	if type(entry) == "table" and type(tip) == "table" then
 		K.TipLines(entry, tip, noClick)
@@ -4151,6 +4192,7 @@ local function Bare(entry)
 	local record = records[entry.id]
 	if record then
 		Apply(record, entry, { icon = nil, sweep = "clear" })
+		record.sample = { game = true }
 		K.SetAlpha(record, 1)
 		record.alpha = 1
 		K.Mouse(record, entry)
@@ -4164,6 +4206,7 @@ local function Paint(entry, state, length)
 		length = length or 600
 		local reading = { state = state, hidden = false, expires = Now() + length, length = length, icon = EntryIcon(entry), count = entry.charged and 3 or nil }
 		Apply(record, entry, Looks(entry, reading, "live"))
+		record.sample = reading
 		K.SetAlpha(record, 1)
 		record.alpha = 1
 		K.Mouse(record, entry)
@@ -4175,7 +4218,8 @@ end
 -- its reading, fine, low and missing in turn, a step every 4 seconds while Moving is on (HeldStep), at full opacity whatever its Show says, so a
 -- tracker set to Only when low or missing or Only in combat shows too. The sample has the widest numbers TrackerShapes.lua measures for, 20
 -- charges and 10:00 left, and 2 charges and 0:20 left when low. Draw paints it at every pass, so a change of a row shows at once. A kind with a
--- test of its own (a proc) keeps its own drawing, but for the proc Procs.lua holds up (ns.ProcHeld), which shows fine. The game's own drawing
+-- test of its own (a proc) keeps its own drawing, but for the proc Procs.lua holds up (ns.ProcHeld), which shows fine; the look preview shows
+-- every proc as its fine sample, with its rim, so its size and its place at the end of the row show too. The game's own drawing
 -- (TrackerSlots.lua) stays off; the marks on the action buttons and the clicks keep what they had. Off and a fight end it, and the Refresh after
 -- each draws every tracker from its reading again.
 K.HELD_STATES, K.HELD_LENGTH, K.HELD_LOW, K.HELD_COUNT, K.HELD_LOW_COUNT = { "fine", "low", "missing" }, 600, 20, 20, 2
@@ -4188,7 +4232,8 @@ function K.HeldDraw(entry)
 	end
 	local kind = KINDS[entry.kind]
 	local own = kind ~= nil and type(kind.Test) == "function"
-	if own and not (type(ns.ProcHeld) == "function" and ns.ProcHeld(entry) == true) then
+	-- The look preview draws a proc too, as its fine sample with its rim and no art, glow or sound; test mode leaves it to Procs.lua.
+	if own and not held.preview and not (type(ns.ProcHeld) == "function" and ns.ProcHeld(entry) == true) then
 		return false
 	end
 	local state = own and "fine" or K.HELD_STATES[held.step] or "fine"
@@ -4197,6 +4242,8 @@ function K.HeldDraw(entry)
 		icon = EntryIcon(entry), count = entry.charged and state ~= "missing" and (low and K.HELD_LOW_COUNT or K.HELD_COUNT) or nil }
 	record.how = "live"
 	Apply(record, entry, Looks(entry, reading, "live"))
+	-- The tooltip says what the sample shows (K.TipLines).
+	record.sample = reading
 	record.curved = nil
 	if record.alpha ~= 1 then
 		K.SetAlpha(record, 1)
@@ -4223,12 +4270,14 @@ end
 
 -- The look preview: out of combat, with test mode off and no /flatui tracker test running, a change of a row of Look and position, or of When
 -- missing, shows every tracker that is on as test mode's sample (K.HeldDraw), at full opacity, fine, or missing for When missing, in the new
--- look; a change of Shape, Icon size, Colour, Place, X, Y or When missing in Edit a tracker shows that tracker alone (only). The samples stay
+-- look, the procs of your class among them as their fine sample with their rim (no art, glow or sound: nothing of Procs.lua runs); a change of
+-- Shape, Icon size, Colour, Place, X, Y or When missing in Edit a tracker shows that tracker alone (only), and so do switching a tracker on and
+-- Clear own settings. Adding a tracker, importing trackers or moving one up or down shows the whole row (K.RowPreview). The samples stay
 -- until 4 seconds after the last change (K.PREVIEW): each change is a new hold, so the timer of an earlier one finds it replaced and leaves it,
 -- and test mode's own hold (K.HeldStart) replaces it the same way. Draw's normal path then fades each tracker back to what it shows (K.Fade),
--- and Close up the gaps closes the row again after the fade (K.Packed).
+-- a proc that is down among them, and Close up the gaps closes the row again after the fade (K.Packed).
 K.PREVIEW = 4
-K.OWN_LOOK = { shape = true, size = true, colour = true, x = true, y = true, place = true, missing = true }
+K.OWN_LOOK = { shape = true, size = true, colour = true, x = true, y = true, place = true, missing = true, on = true }
 
 function K.CanPreview()
 	return not InCombatLockdown() and not (ns.TestMode and ns.TestMode.IsOn()) and ns.Enabled(KEY) and next(testing) == nil
@@ -4247,12 +4296,22 @@ function K.Preview(only, step)
 	end)
 end
 
--- A tracker's own value of the look, set in Edit a tracker or by /flatui tracker set: that tracker alone takes its sample for a moment.
+-- A tracker's own value of the look, set in Edit a tracker or by /flatui tracker set: that tracker alone takes its sample for a moment. A
+-- tracker switched off shows nothing.
 function K.OwnPreview(entry, key)
-	if key and K.OWN_LOOK[key] and K.CanPreview() then
+	if key and K.OWN_LOOK[key] and entry.on ~= false and K.CanPreview() then
 		K.Preview(entry.id, key == "missing" and 3 or 1)
 	end
 end
+
+-- A tracker added, imported or moved: every tracker that is on takes its sample for a moment, or only that one (an id). The layout has run by
+-- then, since out of combat QueueLayout lays the row out at once.
+function K.RowPreview(only)
+	if K.CanPreview() then
+		K.Preview(only, 1)
+	end
+end
+ns.TrackerPreviewRow = K.RowPreview
 
 function K.HeldStop()
 	K.held = nil
@@ -4599,6 +4658,47 @@ function ns.TrackerLookChanged(path)
 	end
 end
 
+-- Show at a ready check (on by default): out of combat, for K.READY seconds after READY_CHECK, every tracker read low or missing shows (Wanted),
+-- also while mounted, in a city or with Only in combat, and one line in the chat names them, by the state each showed last (mem.kept); none
+-- when all are fine. The procs (noDrop) and a tracker its kind hides now (an off hand with no weapon, a debuff with no target) are left out of
+-- the line. The payload of the event, which may be withheld, is never read.
+K.READY = 12
+
+function K.ReadyCheck()
+	if not Opt("readyCheck") or InCombatLockdown() or not ns.Enabled(KEY) then
+		return
+	end
+	K.readyUntil = Now() + K.READY
+	local missing, low = {}, {}
+	for _, entry in ipairs(Entries()) do
+		local kind, kept = KINDS[entry.kind], mem.kept[entry.id]
+		local state = entry.on ~= false and not (kind and kind.noDrop == true) and kept and Plain(kept.state, "string") and kept.state or nil
+		if state == "low" or state == "missing" then
+			local hidden = false
+			if kind and type(kind.Wanted) == "function" then
+				local ok, alpha = pcall(kind.Wanted, entry, state, "live", fighting)
+				hidden = ok and not IsSecret(alpha) and alpha == 0
+			end
+			if not hidden then
+				local list = state == "missing" and missing or low
+				list[#list + 1] = Label(entry) .. (state == "missing" and " is missing" or " is low")
+			end
+		end
+	end
+	for _, text in ipairs(low) do
+		missing[#missing + 1] = text
+	end
+	if #missing > 0 then
+		local last = table.remove(missing)
+		local text = #missing > 0 and (table.concat(missing, ", ") .. " and " .. last) or last
+		print(("Flat UI: for the ready check, %s."):format(text))
+	end
+	Dirty()
+	if C_Timer and C_Timer.After then
+		C_Timer.After(K.READY + 0.05, Dirty)
+	end
+end
+
 ns.Register(KEY, {
 	label = "Trackers",
 	Start = Refresh,
@@ -4618,6 +4718,9 @@ ns.Register(KEY, {
 		PLAYER_CONTROL_GAINED = Dirty,
 		PLAYER_UPDATE_RESTING = Dirty,
 		SPELLS_CHANGED = SpellsChanged,
+		READY_CHECK = function()
+			ns.Try(KEY, K.ReadyCheck)
+		end,
 	},
 	slash = { tracker = Slash },
 	help = HELP,

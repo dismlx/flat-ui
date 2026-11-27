@@ -8,19 +8,28 @@ local _, ns = ...
 -- "target", compared as a frame, so no unit comparison the client can withhold is needed). The count is the game's own: GetComboPoints("player",
 -- "target"), the call ComboFrame.lua:98 makes, which the client may withhold (SecretWhenUnitPowerRestricted, UnitDocumentation.lua:91-105). A
 -- withheld count, an answer that is no plain number and 0 hide the row, as the game hides its own at 0 (ComboFrame.lua:121-130); a druid out of Cat
--- Form reads 0. A lit square is in Combo point colour and the rest of the row is in it at DIM, each in Flat UI's thin border (ns.Outline). As the
--- count goes up the newest square pops (a Scale animation of the square's own texture from POP_FROM back to whole over POP_SECONDS, from its middle,
--- not protected, so it plays in a fight); a change of target draws the new plate's row at once without a pop, as ComboFrame.lua's
--- suppressTransitions does, and hides the old one.
+-- Form reads 0. A lit square is in Combo point colour and the rest of the row is in it at DIM, each in Flat UI's thin border (ns.Outline). With Full
+-- points stand out (on by default), at your most points every square takes Full points colour (gold at first), so a finisher reads at a glance,
+-- and spending them brings Combo point colour back. As the count goes up the newest square pops (a Scale animation of the square's own texture
+-- from POP_FROM back to whole over POP_SECONDS, from its middle, not protected, so it plays in a fight), and every lit square pops together as the
+-- last point lands while Full points stand out is on. The row fades in over FADE_IN seconds as the first point lands (the game fades its own row in,
+-- ComboFrame.lua's COMBOFRAME_FADE_IN) and out over FADE_OUT as the points are spent, Alpha animations of the row's own frame, not protected; a
+-- change of target draws the new plate's row at once without a pop or a fade, as ComboFrame.lua's suppressTransitions does, and hides the old one
+-- at once, as a plate that leaves and the part going off do.
+-- Combo point size (SIZE by default) sizes each square, the units between two keeping SPACE's share of SIZE, and Combo points vertical offset moves
+-- the row up or down. While a class icon shows at Below on the plate (Nameplates.lua's own record of the plate, which the show and layout hooks
+-- pass, and ns.PlateComboPlace as the icon comes or goes a frame after the plate shows), the row hangs just under the icon instead of lying on it,
+-- and moves back under the cast bar on other plates.
 -- Events: UNIT_POWER_FREQUENT, UNIT_POWER_UPDATE and UNIT_MAXPOWER of the player (RegisterUnitEvent) and PLAYER_TARGET_CHANGED, as ComboFrame.lua
 -- hears them (24-31), and UPDATE_SHAPESHIFT_FORM for a druid's form, on a frame of the file's own while the row is on; the show hook of
 -- Nameplates.lua draws the row as your target's plate comes into view, and its leave hook hides the row of a plate that goes.
 -- With Threat value position at Below the threat value hangs under the row while it shows (ns.PlateComboRow, PlateThreatText.lua's PlaceValue),
--- placed again as the row comes and goes (ns.PlateThreatPlace; in a fight on a plate that may be protected, once the fight ends).
+-- placed again as the row comes and goes or moves (ns.PlateThreatPlace; in a fight on a plate that may be protected, once the fight ends); it moves
+-- up as a fade out starts.
 -- Combat: the row is a frame of Flat UI's own, a child of the plate's unit frame so it moves, fades and hides with the plate, made, sized and
 -- anchored only out of combat on a plate the game may protect (ns.MaybeProtected, Movers.lua), as PlateOverpower.lua makes its icon: it is made on
--- each enemy plate as the plate shows while the row is on, so a target taken in a fight has it. In a fight only its alpha, its colours, its border
--- and its pop change. A plate first seen in a fight gets its row when the fight ends; /flatui status counts those. Nothing of the game is written:
+-- each enemy plate as the plate shows while the row is on, so a target taken in a fight has it. In a fight only its alpha, its colours, its border,
+-- its pops and its fades change; a new size, offset or anchor waits for the end of the fight there. A plate first seen in a fight gets its row when the fight ends; /flatui status counts those. Nothing of the game is written:
 -- every call on the game only reads.
 
 local KEY = "nameplates"
@@ -30,21 +39,26 @@ if type(EXTRA) ~= "table" then
 	return
 end
 
--- MAX: the most points drawn (ComboFrame.lua's MAX_COMBO_POINTS). SIZE and SPACE: each square and the units between two, in nameplate units. DROP:
--- the units between the cast bar and the row. DIM: the opacity of a square not lit. POP_FROM and POP_SECONDS: the pop of the newest point. LEVEL:
--- frame levels above the plate's unit frame. CLASSES: the classes that build combo points. EVENTS: heard while the row is on; UNIT_EVENTS: of the
--- player only.
+-- MAX: the most points drawn (ComboFrame.lua's MAX_COMBO_POINTS). SIZE and SPACE: each square and the units between two, in nameplate units, when
+-- Combo point size cannot be read. DROP: the units between the cast bar (or a Below class icon) and the row. DIM: the opacity of a square not lit.
+-- POP_FROM and POP_SECONDS: the pop of the newest point. FADE_IN and FADE_OUT: the seconds the row fades in as the first point lands and out as the
+-- points are spent. COLOUR and FULL: the colours when Combo point colour and Full points colour cannot be read. LEVEL: frame levels above the
+-- plate's unit frame. CLASSES: the classes that build combo points. EVENTS: heard while the row is on; UNIT_EVENTS: of the player only.
 local K = {
-	MAX = 5, SIZE = 7, SPACE = 3, DROP = 2, DIM = 0.25, POP_FROM = 1.4, POP_SECONDS = 0.15, LEVEL = 15,
+	MAX = 5, SIZE = 7, SPACE = 3, DROP = 2, DIM = 0.25, POP_FROM = 1.4, POP_SECONDS = 0.15, LEVEL = 15, FADE_IN = 0.15, FADE_OUT = 0.2,
+	COLOUR = { 1, 0.3, 0.2 }, FULL = { 1, 0.82, 0 },
 	CLASSES = { ROGUE = true, DRUID = true },
 	EVENTS = { "PLAYER_TARGET_CHANGED", "UPDATE_SHAPESHIFT_FORM" },
 	UNIT_EVENTS = { "UNIT_POWER_FREQUENT", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER" },
 }
 
--- recs[unitFrame]: holder (the row's frame), squares ({ texture, outline, pop }), cast (the cast bar it hangs from), max (the squares laid out),
--- shown (the row shows), lit (the count it shows), hex and painted (the colour and the squares it was painted with), waiting (for the end of a
--- fight). Kept when the plate leaves, so a plate's row is made once.
+-- recs[unitFrame]: holder (the row's frame), squares ({ texture, outline, pop }), cast (the plate's cast bar), under (what the row hangs from: the
+-- cast bar or a Below class icon), max, size and oy (the squares laid out, their size and the offset), shown (the row shows), lit (the count it
+-- shows), hex and painted (the look, Look's key, and the squares it was painted with), appear and vanish (its fades, nil on a client without them),
+-- waiting (for the end of a fight). Kept when the plate leaves, so a plate's row is made once.
 local recs = setmetatable({}, { __mode = "k" })
+-- owns[unitFrame]: Nameplates.lua's own record of the plate (its class icon: icon, classShown, iconSide), from the show and layout hooks; only read.
+local owns = setmetatable({}, { __mode = "k" })
 -- S: frame (the file's own, false when it could not be made), on (the events are heard), builder (true or false once the game named the class),
 -- drawn (the plate whose row shows), waited (plates that waited for the end of a fight, for /flatui status).
 local S = { frame = nil, on = false, builder = nil, drawn = nil, waited = 0 }
@@ -100,6 +114,31 @@ local function Most()
 	return math.min(K.MAX, math.floor(most + 0.5))
 end
 
+-- Each square and the units between two, from Combo point size (SIZE when it cannot be read): the space keeps SPACE's share of SIZE, at least 2.
+local function Size()
+	local size = Opt("comboSize")
+	size = ns.Finite(size) and size >= 1 and math.floor(size + 0.5) or K.SIZE
+	return size, math.max(2, math.floor(size * K.SPACE / K.SIZE + 0.5))
+end
+
+-- The look of `count` of `most` points: the colour row (Full points colour at your most points while Full points stand out is on, else Combo point
+-- colour), the key a painted row keeps (a change of either colour or of fullness changes it) and whether the row is full.
+local function Look(count, most)
+	local full = Opt("comboFull") == true and count >= most
+	local row = full and "comboFullColour" or "comboColour"
+	local hex = Opt(row)
+	return row, (type(hex) == "string" and hex or "") .. (full and "+" or ""), full
+end
+
+-- True while an animation group plays.
+local function Playing(group)
+	if not group then
+		return false
+	end
+	local ok, playing = pcall(group.IsPlaying, group)
+	return ok and playing == true
+end
+
 -- The row's frame -----------------------------------------------------------------------------------------------------------------------------
 
 -- SetPoint and ClearAllPoints are protected (SimpleScriptRegionResizingAPIDocumentation.lua:22-30, 135-139): on a plate that may be protected nothing
@@ -153,6 +192,38 @@ local function MakePop(texture)
 	return ok and type(group) == "table" and group or nil
 end
 
+-- The fades of the row: in over FADE_IN (an Alpha animation from nothing) and out over FADE_OUT (to nothing, keeping its end; the row stays at
+-- nothing once it ends unless it shows again), animation groups of the row's own frame; none on a client that refuses them.
+local function MakeFades(rec)
+	local holder = rec.holder
+	local ok, appear, vanish = pcall(function()
+		local inGroup = holder:CreateAnimationGroup()
+		ns.Own[inGroup] = true
+		local fadeIn = inGroup:CreateAnimation("Alpha")
+		ns.Own[fadeIn] = true
+		fadeIn:SetFromAlpha(0)
+		fadeIn:SetToAlpha(1)
+		fadeIn:SetDuration(K.FADE_IN)
+		local outGroup = holder:CreateAnimationGroup()
+		ns.Own[outGroup] = true
+		local fadeOut = outGroup:CreateAnimation("Alpha")
+		ns.Own[fadeOut] = true
+		fadeOut:SetFromAlpha(1)
+		fadeOut:SetToAlpha(0)
+		fadeOut:SetDuration(K.FADE_OUT)
+		pcall(outGroup.SetToFinalAlpha, outGroup, true)
+		outGroup:SetScript("OnFinished", function()
+			if not rec.shown then
+				holder:SetAlpha(0)
+			end
+		end)
+		return inGroup, outGroup
+	end)
+	if ok and type(appear) == "table" and type(vanish) == "table" then
+		rec.appear, rec.vanish = appear, vanish
+	end
+end
+
 -- The row of a plate, made the first time the plate needs one; nil while it waits for the end of a fight.
 local function Make(unitFrame)
 	local rec = recs[unitFrame]
@@ -167,28 +238,55 @@ local function Make(unitFrame)
 	recs[unitFrame] = rec
 	local holder = CreateFrame("Frame", nil, unitFrame)
 	ns.Own[holder] = true
-	holder:SetSize(K.MAX * K.SIZE + (K.MAX - 1) * K.SPACE, K.SIZE)
+	local size, space = Size()
+	holder:SetSize(K.MAX * size + (K.MAX - 1) * space, size)
 	holder:SetAlpha(0)
 	local squares = {}
 	for index = 1, K.MAX do
 		local texture = holder:CreateTexture(nil, "ARTWORK")
 		ns.Own[texture] = true
-		texture:SetSize(K.SIZE, K.SIZE)
+		texture:SetSize(size, size)
 		texture:SetColorTexture(1, 1, 1, 1)
 		local outline = ns.SetOutlineArea(ns.Outline(holder, texture), KEY)
 		ns.SetOutline(outline, false, false)
 		squares[index] = { texture = texture, outline = outline, pop = MakePop(texture) }
 	end
 	rec.holder, rec.squares = holder, squares
+	MakeFades(rec)
 	return rec
 end
 
--- Anchors the row just under the plate's cast bar, centred, and lays its squares out for the most points you can have, when that changed or it has
--- no anchor yet, out of combat on a plate that may be protected.
+-- What the row hangs from: the plate's class icon while it shows at Below (Nameplates.lua's own record, owns), else the cast bar.
+local function Under(unitFrame, cast)
+	local own = owns[unitFrame]
+	local icon = type(own) == "table" and own.icon
+	if own and own.classShown and own.iconSide == "below" and type(icon) == "table" then
+		return icon
+	end
+	return cast
+end
+
+-- The threat value of a plate placed again (PlateThreatText.lua): at Below it hangs under the row while the row shows.
+local function ValuePlace(unitFrame)
+	if type(ns.PlateThreatPlace) == "function" then
+		pcall(ns.PlateThreatPlace, unitFrame)
+	end
+end
+
+-- Anchors the row just under the plate's cast bar (or its Below class icon), centred and moved by Combo points vertical offset, and lays its squares
+-- out at Combo point size for the most points you can have, when any of that changed or it has no anchor yet, out of combat on a plate that may be
+-- protected. A row that shows and moves places a Below threat value again.
 local function Place(unitFrame, rec)
 	local cast = Region(unitFrame, "CastBarsContainer")
+	if cast == nil then
+		return
+	end
 	local most = Most()
-	if cast == nil or (rec.cast == cast and rec.max == most) then
+	local size, space = Size()
+	local oy = Opt("comboY")
+	oy = ns.Finite(oy) and math.floor(oy + 0.5) or 0
+	local under = Under(unitFrame, cast)
+	if rec.cast == cast and rec.max == most and rec.size == size and rec.oy == oy and rec.under == under then
 		return
 	end
 	if Locked(unitFrame) then
@@ -196,21 +294,25 @@ local function Place(unitFrame, rec)
 		return
 	end
 	local holder = rec.holder
-	if rec.cast ~= cast then
+	if rec.under ~= under or rec.oy ~= oy then
 		holder:ClearAllPoints()
-		holder:SetPoint("TOP", cast, "BOTTOM", 0, -K.DROP)
+		holder:SetPoint("TOP", under, "BOTTOM", 0, -K.DROP + oy)
 	end
-	local width = most * K.SIZE + (most - 1) * K.SPACE
-	holder:SetSize(width, K.SIZE)
+	holder:SetSize(most * size + (most - 1) * space, size)
 	for index, square in ipairs(rec.squares) do
+		square.texture:SetSize(size, size)
 		square.texture:ClearAllPoints()
-		square.texture:SetPoint("LEFT", holder, "LEFT", (index - 1) * (K.SIZE + K.SPACE), 0)
+		square.texture:SetPoint("LEFT", holder, "LEFT", (index - 1) * (size + space), 0)
 	end
 	local level = Ask(unitFrame.GetFrameLevel, unitFrame)
 	if type(level) == "number" then
 		pcall(holder.SetFrameLevel, holder, level + K.LEVEL)
 	end
-	rec.cast, rec.max = cast, most
+	local moved = rec.cast ~= nil and (rec.under ~= under or rec.oy ~= oy or rec.size ~= size)
+	rec.cast, rec.under, rec.max, rec.size, rec.oy = cast, under, most, size, oy
+	if moved and rec.shown then
+		ValuePlace(unitFrame)
+	end
 end
 
 -- An enemy plate gets its row ready, so a target taken in a fight shows its points at once. A plate whose side is not known yet gets it too.
@@ -228,22 +330,28 @@ function Prepare(unitFrame)
 	end
 end
 
--- The threat value of a plate placed again (PlateThreatText.lua): at Below it hangs under the row while the row shows.
-local function ValuePlace(unitFrame)
-	if type(ns.PlateThreatPlace) == "function" then
-		pcall(ns.PlateThreatPlace, unitFrame)
-	end
-end
-
--- The row of a plate hidden: its squares' pops stop and the threat value below it moves up again.
-local function Hide(unitFrame)
+-- The row of a plate hidden: its squares' pops stop and the threat value below it moves up again. soft: the points were spent, so a row that shows
+-- fades out over FADE_OUT, and a fade out on its way goes on; else it goes at once, cutting a fade short (a change of target, a plate that leaves,
+-- the part going off).
+local function Hide(unitFrame, soft)
 	local rec = recs[unitFrame]
 	if not (rec and rec.holder) then
 		return
 	end
 	local was = rec.shown
+	if soft and not was then
+		return
+	end
 	rec.shown, rec.lit = nil, nil
-	rec.holder:SetAlpha(0)
+	if rec.appear then
+		pcall(rec.appear.Stop, rec.appear)
+	end
+	if not (soft and rec.vanish and pcall(rec.vanish.Play, rec.vanish)) then
+		if rec.vanish then
+			pcall(rec.vanish.Stop, rec.vanish)
+		end
+		rec.holder:SetAlpha(0)
+	end
 	for _, square in ipairs(rec.squares) do
 		if square.pop then
 			pcall(square.pop.Stop, square.pop)
@@ -254,27 +362,33 @@ local function Hide(unitFrame)
 	end
 end
 
--- Paints the row: `count` of the squares laid out lit in Combo point colour, the rest at DIM, each in its border. pop: the newest point pops.
+-- Paints the row: `count` of the squares laid out lit in Combo point colour (every square in Full points colour at your most points, Look), the rest
+-- at DIM, each in its border. pop: the newest point pops, and every lit one with it as a full row lands.
 local function Paint(rec, count, pop)
-	local hex = Opt("comboColour")
-	local r, g, b = 1, 0.3, 0.2
-	if type(hex) == "string" then
-		r, g, b = ns.Colour(KEY .. ".comboColour")
-	end
 	local most = rec.max or K.MAX
+	local row, key, full = Look(count, most)
+	local base = full and K.FULL or K.COLOUR
+	local r, g, b = base[1], base[2], base[3]
+	if type(Opt(row)) == "string" then
+		r, g, b = ns.Colour(KEY .. "." .. row)
+	end
 	for index, square in ipairs(rec.squares) do
 		local within = index <= most
-		if rec.hex ~= hex then
+		if rec.hex ~= key then
 			square.texture:SetColorTexture(r, g, b, 1)
 		end
 		square.texture:SetAlpha(within and (index <= count and 1 or K.DIM) or 0)
 		ns.SetOutline(square.outline, within, false)
 	end
-	rec.hex, rec.lit, rec.painted = hex, count, most
-	local newest = pop and rec.squares[count]
-	if newest and newest.pop then
-		pcall(newest.pop.Stop, newest.pop)
-		pcall(newest.pop.Play, newest.pop)
+	rec.hex, rec.lit, rec.painted = key, count, most
+	if not pop then
+		return
+	end
+	for index, square in ipairs(rec.squares) do
+		if square.pop and (index == count or (full and index < count)) then
+			pcall(square.pop.Stop, square.pop)
+			pcall(square.pop.Play, square.pop)
+		end
 	end
 end
 
@@ -288,8 +402,9 @@ function Draw(snap)
 	end
 	local count = target and Count() or 0
 	if target == nil or count <= 0 then
+		-- The points were spent on the plate that shows them: the row fades out (a row already hidden, or fading, stays so).
 		if target ~= nil then
-			Hide(target)
+			Hide(target, not snap)
 		end
 		S.drawn = nil
 		return
@@ -304,16 +419,28 @@ function Draw(snap)
 	end
 	S.drawn = target
 	count = math.min(count, rec.max or K.MAX)
-	if rec.shown and rec.lit == count and rec.hex == Opt("comboColour") and rec.painted == rec.max then
+	local _, key = Look(count, rec.max or K.MAX)
+	if rec.shown and rec.lit == count and rec.hex == key and rec.painted == rec.max then
 		return
 	end
 	local first = not rec.shown
 	local pop = not snap and count > (rec.shown and rec.lit or 0)
 	Paint(rec, count, pop)
 	rec.shown = true
-	rec.holder:SetAlpha(1)
 	if first then
+		-- The first point fades the row in; one that comes back while its fade out runs, or on a new target, shows it at once.
+		local fading = Playing(rec.vanish)
+		if rec.vanish then
+			pcall(rec.vanish.Stop, rec.vanish)
+		end
+		rec.holder:SetAlpha(1)
+		if not snap and not fading and rec.appear then
+			pcall(rec.appear.Stop, rec.appear)
+			pcall(rec.appear.Play, rec.appear)
+		end
 		ValuePlace(target)
+	else
+		rec.holder:SetAlpha(1)
 	end
 end
 
@@ -407,7 +534,10 @@ end
 
 -- Hooks into the plates ------------------------------------------------------------------------------------------------------------------------
 
-EXTRA.show[#EXTRA.show + 1] = function(unitFrame)
+EXTRA.show[#EXTRA.show + 1] = function(unitFrame, own)
+	if type(own) == "table" then
+		owns[unitFrame] = own
+	end
 	if S.on then
 		ns.EachPart(KEY, PART, Prepare, unitFrame)
 		-- Your target's plate came into view.
@@ -416,7 +546,10 @@ EXTRA.show[#EXTRA.show + 1] = function(unitFrame)
 		end
 	end
 end
-EXTRA.layout[#EXTRA.layout + 1] = function(unitFrame)
+EXTRA.layout[#EXTRA.layout + 1] = function(unitFrame, own)
+	if type(own) == "table" then
+		owns[unitFrame] = own
+	end
 	local rec = recs[unitFrame]
 	if S.on and rec and rec.holder then
 		ns.EachPart(KEY, PART, Place, unitFrame, rec)
@@ -434,6 +567,21 @@ EXTRA.refresh[#EXTRA.refresh + 1] = function()
 		S.on = false
 		pcall(Hear, false)
 		pcall(StandDown)
+	end
+end
+
+-- The row of a plate placed again, for Nameplates.lua as the plate's class icon comes or goes (own: its record of the plate): under a Below class
+-- icon while it shows, else under the cast bar. Out of combat on a plate that may be protected, else once the fight ends.
+function ns.PlateComboPlace(unitFrame, own)
+	if unitFrame == nil or ns.IsSecret(unitFrame) or ns.Forbidden(unitFrame) then
+		return
+	end
+	if type(own) == "table" then
+		owns[unitFrame] = own
+	end
+	local rec = recs[unitFrame]
+	if S.on and rec and rec.holder then
+		ns.EachPart(KEY, PART, Place, unitFrame, rec)
 	end
 end
 

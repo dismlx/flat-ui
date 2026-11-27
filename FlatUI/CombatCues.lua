@@ -48,6 +48,10 @@ local _, ns = ...
 -- UNIT_MAXPOWER and UNIT_DISPLAYPOWER of the player, which a frame of the addon's own hears while the row is on, and at each refresh. Low mana
 -- shows only while UnitPowerType is plainly mana (not in a druid's cat or bear form), and both hide while the player is plainly dead or a ghost
 -- (PLAYER_DEAD, PLAYER_ALIVE, PLAYER_UNGHOST). A client that refuses the curve or the call leaves the line off, and /flatui status says so.
+-- Share on Low health and Low mana (on by default, 0.5.41): while a line shows, each of those paints also writes the share after its words, as
+-- Low health  14%: UnitHealthPercent or UnitPowerPercent of the player through the game's curve to 100 (CurveConstants.ScaleTo100, as
+-- HealerMana.lua and Chat.lua read it) goes untouched to SetFormattedText with %.0f%%, so a withheld share shows without being compared; a client
+-- without the curve, or a call that raises, leaves the words alone. Test mode's sample reads Low health  15% and Low mana  12%.
 -- The two lines are font strings on one frame of the addon's own on UIParent, which takes no mouse, at the spot of Combat text: alerts in the movers:
 -- +Combat and -Combat above the middle of the box, No target under it and Low health and Low mana under that; the frame and the box are 200 by 170,
 -- from +Combat to Low mana at their 100% size. They are made on the game's combat font (CombatTextFont,
@@ -56,7 +60,10 @@ local _, ns = ...
 -- (C_Timer.NewTicker), which runs only while +Combat or -Combat shows. Each line has an animation group of its own (UISharedDocumentation.lua): No
 -- target breathes while it shows, its opacity from whole to 0.55 and back every 1.2 seconds (an Alpha animation that bounces), and +Combat and
 -- -Combat start a third larger and settle in 0.15 seconds (a Scale animation in Vertex mode, as the scroll areas pop their numbers, ScrollText.lua);
--- a client that will not make them shows the lines still, as before 0.5.35. Nothing shows while the interface is hidden: Alt+Z hides UIParent
+-- a client that will not make them shows the lines still, as before 0.5.35. No target fades out over a quarter of a second as it goes (0.5.41,
+-- WarnFade: an Alpha animation of its own, the final opacity kept, that hides the line as it ends; the frame stays shown meanwhile): as a target
+-- is taken, the fight ends or the row goes off. No target back during the fade stops it and shows whole at once; HideAll, test mode's sample and
+-- a refresh of the page (Apply) hide it at once, so a row change never leaves it half faded. Nothing shows while the interface is hidden: Alt+Z hides UIParent
 -- (Blizzard_FrameXML/Bindings_Camelot.xml:1310-1318), a cinematic is a full screen panel that hides it (Blizzard_UIParentPanelManager/Mainline/
 -- UIPanelWindows.lua:42, Shared/UIParentPanelManager.lua:281-283 and 444-446) and a movie hides it (Blizzard_FrameXML/MovieFrame.lua:59-62). Then
 -- +Combat and -Combat do not start, a fading one goes, and no sound plays; No target is hidden with UIParent. Nothing of the game is changed.
@@ -82,6 +89,8 @@ local LIFE, FADE_FROM, STEP, DELAY, SOUND_GAP, HEIGHT = 1.9, 1.3, 0.05, 1, 3, 25
 -- The breath of No target: the opacity it dims to and the seconds each way. The pop of +Combat and -Combat: the scale it starts at and the seconds it
 -- takes to settle.
 local BREATHE_TO, BREATHE_TIME, POP_FROM, POP_TIME = 0.55, 0.6, 1.3, 0.15
+-- The seconds No target takes to fade out as a target is taken (0.5.41).
+local WARN_FADE = 0.25
 -- The box of the movers (Movers.lua): its name and size, the units between its middle and each line, and where it is from the middle of the
 -- screen when the movers give no spot. The box reaches from +Combat down to Low mana at their 100% size.
 local MOVER, WIDTH, TALL, GAP, X, Y = "FlatUICombatCues", 200, 170, 2, 0, 100
@@ -98,6 +107,8 @@ local LOOKS = { enter = { "combatEnterColour", "combatStateSize" }, leave = { "c
 -- power type (Enum.PowerType.Mana), the two lines in the order they stand under No target, and the player's events that change them: health, mana, the
 -- power type (a druid's form) and death.
 local LOW_AT, MANA = 0.2, 0
+-- The share test mode's and setup's samples write after Low health and Low mana while Share on Low health and Low mana is on.
+local LOW_SAMPLE = { health = "  15%", mana = "  12%" }
 local LOW_KINDS = { "health", "mana" }
 local LOW_UNIT_EVENTS = { UNIT_HEALTH = "health", UNIT_MAXHEALTH = "health", UNIT_POWER_UPDATE = "mana", UNIT_MAXPOWER = "mana", UNIT_DISPLAYPOWER = "mana" }
 local LOW_EVENTS = { "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST" }
@@ -115,10 +126,12 @@ local TARGET_EVENTS = { "UNIT_HEALTH", "UNIT_FLAGS", "UNIT_FACTION" }
 -- warned: No target shows. soundAt: when its sound last played. listener and listening: the frame that hears the target, and whether it does.
 -- flashes, warnings, withheld and stateSounds (the +Combat and -Combat sounds played): what /flatui status counts. silent: the No target sounds
 -- the game has not played since it last played one; /flatui status says so while there are any. blind: the last judgement had an answer the game
--- withheld. healer: the player heals (ns.PlayerRole), read out of a fight. breathe and pop: the animation groups of No target and of the flash line.
+-- withheld. healer: the player heals (ns.PlayerRole), read out of a fight. breathe and pop: the animation groups of No target and of the flash line;
+-- warnFade (false when it could not be made) and fading: the fade of No target as it goes, and whether it runs.
 -- fightAt: GetTime as this fight started; lastFight: the seconds the last fight lasted. low: the Low health and Low mana lines ({ holder, line,
 -- breathe, on } by kind), lowCurves their step curves ({ at, curve } by kind), lowListener and lowListening the frame that hears the player
--- and whether it does, lowSampled: test mode shows Low health; lowRefused and manaRefused: the game refused the curve or the call.
+-- and whether it does, lowSampled: test mode shows Low health; lowRefused and manaRefused: the game refused the curve or the call. shared and
+-- shareRefused: a share was written after Low health or Low mana, and one could not be (Share on Low health and Low mana).
 local S = { fighting = false, warned = false, listening = false, blind = false, healer = false, flashes = 0, warnings = 0, withheld = 0, silent = 0,
 	stateSounds = 0 }
 
@@ -327,7 +340,7 @@ end
 -- whether it shows.
 local function Shown()
 	if S.frame then
-		pcall(S.frame.SetShown, S.frame, S.flashAt ~= nil or S.warned or (S.low ~= nil and LowWanted()))
+		pcall(S.frame.SetShown, S.frame, S.flashAt ~= nil or S.warned or S.fading == true or (S.low ~= nil and LowWanted()))
 	end
 end
 
@@ -443,14 +456,66 @@ local function Flash(kind, quiet, extra)
 	end
 end
 
-local function HideWarning()
+-- The fade of No target as a target is taken (0.5.41): an Alpha animation of its own from whole to nothing in WARN_FADE seconds, the final
+-- opacity kept, that hides the line and gives it back its opacity as it ends. Made once, at the first fade; false when the client would not
+-- make it, and the line then hides at once as before.
+local function WarnFade()
+	if S.warnFade == nil and S.warn then
+		local line = S.warn
+		local ok, group = pcall(function()
+			local made = line:CreateAnimationGroup()
+			local fade = made:CreateAnimation("Alpha")
+			fade:SetFromAlpha(1)
+			fade:SetToAlpha(0)
+			fade:SetDuration(WARN_FADE)
+			made:SetToFinalAlpha(true)
+			made:SetScript("OnFinished", function()
+				S.fading = nil
+				pcall(line.Hide, line)
+				pcall(line.SetAlpha, line, 1)
+				Shown()
+			end)
+			return made
+		end)
+		S.warnFade = ok and not ns.IsSecret(group) and type(group) == "table" and group or false
+	end
+	return S.warnFade or nil
+end
+
+-- Stops a fade of No target that runs; hide also hides the line at once, as for a change of a row in the middle of it.
+local function StopFade(hide)
+	if not S.fading then
+		return
+	end
+	S.fading = nil
+	Animate(S.warnFade or nil, false)
+	if hide and S.warn then
+		pcall(S.warn.Hide, S.warn)
+	end
+	if S.warn then
+		pcall(S.warn.SetAlpha, S.warn, 1)
+	end
+	Shown()
+end
+
+-- Takes No target away: fading out while the interface shows (a target taken, the fight over, the row off), at once with quick (HideAll, the
+-- samples of test mode) or when the fade could not be made.
+local function HideWarning(quick)
 	S.missingAt, S.waiting = nil, nil
+	if quick then
+		StopFade(true)
+	end
 	if S.warned then
 		S.warned = false
 		Animate(S.breathe, false)
 		if S.warn then
-			pcall(S.warn.Hide, S.warn)
-			pcall(S.warn.SetAlpha, S.warn, 1)
+			local fade = not quick and InterfaceShown() and WarnFade()
+			if fade and pcall(fade.Play, fade) then
+				S.fading = true
+			else
+				pcall(S.warn.Hide, S.warn)
+				pcall(S.warn.SetAlpha, S.warn, 1)
+			end
 		end
 		Shown()
 	end
@@ -502,6 +567,8 @@ local function ShowWarning()
 	if S.warned or not Make() then
 		return
 	end
+	-- No target back during its fade shows whole again at once.
+	StopFade(false)
 	local line = S.warn
 	line:SetText(WarnText())
 	Look(line, "warn")
@@ -579,15 +646,17 @@ local function MakeLow()
 	return true
 end
 
--- The words, look and spot of the two lines: under the spot of No target, a line of its size apart, read each time so a new size counts.
+-- The words, look and spot of the two lines: under the spot of No target, a line of its size apart, read each time so a new size counts. Test
+-- mode's sample writes its share after the words while Share on Low health and Low mana is on; PaintLow writes the live share.
 local function LookLow()
 	if not S.low then
 		return
 	end
 	local step = HEIGHT * (Opt("noTargetSize") or 100) / 100 + GAP
+	local sample = S.lowSampled and Opt("lowShare") == true
 	for index, kind in ipairs(LOW_KINDS) do
 		local line = S.low[kind].line
-		line:SetText(Words(kind))
+		line:SetText(sample and Words(kind) .. LOW_SAMPLE[kind] or Words(kind))
 		Look(line, kind == "mana" and "mana" or "low")
 		line:ClearAllPoints()
 		line:SetPoint("TOP", S.frame, "CENTER", 0, -GAP - step * index)
@@ -616,6 +685,41 @@ local function ManaAlpha(holder, curve)
 	holder:SetAlpha(UnitPowerPercent("player", MANA, false, curve))
 end
 
+-- The game's curve that turns a share of 1 into 100 (CurveConstants.ScaleTo100, as HealerMana.lua reads it), or nil when the client has none.
+local function Hundred()
+	local ok, curve = pcall(function()
+		return CurveConstants.ScaleTo100
+	end)
+	if ok and curve ~= nil and not ns.IsSecret(curve) then
+		return curve
+	end
+	return nil
+end
+
+-- Share on Low health and Low mana: the words and the share through that curve, which goes as it is to SetFormattedText, withheld or not, as
+-- Chat.lua writes the health of a unit; never compared here.
+local function ShareText(line, kind, hundred)
+	if kind == "health" then
+		line:SetFormattedText("%s  %.0f%%", Words(kind), UnitHealthPercent("player", true, hundred))
+	else
+		line:SetFormattedText("%s  %.0f%%", Words(kind), UnitPowerPercent("player", MANA, false, hundred))
+	end
+end
+
+-- The live share after the words while the row is on and the line shows; the words alone when the client has no curve or refuses the call.
+local function PaintShare(rec, kind)
+	if Opt("lowShare") ~= true then
+		return
+	end
+	local hundred = Hundred()
+	if hundred and pcall(ShareText, rec.line, kind, hundred) then
+		S.shared = true
+		return
+	end
+	S.shareRefused = true
+	pcall(rec.line.SetText, rec.line, Words(kind))
+end
+
 -- One line: its holder's opacity from the player's health or mana, the line hidden while the row is off, the player is plainly dead or a ghost,
 -- out of a fight while Only in a fight is on, and for mana while the power is not plainly mana. A refusal of the game leaves that line off and is
 -- noted for the status.
@@ -636,6 +740,9 @@ local function PaintLow(kind)
 	elseif curve and not S.manaRefused and Ask(UnitPowerType, "player") == MANA then
 		on = pcall(ManaAlpha, rec.holder, curve)
 		S.manaRefused = not on
+	end
+	if on then
+		PaintShare(rec, kind)
 	end
 	ShowLow(rec, on)
 end
@@ -856,7 +963,7 @@ end
 
 local function HideAll()
 	EndFlash()
-	HideWarning()
+	HideWarning(true)
 	Listen(false)
 	HideLow()
 	S.fightAt = nil
@@ -889,6 +996,8 @@ local function Apply()
 		EndFlash()
 	end
 	Listen(warn and S.fighting)
+	-- A change of a row never leaves a half-faded No target.
+	StopFade(true)
 	if S.frame then
 		Place()
 		-- A line that shows, a sample of test mode too, takes a changed row at once: its look and its words (the key to target an enemy, the
@@ -1000,6 +1109,9 @@ ns.AddStatus(KEY, function()
 			lines[#lines + 1] = ("Low health warning: under %d%% health, under %d%% mana%s."):format(math.floor(LowAt("health") * 100 + 0.5),
 				math.floor(LowAt("mana") * 100 + 0.5), Opt("lowFight") == true and ", only in a fight" or "")
 		end
+		if Opt("lowShare") == true and S.shareRefused and not S.shared then
+			lines[#lines + 1] = "Share on Low health and Low mana: the game would not give the share as a number, so the lines show their words alone."
+		end
 	end
 	return lines
 end)
@@ -1019,7 +1131,7 @@ local function HideSample()
 	if S.sampled then
 		S.sampled = nil
 		if not S.fighting then
-			HideWarning()
+			HideWarning(true)
 		end
 	end
 	if S.lowSampled then
@@ -1042,6 +1154,7 @@ local function TestStep(quiet)
 			Flash(phase == 0 and "enter" or "leave", true, phase == 2 and "0:42" or nil)
 		elseif InterfaceShown() then
 			if WarnWanted() and Make() then
+				StopFade(false)
 				local line = S.warn
 				line:SetText(WarnText())
 				Look(line, "warn")
@@ -1055,8 +1168,10 @@ local function TestStep(quiet)
 					Sound()
 				end
 			end
-			-- Low health, whole, under the sample No target, and Low mana under it for a mana user, until the next step paints them again.
+			-- Low health, whole, under the sample No target, and Low mana under it for a mana user, until the next step paints them again; with
+			-- Share on Low health and Low mana on, as Low health  15% and Low mana  12% (LookLow).
 			if LowWanted() and MakeLow() then
+				S.lowSampled = true
 				LookLow()
 				for _, kind in ipairs(LOW_KINDS) do
 					local rec = S.low[kind]

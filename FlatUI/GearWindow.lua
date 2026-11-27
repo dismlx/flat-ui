@@ -4,7 +4,8 @@ local _, ns = ...
 -- profile of the spells chosen for the gear comparison (ns.GearChosen, GearLines.lua), each now and with an item, as a cast, a second or threat. It is
 -- the place to drop items and spells on, and it works with Your spells in item tooltips off: it is a tool of its own, and the list rows of the Spells
 -- and gear tab serve both. /flatui gear opens and closes it (ns.GearWindowToggle); the tab's Gear comparison window row opens it, or raises it when it
--- is open, and /flatui gear <item> shows that item in it (ns.GearWindowShow); Escape closes it; the item and the switch are kept for the session.
+-- is open, and /flatui gear <item> shows that item in it (ns.GearWindowShow), as an Alt-click on an item link in a chat window does (0.5.41,
+-- U.ChatClick, on EventRegistry's ChatFrame.OnHyperlinkClick); Escape closes it; the item and the switch are kept for the session.
 -- While avoidance shows (Avoidance of the Gear comparison page, GearAvoid.lua's A.Wanted) the switch has a fourth word, Avoidance: the attack table
 -- of an enemy's swing, armor and block value now and with the item, in the rows and words GearAvoid.lua writes (A.Window), which this file draws in
 -- the same columns; a tank's window starts on it, and its lines have no spell, so they have no tooltip and a right click takes nothing off.
@@ -90,7 +91,9 @@ local _, ns = ...
 -- :17097), goes back there with ClearCursor (:34956, not protected), also in a fight, as Bags' sections give a dropped item back
 -- (BagsLayout.lua:1408-1425); any other, such as one dragged off an action bar (PickupAction takes it off the bar, Blizzard_ActionBar/Shared/
 -- ActionButton.lua:1429-1437), stays on the cursor, as a spell does. The click that ends a drag on the window brings the same thing again, which
--- counts as that drop. A right click takes a line off the list (ns.GearRemove). While the cursor holds an item or a spell, the part of the window
+-- counts as that drop. A right click takes a line off the list (ns.GearRemove). With nothing on the cursor, a Shift-click on the item or on Against's
+-- item puts its link in the chat line and a Ctrl-click tries it on (0.5.41, U.ItemModified, the Chat link and Dress up clicks as the player bound
+-- them). While the cursor holds an item or a spell, the part of the window
 -- that takes it is lit, looked at ten times a second, as Bags lights the titles that take an item (BagsLayout.lua:40-45).
 -- The frame: CreateFrame on UIParent, named FlatUIGear, made the first time it opens and only out of combat (an opening asked for in a fight before
 -- that waits for its end, ns.OutOfCombat), in the MEDIUM strata among the game's windows, or DIALOG when it shows while the options window does
@@ -196,7 +199,7 @@ local LABEL = { 0.82, 0.82, 0.82 }
 -- The words of the window. Flat UI's lines are English, as its other extra lines (design 6.22).
 local T = {
 	TITLE = "Gear comparison",
-	DROP = "Drop an item here, find one with Find, or type /flatui gear and shift-click an item into the chat line.",
+	DROP = "Drop an item here, find one with Find, or Alt-click an item link in chat.",
 	EMPTY = "Drag a spell from your spell book onto this window.",
 	NO_MODEL = "The spell data of Chat and tooltips is not running, so there is nothing to work out. /flatui status says why.",
 	NO_LIST = "The list of spells of Chat and tooltips is not running, so there is nothing to show. /flatui status says why.",
@@ -246,7 +249,8 @@ local T = {
 	ROW_SKILL = "Now and With count your weapon at the full skill of its line for your level; the spell's own lines above count your skill as it is.",
 	UNKNOWN = "You do not know this spell now.",
 	REMOVE = "Right-click to take it off the comparison.",
-	CLEAR = "Right-click to take the item out of the window.",
+	CLEAR = { "Shift-click: link it in chat. Ctrl-click: try it on.", "Right-click to take the item out of the window." },
+	TRY_FIGHT = "Gear comparison: trying items on waits for the end of the fight.",
 	OFF = "Gear comparison: turn on Restyle chat and tooltips first (Chat page).",
 	MODULE_STOPPED = "Gear comparison: Chat and tooltips stopped after an error. /flatui status says why.",
 	STOPPED = "Gear comparison: the window stopped after an error. /flatui status says why.",
@@ -264,7 +268,7 @@ local T = {
 	AGAINST_UNUSED = "The item of Against was not used; the numbers are against what you wear.",
 	AGAINST_TIP = { "Empty, the item is compared with what you wear in its slot.",
 		"Drop an item here, or right-click one in the item finder, to compare with that one instead." },
-	AGAINST_CLEAR = "Right-click to compare with what you wear again.",
+	AGAINST_CLEAR = { "Shift-click: link it in chat. Ctrl-click: try it on.", "Right-click to compare with what you wear again." },
 	OVERALL = "Overall",
 	OVERALL_SLOT = "Overall, %s",
 	-- The first of OVERALL_LINES while the Overall line follows a WoWSims rotation (G.Rotation, 0.5.30): its label, and STAND after it for a tree
@@ -2624,7 +2628,7 @@ local function ItemTip()
 		Untip(button)
 		return
 	end
-	AddDim(tip, { T.CLEAR })
+	AddDim(tip, T.CLEAR)
 	pcall(tip.Show, tip)
 end
 
@@ -2654,7 +2658,9 @@ function U.AgainstTip()
 	if type(W.view) == "table" and W.view.baseOther then
 		lines[1] = T.AGAINST_OTHER:sub(1, 1):upper() .. T.AGAINST_OTHER:sub(2) .. "."
 	end
-	lines[#lines + 1] = T.AGAINST_CLEAR
+	for _, line in ipairs(T.AGAINST_CLEAR) do
+		lines[#lines + 1] = line
+	end
 	AddDim(tip, lines)
 	pcall(tip.Show, tip)
 end
@@ -2689,9 +2695,73 @@ end
 
 -- Clicks -----------------------------------------------------------------------------------------------------------------------------------------
 
--- A left click with something on the cursor is a drop; a right click on the item takes it away.
+-- True while the player pressed the modifier of a kind of click, as the game's key bindings set it (IsModifiedClick: CHATLINK, Shift at first;
+-- DRESSUP, Ctrl at first).
+function U.Modified(kind)
+	local fn = Fn(_G, "IsModifiedClick")
+	if not fn then
+		return false
+	end
+	local ok, held = pcall(fn, kind)
+	return ok and not IsSecret(held) and held == true
+end
+
+-- The whole link of an item the window holds (a link, or an item string from /flatui gear item:19379, C_Item.GetItemInfo's second answer), or nil
+-- while the client has not loaded it.
+function U.WholeLink(link)
+	local text = Text(link)
+	if not text then
+		return nil
+	end
+	if text:find("|H", 1, true) then
+		return text
+	end
+	local info = Fn(C_Item, "GetItemInfo")
+	if info then
+		local ok, _, whole = pcall(info, text)
+		if ok and Text(whole) and whole:find("|H", 1, true) then
+			return whole
+		end
+	end
+	return nil
+end
+
+-- A modified left click on the item or on Against's item (0.5.41), as the item finder and the Trinket queue window take one: Chat link (Shift)
+-- puts its link in the chat line with ChatFrameUtil.InsertLink (else ChatEdit_InsertLink), in a fight too, since that is not protected; Dress up
+-- (Ctrl) tries it on with DressUpItemLink out of a fight, and in one says it waits. True when the click was one of these, so it does nothing else.
+function U.ItemModified(link)
+	if not link then
+		return false
+	end
+	if U.Modified("CHATLINK") then
+		local whole = U.WholeLink(link)
+		local insert = Fn(_G.ChatFrameUtil, "InsertLink") or Fn(_G, "ChatEdit_InsertLink")
+		if whole and insert then
+			pcall(insert, whole)
+		end
+		return true
+	end
+	if U.Modified("DRESSUP") then
+		if Fighting() then
+			print(T.TRY_FIGHT)
+			return true
+		end
+		local dress = Fn(_G, "DressUpItemLink")
+		if dress then
+			pcall(dress, U.WholeLink(link) or link)
+		end
+		return true
+	end
+	return false
+end
+
+-- A left click with something on the cursor is a drop; a Shift-click or a Ctrl-click links the item or tries it on; a right click on the item takes
+-- it away.
 local function ItemClick(mouse)
 	if mouse == "LeftButton" and Drop() then
+		return
+	end
+	if mouse == "LeftButton" and U.ItemModified(W.link) then
 		return
 	end
 	if mouse == "RightButton" and W.link then
@@ -2712,9 +2782,13 @@ local function RowClick(slot, mouse)
 	end
 end
 
--- A left click with something on the cursor is a drop on Against; a right click takes its item away, so the item is compared with what is worn.
+-- A left click with something on the cursor is a drop on Against; a Shift-click or a Ctrl-click links its item or tries it on; a right click takes
+-- its item away, so the item is compared with what is worn.
 function U.AgainstClick(mouse)
 	if mouse == "LeftButton" and Drop("against") then
+		return
+	end
+	if mouse == "LeftButton" and U.ItemModified(W.base) then
 		return
 	end
 	if mouse == "RightButton" and W.base then
@@ -3397,6 +3471,42 @@ function ns.GearWindowShow(link, base)
 		base = AsItem(base)
 	end
 	return Run(Open, AsItem(link), base)
+end
+
+-- True while a key is held (IsAltKeyDown, IsShiftKeyDown, IsControlKeyDown).
+function U.Key(name)
+	local fn = Fn(_G, name)
+	if not fn then
+		return false
+	end
+	local ok, down = pcall(fn)
+	return ok and not IsSecret(down) and down == true
+end
+
+-- An Alt-click on an item link in a chat window (0.5.41) shows that item in the window, as /flatui gear <item> does: opened, or raised and worked
+-- out afresh, and in a fight before the window was made, opened when the fight ends. EventRegistry's ChatFrame.OnHyperlinkClick comes for every click
+-- on a chat link, before the game's SetItemRef (Blizzard_ChatFrameBase/Shared/ChatFrame.lua:19-24), as (owner, frame, link, text, button); the
+-- game does nothing with Alt alone on an item link (SetItemRef sends a modified click to HandleModifiedItemClick, which acts on Chat link and Dress
+-- up: Blizzard_UIPanels_Game/Mainline/ItemRef.lua:17-19, Blizzard_ItemButton/Mainline/ItemButtonTemplate.lua:372-404). So only the left button,
+-- Alt held without Shift and Ctrl, neither of those two kinds of click as the player bound them, and the part allowed; while Chat and tooltips or
+-- the part is off, nothing happens.
+function U.ChatClick(_, _, link, text, button)
+	if IsSecret(button) or button ~= "LeftButton" or not Text(link) or link:sub(1, 5) ~= "item:" then
+		return
+	end
+	if not U.Key("IsAltKeyDown") or U.Key("IsShiftKeyDown") or U.Key("IsControlKeyDown") then
+		return
+	end
+	if U.Modified("CHATLINK") or U.Modified("DRESSUP") or not Allowed() then
+		return
+	end
+	local whole = Text(text)
+	ns.GearWindowShow(whole and whole:find("|H", 1, true) and whole or link)
+end
+
+-- Given once, as the file loads; EventRegistry calls it with its owner first.
+if type(EventRegistry) == "table" and type(EventRegistry.RegisterCallback) == "function" then
+	pcall(EventRegistry.RegisterCallback, EventRegistry, "ChatFrame.OnHyperlinkClick", U.ChatClick, "FlatUI.chat.gearLink")
 end
 
 -- Sets the item of Against (Compare against in the item finder), opening the window, or with nil takes it away, so the item is compared with what

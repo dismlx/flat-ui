@@ -5,7 +5,7 @@ local _, ns = ...
 -- is followed on a global function of the game through ns.FollowGlobal (Core.lua's one hooksecurefunc for each global), with HookScript on
 -- GameTooltip, and with EventRegistry for the input box; no
 -- method of a frame is hooked, and what runs inside a game call is done on the next frame. Tooltips are used by secure code: only texture calls are made on them, apart
--- from the lines the kind of a unit, an item level, the hint that Shift compares, an ID (and a creature's NPC ID, 0.5.39) and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
+-- from the lines the kind of a unit, an item level, the hint that Shift compares, an ID (and a creature's NPC ID, 0.5.39, a quest's or a currency's ID, 0.5.41) and a count add, what ChatTips.lua writes, the spell and gear lines of SpellLines.lua and GearLines.lua
 -- and the hit table lines of HitTableTip.lua (called from the post call after them, on an enemy's GameTooltip), and nothing is created on one in
 -- combat. The size of a tooltip, the height of its health bar and the place of the input box are changed out of combat only. With Arrow keys
 -- without Alt (on by default) each input box gets the widget method SetAltArrowKeyMode(false), so the arrow keys edit the text (Arrows below).
@@ -19,7 +19,8 @@ local _, ns = ...
 -- ChatLinks.lua (called at the end of each refresh) also fills GameTooltip from a chat link under the mouse: SetOwner on a frame of its own,
 -- SetHyperlink and Hide, never in a fight. With Light the tab that names you (0.5.39) it hands this file each chat window a line that names you
 -- goes to (ns.ChatTabNamed): the tab of a window that does not show then takes Your name colour on its box (SetOutlineColour), its label
--- (SetTextColor, the game's colour back once it is chosen) and a slow pulse of a texture and an animation of Flat UI's own, until it is chosen.
+-- (SetTextColor, the game's colour back once it is chosen) and a slow pulse of a texture and an animation of Flat UI's own, until it is chosen;
+-- a small count of Flat UI's own at the tab's top right corner (0.5.41) says how many lines named you in that window since (up to 9+).
 -- ItemCompare.lua (called at the start of each refresh) writes the game's alwaysCompareItems.
 -- ChatHistory.lua (called at the end of each refresh) keeps recent chat lines for this character and prints them after a reload.
 -- SpellLines.lua and GearLines.lua (called from the post call after ChatTips.lua) add the spell and gear lines to GameTooltip and ItemRefTooltip
@@ -250,7 +251,8 @@ end
 
 -- Light the tab that names you (chat.mentionTab, 0.5.39): the alpha of the pulse over the plate at its top and its bottom, and the seconds of
 -- one way. While a tab is lit, its box, its label and a pulse of its own over the plate take Your name colour (chat.mentionColour).
-local NAMED = { HIGH = 0.45, LOW = 0.12, PULSE = 1.2 }
+-- The count of lines that named you (0.5.41) sits this far from the plate's top right corner, and shows MOST at most, then MOST+.
+local NAMED = { HIGH = 0.45, LOW = 0.12, PULSE = 1.2, COUNT_X = -5, COUNT_Y = 0, MOST = 9 }
 
 -- True while a mention may light a tab: Chat tabs, Your name in chat and Light the tab that names you on.
 local function NamedWanted()
@@ -299,6 +301,17 @@ local function PaintNamed(tab, record, r, g, b)
 		glow = { texture = texture, group = group }
 		record.glow = glow
 	end
+	-- The count of lines (0.5.41): a font string of Flat UI's own on the plate, its centre on the plate's top right corner, so it clears the label,
+	-- at full alpha as the pulse.
+	local count = record.count
+	if record.named and not count and record.plate then
+		count = ns.OwnText(record.plate, "OVERLAY", "GameFontHighlightSmall")
+		if count then
+			count:SetPoint("CENTER", record.plate, "TOPRIGHT", NAMED.COUNT_X, NAMED.COUNT_Y)
+			pcall(count.SetIgnoreParentAlpha, count, true)
+			record.count = count
+		end
+	end
 	local ok, label = pcall(tab.GetFontString, tab)
 	label = ok and Usable(label) and label or nil
 	if record.named and glow then
@@ -311,7 +324,17 @@ local function PaintNamed(tab, record, r, g, b)
 			pcall(label.SetTextColor, label, r, g, b)
 			record.labelSet = true
 		end
+		if count then
+			local lines = IsNumber(record.namedCount) and record.namedCount or 1
+			count:SetText(lines > NAMED.MOST and (NAMED.MOST .. "+") or tostring(lines))
+			count:SetTextColor(r, g, b)
+			count:Show()
+		end
 		return
+	end
+	record.namedCount = nil
+	if count then
+		count:Hide()
 	end
 	if glow then
 		glow.group:Stop()
@@ -918,6 +941,12 @@ local function Extras(tooltip, data)
 	elseif not (item or spell) and IsData(data, "Unit") and type(ns.ChatTipNpcId) == "function" then
 		-- The NPC ID of a creature or a vehicle (ChatTips.lua, 0.5.39), once for each build as the other lines here.
 		ns.ChatTipNpcId(lines, data)
+	elseif not (item or spell) and type(ns.ChatTipOtherId) == "function" then
+		-- The ID of a quest (a chat link's tooltip) or a currency (ChatTips.lua, 0.5.41), once for each build too.
+		local kind = (IsData(data, "Quest") and "Quest") or (IsData(data, "Currency") and "Currency") or nil
+		if kind then
+			ns.ChatTipOtherId(lines, data, kind)
+		end
 	end
 	local ok, shown = pcall(tooltip.NumLines, tooltip)
 	local record = X.extras[tooltip]
@@ -1910,7 +1939,8 @@ end
 
 -- Light the tab that names you (0.5.39): ChatLinks.lua calls this with the window a line that names you (or one of the other words) goes to.
 -- Only a window that does not show now (a docked window whose tab is not chosen) lights its tab, and only a tab Chat tabs styles; the tab is
--- painted on the frame after, outside the game's chat call. It goes out when the tab is chosen (FCFTab_UpdateColors, TabColours).
+-- painted on the frame after, outside the game's chat call. It goes out when the tab is chosen (FCFTab_UpdateColors, TabColours). Each line that
+-- names you while the tab is lit adds one to its count (0.5.41, record.namedCount, drawn by PaintNamed).
 local namedQueue = {}
 function ns.ChatTabNamed(frame)
 	if not NamedWanted() or not Usable(frame) or ns.Forbidden(frame) then
@@ -1923,10 +1953,14 @@ function ns.ChatTabNamed(frame)
 	local ok, name = pcall(frame.GetName, frame)
 	local tab = ok and not ns.IsSecret(name) and type(name) == "string" and Global(name .. "Tab") or nil
 	local record = tab and tabs[tab]
-	if not record or record.selected or record.named then
+	if not record or record.selected then
 		return
 	end
-	record.named = true
+	if record.named then
+		record.namedCount = (IsNumber(record.namedCount) and record.namedCount or 1) + 1
+	else
+		record.named, record.namedCount = true, 1
+	end
 	if next(namedQueue) ~= nil then
 		namedQueue[tab] = true
 		return

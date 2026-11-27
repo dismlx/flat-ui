@@ -5,9 +5,10 @@ local _, ns = ...
 -- tracker is one line: its kind, then its fields as name=value, every field of the entry except the id. A value is a letter for its kind and
 -- then the value: t or f for a switch, n and a number, s and a text, l and a list of numbers and texts (n.. and s..) separated by commas.
 -- Import never replaces: each line becomes a new entry with a new id at the end of the list, and the list cleans it the way it cleans every
--- saved entry, which gives a field with a value the kind does not allow the page's value and keeps a key it has no use for. Nothing here reads a
--- game value. The chat edit box takes 255 characters, so a text of any size goes in and out through the Export trackers and Import trackers rows
--- of the Share section; the slash commands are for a text that fits one line.
+-- saved entry, which gives a field with a value the kind does not allow the page's value and keeps a key it has no use for. Out of combat the row
+-- then shows every tracker that is on as its sample for a moment, the new ones at the end (ns.TrackerPreviewRow). Nothing here reads a game value.
+-- The chat edit box takes 255 characters, so a text of any size goes in and out through the Export trackers and Import trackers rows of the Share
+-- section; the slash commands are for a text that fits one line.
 
 local IsSecret = ns.IsSecret
 
@@ -265,6 +266,10 @@ function ns.TrackerImport(text)
 	local added = #saved.trackers - before
 	if ns.TrackerLayout then
 		ns.TrackerLayout()
+	end
+	-- Out of combat the row shows its samples for a moment, the new trackers at the end.
+	if added > 0 and ns.TrackerPreviewRow then
+		ns.TrackerPreviewRow()
 	end
 	if full and added == 0 then
 		return false, ("The list is full at %d trackers."):format(K.MAX)

@@ -19,7 +19,8 @@ local _, ns = ...
 -- the Quest log data panel (ns.DataPanels.TipAt with its stream "quests": the quests of the most, "Your quest log is full.", those ready to hand
 -- in and their experience) with a dim "Click: open the quest log"; GameTooltip is hidden on leave only while IsOwned says the button owns it. A
 -- click opens the quest log (ToggleQuestLog), in a fight as it ends: chat says once "Flat UI: the quest log opens when the fight ends."
--- (ns.OpenAfterFight, MapText.lua), and the hint says "after the fight".
+-- (ns.OpenAfterFight, MapText.lua), and the hint says "after the fight". Under the mouse the count has a faint light, as a data panel's slot has
+-- (HOVER_LIGHT, a texture of the button's own).
 -- It follows EnhanceQoL's quest count on the tracker, adapted with the permission of its author.
 
 local KEY, PART = "hud", "quest count"
@@ -40,6 +41,9 @@ local NOTE = "Quest count: the objective tracker has no Quests heading here, so 
 local ANCHOR = "ANCHOR_LEFT"
 local HINT, FIGHT_HINT = { "Click: open the quest log" }, { "Click: open the quest log, after the fight" }
 local LATER = "Flat UI: the quest log opens when the fight ends."
+-- The faint light over the count while it is under the mouse, as the data panels' slots have (DataPanels.lua), and how far it reaches past the
+-- text.
+local HOVER_LIGHT, LIGHT_OUT = { 1, 1, 1, 0.07 }, 2
 
 -- text: the font string; button: the button over it; header: the heading it is on; queued: a redraw waits for the next frame; waiting: a make
 -- waits for the end of a fight; last: the quests of the last read, nil before the first after login or a reload and while the row is off;
@@ -168,15 +172,27 @@ local function MakeButton(header, text)
 	ns.Own[button] = true
 	button:SetAllPoints(text)
 	button:EnableMouse(true)
+	-- A texture of the button's own: nothing is drawn on the heading.
+	local light = button:CreateTexture(nil, "BACKGROUND")
+	ns.Own[light] = true
+	light:SetPoint("TOPLEFT", button, "TOPLEFT", -LIGHT_OUT, LIGHT_OUT)
+	light:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", LIGHT_OUT, -LIGHT_OUT)
+	light:SetColorTexture(HOVER_LIGHT[1], HOVER_LIGHT[2], HOVER_LIGHT[3], HOVER_LIGHT[4])
+	light:Hide()
+	local function Away(self)
+		light:Hide()
+		Unowned(self)
+	end
 	button:RegisterForClicks("LeftButtonUp")
 	button:SetScript("OnClick", function()
 		ns.EachPart(KEY, PART, Open, {})
 	end)
 	button:SetScript("OnEnter", function(self)
+		light:Show()
 		ns.EachPart(KEY, PART, Tip, {}, self, true)
 	end)
-	button:SetScript("OnLeave", Unowned)
-	button:SetScript("OnHide", Unowned)
+	button:SetScript("OnLeave", Away)
+	button:SetScript("OnHide", Away)
 	button:Hide()
 	return button
 end

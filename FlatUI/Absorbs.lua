@@ -25,8 +25,10 @@ local _, ns = ...
 -- the samples of the test and of a preview draw it too, and turning it on out of combat shows them. The time left on a bar, Flat UI's own
 -- (A.Clock) and the game's in a fight (A.TimeOptions), turns amber in its last 5 seconds.
 -- Out of a fight the totals follow the game's events; in one, a step a few times a second. While test mode is on (TestMode.lua) the sample
--- bars of /flatui absorbs test stay, with the target's (A.Hold). Bar tooltips (On by default) shows the game's tooltip of a shield over its bar and the shields on you over
--- the total bar, and never takes a click (A.TipShow). Every frame is Flat UI's own, and nothing of the game is changed or hooked. The helpers are
+-- bars of /flatui absorbs test stay, with the target's (A.Hold). /flatui absorbs test shows out of combat only, since its samples hide the
+-- game's own rows. Bar tooltips (On by default) shows the game's tooltip of a shield over its bar and the shields on you over the total bar,
+-- and never takes a click (A.TipShow); over a sample it says whether it is the test's or the look preview's. Every frame is Flat UI's own, and
+-- nothing of the game is changed or hooked. The helpers are
 -- in one table, A.
 
 local KEY = "absorbs"
@@ -775,8 +777,10 @@ function A.TipLines(tip, row)
 			tip:AddLine(words, TIP_DIM[1], TIP_DIM[2], TIP_DIM[3])
 		end
 	end
+	-- The look preview's samples say so; those of the test and of test mode are the test's.
 	if sample then
-		tip:AddLine("A sample of the test.", TIP_DIM[1], TIP_DIM[2], TIP_DIM[3])
+		local preview = A.sample and not A.held and A.sampleWhy == "preview"
+		tip:AddLine(preview and "A sample of the look you are setting." or "A sample of the test.", TIP_DIM[1], TIP_DIM[2], TIP_DIM[3])
 	end
 end
 
@@ -1782,13 +1786,19 @@ function A.Samples(seconds)
 	end
 end
 
--- Sample bars for a few seconds: the sample shields and their total.
+-- Sample bars for a few seconds: the sample shields and their total. Out of combat only: the samples hide the game's own rows, which are all
+-- that shows the shields in a fight, and cover the live total.
 function A.Test()
 	if not ns.Enabled(KEY) then
 		print("Absorb shields: turn on Absorb shields first.")
 		return
 	end
+	if InCombatLockdown() then
+		print("Absorb shields: the test shows out of combat only.")
+		return
+	end
 	A.Refresh()
+	A.sampleWhy = "test"
 	A.Samples(TEST_TIME)
 	print("Absorb shields: sample bars for 8 seconds.")
 end
@@ -1800,6 +1810,7 @@ function A.Preview()
 	if InCombatLockdown() or not ns.Enabled(KEY) or A.Holding() or (next(A.items or {}) ~= nil and not A.sample) then
 		return
 	end
+	A.sampleWhy = "preview"
 	A.Samples(PREVIEW)
 end
 

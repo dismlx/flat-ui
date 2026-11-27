@@ -27,10 +27,14 @@ local _, ns = ...
 -- list shrank, a sample, a list that just showed or a client with no interpolation takes the value at once.
 -- While the game gives every share of the healers shown plainly (out of a fight, as a rule), the title reads their average, "Healer mana 64%",
 -- the members offline or dead left out, in the red of the wash while it is under Low mana at; as soon as one share is withheld it reads Healer
--- mana alone, as nothing withheld is added. The samples read 48%. Ready to pull: out of a fight, with no healer shown offline or dead, once the
--- lowest of those plain shares is at Ready at (90%) or above, the title turns green and reads "Healer mana 97% · ready", and Sound when ready
--- (None by default) plays once; it rings again only after a healer was seen under Ready at out of a fight, so a login, a zone-in, a refresh or
--- the list showing again with full healers stays quiet (H.Ready). The samples are never ready.
+-- mana alone, as nothing withheld is added. The three samples read 48%. Ready to pull: out of a fight, with no healer shown offline or dead,
+-- once the lowest of those plain shares is at Ready at (90%) or above, the title turns green and reads "Healer mana 97% · ready", gives a
+-- short soft pulse of its opacity (H.Pulse) as it turns so, and Sound when ready (None by default) plays once; it rings again only after a
+-- healer was seen under Ready at out of a fight, so a login, a zone-in, a refresh or the list showing again with full healers stays quiet
+-- (H.Ready). A title too wide for the window takes a shorter form, "Healers 97% · ready", then "97% · ready" (and "Healers 64%", "64%"), so
+-- the word ready is never cut. In test mode the samples read ready for READY_TIME seconds after each run of the sample Druid's drink
+-- (H.SamplePhase), with their ready shares, no cup and none out of range, and Sound when ready plays once each time test mode comes on;
+-- /flatui healers alone is never ready.
 -- The window is a child of UIParent in the LOW strata in the look of the Threat list (Threat.lua): a flat background and a thin border in the
 -- colours of the Flat UI page, its bars in Bar texture (the bar texture of that page by default); it takes no mouse and hides with the
 -- interface. It fades in over 0.15 seconds as it shows and out over 0.35 as it hides, as the Threat list does (H.Showing); showing again while it
@@ -38,7 +42,8 @@ local _, ns = ...
 -- window's top left corner is the top left corner of the box, or with Bars stack Up its bottom left corner the bottom left corner of the box, so
 -- a list above the action bars grows upward). /flatui healers shows sample bars for a few seconds, the Shaman out of range, out of a fight only;
 -- while test mode is on (TestMode.lua) they stay, drawn with the rows at each refresh and each second, so the sample Druid's drink counts down
--- from 18s to 1s and starts again.
+-- from 18s to 1s, the samples read ready for 4 seconds, and it starts again. With test mode's Group at Raid 10, 20 or 40 the sample holds
+-- eight healers (SAMPLE_RAID), so Number of bars and Bars stack Up can be judged; Solo and Party keep the three.
 -- Nothing of the game is changed.
 -- This follows the Healer Mana indicator of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission (EnhanceQoL/Submodules/
 -- GroupTools.lua:485-713): the healers of the group by their role, their mana share through UnitPowerPercent and the curve to 100, and the
@@ -84,10 +89,20 @@ local LINE_RANGE = "Healer mana: the game refused to fade a bar by its answer ab
 local FAR = 0.45
 local FADE_IN, FADE_OUT = 0.15, 0.35
 local HELP = { "/flatui healers - sample bars of the healer mana list for a few seconds" }
--- The bars of /flatui healers: a name, a class, the share of mana, whether the member drinks and whether he is out of range.
-local SAMPLE = { { "Priest", "PRIEST", 82 }, { "Druid", "DRUID", 47, true }, { "Shaman", "SHAMAN", 15, false, true } }
--- The seconds left on the sample Druid's drink: in test mode they count down from it to 1 and start again.
-local SAMPLE_DRINK = 18
+-- The bars of /flatui healers: a name, a class, the share of mana, whether the member drinks, whether he is out of range, and the share he
+-- shows while test mode previews Ready to pull (H.SamplePhase). With test mode's Group a raid the sample holds eight healers (SAMPLE_RAID), so
+-- Number of bars and Bars stack Up can be judged.
+local SAMPLE = { { "Priest", "PRIEST", 82, false, false, 96 }, { "Druid", "DRUID", 47, true, false, 100 }, { "Shaman", "SHAMAN", 15, false, true, 93 } }
+local SAMPLE_RAID = { SAMPLE[1], SAMPLE[2], SAMPLE[3], { "Paladin", "PALADIN", 91, false, false, 98 }, { "Priest", "PRIEST", 64, false, false, 95 },
+	{ "Druid", "DRUID", 38, false, false, 97 }, { "Shaman", "SHAMAN", 73, false, false, 100 }, { "Paladin", "PALADIN", 22, false, false, 94 } }
+-- The seconds left on the sample Druid's drink: in test mode they count down from it to 1, then the samples read ready for READY_TIME seconds,
+-- and it starts again.
+local SAMPLE_DRINK, READY_TIME = 18, 4
+-- The shorter forms of the title, tried in turn while the one written does not fit the window (H.Title): with the average, and ready to pull.
+local TITLE_FORMS = { TITLE .. " %d%%", "Healers %d%%", "%d%%" }
+local READY_FORMS = { TITLE .. " %d%% · ready", "Healers %d%% · ready", "%d%% · ready" }
+-- The pulse of the title as it turns ready: its opacity dips to this twice, each dip PULSE_STEP seconds down and as long up.
+local PULSE_LOW, PULSE_STEP = 0.4, 0.2
 
 local IsSecret = ns.IsSecret
 -- frame: the window, title its line. rows: the bars. healers: the units of the healers, read from the group. pending: a read waits. ticker: the
@@ -410,7 +425,26 @@ function H.Frame()
 	title:SetText(TITLE)
 	H.title = title
 	H.fadeIn, H.fadeOut = Fades(frame)
+	H.pulse = H.Pulse(title)
 	return frame
+end
+
+-- The soft pulse of the title as it turns ready (H.Title): an animation of the addon's own on its own FontString, two dips of its opacity to
+-- PULSE_LOW and back, 0.8 seconds in all, ending at full; nil where the client refuses.
+function H.Pulse(title)
+	local ok, group = pcall(function()
+		local made = title:CreateAnimationGroup()
+		for order = 1, 4 do
+			local step = made:CreateAnimation("Alpha")
+			local down = order % 2 == 1
+			step:SetFromAlpha(down and 1 or PULSE_LOW)
+			step:SetToAlpha(down and PULSE_LOW or 1)
+			step:SetDuration(PULSE_STEP)
+			step:SetOrder(order)
+		end
+		return made
+	end)
+	return ok and group or nil
 end
 
 -- Bar number index, made the first time the list needs it: a track, the fill, the name on the left and the share on the right.
@@ -470,7 +504,7 @@ function H.Wash(row, unit, sample, word)
 		return
 	end
 	if sample then
-		row.low:SetAlpha(sample[3] < at and 1 or 0)
+		row.low:SetAlpha(H.SampleShare(sample, H.SamplePhase()) < at and 1 or 0)
 		return
 	end
 	local curve = LowCurve(at)
@@ -494,7 +528,7 @@ function H.Range(row, unit, sample, word)
 		return
 	end
 	if sample then
-		bar:SetAlpha(sample[5] == true and FAR or 1)
+		bar:SetAlpha(sample[5] == true and H.SamplePhase() ~= "ready" and FAR or 1)
 		return
 	end
 	if Ask(UnitIsUnit, unit, "player") ~= false or type(UnitInRange) ~= "function" or type(bar.SetAlphaFromBoolean) ~= "function" then
@@ -543,6 +577,8 @@ function H.Layout(n)
 		return
 	end
 	H.laid = key
+	-- A new width or text height may fit another form of the title (H.Title).
+	H.titled = nil
 	local top = PAD + text + 2 + GAP
 	for index = 1, n do
 		local bar = H.rows[index].bar
@@ -553,14 +589,38 @@ function H.Layout(n)
 	H.frame:SetSize(width + 2 * PAD, top + n * height + (n - 1) * GAP + PAD)
 end
 
--- The seconds left on the sample Druid's drink: in test mode (H.sampleStart, set as it starts) SAMPLE_DRINK down to 1 and again, one a second;
--- for /flatui healers alone SAMPLE_DRINK.
-function H.SampleDrink()
+-- Where the samples are: in test mode (H.sampleStart, set as it starts) the seconds left on the sample Druid's drink, SAMPLE_DRINK down to 1,
+-- one a second, then "ready" for READY_TIME seconds, while every sample reads its ready share, and again; for /flatui healers alone
+-- SAMPLE_DRINK, never ready.
+function H.SamplePhase()
 	local now = H.sampleStart and Ask(GetTime)
 	if not ns.Finite(now) or now < H.sampleStart then
 		return SAMPLE_DRINK
 	end
-	return SAMPLE_DRINK - math.floor(now - H.sampleStart) % SAMPLE_DRINK
+	local into = math.floor(now - H.sampleStart) % (SAMPLE_DRINK + READY_TIME)
+	if into >= SAMPLE_DRINK then
+		return "ready"
+	end
+	return SAMPLE_DRINK - into
+end
+
+-- The share a sample shows: its ready share while the samples are ready, at least Ready at so the preview turns ready whatever it is set to,
+-- else its share.
+function H.SampleShare(sample, phase)
+	if phase == "ready" then
+		return math.min(100, math.max(sample[6], Number("readyAt", 90)))
+	end
+	return sample[3]
+end
+
+-- The samples: eight healers while test mode is on with a raid as its Group (TestMode.lua: TM.Group), else three.
+function H.Samples()
+	local mode = ns.TestMode
+	local group = mode and mode.IsOn() == true and mode.Group() or nil
+	if type(group) == "string" and group:find("^raid") then
+		return SAMPLE_RAID
+	end
+	return SAMPLE
 end
 
 -- Writes one bar: the class colour, the name and the share of mana, the red wash below Low mana at, the cup while the member drinks and its
@@ -581,16 +641,18 @@ function H.Fill(row, unit, sample)
 	row.bar:Show()
 	local drinks = Opt("drinking") ~= false
 	if sample then
-		local cup = drinks and sample[4] == true
+		local phase = H.SamplePhase()
+		local value = H.SampleShare(sample, phase)
+		local cup = drinks and sample[4] == true and phase ~= "ready"
 		row.name:SetText(sample[1])
-		row.bar:SetValue(sample[3])
+		row.bar:SetValue(value)
 		row.who = nil
-		H.sum, H.count = (H.sum or 0) + sample[3], (H.count or 0) + 1
-		H.least = math.min(H.least or sample[3], sample[3])
+		H.sum, H.count = (H.sum or 0) + value, (H.count or 0) + 1
+		H.least = math.min(H.least or value, value)
 		if cup then
-			row.share:SetText(("%ds %d%%"):format(H.SampleDrink(), sample[3]))
+			row.share:SetText(("%ds %d%%"):format(phase, value))
 		else
-			row.share:SetText(("%d%%"):format(sample[3]))
+			row.share:SetText(("%d%%"):format(value))
 		end
 		H.Wash(row, nil, sample)
 		H.Cup(row, cup)
@@ -644,14 +706,25 @@ function H.Fill(row, unit, sample)
 	end
 end
 
--- Ready to pull: true out of a fight, with the real healers shown (no sample), none of them offline or dead (H.away), every share plain and the
--- lowest (H.least) at Ready at or above; never with Ready at 0. A plain lowest share under Ready at, out of a fight, arms Sound when ready (H.armed), which plays once as the healers
--- turn ready and again only after one of them dropped under it: so a login, a zone-in or a refresh with full healers is quiet (H.Refresh and
--- the window hiding disarm it).
+-- Ready to pull: true out of a fight, with none of the healers shown offline or dead (H.away), every share plain and the lowest (H.least) at
+-- Ready at or above; never with Ready at 0. A plain lowest share under Ready at, out of a fight, arms Sound when ready (H.armed), which plays
+-- once as the healers turn ready and again only after one of them dropped under it: so a login, a zone-in or a refresh with full healers is
+-- quiet (H.Refresh and the window hiding disarm it). The samples are ready only in the ready part of test mode's loop (H.SamplePhase), where
+-- Sound when ready plays once each time test mode comes on (TM.Sound); /flatui healers alone is never ready.
 function H.Ready(average)
 	local at = Number("readyAt", 90)
-	if average == nil or at <= 0 or H.away or H.Sampling() or Ask(InCombatLockdown) ~= false or not ns.Finite(H.least) then
+	if average == nil or at <= 0 or H.away or Ask(InCombatLockdown) ~= false or not ns.Finite(H.least) then
 		return false
+	end
+	if H.Sampling() then
+		if H.SamplePhase() ~= "ready" or H.least < at then
+			return false
+		end
+		local sound, mode = ns.SOUNDS[KITS[Opt("readySound")] or 0], ns.TestMode
+		if sound and mode and mode.IsOn() == true and mode.Sound("healermana.ready") then
+			ns.PlayKit(sound[1], KEY)
+		end
+		return true
 	end
 	if H.least < at then
 		H.armed = true
@@ -667,9 +740,27 @@ function H.Ready(average)
 	return true
 end
 
+-- True when the title's text is wider than its room, the width of a bar less INSET at each end (H.Frame, H.Layout): measured with
+-- GetUnboundedStringWidth, else as IsTruncated says (SimpleFontStringAPIDocumentation.lua:442-454), as CastRank.lua asks it.
+local function TitleCut(title)
+	local room = Number("barWidth", 150) - 2 * INSET
+	local ok, width = pcall(title.GetUnboundedStringWidth, title)
+	if ok and not IsSecret(width) and ns.Finite(width) and width > 0 then
+		return width > room + 0.5
+	end
+	if type(title.IsTruncated) == "function" then
+		local asked, cut = pcall(title.IsTruncated, title)
+		return asked and not IsSecret(cut) and cut == true
+	end
+	return false
+end
+
 -- The title: with the average of the plain shares H.Fill added (H.sum, H.count) and none withheld (H.hidden), "Healer mana 64%", in the red of the
 -- wash while under Low mana at; once the healers are ready to pull (H.Ready) "Healer mana 97% · ready" in green, which wins over the red; else
--- Healer mana alone in the text-dim. Written only when it changes.
+-- Healer mana alone in the text-dim. A form that does not fit the window gives way to a shorter one ("Healers 97% · ready", then
+-- "97% · ready"; "Healers 64%", then "64%"), so the word ready is never the part cut. As it turns ready (it was written not ready before, so not
+-- as the window first shows or after a refresh) the title gives its soft pulse (H.Pulse), a FontString of the addon's own, in a fight too.
+-- Written only when it changes, or when the form written is cut and a shorter one remains.
 function H.Title()
 	local count, average = H.count or 0, nil
 	if count > 0 and not H.hidden then
@@ -679,19 +770,29 @@ function H.Title()
 	local low = average ~= nil and at > 0 and average < at
 	local ready = H.Ready(average)
 	local key = average and ("%d:%s:%s"):format(average, tostring(low), tostring(ready)) or "plain"
-	if H.titled == key then
+	local forms = ready and READY_FORMS or (average and TITLE_FORMS or nil)
+	if H.titled == key and not (forms and (H.form or 1) < #forms and TitleCut(H.title)) then
 		return
 	end
+	local form = H.titled == key and (H.form or 1) + 1 or 1
 	H.titled = key
 	local colour = ready and READY or low and LOW or DIM
 	H.title:SetTextColor(colour[1], colour[2], colour[3], 1)
-	if ready then
-		H.title:SetFormattedText("%s %d%% · ready", TITLE, average)
-	elseif average then
-		H.title:SetFormattedText("%s %d%%", TITLE, average)
+	if forms then
+		H.title:SetFormattedText(forms[form], average)
+		while form < #forms and TitleCut(H.title) do
+			form = form + 1
+			H.title:SetFormattedText(forms[form], average)
+		end
 	else
 		H.title:SetText(TITLE)
 	end
+	H.form = form
+	if ready and H.readyShown == false and H.pulse then
+		pcall(H.pulse.Stop, H.pulse)
+		pcall(H.pulse.Play, H.pulse)
+	end
+	H.readyShown = ready
 end
 
 -- Starts a new average for the title (H.Title).
@@ -732,12 +833,13 @@ end
 
 -- Shows a bar for each healer, as many as Number of bars allows (the samples for /flatui healers), or hides the window when there are none.
 function H.Draw()
-	local samples = H.Sampling() and SAMPLE or nil
+	local samples = H.Sampling() and H.Samples() or nil
 	local list = samples or H.healers
 	local n = math.min(#list, Number("rows", 5), MOST_ROWS)
 	if n < 1 then
 		H.Showing(false)
 		H.Tick(false)
+		H.readyShown = nil
 		return
 	end
 	H.Frame()
@@ -840,7 +942,7 @@ function H.Tick(on)
 end
 
 function H.Refresh()
-	H.pending, H.placed, H.laid, H.armed = nil, nil, nil, nil
+	H.pending, H.placed, H.laid, H.armed, H.readyShown = nil, nil, nil, nil, nil
 	if not ns.Enabled(KEY) then
 		H.sample, H.healers = nil, {}
 		H.Tick(false)
@@ -922,7 +1024,7 @@ ns.Register(KEY, {
 
 -- Test mode: the sample bars while it is on (H.Sampling), drawn with the rows at each refresh of the page; Off refreshes the page, which draws the
 -- healers of the group again or hides the window. Its ticker draws them each second, out of a fight, so the sample Druid's drink counts down
--- (H.SampleDrink) from the moment test mode started.
+-- from the moment test mode started and the samples then read ready for a few seconds (H.SamplePhase).
 if ns.TestMode then
 	ns.TestMode.Register("healermana", {
 		module = KEY,

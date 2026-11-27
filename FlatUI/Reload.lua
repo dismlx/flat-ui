@@ -4,7 +4,9 @@ local _, ns = ...
 -- button gets a secure button on top that runs the game's own /reload on the next press. That secure button leaves in a fight, so there every
 -- reload button (the options window's strip, Home's Needs a reload, the reload notice, the welcome screen's) is dimmed, and a press says that
 -- Reload works again after the fight and that /reload works now (ns.Reload); the buttons come back as the fight ends. The strip's Reload of the
--- options window counts the changes that wait ("Reload (2)") and lists them in the notice's tooltip (ns.ReloadTip).
+-- options window counts the changes that wait ("Reload (2)") and lists them in the notice's tooltip (ns.ReloadTip). The secure button takes the
+-- mouse of the button under it, so it hands on the press with HookScript (a frame of Flat UI's own): the button's label sinks 1 px while the left
+-- button holds it, as every button of the options window does (ns.PanelKit.Press). The buttons of the taint log box act only when let go over them.
 
 local secure = false
 local buttons = {}
@@ -101,7 +103,21 @@ function Wanted()
 	return record ~= nil and record.reloadSecure == true
 end
 
--- A secure button over the button, made out of combat. The hover scripts of the button still run.
+-- The pressed look of a Button of the options window's kit under a secure button (Panel.lua, ns.PanelKit.Press); any other button has none.
+local function Press(button, down)
+	local kit = ns.PanelKit
+	if type(kit) == "table" and type(kit.Press) == "function" then
+		pcall(kit.Press, button, down)
+	end
+end
+
+-- True while the cursor is over a frame; a client that will not say counts as over, as with the options window's Clickable.
+local function Over(frame)
+	local ok, over = pcall(frame.IsMouseOver, frame)
+	return not ok or ns.IsSecret(over) or over ~= false
+end
+
+-- A secure button over the button, made out of combat. The hover scripts of the button still run, and its pressed look (Press).
 local function Cover(button)
 	if built[button] then
 		return
@@ -137,6 +153,17 @@ local function Cover(button)
 				if script then
 					script(button, ...)
 				end
+			end)
+			overlay:HookScript("OnMouseDown", function(_, mouse)
+				if mouse == "LeftButton" then
+					Press(button, true)
+				end
+			end)
+			overlay:HookScript("OnMouseUp", function()
+				Press(button, false)
+			end)
+			overlay:HookScript("OnHide", function()
+				Press(button, false)
 			end)
 		end)
 		if not done then
@@ -305,10 +332,10 @@ local function TaintBuild()
 	ignore:SetScript("OnMouseDown", function(_, button)
 		ignoreDown = button == "LeftButton"
 	end)
-	ignore:SetScript("OnMouseUp", function(_, button)
+	ignore:SetScript("OnMouseUp", function(self, button)
 		local wanted = ignoreDown and button == "LeftButton"
 		ignoreDown = false
-		if wanted then
+		if wanted and Over(self) then
 			box:Hide()
 		end
 	end)
@@ -318,10 +345,10 @@ local function TaintBuild()
 	reload:SetScript("OnMouseDown", function(_, button)
 		reloadDown = button == "LeftButton"
 	end)
-	reload:SetScript("OnMouseUp", function(_, button)
+	reload:SetScript("OnMouseUp", function(self, button)
 		local wanted = reloadDown and button == "LeftButton"
 		reloadDown = false
-		if wanted then
+		if wanted and Over(self) then
 			TaintTurnOff()
 			print("Flat UI: taintLog is off. Type /reload to follow the game frames again.")
 			box:Hide()
@@ -435,7 +462,8 @@ end
 -- line with one Undo and one Ctrl+Z puts them all back, and one line in chat says how many. Later hides
 -- the notice until the next change that needs a reload; it goes when nothing needs one any more. Undo is dimmed while it would do nothing (in a fight,
 -- while Setup has the window). Pointing at the notice, or at any of its buttons, shows GameTooltip with every change, its value now and at login,
--- in the words of the options window (ns.PanelTrust.ValueText). It fades in over 0.2 s each time it shows from hidden (its own alpha). It is in
+-- in the words of the options window (ns.PanelTrust.ValueText). It fades in over 0.2 s each time it shows from hidden (its own alpha), and out over
+-- 0.2 s on Later or once nothing needs a reload, coming back from where it is if a change needs one meanwhile. It is in
 -- DIALOG strata, over the options window (HIGH), and has an own entry in /flatui move (FlatUIReloadNotice, Movers.lua), at whose spot it stands.
 -- It keeps clear of the title bar of the options window while that shows, of the toolbar of /flatui move while that is open and of the test mode
 -- bar while that shows (TM.BarRect, TestMode.lua): covering any of them, it takes the nearest place just above or just under one of them that
@@ -639,13 +667,13 @@ local function NoticePlace(frame)
 	end)
 end
 
--- Later: the changes that need a reload now are held, and the notice hides until another comes.
+-- Later: the changes that need a reload now are held, and the notice fades out until another comes (notice.leaving, NoticeBuild's OnUpdate).
 local function NoticeLater()
 	notice.later = {}
 	for _, entry in ipairs(ns.ReloadLines()) do
 		notice.later[entry[3]] = entry[4]
 	end
-	notice.frame:Hide()
+	notice.leaving = true
 end
 
 -- Reload: the secure button takes the press where it is on the button. A press that reaches this function in a fight, where the reload needs that
@@ -822,7 +850,16 @@ local function NoticeBuild()
 	end)
 	frame:SetScript("OnUpdate", function(_, elapsed)
 		local step = Finite(elapsed) and elapsed or 0
-		if notice.alpha < 1 then
+		-- Later, and nothing left to reload, fade it out over the time it takes to come in, then hide it.
+		if notice.leaving then
+			notice.alpha = math.max(0, notice.alpha - step / NOTICE.fade)
+			pcall(frame.SetAlpha, frame, notice.alpha)
+			if notice.alpha <= 0 then
+				notice.leaving = false
+				frame:Hide()
+				return
+			end
+		elseif notice.alpha < 1 then
 			notice.alpha = math.min(1, notice.alpha + step / NOTICE.fade)
 			pcall(frame.SetAlpha, frame, notice.alpha)
 		end
@@ -948,8 +985,9 @@ local function NoticeRefresh()
 	NoticeSample(#lines == 0 and notice.sample == true)
 	if #lines == 0 then
 		notice.later = nil
-		if notice.frame then
-			pcall(notice.frame.Hide, notice.frame)
+		-- It fades out (NoticeBuild's OnUpdate); one already hidden stays so.
+		if notice.frame and notice.frame:IsShown() then
+			notice.leaving = true
 		end
 		return
 	end
@@ -984,7 +1022,9 @@ local function NoticeRefresh()
 	NoticeDim(InCombatLockdown())
 	notice.wait = 0
 	NoticePlace()
-	-- From hidden it fades in (OnUpdate, above); shown already, it only says the new line, and an open list says it again.
+	-- From hidden it fades in (OnUpdate, above); shown already, it only says the new line, and an open list says it again. One fading out comes
+	-- back in from where it is.
+	notice.leaving = false
 	if not notice.frame:IsShown() then
 		notice.alpha = 0
 		pcall(notice.frame.SetAlpha, notice.frame, 0)

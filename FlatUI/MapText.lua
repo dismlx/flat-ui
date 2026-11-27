@@ -19,7 +19,8 @@ local _, ns = ...
 -- slot does; a click on the time opens the game's stopwatch and alarm (ToggleTimeManager) and a Shift-click its calendar (ToggleCalendar). In a
 -- fight, where the game opens no such window, the click waits for the end of the fight (ns.OpenAfterFight): chat says once, for example,
 -- "Flat UI: the stopwatch opens when the fight ends.", the window opens as the fight ends, and the tooltip's hints say "after the fight".
--- The line of the frame rate lets clicks through. Text size (hud.mapTextSize) sizes the four lines at once (ns.TextStyle on
+-- The line of the frame rate lets clicks through; a line that takes clicks has a faint light behind its text while it is under the mouse, as a
+-- data panel's slot has (HOVER_LIGHT, a texture of the frame of the lines). Text size (hud.mapTextSize) sizes the four lines at once (ns.TextStyle on
 -- each, a share of the game's small font), and the lines, the addon button row under the map and the room under the zone name follow it.
 --   Coordinates: the player's place on the map of the zone, from C_Map.GetBestMapForUnit("player") and C_Map.GetPlayerMapPosition(map,
 --     "player"), whose x and y are read as fields (the game's own line calls GetXY of that table: Mainline/Minimap.lua:1434-1457). Neither is
@@ -48,6 +49,8 @@ local _, ns = ...
 -- the map for the lines below it (ns.MapTextBelow), and Hud.lua, while Close the gap under the zone name is on, leaves room under the zone name
 -- for the lines whose place is above the map (ns.MapTextAbove).
 -- These follow the minimap stats of EnhanceQoL by Philipp Barth (R41Z0R), adapted with his permission.
+-- Coordinates on the world map (hud.mapWorldCoords) puts your place and the cursor's in one line at the bottom middle of the world map, on a frame
+-- of Flat UI's own on the map's scroll container (W, below).
 
 local KEY, PART = "hud", "map text"
 -- The lines, from the map outwards: the row of each, the row of its place, and how often the ticker reads it (none: on events only).
@@ -75,6 +78,9 @@ local ANCHOR = "ANCHOR_LEFT"
 local DIM_RGB = { 0.66, 0.68, 0.62 }
 -- The lines a click does something on, and the hints their tooltips end with. The frame rate line lets clicks through.
 local CLICKS = { coords = true, durability = true, clock = true }
+-- The faint light behind a line that takes clicks while it is under the mouse, as the data panels' slots have (DataPanels.lua), and how far it
+-- reaches past the text.
+local HOVER_LIGHT, LIGHT_OUT = { 1, 1, 1, 0.07 }, 2
 local HINTS = {
 	coords = { "Click: world map", "Shift-click: put this in chat" },
 	durability = { "Click: character window" },
@@ -512,6 +518,16 @@ local function MakeButton(line, text)
 	ns.Own[button] = true
 	button:SetAllPoints(text)
 	button:EnableMouse(true)
+	-- The light is a texture of the frame of the lines, so it lies behind the text; the button is a level above that frame.
+	local light
+	if CLICKS[line.id] then
+		light = S.frame:CreateTexture(nil, "BACKGROUND")
+		ns.Own[light] = true
+		light:SetPoint("TOPLEFT", text, "TOPLEFT", -LIGHT_OUT, LIGHT_OUT)
+		light:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", LIGHT_OUT, -LIGHT_OUT)
+		light:SetColorTexture(HOVER_LIGHT[1], HOVER_LIGHT[2], HOVER_LIGHT[3], HOVER_LIGHT[4])
+		light:Hide()
+	end
 	if CLICKS[line.id] then
 		button:RegisterForClicks("LeftButtonUp")
 		button:SetScript("OnClick", function()
@@ -522,11 +538,17 @@ local function MakeButton(line, text)
 	end
 	button:SetScript("OnEnter", function(self)
 		S.over = line.id
+		if light then
+			light:Show()
+		end
 		ns.EachPart(KEY, PART, Tip, {}, line, self, true)
 	end)
 	button:SetScript("OnLeave", function(self)
 		if S.over == line.id then
 			S.over = nil
+		end
+		if light then
+			light:Hide()
 		end
 		if Owns(self) then
 			pcall(_G.GameTooltip.Hide, _G.GameTooltip)
@@ -535,6 +557,9 @@ local function MakeButton(line, text)
 	button:SetScript("OnHide", function(self)
 		if S.over == line.id then
 			S.over = nil
+		end
+		if light then
+			light:Hide()
 		end
 		if Owns(self) then
 			pcall(_G.GameTooltip.Hide, _G.GameTooltip)
@@ -886,7 +911,203 @@ local function Update()
 	Ticker()
 end
 
+-- The world map's line ---------------------------------------------------------------------------------------------------------------------
+
+-- Coordinates on the world map (hud.mapWorldCoords): "You 45.2, 61.8    Cursor 33.0, 12.5" at the bottom middle of the map, with Coordinate
+-- decimals. W.frame is a frame of Flat UI's own, a child of WorldMapFrame.ScrollContainer (Blizzard_WorldMap.xml:11), made out of combat or on a
+-- container the game does not protect, over the map's pins (they take levels up to 9000, MapCanvas_PinFrameLevelsManager.lua:3-4); it takes no
+-- mouse and shows and hides with the map, so its OnUpdate runs only while the map shows, every WORLD_EVERY seconds. Nothing of the map's is
+-- written and none of its mixin's calls is made: the map shown is read with rawget(WorldMapFrame, "mapID") (MapCanvasMixin keeps it there,
+-- Blizzard_MapCanvas.lua:60-62), your place on it from C_Map.GetPlayerMapPosition as the Coordinates line reads it, and the cursor from
+-- GetCursorPosition over the map's canvas (ScrollContainer.Child) with its region calls, the sums of the game's NormalizeUIPosition
+-- (MapCanvas_ScrollContainerMixin.lua:858-873). Your part shows while you are on the map shown and not in an instance, the cursor part while the
+-- pointer is over the map; a part outside 0 to 100 is left out. Part "map text", so its failures stop it with the other lines.
+local W = { every = 0.1, up = 6, pad = 6, level = 9500, gap = "    ", back = 0.6 }
+
+function W.Wanted()
+	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and Opt("mapWorldCoords") == true and MapCalls() ~= nil
+end
+
+-- The world map, its scroll container and the canvas in it; nil while the game has none or one addons may not touch.
+function W.Map()
+	local map = _G.WorldMapFrame
+	if type(map) ~= "table" or ns.IsSecret(map) or ns.Forbidden(map) then
+		return nil
+	end
+	local container = Field(map, "ScrollContainer")
+	local child = type(container) == "table" and not ns.Forbidden(container) and Field(container, "Child") or nil
+	if type(child) ~= "table" or ns.Forbidden(child) then
+		return nil
+	end
+	return map, container, child
+end
+
+-- A share of the map as text, or nil outside it.
+function W.Spot(x, y, format)
+	if not (ns.Finite(x) and ns.Finite(y)) or x < 0 or x > 1 or y < 0 or y > 1 then
+		return nil
+	end
+	return format:format(x * 100, y * 100)
+end
+
+-- Your place on the map shown, or nil in an instance, on another map or where the game gives none.
+function W.You(api, map, format)
+	if InInstance() then
+		return nil
+	end
+	local ok, id = pcall(rawget, map, "mapID")
+	if not ok or not ns.Finite(id) or id <= 0 then
+		return nil
+	end
+	local position = Ask(api.GetPlayerMapPosition, id, "player")
+	local x, y = Field(position, "x"), Field(position, "y")
+	if x == 0 and y == 0 then
+		return nil
+	end
+	return W.Spot(x, y, format)
+end
+
+-- The cursor's place on the map, or nil while the pointer is not over it.
+function W.Cursor(container, child, format)
+	if Ask(container.IsMouseOver, container) ~= true then
+		return nil
+	end
+	local ok, cx, cy = pcall(_G.GetCursorPosition)
+	if not ok or not (ns.Finite(cx) and ns.Finite(cy)) then
+		return nil
+	end
+	local scale, left, top = Ask(child.GetEffectiveScale, child), Ask(child.GetLeft, child), Ask(child.GetTop, child)
+	local width, height = Ask(child.GetWidth, child), Ask(child.GetHeight, child)
+	if not (ns.Finite(scale) and ns.Finite(left) and ns.Finite(top) and ns.Finite(width) and ns.Finite(height)) or scale <= 0 or width <= 0
+		or height <= 0 then
+		return nil
+	end
+	return W.Spot((cx / scale - left) / width, (top - cy / scale) / height, format)
+end
+
+-- One read: the line's text, the backing sized to it; both hidden while neither part has anything to show.
+function W.Read()
+	local api = MapCalls()
+	local map, container, child = W.Map()
+	local value
+	if api and map then
+		local decimals = math.max(0, math.min(2, math.floor(tonumber(Opt("mapCoordsDecimals")) or 1)))
+		local format = "%." .. decimals .. "f, %." .. decimals .. "f"
+		local you, cursor = W.You(api, map, format), W.Cursor(container, child, format)
+		if you and cursor then
+			value = "You " .. you .. W.gap .. "Cursor " .. cursor
+		else
+			value = (you and "You " .. you) or (cursor and "Cursor " .. cursor) or nil
+		end
+	end
+	if value == W.shown then
+		return
+	end
+	W.shown = value
+	if not value then
+		W.text:Hide()
+		W.backing:Hide()
+		return
+	end
+	W.text:SetText(value)
+	W.text:Show()
+	local width, height = Ask(W.text.GetStringWidth, W.text), Ask(W.text.GetStringHeight, W.text)
+	W.frame:SetSize((ns.Finite(width) and width or 120) + W.pad * 2, (ns.Finite(height) and height or LINE) + 4)
+	W.backing:Show()
+end
+
+function W.Step(_, elapsed)
+	W.at = (W.at or 0) + (ns.Finite(elapsed) and elapsed or 0)
+	if W.at < W.every then
+		return
+	end
+	W.at = 0
+	if ns.IsStopped(KEY) or not W.Wanted() then
+		W.frame:Hide()
+	elseif not ns.EachPart(KEY, PART, W.Read, {}) and ns.PartStopped(KEY, PART) then
+		W.frame:Hide()
+	end
+end
+
+-- Makes the frame on the map, once. False while it cannot be made now: in a fight on a container the game may protect, the make waits for the
+-- end of the fight.
+function W.Make()
+	if W.frame then
+		return true
+	end
+	local _, container = W.Map()
+	if not container or W.broken then
+		return false
+	end
+	if InCombatLockdown() and (ns.MaybeProtected == nil or ns.MaybeProtected(container)) then
+		if not W.waiting then
+			W.waiting = true
+			ns.OutOfCombat(function()
+				W.waiting = false
+				W.Refresh()
+			end)
+		end
+		return false
+	end
+	local ok, frame = pcall(CreateFrame, "Frame", nil, container)
+	if not ok or type(frame) ~= "table" then
+		return false
+	end
+	ns.Own[frame] = true
+	frame:SetSize(1, 1)
+	frame:SetPoint("BOTTOM", container, "BOTTOM", 0, W.up)
+	frame:SetFrameLevel(W.level)
+	frame:EnableMouse(false)
+	local backing = frame:CreateTexture(nil, "BACKGROUND")
+	ns.Own[backing] = true
+	backing:SetAllPoints(frame)
+	backing:SetColorTexture(0, 0, 0, W.back)
+	backing:Hide()
+	local text = ns.OwnText(frame, "OVERLAY", "GameFontHighlightSmall")
+	if not text then
+		-- The client refused the text: no line, and no second frame.
+		frame:Hide()
+		W.broken = true
+		return false
+	end
+	text:SetPoint("CENTER", frame, "CENTER", 0, 0)
+	text:Hide()
+	W.frame, W.text, W.backing = frame, text, backing
+	frame:SetScript("OnUpdate", W.Step)
+	-- The map hid: the next showing reads at once.
+	frame:SetScript("OnHide", function()
+		W.at = W.every
+	end)
+	return true
+end
+
+-- Shows the line's frame while its row is on, else hides it; a change of decimals shows on the next read. Through ns.EachPart, so a failure
+-- counts toward stopping the part; a stopped part hides it.
+function W.Refresh()
+	if ns.PartStopped(KEY, PART) or ns.IsStopped(KEY) then
+		if W.frame then
+			W.frame:Hide()
+		end
+		return
+	end
+	ns.EachPart(KEY, PART, W.Draw, {})
+end
+
+function W.Draw()
+	if not W.Wanted() then
+		if W.frame then
+			W.frame:Hide()
+		end
+		return
+	end
+	if W.Make() then
+		W.shown, W.at = false, W.every
+		W.frame:Show()
+	end
+end
+
 local function Draw()
+	W.Refresh()
 	if not ns.PartStopped(KEY, PART) and ns.EachPart(KEY, PART, Update, {}) then
 		return
 	end
@@ -938,6 +1159,12 @@ for _, event in ipairs({ "PLAYER_DEAD", "PLAYER_UNGHOST" }) do
 end
 ns.AddEvent(KEY, "CVAR_UPDATE", Changed, function(name)
 	return not ns.IsSecret(name) and name == "minimapShowPlayerCoords"
+end)
+-- The world map may come with its addon after login: its line is made then.
+ns.AddEvent(KEY, "ADDON_LOADED", function()
+	W.Refresh()
+end, function(name)
+	return not ns.IsSecret(name) and name == "Blizzard_WorldMap"
 end)
 
 -- /flatui status says why a wanted line is hidden.

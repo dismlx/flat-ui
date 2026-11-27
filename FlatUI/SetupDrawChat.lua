@@ -557,12 +557,13 @@ do
 	-- The age a Burst critical hit is drawn at: 0.03 s, 2.06 times its settled height.
 	local BURST_AGE = 0.03
 	-- Over an enemy, in the order they appeared: the text, the kind of hit the game reports, the school of magic mask, whether it is a
-	-- healing number, and how long ago it showed. The last is a critical hit still in its pop.
+	-- healing number, and how long ago it showed. The last is a critical hit still in its pop. name: the spell written after the number while
+	-- Spell names is After every spell and Whose hits is Yours, on Flat UI numbers (CombatText.lua, Ability).
 	local ENEMY = {
 		{ text = "412", school = 1, age = 1.3 },
 		{ text = "412", flag = "GLANCING", school = 1, age = 1.05 },
 		{ text = "215", heal = true, age = 0.8 },
-		{ text = "510", school = 4, age = 0.6 },
+		{ text = "510", school = 4, age = 0.6, name = "Fireball" },
 		{ text = "Dodge", word = true, age = 0.4 },
 		{ text = "824", flag = "CRITICAL", school = 1, crit = true, age = 0.12 },
 	}
@@ -591,9 +592,10 @@ do
 	-- In the Outgoing scroll area, right of the numbers on you, from the oldest: a swing with the icon of Attack, a critical Fire spell hit with its
 	-- icon and a Dodge, a steady run of hits OUT_GAP seconds apart. The column is OUT_X from the left; it starts OUT_LOW from the bottom of the mock
 	-- area when it moves up (from OUT_LOW + OUT_LENGTH when it moves down) and reaches OUT_LENGTH. The icon of a swing when the client gives none.
+	-- The Fire crit reads 824 Fireball while Spell names is After every spell and Whose hits is Yours, as the module writes it.
 	local OUT = {
 		{ text = "412", school = 1, icon = "swing" },
-		{ text = "824", school = 4, crit = true, icon = "spell" },
+		{ text = "824", school = 4, crit = true, icon = "spell", name = "Fireball" },
 		{ text = "Dodge", word = true },
 	}
 	local OUT_X, OUT_LOW, OUT_LENGTH, OUT_GAP = 545, 18, 168, 0.85
@@ -703,6 +705,7 @@ do
 		local base = SHAPE.text * (ns.ScrollSize and ns.ScrollSize("out") or ns.Get("combattext.size")) / 100
 		local path = style == "straight" or style == "arc"
 		local icons = ns.Get("combattext.whose") == "one" and ns.Get("combattext.icons") or "off"
+		local named = ns.Get("combattext.whose") == "one" and ns.Get("combattext.abilityName") == "every"
 		local snapshot = OUT_GAP * (#OUT - 1) + 0.1
 		local newest, spots, over = {}, {}, 0
 		local laneStep = math.min(scroll.lane * base, (WIDE - OUT_X - 8) / 2)
@@ -729,6 +732,9 @@ do
 					local icon = (sample.icon == "swing" and icons == "all" and SwingIcon()) or (sample.icon == "spell" and (icons == "all" or icons == "spells") and SPELL_ICON)
 					if icon then
 						text = INLINE:format(tostring(icon)) .. text
+					end
+					if named and sample.name then
+						text = text .. " " .. sample.name
 					end
 				end
 				fs:SetText(text)
@@ -791,8 +797,11 @@ do
 		local lanes = ns.CombatLanes(loose and ns.Get("combattext.spreadWidth") or 0, grow)
 		local apart, rows = ns.Get("combattext.overlap") == "apart", ns.Get("combattext.rows")
 		local placed = {}
+		-- Spell names After every spell writes the name after the number of your spell, on Flat UI numbers under Whose hits Yours.
+		local named = not game and ns.Get("combattext.whose") == "one" and ns.Get("combattext.abilityName") == "every"
 		for i, sample in ipairs(ENEMY) do
 			local fs = S.enemy[i]
+			local after = (named and sample.name) and (" " .. sample.name) or ""
 			local move = ns.CombatMove(movement, sample.crit and not game and not classic and pops)
 			-- A Burst critical hit is drawn young enough for the slam to show.
 			local age = move == "burst" and BURST_AGE or sample.age
@@ -802,7 +811,7 @@ do
 			local lane, up = lanes[turn], 0
 			local item = { lane = lane, drift = ns.CombatDrift(lane, grow), grow = grow, movement = move }
 			if apart and not classic then
-				fs:SetText(sample.text)
+				fs:SetText(sample.text .. after)
 				U.font(fs, enemyFile, settle, enemyFlags, enemyShadow, { 1, 1, 1 })
 				local ok, measured = pcall(fs.GetStringWidth, fs)
 				wide = ok and type(measured) == "number" and measured > 0 and measured or wide
@@ -826,6 +835,7 @@ do
 			if classic and signs and not sample.word then
 				text = (sample.heal and "+" or "-") .. text
 			end
+			text = text .. after
 			local r, g, b = 1, 1, 1
 			if sample.heal then
 				r, g, b = 0, 1, 0
@@ -1000,7 +1010,8 @@ end
 -- CombatCues.lua), on the game's combat font (CombatTextFont, else its large number font) with a thin outline. No target names the key bound to
 -- Target Nearest Enemy while Name the key to target an enemy is on, read as the module reads it. The whole is kept inside the picture at any size:
 -- it shrinks as one, so the sizes keep their proportions. Low mana is drawn only for a class that has mana (not a warrior or a rogue), as test
--- mode shows it only for a mana user. At the left, an "On you" column (0.5.39) shows the numbers on you of the Incoming area, still: -412 in
+-- mode shows it only for a mana user. While Share on Low health and Low mana is on (0.5.41) the two read Low health  15% and Low mana  12%, as
+-- the live lines write the share. At the left, an "On you" column (0.5.39) shows the numbers on you of the Incoming area, still: -412 in
 -- Damage on you colour and +300 in Healing on you colour (while Healing on you is on) with Combat text for you on, and (Dodge) and +20 with Also
 -- misses, dodges and gains, at Size of your text in the combat text's font, outline and shadow (CombatText.lua), so the rows of Your character on
 -- the You and warnings tab have a number to point at; it goes while Combat text for you is Off, and shrinks as one to fit its room.
@@ -1169,8 +1180,11 @@ do
 		local mana = low and HasMana()
 		local shown = { enter = flash, leave = flash, warn = warn, health = low, mana = mana }
 		local left = DrawYou(S, on) and COL_W or 0
+		-- Share on Low health and Low mana writes a sample share after the words, as the live lines write yours (CombatCues.lua).
+		local share = ns.Get("combattext.lowShare") == true
 		local texts = {
-			enter = Words("enter"), warn = Words("warn"), health = Words("health"), mana = Words("mana"),
+			enter = Words("enter"), warn = Words("warn"), health = share and Words("health") .. "  15%" or Words("health"),
+			mana = share and Words("mana") .. "  12%" or Words("mana"),
 			leave = ns.Get("combattext.combatLength") == true and Words("leave") .. "  1:24" or Words("leave"),
 		}
 		-- Measured whole first; then the whole shrinks as one to fit, both high and wide.
@@ -1220,6 +1234,7 @@ do
 			p["combattext." .. key] = lines.warn
 		end
 		p["combattext.lowHealth"], p["combattext.lowColour"], p["combattext.lowManaColour"] = lines.health, lines.health, lines.mana
+		p["combattext.lowShare"] = lines.health
 		p["combattext.combatState"], p["combattext.combatEnterColour"], p["combattext.combatStateSize"] = lines.enter, lines.enter, lines.enter
 		p["combattext.combatLeaveColour"], p["combattext.combatLength"] = lines.leave, lines.leave
 		-- The rows of Your character, on the same tab: the On you column.

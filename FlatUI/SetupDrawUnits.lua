@@ -27,14 +27,18 @@ local ADDON_NAME, ns = ...
 -- colours and places of your class's heals over time, or two sample squares for a class with none, left of the type icon's spot on a right-hand
 -- corner while Debuff type icon on party frames is on). With Blink as one lands the border and type icon blink three times as the marks are first
 -- drawn, as they come into view and each time the row is turned on, in the live blink's steps (UnitGroupMarks.lua Blink). The setup's party frames show Mara's Star with
--- Raid marker on party frames, and its raid cells the marks of their rows: Aria's Skull (Raid marker on raid frames), her leader crown and Dru's
+-- Raid marker on party frames, and Fay dead while someone resurrects her, with the game's resurrection icon centred on her picture, or at the left end
+-- of her health bar with Picture None, with Resurrection icon on party frames (UnitGroupMarks.lua PlaceRez). Role icons for leaves out the icons of the
+-- roles it leaves out on the party frames and the raid cells, as the live frames do (UnitParts.lua X.roleLeftOut). Its raid cells show the marks of
+-- their rows: Aria's Skull (Raid marker on raid frames), her leader crown and Dru's
 -- assistant icon (Leader and assistant icons on raid frames), and Cole as your target, with the border of Border for your target in the game's white or
 -- Target border colour (UnitFrames.lua Colour).
 -- Right of the setup's pet (Wolf), while Pet target frame is on, the pet target frame of UnitPetTarget.lua is drawn as test mode draws its sample:
 -- Training Dummy at 65% in the hostile colour, Pet target width wide, a Skull left of it with Raid marker on target, focus, boss and pet target frames,
 -- and its border in Not your target colour with Border while it is not your target.
 -- Under the setup's player frame, for a druid while Druid mana in forms is on, the druid mana bar of UnitDruidMana.lua is drawn as in Cat Form (the
--- frame's energy full): 60% full in mana blue, Mana bar height high, with "60%" or "3.6K" just right of it by Mana text, in the border, background,
+-- frame's energy full): 60% full in mana blue, Mana bar height high, with "60%" or "3.6K" just right of it by Mana text at Power text size (85% of
+-- it with Smaller, lighter bar text), and with Mark the cost of a shift a white line at 35%, the cost of Cat Form, in the border, background,
 -- Corners and hang of the live bar in either Frame style.
 
 local KEY = "unitframes"
@@ -94,7 +98,10 @@ local SIZE = { large = { bar = 124, health = 20, power = 10 }, small = { bar = 7
 local ART = { leader = { "UI-HUD-UnitFrame-Player-Group-LeaderIcon", 1, 0.82, 0 }, attack = { "UI-HUD-UnitFrame-Player-CombatIcon", 0.9, 0.2, 0.2 },
 	tank = { "roleicon-tiny-tank", 0.3, 0.5, 0.9 }, healer = { "roleicon-tiny-healer", 0.3, 0.8, 0.3 }, damage = { "roleicon-tiny-dps", 0.8, 0.3, 0.3 },
 	pvp = { "UI-HUD-UnitFrame-Player-PVP-FFAIcon", 0.7, 0.7, 0.7 }, happy = { "UI-PetHappiness", 0.3, 0.8, 0.3 },
-	rest = { "UI-HUD-UnitFrame-Player-Rest-Flipbook", 1, 0.9, 0.4 } }
+	rest = { "UI-HUD-UnitFrame-Player-Rest-Flipbook", 1, 0.9, 0.4 }, rez = { "RaidFrame-Icon-Rez", 0.4, 0.9, 0.4 } }
+-- The resurrection icon of a party frame (UnitGroupMarks.lua REZ_SIZE and REZ_BAR): its size centred on the picture, and at the left end of the
+-- health bar of a frame with none, 1 unit in.
+local REZ = { size = 20, bar = 14, inset = 1 }
 local MARKER = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local ICON = 14
 -- The picture of the sample auras and the totem.
@@ -131,6 +138,15 @@ local ENEMY_LOW = { target = true, focus = true, boss = true, tot = true }
 
 local function Get(key)
 	return ns.Get(KEY .. "." .. key)
+end
+
+-- Whether Role icons for shows the icon of a role of the samples (tank, healer or damage): Tanks and healers leaves out damage, Healers only tanks
+-- and damage too, as LEFT_OUT has it (UnitParts.lua X.roleLeftOut).
+local ROLES_LEFT_OUT = { support = { damage = true }, healer = { tank = true, damage = true } }
+
+local function RoleShown(role)
+	local out = ROLES_LEFT_OUT[Get("roleIconRoles")]
+	return not (out and out[role])
 end
 
 local function Clamp(value)
@@ -675,8 +691,9 @@ end
 -- with typeIcon its icon 1 unit in from the right end of the bar (UnitGroupMarks.lua PlaceDispel). hots: the colours of the player's heals over
 -- time, a square each in a row from Square corner, Square size on a side with a dark rim of one screen pixel, just inside the dispel border, with
 -- Squares for your heals over time (UnitHots.lua Make and Place); with typeIcon and Top right or Bottom right the row starts just left of the icon's
--- spot, so the two show side by side as on the live party frames. on: the frame's switch.
-local function PaintMarks(m, bar, root, on, dispel, typeIcon, hots)
+-- spot, so the two show side by side as on the live party frames; on a party frame (party) the side is at most the bar's height less the row's inset
+-- and the dispel border on the far side (UnitHots.lua Side). on: the frame's switch.
+local function PaintMarks(m, bar, root, on, dispel, typeIcon, hots, party)
 	m.frame:SetAllPoints(root)
 	m.rim:SetAllPoints(root)
 	local colour = on and dispel and Get("dispelBorder") == true and TYPE[dispel] or nil
@@ -730,6 +747,12 @@ local function PaintMarks(m, bar, root, on, dispel, typeIcon, hots)
 	local corner = HOT_CORNERS[Get("hotCorner")] or HOT_CORNERS.tr
 	local size, px = tonumber(Get("hotSize")) or 6, ns.Pixels(root, 1)
 	local inset = px * (DISPEL.px + 1)
+	if party then
+		local ok, tall = pcall(bar.GetHeight, bar)
+		if ok and ns.Finite(tall) and tall > 0 then
+			size = math.max(2, math.min(size, tall - inset - px * DISPEL.px))
+		end
+	end
 	-- With the type icon row on a party frame and a right-hand corner the row starts one screen pixel left of the icon's spot, whether a debuff is
 	-- there or not (UnitHots.lua Across).
 	local from = (typeIcon and corner[2] < 0) and (1 + t + DISPEL.icon + px) or inset
@@ -783,16 +806,19 @@ end
 -- The druid mana bar ------------------------------------------------------------------------------------------------------------------
 
 -- The druid mana bar of the setup's player frame (UnitDruidMana.lua): the share of mana its sample shows and the mana of Current, the units between the
--- bar and its text, the text's size against the game's small font (UnitDruidMana.lua SAMPLE_MANA, TEXT_GAP, TEXT_PERCENT and the 60% of Show), its
--- height in screen pixels where Mana bar height has none, and the power the player's bars show while it is drawn: Cat Form, its energy full.
-local DRUID_MANA = { share = 0.6, mana = 3600, gap = 4, percent = 85, height = 4, form = { "ENERGY", 1 } }
+-- bar and its text, the text's size against the game's small font where Power text size has none (UnitDruidMana.lua SAMPLE_MANA, TEXT_GAP,
+-- TEXT_PERCENT and the 60% of Show), its height in screen pixels where Mana bar height has none, the share where Mark the cost of a shift draws its
+-- line (a Cat Form of 35% of the mana), and the power the player's bars show while it is drawn: Cat Form, its energy full.
+local DRUID_MANA = { share = 0.6, mana = 3600, gap = 4, percent = 85, height = 4, shift = 0.35, form = { "ENERGY", 1 } }
 
--- The frames of the druid mana bar on the player's root: the bar with its border, background and fill, and its text just right of it.
+-- The frames of the druid mana bar on the player's root: the bar with its border, background and fill, the line of Mark the cost of a shift over the
+-- fill, and its text just right of it.
 local function MakeDruidMana(root)
 	local d = { frame = Above(Frame(root), root, 2) }
 	d.outline = ns.Outline(d.frame, d.frame)
 	ns.SetOutlineArea(d.outline, KEY)
 	d.fill = Tex(d.frame, "ARTWORK", 0)
+	d.tick = Tex(d.frame, "OVERLAY", 7)
 	d.text = Text(d.frame, "GameFontHighlightSmall")
 	d.text:SetJustifyH("LEFT")
 	d.frame:Hide()
@@ -874,11 +900,12 @@ local function Sample(id)
 		local member = PARTY[number]
 		local debuffed = number == 1 or number == 3
 		-- low: Mara's health while Low health border is on, so that the border shows (E.bars). dispel and hots: Mara's Magic debuff you can dispel and
-		-- the heals over time of yours on Bex (PaintMarks). marker: Mara's Star, with Raid marker on party frames (E.icons).
+		-- the heals over time of yours on Bex (PaintMarks). marker: Mara's Star, with Raid marker on party frames (E.icons). dead and rez: Fay lies dead
+		-- while someone resurrects her, with Resurrection icon on party frames (E.icons).
 		return { kind = "party", cap = number == 1 and "Party" or nil, name = member[1], level = 19, class = member[2], player = true, react = FRIENDLY, role = member[3],
 			leader = number == 1, number = number, away = number == 4, auras = debuffed and { { "debuff", number == 1 and "magic" or "poison", false, 3, "12" } } or nil,
 			debuff = number == 1 and TYPE.magic or nil, low = number == 1 and 0.15 or nil, dispel = number == 1 and "magic" or nil, marker = number == 1 and 1 or nil,
-			hots = number == 2 and SampleHots(class) or nil }
+			hots = number == 2 and SampleHots(class) or nil, dead = number == 5 or nil, rez = number == 5 or nil }
 	end
 	number = tonumber(id:match("^partypet(%d)$"))
 	if number then
@@ -977,6 +1004,8 @@ function E.make(stage, id, given)
 		Tex(top, "OVERLAY", 3), Tex(top, "OVERLAY", 2)
 	o.pvpTimer = Text(top)
 	o.shade = Tex(top, "OVERLAY", 7)
+	-- The resurrection icon of a party frame (E.icons).
+	o.rez = sample.kind == "party" and Tex(top, "OVERLAY", 3) or nil
 	o.auras = {}
 	for index, aura in ipairs(sample.auras or {}) do
 		local icon = ns.IconNew(top)
@@ -992,7 +1021,7 @@ function E.make(stage, id, given)
 	-- The regions the rows of the steps mark (design.md 4.3, part marks). body: the frame's box, placed in both styles and shown in One frame.
 	o.parts = { root = root, body = o.box, pic = o.pic, health = o.health, power = o.power, row = row, name = o.name, level = o.level, healthText = o.healthText,
 		powerText = o.powerText, pred = o.pred, shield = o.shield, absorb = o.absorb, kmark = o.kmark, kword = o.kword, kline = o.rLine, plate = o.plateIcon,
-		flag = o.flag, leader = o.leader, role = o.role, marker = o.marker, attack = o.attack, happy = o.happy, dead = o.deadText, aura = o.auras[1] and o.auras[1].frame,
+		flag = o.flag, leader = o.leader, role = o.role, marker = o.marker, attack = o.attack, happy = o.happy, dead = o.deadText, rez = o.rez, aura = o.auras[1] and o.auras[1].frame,
 		count = o.auras[1] and o.auras[1].count, time = o.auras[1] and o.auras[1].time, picLevel = o.picLevel, timer = o.pvpTimer, shadow = o.shadow,
 		petTarget = o.petTarget and o.petTarget.frame }
 	-- The rows of the druid mana bar mark it for a druid, and the power bar it hangs from for any other class, who never sees it.
@@ -1791,6 +1820,9 @@ function E.icons(o, g, L)
 	for _, icon in ipairs({ o.leader, o.attack, o.role, o.plateIcon, o.marker, o.happy }) do
 		icon:Hide()
 	end
+	if o.rez then
+		o.rez:Hide()
+	end
 	o.picLevel:Hide()
 	o.pvpTimer:Hide()
 	o.shade:Hide()
@@ -1830,7 +1862,7 @@ function E.icons(o, g, L)
 			Art(o.attack, "attack")
 			Mark(o.attack, root, px + side - ICON + 4, py - 5)
 		end
-		if shown and s.role and g.roleIcon then
+		if shown and s.role and g.roleIcon and RoleShown(s.role) then
 			Art(o.role, s.role)
 			Mark(o.role, root, px - 2, py + side - ICON + 2)
 		end
@@ -1857,6 +1889,20 @@ function E.icons(o, g, L)
 			-- A party member's marker is centred on the top of its picture, or of its health bar with none, at 16 units (UnitGroupMarks.lua MarkerSpot,
 			-- PARTY_MARK).
 			Marker(shown and o.pic or o.health, "CENTER", "TOP", 0, 0, 16)
+		end
+		-- A dead party member someone resurrects: the game's resurrection icon centred on the picture, or with none at the left end of the health
+		-- bar, clear of the Dead word (UnitGroupMarks.lua PlaceRez).
+		if o.rez and s.rez and L.on and Get("partyRezIcon") == true then
+			Art(o.rez, "rez")
+			o.rez:ClearAllPoints()
+			if shown then
+				o.rez:SetSize(REZ.size, REZ.size)
+				o.rez:SetPoint("CENTER", o.pic, "CENTER", 0, 0)
+			else
+				o.rez:SetSize(REZ.bar, REZ.bar)
+				o.rez:SetPoint("LEFT", o.health, "LEFT", REZ.inset, 0)
+			end
+			o.rez:Show()
 		end
 		if shown and s.happy and g.petHappiness then
 			Art(o.happy, "happy")
@@ -2040,13 +2086,30 @@ function E.druidMana(o, g, L)
 	Stretch(d.fill, d.frame, 0, width * DRUID_MANA.share, tall)
 	Fill(d.fill, FileOf("power"), r, gr, b, 1)
 	CutFill(d.frame, d.fill, radius)
+	-- Mark the cost of a shift: a white line of one screen pixel at the cost of Cat Form (UnitDruidMana.lua Mark).
+	local shift = Get("druidManaShift") == true
+	d.tick:SetShown(shift)
+	if shift then
+		local x = width * DRUID_MANA.shift
+		d.tick:ClearAllPoints()
+		d.tick:SetPoint("TOP", d.frame, "TOPLEFT", x, 0)
+		d.tick:SetPoint("BOTTOM", d.frame, "BOTTOMLEFT", x, 0)
+		d.tick:SetWidth(ns.Pixels(o.root, 1))
+		Solid(d.tick, 1, 1, 1, 0.9)
+	end
 	local mode = Get("druidManaText")
 	local right = L.barsLeft + width + L.t
 	d.text:SetShown(mode == "pct" or mode == "cur")
 	if mode == "pct" or mode == "cur" then
 		local formats = ns.UnitFrameExtra and ns.UnitFrameExtra.formats
 		d.text:SetText(mode == "cur" and Num(DRUID_MANA.mana) or ((formats and formats.pct) or "%.0f%%"):format(DRUID_MANA.share * 100))
-		local spec = { percent = DRUID_MANA.percent, flags = FLAGS[g.barTextOutline], face = g.barTextFace ~= "default" and ns.FontFile(g.barTextFace) or nil }
+		-- Power text size, and under Smaller, lighter bar text 85% of it with no outline unless Bar text outline gives one (UnitDruidMana.lua Paint).
+		local percent = tonumber(g.powerTextSize) or DRUID_MANA.percent
+		local spec = { percent = g.lightText and percent * 0.85 or percent, flags = FLAGS[g.barTextOutline],
+			face = g.barTextFace ~= "default" and ns.FontFile(g.barTextFace) or nil }
+		if g.lightText and spec.flags == nil then
+			spec.flags = ""
+		end
 		if g.barTextOwn then
 			spec.r, spec.g, spec.b = ns.Colour(KEY .. ".barTextColour")
 		end
@@ -2110,7 +2173,7 @@ function E.draw(o, g)
 	E.auras(o, g, L)
 	-- The marks of a party frame (E.make), of the setup or of test mode.
 	if o.marks then
-		PaintMarks(o.marks, o.health, o.root, L.on, o.s.dispel, Get("dispelIcon") == true, o.s.hots)
+		PaintMarks(o.marks, o.health, o.root, L.on, o.s.dispel, Get("dispelIcon") == true, o.s.hots, true)
 	end
 	o.g = g
 	o.width, o.height = L.width, L.height
@@ -2421,7 +2484,7 @@ local function PaintCell(cell, s, width, height, g)
 		statusSpec.flags = FLAGS[g.barTextOutline]
 	end
 	Style(cell.name, nameSpec)
-	local roleOn = (not on or Get("raidRoleIcon") == true) and ART[s.role] ~= nil
+	local roleOn = (not on or (Get("raidRoleIcon") == true and RoleShown(s.role))) and ART[s.role] ~= nil
 	cell.role:SetShown(roleOn)
 	if roleOn then
 		Art(cell.role, s.role)
@@ -2471,7 +2534,7 @@ local MARK = {
 	backdrop = { "player", "body" }, flat = { "player", "health" }, healthColour = { "player", "health" }, healthTexture = { "player", "health" },
 	powerTexture = { "player", "power" }, healthByLeft = { "player", "health" }, status = { "player", "pic" }, threat = { "boss", "health" },
 	lowHealth = { "party1", "health" }, lowHealthAt = { "party1", "health" }, lowHealthColour = { "party1", "health" }, hoverHighlight = { "player", "health" },
-	druidMana = { "player", "druid" }, druidManaText = { "player", "druid" }, druidManaHeight = { "player", "druid" },
+	druidMana = { "player", "druid" }, druidManaText = { "player", "druid" }, druidManaHeight = { "player", "druid" }, druidManaShift = { "player", "druid" },
 	petTarget = { "pet", "petTarget" }, petTargetWidth = { "pet", "petTarget" }, petTargetWarn = { "pet", "petTarget" }, petTargetWarnColour = { "pet", "petTarget" },
 	lowHealthTarget = { "target", "health" }, lowHealthTargetAt = { "target", "health" }, lowHealthPulse = { "party1", "health" }, dispelBorder = { "party1", "health" }, dispelIcon = { "party1", "health" },
 	dispelFlash = { "party1", "health" },
@@ -2508,7 +2571,7 @@ local MARK = {
 	bossPowerBar = { "boss", "power" },
 	raidRangeAlpha = { "raid", "cell" }, raidRoleIcon = { "raid", "role" }, raidName = { "raid", "name" }, raidStatusText = { "raid", "status" },
 	raidFrameMarker = { "raid", "marker" }, raidLeaderIcon = { "raid", "lead" }, targetBorder = { "raid", "target" }, targetColour = { "raid", "target" },
-	partyFrameMarker = { "party1", "marker" },
+	partyFrameMarker = { "party1", "marker" }, partyRezIcon = { "party5", "rez" }, roleIconRoles = { "party1", "role" },
 }
 
 -- Builds a scene: the frames of a list of items on a root frame, with a caption under each. make: the function for an item that is not a unit frame.

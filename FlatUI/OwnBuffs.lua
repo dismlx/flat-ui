@@ -13,7 +13,11 @@ local _, ns = ...
 -- and /flatui test icons show Time left as the row draws it: under the icon, as a thin bar under it, on the icon or not at all (B.SampleTime).
 -- The time left under or on an icon turns amber in its last 5 seconds: the game colours its text by a colour curve (B.TimeOptions), so also
 -- in a fight, and the samples do the same. Out of combat with test mode off and none of the row's buffs up, a change of Time left, Icon size,
--- Spacing, Icon border or Bar texture shows the samples for 4 seconds in the new look, with no line in the chat (ns.OwnBuffsLookChanged).
+-- Spacing, Icon border, Flash when one lands, Bar texture, Place, X offset or Y offset shows the samples for 4 seconds in the new look where the
+-- row now sits, with no line in the chat (ns.OwnBuffsLookChanged); a further step of a slider redraws them with their countdowns running on.
+-- Flash when one lands (on by default) gives each icon a quick white flash as its buff comes: on the game's buttons an animation the game plays
+-- itself as the button shows (AddAuraShownAnimation), so also in a fight, and not for a buff cast again while it shows; on the icons of a read,
+-- a flash of IconRow.lua for a buff that was not in the last read. The samples of the test, of test mode and of the preview flash as they appear.
 -- The numbers on an icon, the time left on it and the charges, follow Icon size: today's heights at the default of 40, grown and shrunk with
 -- it (B.SizeText), on the game's buttons, the icons of a read and the samples; the time under the icon keeps its height.
 
@@ -49,6 +53,8 @@ local IsSecret = ns.IsSecret
 local T = ns.Tracking
 local TM = ns.TestMode
 local B = { list = {}, pending = {}, refused = {}, icons = {}, groups = {} }
+-- The flash of a buff that comes: from this opacity to none in FLASH seconds, as on Defensives on you.
+B.FLASH_FROM, B.FLASH = 0.8, 0.5
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -259,7 +265,7 @@ function B.Place()
 	B.where = "above the player frame, the personal resource display cannot be used"
 	local frame = PlayerFrame
 	if frame ~= nil and not ns.Forbidden(frame) then
-		holder:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, 70 + y)
+		holder:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", x, 70 + y)
 		return "player"
 	end
 	holder:SetPoint("CENTER", UIParent, "CENTER", x, -150 + y)
@@ -478,7 +484,7 @@ function B.Init(button)
 		return frame
 	end)
 	if not made then
-		B.refused.count, B.refused.time, B.refused.border = true, true, true
+		B.refused.count, B.refused.time, B.refused.border, B.refused.flash = true, true, true, true
 		return
 	end
 	parts.top = top
@@ -519,6 +525,24 @@ function B.Init(button)
 		end
 		parts.edges = edges
 		B.PaintEdges(parts)
+	end)
+	-- A white square over the button, at no opacity but while its fade plays: the game plays the fade as the button shows, as a buff comes,
+	-- and not when a buff already shown is cast again. The square is a child of the button, as the game asks of the regions of such an animation.
+	Part("flash", function()
+		local flash = Own(top:CreateTexture(nil, "OVERLAY", nil, 7))
+		flash:SetAllPoints(button)
+		flash:SetColorTexture(1, 1, 1, 1)
+		flash:SetAlpha(0)
+		local group = flash:CreateAnimationGroup()
+		local fade = group:CreateAnimation("Alpha")
+		fade:SetFromAlpha(B.FLASH_FROM)
+		fade:SetToAlpha(0)
+		fade:SetDuration(B.FLASH)
+		group:SetToFinalAlpha(true)
+		button:AddAuraShownAnimation(group)
+		parts.flash = flash
+		parts.flashOn = Opt("flash") ~= false
+		flash:SetShown(parts.flashOn)
 	end)
 	pcall(B.SizeText, parts, Opt("size"))
 end
@@ -582,7 +606,21 @@ function B.ApplySize()
 	B.refused.size = refused
 end
 
-B.apply = { time = B.ApplyTime, border = B.ApplyBorder, tips = B.ApplyTips, size = B.ApplySize }
+-- Flash when one lands again where it has changed: the square shows or hides, and the fade the game plays stays registered.
+function B.ApplyFlash()
+	local want = Opt("flash") ~= false
+	for _, parts in ipairs(B.list) do
+		if parts.flash and parts.flashOn ~= want then
+			if pcall(parts.flash.SetShown, parts.flash, want) then
+				parts.flashOn = want
+			else
+				B.refused.flash = true
+			end
+		end
+	end
+end
+
+B.apply = { time = B.ApplyTime, border = B.ApplyBorder, tips = B.ApplyTips, size = B.ApplySize, flash = B.ApplyFlash }
 
 -- Runs what waited, once the game says buffs are open.
 function B.Flush()
@@ -784,13 +822,22 @@ function B.Pass()
 	if B.path ~= "reading" or not ns.Enabled(KEY) or B.testing or B.Holding() then
 		return
 	end
-	local found = B.Read() or {}
+	local read = B.Read()
+	local found = read or {}
 	local shown = {}
+	-- A buff that was not in the last read flashes as it comes; by its spell alone, so a buff cast again while it shows does not, as on the
+	-- game's row. None at the first read, nor at the first after the game hid buffs.
+	local before, now = B.landed, {}
+	B.landed = read and now or nil
 	for index = 1, #found do
 		local item, icon = found[index], B.Icon(index)
 		if icon then
 			ns.IconSet(icon, item.file, item.expires - item.length, item.length, { numbers = Opt("time") ~= "off", border = Opt("iconBorder") })
 			ns.IconCountdownHeight(icon, Opt("size"), B.BASE)
+			now[item.id] = true
+			if before and not before[item.id] and Opt("flash") ~= false then
+				ns.IconFlash(icon)
+			end
 			shown[#shown + 1] = icon
 		end
 	end
@@ -841,6 +888,7 @@ function B.StopReading()
 	if B.watcher then
 		pcall(B.watcher.UnregisterAllEvents, B.watcher)
 	end
+	B.landed = nil
 	for _, icon in ipairs(B.icons) do
 		ns.IconClear(icon)
 	end
@@ -879,6 +927,7 @@ function B.Sync()
 		B.Change("time")
 		B.Change("border")
 		B.Change("tips")
+		B.Change("flash")
 	elseif B.path == "reading" then
 		B.StartReading()
 	end
@@ -1051,9 +1100,10 @@ function B.EndTest(token)
 	B.Pass()
 end
 
--- Three sample icons, run by /flatui test icons with the samples of the other rows. quiet: for PREVIEW seconds and with no line in the chat
--- (ns.OwnBuffsLookChanged).
-function ns.OwnBuffsTest(quiet)
+-- Three sample icons, run by /flatui test icons with the samples of the other rows, each flashing as it appears with Flash when one lands on.
+-- quiet: for PREVIEW seconds and with no line in the chat (ns.OwnBuffsLookChanged). A quiet test over one that runs keeps its start, so the
+-- countdowns run on, and the samples flash again only for path Flash when one lands: a slider drag does not strobe.
+function ns.OwnBuffsTest(quiet, path)
 	quiet = quiet == true
 	if not B.Capable() then
 		return
@@ -1070,6 +1120,7 @@ function ns.OwnBuffsTest(quiet)
 		end
 		return
 	end
+	local again = quiet and B.testing and B.testing.quiet and B.testing or nil
 	if B.testing then
 		B.EndTest()
 	end
@@ -1081,6 +1132,11 @@ function ns.OwnBuffsTest(quiet)
 	B.Place()
 	holder:Show()
 	local list, now = {}, Now()
+	-- The countdowns run 4, 6 and 8 seconds: once the longest has run out, a further step starts them again, still with no flash.
+	if again and again.start and now - again.start < 8 then
+		now = again.start
+	end
+	local flash = Opt("flash") ~= false and (not again or path == KEY .. ".flash")
 	B.sample = B.sample or {}
 	for index = 1, 3 do
 		local icon = B.sample[index] or ns.IconNew(holder)
@@ -1092,9 +1148,12 @@ function ns.OwnBuffsTest(quiet)
 		ns.IconSet(icon, ({ 135940, 135964, 136089 })[index], now, 2 * index + 2, { numbers = Opt("time") == "on", border = Opt("iconBorder") })
 		ns.IconCountdownHeight(icon, Opt("size"), B.BASE)
 		B.SampleTime(icon, now, 2 * index + 2)
+		if flash then
+			ns.IconFlash(icon)
+		end
 	end
 	B.Row(list)
-	local test = { list = list, quiet = quiet }
+	local test = { list = list, quiet = quiet, start = now }
 	B.testing = test
 	if not quiet then
 		print("Your buffs: three sample icons for 8 seconds.")
@@ -1106,11 +1165,12 @@ function ns.OwnBuffsTest(quiet)
 	end
 end
 
--- A row of the look changed (Time left, Icon size, Spacing, Icon border, Bar texture): the row is refreshed, as without a changed function of
--- the row (Core.lua's Changed), and out of combat with test mode off (its own samples show then), no test of /flatui test icons under way and
--- none of the row's buffs up, the three samples show for PREVIEW seconds in the new look with no line in the chat. Each change starts them
--- again, so a slider dragged keeps them up until PREVIEW after its last step.
-function ns.OwnBuffsLookChanged()
+-- A row of the look or the place changed (Time left, Icon size, Spacing, Icon border, Flash when one lands, Bar texture, Place, X offset, Y
+-- offset): the row is refreshed, as without a changed function of the row (Core.lua's Changed), and out of combat with test mode off (its own
+-- samples show then), no test of /flatui test icons under way and none of the row's buffs up, the three samples show for PREVIEW seconds in the
+-- new look where the row now sits, with no line in the chat. Each change keeps them up again, so a slider dragged keeps them up until PREVIEW
+-- after its last step, with their countdowns running on (ns.OwnBuffsTest).
+function ns.OwnBuffsLookChanged(path)
 	ns.Try(KEY, B.Refresh)
 	if InCombatLockdown() or TM.IsOn() or not (B.Capable() and B.on and ns.Enabled(KEY)) then
 		return
@@ -1119,11 +1179,12 @@ function ns.OwnBuffsLookChanged()
 	if (B.testing and not B.testing.quiet) or not read or (type(found) == "table" and #found > 0) then
 		return
 	end
-	ns.Try(KEY, ns.OwnBuffsTest, true)
+	ns.Try(KEY, ns.OwnBuffsTest, true, path)
 end
 
 -- Test mode (TestMode.lua): while it is on, out of combat, with the page on, the holder shows three sample icons of its own, apart from those of
--- /flatui test icons, with the look of Time left and Icon border and, as there, no flash or sound. Each Sync lays them out again (B.Row), so a
+-- /flatui test icons, with the look of Time left and Icon border, a flash as each appears (Flash when one lands) and no sound; a sweep that
+-- starts again does not flash, as a buff cast again while it shows does not. Each Sync lays them out again (B.Row), so a
 -- change of Icon size shows at once, and the ticker of test mode starts their sweeps again (IconRow.lua: ns.IconSampleHeld, ns.IconSampleLoop). The
 -- icons of the reading path wait while they show, as for the 8-second test. Off, a fight and the page going off take them away.
 function B.Holding()
@@ -1152,10 +1213,15 @@ function B.Held()
 	end
 	-- The countdown on the icon only with Time left On the icon; Under the icon and Thin bar draw their own (B.SampleTime).
 	local look = { numbers = Opt("time") == "on", border = Opt("iconBorder"), flash = false, sound = false }
+	local flash = Opt("flash") ~= false
 	for index, icon in ipairs(list) do
+		local fresh = not (icon.held and icon.frame:IsShown())
 		ns.IconSampleHeld(icon, index, KEY, look)
 		ns.IconCountdownHeight(icon, Opt("size"), B.BASE)
 		B.SampleTime(icon)
+		if fresh and icon.held and flash then
+			ns.IconFlash(icon)
+		end
 	end
 	B.Row(list)
 end
@@ -1178,8 +1244,8 @@ function B.Status()
 	if B.path == "reading" then
 		lines[#lines + 1] = LINE_OUT
 	end
-	local names = { icon = "icon", sweep = "sweep", count = "count", time = "time left", border = "border" }
-	for _, name in ipairs({ "icon", "sweep", "count", "time", "border" }) do
+	local names = { icon = "icon", sweep = "sweep", count = "count", time = "time left", border = "border", flash = "flash" }
+	for _, name in ipairs({ "icon", "sweep", "count", "time", "border", "flash" }) do
 		if B.refused[name] then
 			lines[#lines + 1] = NOTE_REFUSED:format(names[name])
 		end

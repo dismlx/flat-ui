@@ -48,6 +48,9 @@ local _, ns = ...
 -- of items in its cast sequence or fight line (a cooldown that only reorders them does not count), or with none left, chat says so ("Flat UI:
 -- Flat UI Drink now drinks Morning Glory Dew."). The first write of the session (login, /reload) says nothing, and nor does one that follows a
 -- change of the rows the macro follows (Mana potion in a fight, Mana gem first in a fight, Eat out of combat), or one Flat UI did not write.
+-- It also says once, as you drink or eat out of combat, when the bags hold LOW (5) or fewer drinks for Flat UI Drink, or foods for Flat UI
+-- Health while it eats out of combat ("Flat UI: Flat UI Drink has 5 drinks left in your bags."), counting every rank of conjured and bought the
+-- level allows (Supply), and again only after the bags held more than LOW; none left is the line above.
 -- Turned off (its row, the page, a profile without it, or a stop after errors) in a session that kept it, a macro Flat UI made is deleted, out
 -- of combat, for every character of the account, whose list it is; a character whose profile has it off at login leaves it alone. A delete
 -- takes the macro off every action slot that holds it, as when a player deletes a macro, so a macro that an action slot or the cursor still
@@ -239,6 +242,25 @@ local function BestOf(key, level)
 		end
 	end
 	return nil
+end
+
+-- How many of a conjured kind (water, bread) and the kind bought (drink, food) the bags hold, of every rank the level allows.
+local function Supply(conjured, bought, level)
+	local total = 0
+	for _, kind in ipairs(type(ns.CONSUMABLE_KINDS) == "table" and ns.CONSUMABLE_KINDS or {}) do
+		if type(kind) == "table" and (kind.key == conjured or kind.key == bought) and type(kind.ranks) == "table" then
+			for _, rank in ipairs(kind.ranks) do
+				local id = type(rank) == "table" and rank[1]
+				if ns.Finite(id) then
+					local n = Count(id)
+					if n > 0 and Allowed(id, rank[2], level) then
+						total = total + n
+					end
+				end
+			end
+		end
+	end
+	return total
 end
 
 -- The best of a conjured kind (water, bread) and the kind bought (drink, food): the conjured item, unless the bought one needs a higher level
@@ -519,7 +541,28 @@ local function Change(kind, old, new)
 end
 
 -- primed: the kinds kept once this session, so the first write after login or /reload says nothing. rowsAt: the rows each followed then.
-local primed, rowsAt = {}, {}
+-- lowSaid: the kinds whose low supply chat has told, until the bags hold more than LOW again.
+local primed, rowsAt, lowSaid = {}, {}, {}
+-- At this many drinks (or foods) left, or fewer, chat says how many.
+local LOW = 5
+
+-- Chat says once how many drinks Flat UI Drink has left, or foods Flat UI Health (while it eats out of combat), at LOW or fewer; again only
+-- after the bags held more than LOW. None left is Change's line. speak: the write is not the first of the session and Say when a macro changes
+-- is on.
+local function Low(kind, level, uses, speak)
+	local drink = kind == "drink"
+	if not (drink and uses.drink or not drink and uses.food) then
+		return
+	end
+	local total = drink and Supply("water", "drink", level) or Supply("bread", "food", level)
+	if total > LOW then
+		lowSaid[kind] = nil
+	elseif total > 0 and speak and not lowSaid[kind] then
+		lowSaid[kind] = true
+		local word = drink and (total == 1 and "drink" or "drinks") or (total == 1 and "food" or "foods")
+		print(("Flat UI: %s has %d %s left in your bags."):format(NAMES[kind], total, word))
+	end
+end
 
 -- Makes or writes the macro of a kind, as its row wants it.
 local function Keep(kind)
@@ -555,7 +598,8 @@ local function Keep(kind)
 	-- What chat says once the macro is written: only after the first write of the session, while Say when a macro changes is on, and not for a
 	-- change of the rows the macro follows.
 	local rows, changes = Rows(kind), nil
-	if primed[kind] and rowsAt[kind] == rows and Opt("say") == true then
+	local speak = primed[kind] == true and Opt("say") == true
+	if speak and rowsAt[kind] == rows then
 		changes = Change(kind, using[kind], uses)
 	end
 	primed[kind], rowsAt[kind] = true, rows
@@ -599,6 +643,7 @@ local function Keep(kind)
 			print("Flat UI: " .. line)
 		end
 	end
+	Low(kind, level, uses, speak)
 end
 
 -- What still holds the macro of that name and place: "bar" when an action slot does, "cursor" when the cursor does, else nil. A macro slot

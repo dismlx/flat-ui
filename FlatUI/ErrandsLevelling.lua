@@ -23,8 +23,11 @@ local _, ns = ...
 -- (any SLASH_ global, or the game's own list of commands); an addon that adds /way later takes it over by itself, since the game reads new
 -- commands last. Also in a fight, with the map closed: the calls are not protected, and the one game handler they then run, the world map's
 -- pin button, makes no restricted call. While the map is open its pin provider would draw the pin inside the call (AcquirePin calls
--- SetPassThroughButtons, which a fight refuses, and the first pin of a session would leave the map's pin pool Flat UI's), so /way then asks
--- to close the map; so does /way clear, whose call empties that pool under Flat UI's call.
+-- SetPassThroughButtons, which a fight refuses, and the first pin of a session would leave the map's pin pool Flat UI's), so a /way typed then
+-- waits for the map to close ("the waypoint goes on as you close the map."); so does /way clear, whose call empties that pool under Flat UI's
+-- call. The waiting one is looked at every WAIT_STEP seconds, at most WAIT_TRIES times, by C_Timer.After under a token, with no hook: as the map
+-- is closed the pin and the arrow go on, a newer /way replaces it, the row or Errands going off drops it, and a wait that runs out says once
+-- that it was dropped. /flatui status names a waiting one.
 -- These follow EnhanceQoL's reputation bar, its /way command and its classic reminders, adapted with the permission of its author.
 
 local E = ns.Errands
@@ -40,8 +43,8 @@ local MOST_FACTIONS = 400
 local LEVEL_WAIT, LOGIN_WAIT = 2, 8
 -- The same number of points is not told twice within this many seconds.
 local TOLD_QUIET = 10
--- Seconds after the start before /way is added.
-local WAY_WAIT = 3
+-- Seconds after the start before /way is added; and how often and how many times a /way typed with the map open looks for it closed.
+local WAY_WAIT, WAIT_STEP, WAIT_TRIES = 3, 0.5, 120
 -- The command, and the key of Flat UI's in the game's list of commands (SlashCmdList.FLATUIWAY, SLASH_FLATUIWAY1).
 local WAY, WAY_KEY = "/way", "FLATUIWAY"
 -- Map types (Enum.UIMapType) a name may mean, best first: a zone, a continent, a cave or a building, an orphan, a dungeon.
@@ -60,8 +63,9 @@ local rep = { seen = {}, token = 0, ready = false, switches = 0 }
 -- token: counts the reminders asked for, so only the last one speaks. waiting: a reminder that waits for the end of a fight. told, toldAt: the
 -- number last told and when.
 local talents = { token = 0 }
--- waited: the start's wait is over. claimed: /way is Flat UI's. owner: the key of another addon's /way. index: the maps by name.
-local way = { claimed = false, waited = false }
+-- waited: the start's wait is over. claimed: /way is Flat UI's. owner: the key of another addon's /way. index: the maps by name. pending: a /way
+-- typed with the map open, { map, p, point } or { clear = true }, that waits for it to close; token: counts them, so an old look does nothing.
+local way = { claimed = false, waited = false, token = 0 }
 
 -- A line in chat that a row or a typed command asks for, whatever Say what was done is.
 local function Tell(text)
@@ -796,18 +800,16 @@ local function Where()
 	end
 end
 
-local function Clear()
+-- Drops a waypoint or a clear that waits for the map to close: an old look then does nothing.
+local function Drop()
+	way.pending = nil
+	way.token = way.token + 1
+end
+
+-- Takes the waypoint off, with the map closed.
+local function ClearNow()
+	Drop()
 	local M = Map()
-	if E.Ask(M.HasUserWaypoint) == false then
-		Tell("There is no waypoint to clear.")
-		return
-	end
-	-- ClearUserWaypoint raises USER_WAYPOINT_UPDATED inside the call too: with the map open its pin provider would empty its pool of pins under
-	-- Flat UI's call, and the map's own refresh reads that pool in a later fight.
-	if E.Shown(_G.WorldMapFrame) then
-		Tell(("close the map, then type %s clear again."):format(Command()))
-		return
-	end
 	E.Call(M.ClearUserWaypoint)
 	local S = Track()
 	if S then
@@ -815,6 +817,76 @@ local function Clear()
 	end
 	way.last = nil
 	Tell("Waypoint cleared.")
+end
+
+-- Sets the pin, with the map closed, and asks the game to point to it.
+local function SetNow(map, p, point)
+	Drop()
+	local ok, set = pcall(Map().SetUserWaypoint, point)
+	if not ok or (not ns.IsSecret(set) and set == false) then
+		Tell("the game did not take that waypoint.")
+		return
+	end
+	local S = Track()
+	if S then
+		E.Call(S.SetSuperTrackedUserWaypoint, true)
+	end
+	way.last = ("%s %s, %s"):format(map.name, Coord(p.x), Coord(p.y))
+	Tell(("Waypoint at %s%s."):format(way.last, p.note and (": " .. p.note) or ""))
+end
+
+-- A look for the map closed, for the waypoint or clear that waits: once it is, that is done; while it stays open, another look in WAIT_STEP
+-- seconds, up to WAIT_TRIES. A newer /way (a new token), the row off or Errands off ends the looks.
+local function Look(token, tries)
+	local pending = way.pending
+	if token ~= way.token or not pending then
+		return
+	elseif not E.On("wayCommand") then
+		Drop()
+		return
+	elseif E.Shown(_G.WorldMapFrame) then
+		if tries >= WAIT_TRIES then
+			Drop()
+			Tell(("the map stayed open, so the waypoint you typed was dropped. Close the map and type %s again."):format(Command()))
+			return
+		end
+		C_Timer.After(WAIT_STEP, function()
+			E.Run(part, Look, token, tries + 1)
+		end)
+		return
+	end
+	if pending.clear then
+		ClearNow()
+	else
+		SetNow(pending.map, pending.p, pending.point)
+	end
+end
+
+-- Keeps a waypoint or a clear typed with the map open until the map closes; it replaces one that waits already.
+local function Wait(pending)
+	Drop()
+	way.pending = pending
+	local token = way.token
+	Tell(pending.clear and "the waypoint comes off as you close the map." or "the waypoint goes on as you close the map.")
+	C_Timer.After(WAIT_STEP, function()
+		E.Run(part, Look, token, 1)
+	end)
+end
+
+local function Clear()
+	local M = Map()
+	if E.Ask(M.HasUserWaypoint) == false then
+		Drop()
+		Tell("There is no waypoint to clear.")
+		return
+	end
+	-- ClearUserWaypoint raises USER_WAYPOINT_UPDATED inside the call too: with the map open its pin provider would empty its pool of pins under
+	-- Flat UI's call, and the map's own refresh reads that pool in a later fight. So the clear waits for the map to close.
+	if E.Shown(_G.WorldMapFrame) then
+		Wait({ clear = true })
+		return
+	end
+	ClearNow()
 end
 
 local function List(names)
@@ -893,22 +965,12 @@ local function Way(msg)
 	end
 	-- While the world map is open its pin provider takes USER_WAYPOINT_UPDATED, which the game raises inside SetUserWaypoint: the map would draw
 	-- its pin under this call, and AcquirePin calls SetPassThroughButtons, which a fight refuses; the first pin of a session would also leave the
-	-- map's pool of pins Flat UI's until a reload. So the pin is set only with the map closed.
+	-- map's pool of pins Flat UI's until a reload. So the pin is set only with the map closed: typed with it open, it waits for it to close.
 	if E.Shown(_G.WorldMapFrame) then
-		Tell(("close the map, then type %s again."):format(Command()))
+		Wait({ map = map, p = p, point = point })
 		return
 	end
-	local ok, set = pcall(M.SetUserWaypoint, point)
-	if not ok or (not ns.IsSecret(set) and set == false) then
-		Tell("the game did not take that waypoint.")
-		return
-	end
-	local S = Track()
-	if S then
-		E.Call(S.SetSuperTrackedUserWaypoint, true)
-	end
-	way.last = ("%s %s, %s"):format(map.name, Coord(p.x), Coord(p.y))
-	Tell(("Waypoint at %s%s."):format(way.last, p.note and (": " .. p.note) or ""))
+	SetNow(map, p, point)
 end
 
 local function OnWay(msg)
@@ -998,6 +1060,9 @@ function part.Refresh()
 	if not E.On("talentReminder") then
 		talents.token, talents.waiting = talents.token + 1, nil
 	end
+	if not E.On("wayCommand") and way.pending then
+		Drop()
+	end
 	if way.waited and E.On("wayCommand") then
 		Claim()
 	end
@@ -1059,6 +1124,13 @@ function part.Status()
 		end
 		if way.last then
 			lines[#lines + 1] = ("Levelling: last waypoint %s."):format(way.last)
+		end
+		local pending = way.pending
+		if pending and pending.clear then
+			lines[#lines + 1] = "Levelling: /way clear waits for the world map to close."
+		elseif pending then
+			lines[#lines + 1] = ("Levelling: a waypoint at %s %s, %s waits for the world map to close."):format(pending.map.name,
+				Coord(pending.p.x), Coord(pending.p.y))
 		end
 	end
 	return lines

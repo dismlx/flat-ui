@@ -12,10 +12,12 @@ local _, ns = ...
 -- the labels of small boxes in a crowd stay inside them. The box under the cursor is drawn again over every box, with its whole name on a plate
 -- over its middle, by a frame of the addon's own that takes no mouse, so the smaller box under the cursor still takes it.
 -- Each control of the toolbar has a tooltip that says what it does (TIPS): the grid's Off, Dim and Bright, Snap, Samples, Frame list, Undo with the
--- steps it holds ("Puts back the last change, 3 to undo.") and Done. Ctrl-Z does what Undo does while the movers are open (the keys frame, unless
--- the question of a close shows or a box of the inspector has the keyboard), and Ctrl-Y or Ctrl-Shift-Z puts back what Undo took away, step by
--- step, a group as one (S.redo); a new move, size or reset empties it. The grid's segments, Snap and Samples light up under the mouse, and the
+-- steps it holds ("Puts back the last change, 3 to undo."), Redo with its own and Done. Ctrl-Z does what Undo does while the movers are open (the
+-- keys frame, unless the question of a close shows or a box of the inspector has the keyboard), and Redo, Ctrl-Y or Ctrl-Shift-Z puts back what
+-- Undo took away, step by step, a group as one (S.redo); a new move, size or reset empties it. Undo and Redo are dim while they hold nothing. The grid's segments, Snap and Samples light up under the mouse, and the
 -- two switches click and slide as the switches of the options window do (ns.PanelKit.SwitchClick and Slider).
+-- Every press here, on the toolbar, a row of the list or its eye, and the buttons of Keep your changes?, counts only when it is let go over what was
+-- pressed (Released), as in the options window, so a press slid off before it is let go does nothing; a button's label sinks 1 px while held.
 
 local MM = {}
 ns.MoversMode = MM
@@ -23,7 +25,7 @@ ns.MoversMode = MM
 local KEY = "movers"
 local GRID = 32
 local GRID_ALPHA, CENTRE_ALPHA = { dim = 0.12, bright = 0.25 }, 0.4
-local BAR_W, BAR_H = 650, 40
+local BAR_W, BAR_H = 722, 40
 local LIST_W, LIST_H, ROW_H, LIST_TOP = 240, 400, 24, 66
 local SIDE_W, SIDE_H = 224, 226
 local STEPS_KEPT, SHIFT_STEP = 100, 10
@@ -285,7 +287,43 @@ local function Tipped(frame, tip, hover)
 	end)
 end
 
--- A button with a label; tip, when given, is its tooltip (ShowTip).
+-- A press counts only when it is let go over what was pressed, with the mouse button it began with, as in the options window (ns.PanelKit.Clickable).
+-- The game sends the release to the frame the press began on, wherever the cursor is, so a press slid off before it is let go does nothing; a
+-- client that will not say whether the cursor is over counts as over. onClick gets the mouse button; held, when given, runs with true on the
+-- press and false as it ends, let go or hidden.
+local function Over(frame)
+	local ok, over = pcall(frame.IsMouseOver, frame)
+	return not ok or ns.IsSecret(over) or over ~= false
+end
+
+local function Released(frame, onClick, held)
+	local down
+	frame:SetScript("OnMouseDown", function(_, mouseButton)
+		down = mouseButton
+		if held then
+			held(true)
+		end
+	end)
+	frame:SetScript("OnMouseUp", function(self, mouseButton)
+		local wanted = down ~= nil and down == mouseButton
+		down = nil
+		if held then
+			held(false)
+		end
+		if wanted and Over(self) then
+			onClick(mouseButton)
+		end
+	end)
+	frame:HookScript("OnHide", function()
+		down = nil
+		if held then
+			held(false)
+		end
+	end)
+end
+
+-- A button with a label; tip, when given, is its tooltip (ShowTip). While the left button is held on it, it takes the pressed fill and its label
+-- sinks 1 px, as a button of the options window does; slid off, it looks as it did, and letting go there does nothing (Released).
 local function Button(parent, text, width, onClick, primary, tip)
 	local button = Make("Frame", parent)
 	button:SetSize(width, 28)
@@ -296,8 +334,10 @@ local function Button(parent, text, width, onClick, primary, tip)
 	label:SetText(text)
 	local over, down = false, false
 	local function Paint()
-		local fill = primary and (down and "accent-pressed" or over and "accent-hover" or "accent") or (down and "card" or over and "hover" or "raised")
+		local held = down and over
+		local fill = primary and (held and "accent-pressed" or over and "accent-hover" or "accent") or (held and "card" or over and "hover" or "raised")
 		Look().Backing(outline, fill, 1, "line-strong")
+		label:SetPoint("CENTER", button, "CENTER", 0, held and -1 or 0)
 	end
 	Painted(Paint)
 	button:SetScript("OnEnter", function()
@@ -306,20 +346,17 @@ local function Button(parent, text, width, onClick, primary, tip)
 		ShowTip(button, tip)
 	end)
 	button:SetScript("OnLeave", function()
-		over, down = false, false
+		over = false
 		Paint()
 		HideTip(button)
 	end)
-	button:SetScript("OnMouseDown", function()
-		down = true
-		Paint()
-	end)
-	button:SetScript("OnMouseUp", function(_, mouseButton)
-		down = false
-		Paint()
+	Released(button, function(mouseButton)
 		if mouseButton == "LeftButton" then
 			Try(onClick)
 		end
+	end, function(held)
+		down = held
+		Paint()
 	end)
 	return button, label
 end
@@ -816,6 +853,7 @@ function MM.Refresh(force)
 		ui.hideLabel:SetText(ns.HideFrames.Ticked(hide) and "Show frame" or "Hide frame")
 	end
 	ui.undoLabel:SetAlpha(#S.undo > 0 and 1 or 0.4)
+	ui.redoLabel:SetAlpha(#S.redo > 0 and 1 or 0.4)
 	MM.Spacing()
 end
 
@@ -920,12 +958,12 @@ local function BuildRow(index)
 		row.over = false
 		MM.Layout()
 	end)
-	row:SetScript("OnMouseUp", function(_, mouseButton)
+	Released(row, function(mouseButton)
 		if mouseButton == "LeftButton" and row.entry and row.entry.name then
 			Try(MM.Select, row.entry.name)
 		end
 	end)
-	row.eye:SetScript("OnMouseUp", function(_, mouseButton)
+	Released(row.eye, function(mouseButton)
 		local name = row.entry and row.entry.name
 		local hide = row.entry and row.entry.hide
 		-- The eye of a hidden frame shows it again (Hide.lua); any other eye hides the handle for the session.
@@ -1061,11 +1099,18 @@ local TIPS = {
 	end,
 	undo = function()
 		local count, again = UndoSteps(), UndoSteps(S.redo)
-		local redo = again > 0 and (" Ctrl-Y puts it back again, %d to redo."):format(again) or " Ctrl-Y puts back what it took away."
+		local redo = again > 0 and (" %d to redo."):format(again) or ""
 		if count == 0 then
 			return "Undo", "Nothing to undo yet. Ctrl-Z does the same." .. redo
 		end
 		return "Undo", ("Puts back the last change, %d to undo. Ctrl-Z does the same."):format(count) .. redo
+	end,
+	redo = function()
+		local again = UndoSteps(S.redo)
+		if again == 0 then
+			return "Redo", "Nothing to redo. Redo puts back what Undo took away. Ctrl-Y does the same."
+		end
+		return "Redo", ("Puts back what Undo took away, %d to redo. Ctrl-Y does the same."):format(again)
 	end,
 	done = function()
 		return "Done", "Ends the session and keeps the changes. Escape asks first."
@@ -1173,7 +1218,7 @@ local function BuildToolbar()
 		entry.label = Text(segment, "GameFontHighlight", "text-dim", "CENTER")
 		entry.label:SetPoint("CENTER", segment, "CENTER", 0, 0)
 		entry.label:SetText(choice[2])
-		segment:SetScript("OnMouseUp", function(_, mouseButton)
+		Released(segment, function(mouseButton)
 			if mouseButton == "LeftButton" then
 				Try(ns.Set, "panel.grid", choice[1])
 				MM.DrawGrid()
@@ -1205,7 +1250,7 @@ local function BuildToolbar()
 	local kit = ns.PanelKit
 	local slider = type(kit) == "table" and type(kit.Slider) == "function" and kit.Slider or nil
 	ui.placeSnap = slider and slider(ui.knob, toggle, toggle) or nil
-	toggle:SetScript("OnMouseUp", function(_, mouseButton)
+	Released(toggle, function(mouseButton)
 		if mouseButton == "LeftButton" then
 			local on = SnapOn()
 			Try(ns.Set, "movers.snap", on and "off" or "middle")
@@ -1238,7 +1283,7 @@ local function BuildToolbar()
 	ui.samplesKnob = Fill(samples, "ARTWORK")
 	ui.samplesKnob:SetSize(12, 12)
 	ui.placeSamples = slider and slider(ui.samplesKnob, samples, samples) or nil
-	samples:SetScript("OnMouseUp", function(_, mouseButton)
+	Released(samples, function(mouseButton)
 		if mouseButton == "LeftButton" and type(ns.TestMode) == "table" then
 			local ok, err = pcall(ns.TestMode.Toggle, "movers")
 			if not ok then
@@ -1269,10 +1314,15 @@ local function BuildToolbar()
 		ShowTip(ui.undo, TIPS.undo)
 	end, nil, TIPS.undo)
 	ui.undo:SetPoint("LEFT", bar, "LEFT", 500, 0)
+	ui.redo, ui.redoLabel = Button(bar, "Redo", 64, function()
+		MM.Redo()
+		ShowTip(ui.redo, TIPS.redo)
+	end, nil, TIPS.redo)
+	ui.redo:SetPoint("LEFT", bar, "LEFT", 572, 0)
 	local done = Button(bar, "Done", 70, function()
 		Kit().Close()
 	end, true, TIPS.done)
-	done:SetPoint("LEFT", bar, "LEFT", 572, 0)
+	done:SetPoint("LEFT", bar, "LEFT", 644, 0)
 end
 
 -- The question when a close would leave changes ----------------------------------------------------------

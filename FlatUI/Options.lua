@@ -270,10 +270,24 @@ local function RegisterCanvas()
 	local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 	label:SetPoint("CENTER", button, "CENTER", 0, 0)
 	label:SetText("Open Flat UI")
-	button:SetScript("OnMouseUp", function(_, mouseButton)
-		if mouseButton == "LeftButton" and type(ns.OpenPanel) == "function" then
-			local ok, err = pcall(ns.OpenPanel)
-			if not ok then
+	-- It lights under the mouse, and a press counts only when it is let go over it, as with the buttons of the options window.
+	local down = false
+	button:SetScript("OnEnter", function()
+		ns.SetOutlineFill(outline, 0.26, 0.26, 0.26, 1)
+	end)
+	button:SetScript("OnLeave", function()
+		ns.SetOutlineFill(outline, 0.18, 0.18, 0.18, 1)
+	end)
+	button:SetScript("OnMouseDown", function(_, mouseButton)
+		down = mouseButton == "LeftButton"
+	end)
+	button:SetScript("OnMouseUp", function(self, mouseButton)
+		local wanted = down and mouseButton == "LeftButton"
+		down = false
+		local ok, over = pcall(self.IsMouseOver, self)
+		if wanted and (not ok or ns.IsSecret(over) or over ~= false) and type(ns.OpenPanel) == "function" then
+			local opened, err = pcall(ns.OpenPanel)
+			if not opened then
 				geterrorhandler()(err)
 			end
 		end

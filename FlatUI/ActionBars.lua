@@ -12,12 +12,12 @@ local _, ns = ...
 -- game's bar.
 -- Test mode (TM.Register "actionbars", Action buttons): while it is on, every 5 s, the first four shown buttons of Flat UI's main bar that hold
 -- something (ns.ButtonSamples; with fewer there, the next of bars 2 to 8) play samples of their looks, all on Flat UI's own frames and out of
--- combat: button 1 fills as a 2 s cast that lands, button 2 flashes as an interrupt, button 3 pulses as an aim (ButtonEffects.lua), and button 4,
--- or the last when there are fewer than four, runs a 4 s sweep in the Sweep colour and opacity, with its edge line and numbers, that ends with the
--- ready flash (ButtonStates.lua). A change of an action bar row or of the cast bar's colours gives the samples that show the new look and plays
--- the others; a change of profile plays them all again. Each part plays only while its row is on. Moving off on the bar of test mode holds them
--- mid-way (button 1's fill at about 60%, button 3's pulse bright, the sweep at 2 s of its 4 with its edge and numbers) so a look can be judged,
--- and Moving on carries on from there. With test mode off, a change of one of those rows with the options window open plays its sample once
+-- combat: button 1 fills as a 2 s cast that lands, button 2 flashes as an interrupt and then shows the proc glow for 3 s in the look of Proc glow,
+-- button 3 pulses as an aim (ButtonEffects.lua), and button 4, or the last when there are fewer than four, runs a 4 s sweep in the Sweep colour
+-- and opacity, with its edge line and numbers, that ends with the ready flash (ButtonStates.lua). A change of an action bar row or of the cast
+-- bar's colours gives the samples that show the new look and plays the others; a change of profile plays them all again. Each part plays only
+-- while its row is on. Moving off on the bar of test mode holds them mid-way (button 1's fill at about 60%, button 2's proc glow up, button 3's
+-- pulse bright, the sweep at 2 s of its 4 with its edge and numbers) so a look can be judged, and Moving on carries on from there. With test mode off, a change of one of those rows with the options window open plays its sample once
 -- (ns.ButtonStatesChanged, ns.ButtonEffectsChanged). A Refresh (a change of profile among them) tells OwnBars.lua to place the page arrows again
 -- (ns.OwnPagerChanged).
 
@@ -1089,7 +1089,7 @@ local function Sample(force)
 	end
 	local list = ns.ButtonSamples()
 	if type(ns.ButtonEffectsSample) == "function" then
-		ns.ButtonEffectsSample({ cast = list[1], interrupt = list[2], aim = list[3] }, force)
+		ns.ButtonEffectsSample({ cast = list[1], interrupt = list[2], aim = list[3], glow = list[2] }, force)
 	end
 	-- With fewer than four buttons, the sweep plays on the last one.
 	local sweep = list[4] or list[#list]
@@ -1110,7 +1110,8 @@ end
 -- The cast bar's colours that the samples take, and the rows whose sample plays on buttons 1 to 3 (the role, the button's place in the list).
 local SAMPLE_COLOURS = { ["castbars.castColour"] = true, ["castbars.channelColour"] = true, ["castbars.interruptedColour"] = true,
 	["castbars.playerClass"] = true, ["castbars.flat"] = true }
-local SAMPLE_ROWS = { ["actionbars.castAnim"] = { "cast", 1 }, ["actionbars.interruptAnim"] = { "interrupt", 2 }, ["actionbars.aimAnim"] = { "aim", 3 } }
+local SAMPLE_ROWS = { ["actionbars.castAnim"] = { "cast", 1 }, ["actionbars.interruptAnim"] = { "interrupt", 2 }, ["actionbars.aimAnim"] = { "aim", 3 },
+	["actionbars.proc"] = { "glow", 2 }, ["actionbars.procColour"] = { "glow", 2 } }
 
 -- Moving on the bar of test mode: off holds the samples still, the fill at about 60%, the aim pulse bright and the sweep at half its time with its
 -- edge and numbers, and holds the ones that start meanwhile the same way; on carries on from there.

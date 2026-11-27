@@ -15,12 +15,14 @@ local _, ns = ...
 -- plays itself as the button shows (AddAuraShownAnimation), so also in a fight; on the icons of a read, a flash of IconRow.lua. The time left
 -- turns amber in its last 5 seconds, coloured by the game (a colour curve on the time text, D.TimeOptions). The samples of the test and of
 -- test mode flash as they appear and play Sound when one lands, not a sound at the end of their sweep. Out of combat with test mode off and no
--- defensive on you (none of the game's buttons shows), a change of Icon size, Spacing, Caster's name, Icon border or Flash when one lands, or a
--- pick of either sound, shows the samples for 4 seconds in the new look, with no line in the chat (ns.DefensivesLookChanged); the row read out
--- of combat is read again as a test or such a preview ends. Sound when one ends (None by default) has the game play a sound as a listed
--- defensive you do not know yourself leaves you (trigger Removed), and /flatui test icons plays it once as its samples go; its line in the chat
--- names each sound and whether the game played it. The numbers on an icon, the time left and the charges, follow Icon size: today's heights at
--- the default of 32, grown and shrunk with it (D.TextSize), on the game's buttons, the icons of a read and the samples.
+-- defensive on you (none of the game's buttons shows), a change of Place, Icon size, Spacing, Caster's name, Icon border or Flash when one
+-- lands, or a pick of either sound, shows the samples for 4 seconds in the new look and place, with no line in the chat
+-- (ns.DefensivesLookChanged); they flash as they come, and a further change redraws them with their sweeps running on and flashes them again
+-- only for Flash when one lands or a sound. The row read out of combat is read again as a test or such a preview ends. Sound when one ends
+-- (None by default) has the game play a sound as a listed defensive you do not know yourself leaves you (trigger Removed), and /flatui test
+-- icons plays it once as its samples go; its line in the chat names each sound and whether the game played it. The numbers on an icon, the
+-- time left and the charges, follow Icon size: today's heights at the default of 32, grown and shrunk with it (D.TextSize), on the game's
+-- buttons, the icons of a read and the samples.
 
 local KEY = "defensives"
 -- The name of the row among the saved spots of the movers.
@@ -1348,8 +1350,11 @@ function D.SampleSound(word)
 end
 
 -- Three samples for 8 seconds, each flashing as it appears as a defensive that lands does, with Sound when one lands once. quiet: for
--- PREVIEW seconds, with no sound and no line in the chat (ns.DefensivesLookChanged).
-function D.Test(quiet)
+-- PREVIEW seconds, with no sound and no line in the chat (ns.DefensivesLookChanged). A quiet test over one that runs keeps its start, so the
+-- sweeps run on and the samples flash again only for path Flash when one lands or a sound row (D.FLASH_AGAIN): a slider drag does not strobe.
+D.FLASH_AGAIN = { [KEY .. ".flash"] = true, [KEY .. ".sound"] = true, [KEY .. ".endSound"] = true }
+
+function D.Test(quiet, path)
 	quiet = quiet == true
 	if not D.Capable() then
 		if not quiet then
@@ -1363,6 +1368,7 @@ function D.Test(quiet)
 		end
 		return
 	end
+	local again = quiet and D.testing and D.testing.quiet and D.testing or nil
 	if D.testing then
 		D.EndTest(nil, true)
 	end
@@ -1380,7 +1386,12 @@ function D.Test(quiet)
 		icon.done = 0
 		list[index] = icon
 	end
-	local now, flash = Now(), Opt("flash") ~= false
+	-- The sweeps run 2, 4 and 6 seconds: once the longest has run out, a further step starts them again, still with no flash.
+	local now = Now()
+	if again and again.start and now - again.start < 6 then
+		now = again.start
+	end
+	local flash = Opt("flash") ~= false and (not again or D.FLASH_AGAIN[path] == true)
 	for index, icon in ipairs(list) do
 		ns.IconSet(icon, ns.IconSamplePicture(index), now, 2 * index, D.SampleLook())
 		ns.IconCountdownHeight(icon, Opt("size"), D.BASE)
@@ -1390,7 +1401,7 @@ function D.Test(quiet)
 		end
 	end
 	ns.IconLayout(list, holder, Opt("size"), Opt("spacing"), "right")
-	local test = { list = list, quiet = quiet }
+	local test = { list = list, quiet = quiet, start = now }
 	D.testing = test
 	if not quiet then
 		test.sound = D.SampleSound()
@@ -1429,14 +1440,18 @@ function D.Up()
 	return false
 end
 
--- A row of the look changed (Icon size, Spacing, Caster's name, Icon border, Flash when one lands), or a sound picked (Sound when one lands,
--- Sound when one ends): the page is refreshed, as without a changed function of the row (Core.lua's Changed), which also registers the game's
--- sounds for the pick (D.Sync, D.QueueSounds), and out of combat with test mode off (its own samples show then), no test of /flatui test icons
--- under way and no defensive on the player (none of the game's buttons shows), the three samples show for PREVIEW seconds in the new look,
--- flashing in as they land, with no line in the chat and no sound of their own: the panel plays a pick once itself. Each change starts them
--- again, so a slider dragged keeps them up until PREVIEW after its last step.
-function ns.DefensivesLookChanged()
+-- A row of the look changed (Place, Icon size, Spacing, Caster's name, Icon border, Flash when one lands), or a sound picked (Sound when one
+-- lands, Sound when one ends): the page is refreshed, as without a changed function of the row (Core.lua's Changed), which also registers the
+-- game's sounds for the pick (D.Sync, D.QueueSounds), and out of combat with test mode off (its own samples show then), no test of /flatui
+-- test icons under way and no defensive on the player (none of the game's buttons shows), the three samples show for PREVIEW seconds in the
+-- new look and at the new place, flashing in as they land, with no line in the chat and no sound of their own: the panel plays a pick once
+-- itself. Each change keeps them up again, so a slider dragged keeps them up until PREVIEW after its last step; they flash once as they come
+-- and again only at a change of Flash when one lands or a sound (D.Test). Place at Off takes a preview away at once.
+function ns.DefensivesLookChanged(path)
 	ns.Try(KEY, D.Refresh)
+	if D.testing and D.testing.quiet and Opt("place") == "off" then
+		ns.Try(KEY, D.EndTest, nil, true)
+	end
 	if InCombatLockdown() or TM.IsOn() or not (D.Capable() and ns.Enabled(KEY) and Opt("place") ~= "off") then
 		return
 	end
@@ -1444,7 +1459,7 @@ function ns.DefensivesLookChanged()
 	if (D.testing and not D.testing.quiet) or not read or up then
 		return
 	end
-	ns.Try(KEY, D.Test, true)
+	ns.Try(KEY, D.Test, true, path)
 end
 
 -- Test mode (TestMode.lua): while it is on, out of combat, with the page on and Place not Off, the holder shows three sample icons of its own, apart

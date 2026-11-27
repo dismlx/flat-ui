@@ -43,7 +43,8 @@ local _, ns = ...
 -- ns.TextStyle, which remembers Questie's font and takes a new one Questie sets as the one to go back to), the height of a zone heading's
 -- label (SetHeight, by Heading size), the texture coordinates of the item icons (SetTexCoord) and, in a fight, the alpha of Questie_BaseFrame.
 -- The Objective tracker rule of the Fading page fades Questie_BaseFrame too (Fade.lua). Opacity in combat eases it down over a quarter of a second
--- as a fight starts and back up over 0.2 seconds as it ends (ns.TrackerEase, Hud.lua). While Opacity in combat holds it, the ease back included,
+-- as a fight starts and back up over 0.2 seconds as it ends (ns.TrackerEase, Hud.lua), and in the fight brings it back to full in 0.2 seconds while
+-- the mouse is over it, easing down again as the mouse leaves (ns.TrackerHover, Hud.lua). While Opacity in combat holds it, the ease back included,
 -- the Fading page leaves it alone (ns.QuestieFades); the opacity read before the first write is the one it had before Fading (ns.FadeGiven), and
 -- after the fight it goes back to Fading with that one (ns.FadeTakesBack), which eases on from the opacity it has, so the tracker does not flash to full.
 -- Sizes stay Questie's own: its labels have the height of its font size and the Questie Tracker heading is sized by Questie at every redraw,
@@ -396,12 +397,21 @@ local function Alpha(base, fight)
 			S.alpha = ns.Finite(given) and given or ((ok and ns.Finite(alpha)) and alpha or 1)
 		end
 		if ease then
-			ease(S, base, wanted, false, Run)
+			ease(S, base, S.over and S.alpha or wanted, false, Run)
+			-- The mouse over the tracker keeps it at full (ns.TrackerHover).
+			if ns.TrackerHover then
+				ns.TrackerHover(S, base, base, wanted, Run)
+			end
 		elseif S.sent ~= wanted then
 			base:SetAlpha(wanted)
 			S.sent = wanted
 		end
-	elseif S.alpha ~= nil then
+		return
+	end
+	if ns.TrackerHover then
+		ns.TrackerHover(S)
+	end
+	if S.alpha ~= nil then
 		if ns.FadeTakesBack and ns.FadeTakesBack(base, S.alpha) then
 			if ns.TrackerEaseStop then
 				ns.TrackerEaseStop(S)
