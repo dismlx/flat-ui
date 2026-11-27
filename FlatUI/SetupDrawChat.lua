@@ -798,7 +798,7 @@ do
 			end
 		end
 		local where, units = ns.Get("combattext.friend"), ns.Get("combattext.friendUnits")
-		local healing, signs, pets, words = ns.Get("combattext.friendHeal"), ns.Get("combattext.friendSigns") == true, ns.Get("combattext.friendPet") == true, ns.Get("combattext.friendWords") == true
+		local healing, signs, pets, friendWords = ns.Get("combattext.friendHeal"), ns.Get("combattext.friendSigns") == true, ns.Get("combattext.friendPet") == true, ns.Get("combattext.friendWords") == true
 		local fsize, lift = ns.Get("combattext.friendSize") / 100, ns.Get("combattext.friendHeight")
 		for _, unit in ipairs(S.friends) do
 			local unitShown = (where == unit.where or where == "both") and (units == "all" or unit.where == "plates")
@@ -811,7 +811,7 @@ do
 				elseif sample.kind == "heal" then
 					shown = shown and healing ~= "off" and (healing == "taken" or unit.where == "plates")
 				else
-					shown = shown and words
+					shown = shown and friendWords
 				end
 				fs:SetShown(shown)
 				if shown then
