@@ -64,6 +64,7 @@ GroupTools.lua
 PingBar.lua
 OwnBuffs.lua
 Absorbs.lua
+ResourceBarrier.lua
 TrackerShapes.lua
 TrackerKinds.lua
 TrackerMarks.lua
