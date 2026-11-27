@@ -2213,8 +2213,8 @@ ns.PAGES = {
 		{ key = "totemTimer", kind = "bool", default = true, label = "Totem time left" },
 		{ key = "totemSwipe", kind = "bool", default = true, label = "Totem cooldown swipe" },
 		{ key = "totemTimeSize", kind = "number", default = 80, min = 50, max = 200, step = 5, unit = "%", label = "Totem time size", needs = "totemTimer" },
-		-- UnitGroupMarks.lua: the colour and the type of a debuff you can dispel, the raid marker of a raid or party frame, the resurrection icon and the
-		-- AFK word of a party frame, the leader and assistant icons of a raid frame and the outline of your target on a party frame. UnitFrames.lua: the
+		-- UnitGroupMarks.lua: the colour and the type of a debuff you can dispel, the raid marker of a raid or party frame, the resurrection icon of a
+		-- party frame, the AFK word of a party or raid frame, the leader and assistant icons of a raid frame and the outline of your target on a party frame. UnitFrames.lua: the
 		-- border of your target on a raid frame.
 		{ section = "Party and raid frames" },
 		{ key = "dispelBorder", kind = "bool", default = true, label = "Border colour of a debuff you can dispel",
@@ -2235,6 +2235,8 @@ ns.PAGES = {
 			tip = "On the portrait of a dead member while someone resurrects them, also in a fight, breathing softly so two healers do not resurrect the same one. With Picture None it sits in the empty picture square, or in One frame at the left end of the health bar, clear of the Dead word. The game's party frames show a summon already, and its raid frames both." },
 		{ key = "partyAfk", kind = "bool", default = true, label = "AFK on party frames",
 			tip = "A grey AFK at the bottom of the picture of a party member who is away, also of the empty picture square with Picture None, or in One frame at the left end of the health bar, also in a fight. It fades in, counts the time away from when Flat UI first saw the flag (AFK 3m, AFK 1h) and fades out as they come back. Hidden while they are dead or offline. The game's frames show none." },
+		{ key = "raidAfk", kind = "bool", default = true, label = "AFK on raid frames",
+			tip = "A grey AFK at the bottom of a raid member's cell, where the game's status text sits, while they are away, also in a fight. It fades and counts as on party frames. Hidden while they are dead or offline." },
 		{ key = "raidLeaderIcon", kind = "bool", default = true, label = "Leader and assistant icons on raid frames", tip = "The game's raid frames show none." },
 		{ key = "targetBorder", kind = "choice", default = "game", label = "Border for your target",
 			tip = "On raid frames, the border of your target. With Own colour the game's party frames get one too.",

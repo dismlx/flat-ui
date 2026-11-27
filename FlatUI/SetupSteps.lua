@@ -541,6 +541,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.raidStatusText", "o", "mock-raid-cells" },
 		{ "unitframes.raidFrameMarker", "o", "mock-raid-cells" },
 		{ "unitframes.raidLeaderIcon", "o", "mock-raid-cells" },
+		{ "unitframes.raidAfk", "o", "mock-raid-cells" },
 		{ "unitframes.targetBorder", "o", "mock-raid-cells" },
 		{ "unitframes.targetColour", "r", "mock-raid-cells" },
 	} },

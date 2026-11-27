@@ -32,7 +32,7 @@ local ADDON_NAME, ns = ...
 -- frames (UnitGroupMarks.lua PlaceRez). Role icons for leaves out the icons of the
 -- roles it leaves out on the party frames and the raid cells, as the live frames do (UnitParts.lua X.roleLeftOut). Its raid cells show the marks of
 -- their rows: Aria's Skull (Raid marker on raid frames), her leader crown and Dru's
--- assistant icon (Leader and assistant icons on raid frames), and Cole as your target, with the border of Border for your target in the game's white or
+-- assistant icon (Leader and assistant icons on raid frames), Eli away with a grey AFK where the status text sits (AFK on raid frames), and Cole as your target, with the border of Border for your target in the game's white or
 -- Target border colour (UnitFrames.lua Colour).
 -- Right of the setup's pet (Wolf), while Pet target frame is on, the pet target frame of UnitPetTarget.lua is drawn as test mode draws its sample:
 -- Training Dummy at 65% in the hostile colour, Pet target width wide, a Skull left of it with Raid marker on target, focus, boss and pet target frames,
@@ -2342,6 +2342,7 @@ local function MakeCell(parent, extra)
 	cell.top = Frame(cell.frame)
 	cell.name = Text(cell.top)
 	cell.status = Text(cell.top)
+	cell.afk = Text(cell.top)
 	cell.role = Tex(cell.top, "OVERLAY", 2)
 	if extra then
 		cell.marks = MakeMarks(cell.frame)
@@ -2363,15 +2364,16 @@ function R.make(stage, count, columns)
 		local cell = MakeCell(o.root, "marks")
 		cell.data, cell.index = data, index
 		-- The fixed sample of the setup: the seventh is dead, the eighth out of range and the third has threat and is your target; the fifth is low on
-		-- health while Low health border is on; the first leads with a Skull on, and the fourth assists.
+		-- health while Low health border is on, and away (AFK on raid frames); the first leads with a Skull on, and the fourth assists.
 		cell.sample = { name = data[1], class = data[2], role = data[3], dead = index == 7, away = index == 8, threat = index == 3,
-			low = index == 5 and 0.15 or nil, target = index == 3, marker = index == 1 and 8 or nil, leader = index == 1, assist = index == 4 }
+			low = index == 5 and 0.15 or nil, target = index == 3, marker = index == 1 and 8 or nil, leader = index == 1, assist = index == 4,
+			afk = index == 5 }
 		o.cells[index] = cell
 	end
-	local first, aimed = o.cells[1], o.cells[3]
+	local first, aimed, away = o.cells[1], o.cells[3], o.cells[5]
 	o.parts = { root = o.root, cell = first and first.frame, health = first and first.health, power = first and first.power, name = first and first.name,
 		status = first and first.status, role = first and first.role, marker = first and first.marker, lead = first and first.lead,
-		target = aimed and aimed.health }
+		target = aimed and aimed.health, afk = away and away.afk }
 	return o
 end
 
@@ -2551,6 +2553,16 @@ local function PaintCell(cell, s, width, height, g)
 		cell.status:SetPoint("CENTER", cell.frame, "CENTER", 0, -4)
 		Style(cell.status, statusSpec)
 	end
+	-- AFK on raid frames: a soft grey AFK where the status text sits, at its size, with an outline unless Bar text outline gives one, never on a dead
+	-- or offline member (UnitGroupMarks.lua PlaceAfk, StyleAfk).
+	local afk = s.afk and on and Get("raidAfk") == true and not dead and not s.offline
+	cell.afk:SetShown(afk and true or false)
+	if afk then
+		cell.afk:SetText("AFK")
+		cell.afk:ClearAllPoints()
+		cell.afk:SetPoint("CENTER", cell.frame, "CENTER", 0, -4)
+		Style(cell.afk, { percent = 100, face = statusSpec.face, flags = statusSpec.flags or "OUTLINE", r = 0.8, g = 0.8, b = 0.8 })
+	end
 	if cell.marks then
 		CellMarks(cell, s, width, height, g, on, powerHeight)
 	end
@@ -2621,7 +2633,7 @@ local MARK = {
 	bossPowerBar = { "boss", "power" },
 	raidRangeAlpha = { "raid", "cell" }, raidRoleIcon = { "raid", "role" }, raidName = { "raid", "name" }, raidStatusText = { "raid", "status" },
 	raidFrameMarker = { "raid", "marker" }, raidLeaderIcon = { "raid", "lead" }, targetBorder = { "raid", "target" }, targetColour = { "raid", "target" },
-	partyFrameMarker = { "party1", "marker" }, partyRezIcon = { "party5", "rez" }, roleIconRoles = { "party1", "role" },
+	partyFrameMarker = { "party1", "marker" }, partyRezIcon = { "party5", "rez" }, roleIconRoles = { "party1", "role" }, raidAfk = { "raid", "afk" },
 }
 
 -- Builds a scene: the frames of a list of items on a root frame, with a caption under each. make: the function for an item that is not a unit frame.
