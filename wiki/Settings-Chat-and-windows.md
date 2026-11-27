@@ -1,4 +1,4 @@
-Every setting of the **Chat and windows** group of the options window, 122 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Chat and windows](Chat-and-windows).
+Every setting of the **Chat and windows** group of the options window, 125 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Chat and windows](Chat-and-windows).
 
 Pages: [Chat](#chat) · [Tooltips](#tooltips) · [Windows](#windows)
 
@@ -93,6 +93,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | **Your name colour** | #FF9933 | Needs **Your name in chat** on. |
 | **Sound when you are named** | None | Once for each line that names you, at most once a second. Picking one plays it. Choices: None, Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. Needs **Your name in chat** on. |
 | **Light the tab that names you** | On | When a line names you in a chat window whose tab is not chosen (a Trade, Guild or LFG tab), that tab's box and label take Your name colour with a slow pulse until you click the tab, and a small number at its top right corner counts the lines that named you there (up to 9+). Needs Chat tabs on the Chat page. Needs **Your name in chat** on. |
+| **Flash the game's icon when you are named** | On | While the game is in the background, its icon on the taskbar or dock flashes for a line that names you, as it does for a whisper; at most once every 10 seconds. Needs **Your name in chat** on. |
 | **Other words to colour** |  | Add a word... opens a box: type the word and press Enter. Up to 20 for all your characters: whole words, any case, in Your name colour and with Sound when you are named. Choose a word to stop colouring it. /flatui words add tank does the same. Needs **Your name in chat** on. |
 
 ## Tooltips
@@ -124,6 +125,8 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | --- | --- | --- |
 | **Unit tooltip border** | Plain | Choices: Plain, Reaction colour, Class colour for players. |
 | **Class colour on player names** | On |  |
+| **Raid marker on the name** | On | The skull, moon or other raid marker a unit carries shows as a small icon before its name on its tooltip. |
+| **Away and busy after the name** | On | A player who is away or busy has a dim &lt;AFK&gt; or &lt;DND&gt; after their name on their tooltip. |
 | **Class colour on the class line** | On | The line with the level, race and class of a player. |
 | **Guild colour and rank** | On | The guild line of a player: green for your own guild, blue for another, with the member's rank after it. |
 

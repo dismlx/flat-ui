@@ -106,7 +106,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | **Show** | With an enemy targeted | Choices: With an enemy targeted, In combat, Always. Needs **Hit table under the player frame** at For tanks and damage dealers or Always. |
-| **Tooltip when you point at it** | On | Pointing at the table says what Cap and its dashes mean, and why a number is from before the fight or not given, as /flatui status does. While it shows, an enemy right behind the table then gets this tooltip in place of its own; clicks go through it to the world either way. Needs **Hit table under the player frame** at For tanks and damage dealers or Always. |
+| **Tooltip when you point at it** | On | Pointing at the table says what Cap and its dashes mean, and why a number is from before the fight or not given, as /flatui status does. While it shows, an enemy right behind the table then gets this tooltip in place of its own, in a fight too; once it fades out the mouse reaches the world behind it again, and clicks go through it to the world either way. Needs **Hit table under the player frame** at For tanks and damage dealers or Always. |
 
 **Look**
 
@@ -138,11 +138,11 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | --- | --- | --- |
 | **Say each swap in chat** | On | One line with the trinket put on and the one it replaced, and why. |
 | **Sound on a swap** | None | Plays once as the queue puts a trinket on. Picking one plays it. Choices: None, Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. |
-| **Carrot on a Stick while riding** | Off | Getting on a mount puts Carrot on a Stick in that slot; getting off puts your trinket back: the best ready one of the slot's list while its Auto queue is on, else the one it replaced. Only out of a fight, and only a bound Carrot on a Stick in your bags. A trinket with a use put back on starts its 30 second cooldown, as with any swap. A trinket you change yourself while riding stays until your next mount. Choices: Off, Bottom trinket slot, Top trinket slot. |
+| **Carrot on a Stick while riding** | Off | Getting on a mount puts Carrot on a Stick in that slot; getting off puts your trinket back: the best ready one of the slot's list while its Auto queue is on, else the one it replaced, also after a reload. Only out of a fight, and only a bound Carrot on a Stick in your bags. A trinket with a use put back on starts its 30 second cooldown, as with any swap. A trinket you change yourself while riding stays until your next mount. Choices: Off, Bottom trinket slot, Top trinket slot. |
 
 **Character window**
 
 | Setting | Default | Notes |
 | --- | --- | --- |
 | **Buttons by the trinket slots** | On | A small square right of each trinket slot: its colour says whether that slot's queue is on, waits for the end of a fight or for a delay, is held or paused, or is off; point at it for why; the tooltip follows each click and counts down. Click it for the window, Shift-click for Queue now on that slot, right-click to turn that slot's queue on or off, Shift-right-click to pause or resume every swap, drop a trinket on it to add it to that slot's list. |
-| **Queue line on trinket tooltips** | On | A dim last line on a trinket's tooltip, in your bags or on the Character window, says where it stands in a list, as Trinket queue: 2nd of 4, top slot, with its Stop or delay and whether that slot's Auto queue is off. A trinket in both lists gets a line for each. |
+| **Queue line on trinket tooltips** | On | A dim last line on a trinket's tooltip, in your bags or on the Character window, says where it stands in a list, as Trinket queue: 2nd of 4, top slot, with its Stop or delay and whether that slot's Auto queue is off. A trinket in both lists gets a line for each. Not on the rows of the Trinket queue window, which show the same. |

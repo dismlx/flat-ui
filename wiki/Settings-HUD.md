@@ -98,7 +98,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | **Duration size** | 100% |  |
-| **Duration format** | No space (8m) | Also the totem times under the player frame. Minutes and seconds shows 28:41 under an hour and plain seconds in the last minute; an hour or more keeps the short form, as 2h. Choices: As the game has it (8 m), No space (8m), Minutes and seconds (28:41). |
+| **Duration format** | No space (8m) | Also the totem times under the player frame. Minutes and seconds shows 28:41 under an hour and plain seconds in the last minute; an hour or more reads as hours and minutes, as 1h42, and a day or more keeps the short form. Choices: As the game has it (8 m), No space (8m), Minutes and seconds (28:41). |
 | **Duration colour** | White | Also the totem times under the player frame. Choices: As the game has it (gold, white under 90 s), White, White, red near the end. |
 | **Red under** | 10 s | The time turns red once this little is left. Also the totem times under the player frame. Needs **Duration colour** at White, red near the end. |
 | **Tenths below** | 0 s | Under this many seconds the time on a buff or debuff shows tenths, as 4.3. 0 means never. The totem times stay in whole seconds, as the game gives them. |
