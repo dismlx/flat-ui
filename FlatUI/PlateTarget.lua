@@ -198,16 +198,14 @@ local function StandDown()
 	end
 end
 
--- Starts or stops the part as the rows say; every flash on its way stops and takes the thickness of the rows.
+-- Starts or stops the part as the rows say, readies the flash of every plate shown (one Flat UI now restyles, such as a friendly plate as Restyle
+-- friendly nameplates turns on, gets its own), and stops every flash on its way, which takes the thickness of the rows.
 local function Sync()
-	local want = Wanted()
-	if want ~= S.on then
-		S.on = want
-		if want and type(ns.EachPlate) == "function" then
-			ns.EachPlate(function(unitFrame)
-				ns.EachPart(KEY, PART, Prepare, unitFrame)
-			end)
-		end
+	S.on = Wanted()
+	if S.on and type(ns.EachPlate) == "function" then
+		ns.EachPlate(function(unitFrame)
+			ns.EachPart(KEY, PART, Prepare, unitFrame)
+		end)
 	end
 	for unitFrame, rec in pairs(recs) do
 		if rec.holder and not ns.Forbidden(unitFrame) then
