@@ -18,6 +18,7 @@ local NEAR = { 1, 0.65, 0.1, 0.4 }
 local REARM = 10
 local LOST_TIME = 2
 local TAKEN = { 1, 0.3, 0.3 }
+local OWNER_LIGHT = 0.45
 local FADE_IN, FADE_OUT = 0.15, 0.35
 local MARKERS, MARKER_GAP = "Interface\\TargetingFrame\\UI-RaidTargetingIcons", 3
 local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
@@ -828,9 +829,39 @@ local function Named(name)
 	return IsSecret(name) or (type(name) == "string" and name ~= "")
 end
 
+local function Hex(r, g, b)
+	local function Byte(value)
+		return math.max(0, math.min(255, math.floor(value * 255 + 0.5)))
+	end
+	return ("%02x%02x%02x"):format(Byte(r), Byte(g), Byte(b))
+end
+
+function T.Owner(title, mob)
+	local owner = type(mob) == "string" and mob ~= "targettarget" and mob:match("^(.+)target$") or nil
+	if not owner then
+		return false
+	end
+	local okMob, mobName = pcall(UnitName, mob)
+	local okOwner, ownerName = pcall(UnitName, owner)
+	if not (okMob and okOwner and Named(mobName) and Named(ownerName)) then
+		return false
+	end
+	local r, g, b = ns.ClassColourOf(owner)
+	if not r then
+		r, g, b = GREY[1], GREY[2], GREY[3]
+	end
+	local form = { "%s |cff" .. Hex(DIM[1], DIM[2], DIM[3]) .. "·|r |cff%s%s|r", mobName, Hex(r + (1 - r) * OWNER_LIGHT, g + (1 - g) * OWNER_LIGHT,
+		b + (1 - b) * OWNER_LIGHT), ownerName }
+	if not pcall(title.SetFormattedText, title, form[1], form[2], form[3], form[4]) then
+		return false
+	end
+	T.titleForm = form
+	return true
+end
+
 function T.Title(mob, entries)
 	local title, taker = T.title, nil
-	T.titleTaken = false
+	T.titleTaken, T.titleForm = false, nil
 	local now = T.lostUntil and Ask(GetTime)
 	if ns.Finite(now) and now < T.lostUntil then
 		taker = T.Taker(entries)
@@ -854,7 +885,9 @@ function T.Title(mob, entries)
 	end
 	title:SetTextColor(DIM[1], DIM[2], DIM[3], 1)
 	if mob then
-		SetName(title, mob)
+		if not T.Owner(title, mob) then
+			SetName(title, mob)
+		end
 	else
 		title:SetText("Sample")
 	end

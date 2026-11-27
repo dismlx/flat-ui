@@ -978,7 +978,7 @@ function M.Divider()
 	return M.line
 end
 
-function M.LayBelow(k)
+function M.LayBelow(k, extra)
 	local width, height = Number("barWidth", 180), Number("barHeight", 16)
 	local small = math.max(10, math.floor(height * SMALL + 0.5))
 	local file = ns.BarTexture(Opt("barTexture")) or WHITE
@@ -987,20 +987,35 @@ function M.LayBelow(k)
 	end
 	local bottom = ns.Finite(T.bottom) and T.bottom or 0
 	local start = bottom + 2 * GAP + 1
-	T.frame:SetSize(width + 2 * PAD, k > 0 and start + k * small + (k - 1) * GAP + PAD or bottom + PAD)
+	local tall = start + k * small + (k - 1) * GAP + PAD
+	if extra then
+		tall = tall + GAP + TextHeight(small)
+	end
+	T.frame:SetSize(width + 2 * PAD, k > 0 and tall or bottom + PAD)
 	if k < 1 then
 		if M.line then
 			M.line:Hide()
+		end
+		if M.more then
+			M.more:Hide()
 		end
 		M.belowLaid = nil
 		return
 	end
 	local slip = Number("slipAt", 80)
-	local key = ("%s:%s:%s:%s"):format(tostring(T.laid), bottom, k, slip)
+	local key = ("%s:%s:%s:%s:%s"):format(tostring(T.laid), bottom, k, slip, extra and 1 or 0)
 	if M.belowLaid == key then
 		return
 	end
 	M.belowLaid = key
+	if extra then
+		local more = M.Line()
+		local below = start + k * (small + GAP)
+		more:SetTextHeight(TextHeight(small))
+		more:ClearAllPoints()
+		more:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD + INSET, -below)
+		more:SetPoint("TOPRIGHT", T.frame, "TOPRIGHT", -(PAD + INSET), -below)
+	end
 	local line = M.Divider()
 	line:ClearAllPoints()
 	line:SetPoint("TOPLEFT", T.frame, "TOPLEFT", PAD, -(bottom + GAP))
@@ -1049,6 +1064,10 @@ function M.Suffix(unit, lost)
 	local tail = (" |cff%s· %d lost|r"):format(Hex(Lighter(StateColour("lost"))), lost)
 	if unit == nil then
 		T.title:SetText("Sample" .. tail)
+		return
+	end
+	local form = T.titleForm
+	if type(form) == "table" and pcall(T.title.SetFormattedText, T.title, form[1] .. tail, form[2], form[3], form[4]) then
 		return
 	end
 	local ok, name = pcall(UnitName, unit)
@@ -1111,13 +1130,15 @@ function M.Below(unit)
 		end
 	end
 	local k = math.min(#shown, BELOW)
-	M.LayBelow(k)
+	local hidden = #shown - k
+	M.LayBelow(k, hidden > 0)
 	local keys = {}
 	for index = 1, k do
 		M.Fill(M.rows[index], shown[index])
 		keys[index] = shown[index].key
 	end
 	M.Clear(k + 1)
+	M.More(shown, k, hidden)
 	M.below, M.shown = k > 0 or nil, #shown
 	Look("Order", M.rows, k, mode, T.frame, keys, true)
 	if fresh then
@@ -1142,6 +1163,9 @@ function M.BelowOff(keep)
 	Look("Forget", M.rows)
 	if M.line then
 		M.line:Hide()
+	end
+	if M.more then
+		M.more:Hide()
 	end
 	if T.frame and ns.Finite(T.bottom) then
 		T.frame:SetSize(Number("barWidth", 180) + 2 * PAD, T.bottom + PAD)
