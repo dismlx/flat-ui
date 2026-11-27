@@ -110,7 +110,7 @@ The **Objective tracker** row of the **Fading** page can fade the tracker too. S
 - **Warn as the log fills** (on) turns the count amber at one free slot. When the log becomes full while you play, the count gives a short red pulse and chat says once "Flat UI: your quest log is full (20/20)." The first count after you log in or reload never warns.
 - **Quests ready in the count** (on) adds how many of your quests are ready to hand in, as "12/20  3 ready", in the experience bar's **Quest colour**. The count pulses once as another quest becomes ready.
 
-Point at the count for your quests, those ready to hand in and their experience. A click opens the quest log, in a fight as the fight ends.
+Point at the count for your quests, those ready to hand in and their experience. With **Quests ready in the count** on, up to five of the quests ready to hand in follow by name in **Quest colour**, as "Kobold Camp Cleanup", then "and 2 more" for the rest, kept up to date while you point at it. A click opens the quest log, in a fight as the fight ends.
 
 ### Questie's tracker
 

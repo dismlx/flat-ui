@@ -84,6 +84,34 @@ local function Ready(log, entries)
 	return ready
 end
 
+local function ReadyNames()
+	local log = QuestLog()
+	if ns.Get(KEY .. ".trackerCountReady") ~= true or not log or type(log.GetInfo) ~= "function" or type(log.IsComplete) ~= "function" then
+		return nil
+	end
+	local ok, entries = pcall(log.GetNumQuestLogEntries)
+	if not ok or not ns.Finite(entries) then
+		return nil
+	end
+	local names, rest = {}, 0
+	for index = 1, math.min(math.floor(entries), 100) do
+		local okInfo, info = pcall(log.GetInfo, index)
+		local id = okInfo and Read(info, "questID") or nil
+		if ns.Finite(id) and id > 0 and Read(info, "isHeader") ~= true and Read(info, "isHidden") ~= true then
+			local okDone, done = pcall(log.IsComplete, id)
+			if okDone and not ns.IsSecret(done) and done == true then
+				local title = Read(info, "title")
+				if type(title) == "string" and title ~= "" and #names < 5 then
+					names[#names + 1] = title
+				else
+					rest = rest + 1
+				end
+			end
+		end
+	end
+	return names, rest
+end
+
 local function ReadyCode()
 	local ok, r, g, b = pcall(ns.Colour, KEY .. ".xpQuestColour")
 	if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
@@ -138,7 +166,20 @@ end
 local function Tip(_, button, fresh)
 	local panels = ns.DataPanels
 	if type(panels) == "table" and type(panels.TipAt) == "function" then
-		panels.TipAt(button, ANCHOR, "quests", fresh, InCombatLockdown() and FIGHT_HINT or HINT)
+		local hints, names, rest = {}, ReadyNames()
+		if names then
+			local code = ReadyCode()
+			for _, title in ipairs(names) do
+				hints[#hints + 1] = code .. title .. "|r"
+			end
+			if rest > 0 then
+				hints[#hints + 1] = ("and %d more"):format(rest)
+			end
+		end
+		for _, hint in ipairs(InCombatLockdown() and FIGHT_HINT or HINT) do
+			hints[#hints + 1] = hint
+		end
+		panels.TipAt(button, ANCHOR, "quests", fresh, hints)
 	end
 end
 
