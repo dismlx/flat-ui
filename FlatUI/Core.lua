@@ -1021,6 +1021,12 @@ function ns.TextSize(fontString, percent, flags)
 	return ns.TextStyle(fontString, { percent = percent, flags = flags })
 end
 
+function ns.TextStyleForget(fontString)
+	if fontString ~= nil and not IsSecret(fontString) then
+		fonts[fontString] = nil
+	end
+end
+
 local FONT_FACES = { { "friz", "Fonts\\FRIZQT__.TTF", "Friz Quadrata" }, { "arial", "Fonts\\ARIALN.TTF", "Arial Narrow" },
 	{ "morpheus", "Fonts\\MORPHEUS.TTF", "Morpheus" }, { "skurri", "Fonts\\SKURRI.TTF", "Skurri" } }
 local fontsOffered

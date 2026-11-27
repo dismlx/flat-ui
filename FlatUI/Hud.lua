@@ -521,7 +521,10 @@ local function ReMask()
 		return
 	end
 	local map = Frame("Minimap")
-	if map and not SetMask(map, SQUARE_MASK) then
+	if map and SetMask(map, SQUARE_MASK) then
+		minimap.maskLost = nil
+	elseif map then
+		minimap.maskLost = true
 		ns.Note(KEY, LABEL .. ": the game refused the square mask, and the minimap has the game's mask.")
 	end
 end
@@ -537,11 +540,11 @@ local function MapShape(square)
 				ns.Note(KEY, LABEL .. ": the game refused the square mask, so the minimap stays round.")
 				return false
 			end
-			minimap.squared = true
+			minimap.squared, minimap.maskLost = true, nil
 		end
 	elseif minimap.squared and not Later(map) then
 		if SetMask(map, MAP_MASK) then
-			minimap.squared = nil
+			minimap.squared, minimap.maskLost = nil, nil
 		else
 			ns.Note(KEY, LABEL .. ": the game refused to put back the round mask, so the minimap stays square.")
 		end
@@ -2702,6 +2705,7 @@ end
 local function ForPlayer(unit) return not ns.IsSecret(unit) and (unit == "player" or unit == "vehicle") end
 local function ForCVar(name) return not ns.IsSecret(name) and name == "rotateMinimap" end
 local function SquareMap() return minimap.squared == true end
+function ns.MinimapSquare() return minimap.squared == true and not minimap.maskLost end
 local function BagsStyled() return next(bags) ~= nil end
 local function AlertsWanted() return _G.LootAlertSystem ~= nil and Wanted("alerts") end
 local function MirrorsWanted() return _G.MirrorTimerContainer ~= nil and Wanted("mirror timers") end

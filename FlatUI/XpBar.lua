@@ -16,6 +16,12 @@ local MANAGER = "StatusTrackingBarManager"
 local CONTAINERS = { "MainStatusTrackingBarContainer", "SecondaryStatusTrackingBarContainer" }
 local RED, ORANGE, YELLOW, GREEN, BLUE = { 0.8, 0.3, 0.22 }, { 0.75, 0.27, 0 }, { 0.9, 0.7, 0 }, { 0, 0.6, 0.1 }, { 0, 0.39, 0.88 }
 local REACTION = { RED, RED, ORANGE, YELLOW, GREEN, GREEN, GREEN, GREEN }
+local ART = { xp = "UI-HUD-ExperienceBar-Fill-Experience", rested = "UI-HUD-ExperienceBar-Fill-Rested", back = "UI-HUD-ExperienceBar-Background",
+	blue = "UI-HUD-ExperienceBar-Fill-Reputation-Faction-Blue", rep = {},
+	missing = "Experience bar: the game has no modern bar art here, so the bar keeps its flat fill." }
+for index, colour in ipairs({ "Red", "Red", "Orange", "Yellow", "Green", "Green", "Green", "Green" }) do
+	ART.rep[index] = "UI-HUD-ExperienceBar-Fill-Reputation-Faction-" .. colour
+end
 local EVENTS = { "PLAYER_ENTERING_WORLD", "PLAYER_XP_UPDATE", "UPDATE_EXHAUSTION", "PLAYER_LEVEL_UP", "PLAYER_UPDATE_RESTING", "ENABLE_XP_GAIN",
 	"DISABLE_XP_GAIN", "PLAYER_MAX_LEVEL_UPDATE", "UPDATE_EXPANSION_LEVEL", "UNIT_LEVEL", "UPDATE_FACTION", "MAJOR_FACTION_RENOWN_LEVEL_CHANGED",
 	"CVAR_UPDATE", "PLAYER_REGEN_ENABLED", "EDIT_MODE_LAYOUTS_UPDATED", "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED", "UNIT_PET_EXPERIENCE" }
@@ -824,17 +830,41 @@ function F.Ticks(bar, width, height)
 	end
 end
 
+function F.Art()
+	if Opt("xpArt") ~= "game" then
+		return false
+	end
+	if S.artThere == nil then
+		local api, ok, info = _G.C_Texture, false, nil
+		if type(api) == "table" and not ns.IsSecret(api) and type(api.GetAtlasInfo) == "function" then
+			ok, info = pcall(api.GetAtlasInfo, ART.xp)
+		end
+		S.artThere = ok and not ns.IsSecret(info) and type(info) == "table"
+	end
+	return S.artThere
+end
+
 function F.Look(bar, index, width, height, gap)
 	local frame = bar.frame
 	frame:ClearAllPoints()
 	frame:SetPoint("TOP", S.frame, "TOP", 0, -(index - 1) * (height + gap))
 	frame:SetSize(width, height)
-	local file = ns.BarTexture(Opt("xpTexture")) or FILE
-	if bar.file ~= file then
-		bar.file = file
-		frame:SetStatusBarTexture(file)
+	local art = F.Art()
+	if not art then
+		local file = ns.BarTexture(Opt("xpTexture")) or FILE
+		if bar.file ~= file then
+			bar.file = file
+			frame:SetStatusBarTexture(file)
+		end
+	elseif not bar.back then
+		bar.back = frame:CreateTexture(nil, "BACKGROUND", nil, 0)
+		pcall(bar.back.SetAtlas, bar.back, ART.back)
+		bar.back:SetAllPoints(frame)
 	end
-	ns.SetOutline(bar.outline, true, Opt("xpBack"))
+	if bar.back then
+		bar.back:SetShown(art and Opt("xpBack") == true)
+	end
+	ns.SetOutline(bar.outline, true, Opt("xpBack") and not art)
 	ns.SetOutlineBare(bar.outline, not Opt("xpFrame"))
 	F.Ticks(bar, width, height)
 end
@@ -1193,8 +1223,26 @@ function F.Fill(bar, width)
 	local real = data ~= nil and not sample and ns.Finite(data.value)
 	local flash, sameKey = F.Rose(bar, data, sample), bar.key == key
 	F.Value(bar, ratio, key, sample, width, flash)
-	local r, g, b = F.Colour(bar)
-	bar.frame:SetStatusBarColor(r, g, b, 1)
+	local art = F.Art()
+	if art then
+		local atlas
+		if bar.id == "xp" then
+			atlas = Opt("xpRested") == true and data and data.state == 1 and ART.rested or ART.xp
+		else
+			atlas = data and (data.blue and ART.blue or ART.rep[data.reaction]) or nil
+		end
+		atlas = atlas or ART.rep[5]
+		if bar.file ~= atlas then
+			bar.file = atlas
+			if not pcall(bar.frame.SetStatusBarTexture, bar.frame, atlas) then
+				S.artThere = false
+			end
+		end
+		bar.frame:SetStatusBarColor(1, 1, 1, 1)
+	else
+		local r, g, b = F.Colour(bar)
+		bar.frame:SetStatusBarColor(r, g, b, 1)
+	end
 	if real then
 		F.Change(bar, data, sameKey, ratio, width, flash)
 	else
@@ -1209,7 +1257,18 @@ function F.Fill(bar, width)
 		stretch:SetPoint("TOPLEFT", bar.frame, "TOPLEFT", 0, 0)
 		stretch:SetPoint("BOTTOMLEFT", bar.frame, "BOTTOMLEFT", 0, 0)
 		stretch:SetWidth(math.max(reach * width, 1))
-		stretch:SetVertexColor(rr, rg, rb, 0.4)
+		if art and not bar.restedArt then
+			bar.restedArt = true
+			pcall(stretch.SetAtlas, stretch, ART.rested)
+		elseif not art and bar.restedArt then
+			bar.restedArt = nil
+			stretch:SetTexture(FILE)
+		end
+		if art then
+			stretch:SetVertexColor(1, 1, 1, 0.4)
+		else
+			stretch:SetVertexColor(rr, rg, rb, 0.4)
+		end
 		stretch:Show()
 	else
 		stretch:Hide()
@@ -1513,6 +1572,13 @@ function ns.XpBarBlock(spot)
 		F.Place()
 	end
 end
+
+ns.AddStatus(KEY, function()
+	if S.artThere == false and Opt("xpArt") == "game" and ns.XpOwn() then
+		return { ART.missing }
+	end
+	return {}
+end)
 
 ns.ClickPathReporter(function()
 	if S.mode == "flat" then

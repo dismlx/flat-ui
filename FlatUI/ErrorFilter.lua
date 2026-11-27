@@ -381,7 +381,22 @@ local function Size()
 	end
 	local size = ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and tonumber(ns.Get(KEY .. ".errorTextSize")) or 100
 	size = math.max(50, math.min(150, size))
+	if size ~= 100 and S.object == nil and type(errors.GetFontObject) == "function" then
+		local ok, object = pcall(errors.GetFontObject, errors)
+		S.object = ok and type(object) == "table" and not ns.IsSecret(object) and object or false
+	end
 	S.sizeRefused = ns.TextStyle(errors, { percent = size }) == false and size ~= 100 or nil
+end
+
+function ns.ErrorTextRefont()
+	local errors = GameFrame()
+	if errors == nil or not S.object or type(errors.SetFontObject) ~= "function" then
+		return
+	end
+	if pcall(errors.SetFontObject, errors, S.object) then
+		ns.TextStyleForget(errors)
+		Size()
+	end
 end
 
 function Apply()

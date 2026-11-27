@@ -18,6 +18,7 @@ local ANCHOR = "ANCHOR_LEFT"
 local DIM_RGB = { 0.66, 0.68, 0.62 }
 local CLICKS = { coords = true, durability = true, clock = true }
 local HOVER_LIGHT, LIGHT_OUT = { 1, 1, 1, 0.07 }, 2
+local FADE_IN = 0.15
 local HINTS = {
 	coords = { "Click: world map", "Shift-click: put this in chat" },
 	durability = { "Click: character window" },
@@ -583,8 +584,30 @@ local function Make(map)
 	return true
 end
 
+function S.Fade(frame, elapsed)
+	local step = ns.Finite(elapsed) and elapsed or 0
+	for text, at in pairs(S.fading) do
+		at = at + step
+		if at >= FADE_IN then
+			S.fading[text] = nil
+			text:SetAlpha(1)
+		else
+			S.fading[text] = at
+			text:SetAlpha(at / FADE_IN)
+		end
+	end
+	if next(S.fading) == nil then
+		S.fadeOn = nil
+		frame:SetScript("OnUpdate", nil)
+	end
+end
+
 local function Hide(line)
 	local text, button = S.text[line.id], S.button[line.id]
+	if text and S.fading and S.fading[text] then
+		S.fading[text] = nil
+		text:SetAlpha(1)
+	end
 	if text and S.shown[line.id] then
 		text:Hide()
 	end
@@ -606,9 +629,11 @@ local function Show(line, value, colour)
 		S.text[line.id] = text
 	end
 	local size = tonumber(Opt("mapTextSize")) or 100
-	if S.size[line.id] ~= size then
-		ns.TextStyle(text, { percent = size })
-		S.size[line.id] = size
+	local inside = Opt(line.place) == "inside"
+	local style = tostring(size) .. (inside and " inside" or "")
+	if S.size[line.id] ~= style then
+		ns.TextStyle(text, { percent = size, flags = inside and "OUTLINE" or nil })
+		S.size[line.id] = style
 	end
 	colour = colour or WHITE
 	if S.colour[line.id] ~= colour then
@@ -621,6 +646,13 @@ local function Show(line, value, colour)
 	end
 	if S.shown[line.id] ~= value then
 		if S.shown[line.id] == nil then
+			S.fading = S.fading or {}
+			S.fading[text] = 0
+			text:SetAlpha(0)
+			if not S.fadeOn then
+				S.fadeOn = true
+				S.frame:SetScript("OnUpdate", S.Fade)
+			end
 			text:Show()
 		end
 		text:SetText(value)
@@ -679,10 +711,16 @@ end
 local function Layout()
 	local places, sig = {}, { S.game and "game" or "", "size=" .. tostring(Opt("mapTextSize")) }
 	local side, near, far = Plate()
-	local used, asked
+	local used, asked, lift
 	for _, line in ipairs(LINES) do
 		if S.shown[line.id] then
-			local place = Opt(line.place) == "above" and "above" or "below"
+			local place = Opt(line.place)
+			place = (place == "above" or place == "inside") and place or "below"
+			if place == "inside" and not lift then
+				local height = Ask(S.frame.GetHeight, S.frame)
+				lift = P.Round() and ns.Finite(height) and height > 0 and math.floor(height * 0.1) or GAP
+				sig[#sig + 1] = "lift=" .. lift
+			end
 			if place == "above" then
 				asked = (asked and asked + SPACING or GAP) + Height(S.text[line.id])
 			end
@@ -712,9 +750,11 @@ local function Layout()
 		if place and text then
 			local before = last[place]
 			text:ClearAllPoints()
-			if place == "above" then
+			if place == "above" or place == "inside" then
 				if before then
 					text:SetPoint("BOTTOM", before, "TOP", 0, SPACING)
+				elseif place == "inside" then
+					text:SetPoint("BOTTOM", S.frame, "BOTTOM", 0, lift)
 				else
 					text:SetPoint("BOTTOM", S.frame, "TOP", 0, GAP)
 				end
@@ -1062,6 +1102,9 @@ function P.Make(map)
 end
 
 function P.Round()
+	if ns.MinimapSquare ~= nil then
+		return not ns.MinimapSquare()
+	end
 	return not ns.Enabled(KEY) or ns.PartStopped(KEY, "minimap") or ns.Get(KEY .. ".shape") ~= "square"
 end
 

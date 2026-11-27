@@ -243,8 +243,10 @@ function Minimap.build(stage)
 		dot:SetPoint("LEFT", s.addons, "LEFT", 3 + index * 5, 0)
 	end
 	s.lines = {}
+	s.words = NewFrame(root, 1, 1)
+	s.words:SetAllPoints(root)
 	for _, line in ipairs(MAP_LINES) do
-		s.lines[line.id] = NewText(root, "GameFontHighlightSmall", "TOP", 0, 0, "")
+		s.lines[line.id] = NewText(s.words, "GameFontHighlightSmall", "TOP", 0, 0, "")
 	end
 	s.label = NewGameLabel(root)
 	parts["hud.enabled"] = root
@@ -313,15 +315,17 @@ local function PlaceMap(s, drop)
 end
 
 local function MapLines(s)
-	local size, above, below = Val("mapTextSize") or 100, {}, {}
+	local size, above, below, inside = Val("mapTextSize") or 100, {}, {}, {}
+	s.words:SetFrameLevel(s.map:GetFrameLevel() + 3)
 	for _, line in ipairs(MAP_LINES) do
 		local text = s.lines[line.id]
 		local shown = On(line.option)
 		text:SetShown(shown)
 		if shown then
+			local place = Val(line.place)
 			text:SetText(MapLineText(line.id))
-			ns.TextStyle(text, { percent = size })
-			local list = Val(line.place) == "above" and above or below
+			ns.TextStyle(text, { percent = size, flags = place == "inside" and "OUTLINE" or nil })
+			local list = place == "above" and above or place == "inside" and inside or below
 			list[#list + 1] = text
 		end
 	end
@@ -331,11 +335,23 @@ local function MapLines(s)
 		drop = drop + (index == 1 and MAP_TEXT.gap or MAP_TEXT.spacing) + ((ok and ns.Finite(height) and height > 0) and height or MAP_TEXT.line)
 	end
 	PlaceMap(s, drop)
-	for _, list in ipairs({ above, below }) do
-		local up = list == above
+	local lift = MAP_TEXT.gap
+	if Val("shape") ~= "square" then
+		local ok, height = pcall(s.map.GetHeight, s.map)
+		if ok and ns.Finite(height) and height > 0 then
+			lift = math.floor(height * 0.1)
+		end
+	end
+	for _, list in ipairs({ above, below, inside }) do
 		for index, text in ipairs(list) do
 			text:ClearAllPoints()
-			if up then
+			if list == inside then
+				if index == 1 then
+					text:SetPoint("BOTTOM", s.map, "BOTTOM", 0, lift)
+				else
+					text:SetPoint("BOTTOM", list[index - 1], "TOP", 0, MAP_TEXT.spacing)
+				end
+			elseif list == above then
 				text:SetPoint("BOTTOM", index == 1 and s.map or list[index - 1], "TOP", 0, index == 1 and MAP_TEXT.gap or MAP_TEXT.spacing)
 			else
 				text:SetPoint("TOP", index == 1 and s.map or list[index - 1], "BOTTOM", 0, -(index == 1 and MAP_TEXT.gap or MAP_TEXT.spacing))
