@@ -1595,9 +1595,9 @@ ns.PAGES = {
 		{ section = "Enemies" },
 		{ key = "slipAt", kind = "number", default = 80, min = 50, max = 100, step = 5, unit = "%", label = "Slipping at", needs = "view", needsIn = { "auto", "mobs" },
 			tip = "In Enemies, an enemy you hold turns amber and pulses slowly once another member's threat passes this share of yours, with his name and share; it turns red and pulses fast once someone else holds it." },
-		{ key = "lostSound", kind = "choice", default = "none", label = "Sound when you lose an enemy", needs = "view", needsIn = { "auto", "mobs" },
-			tip = "Plays once as an enemy of Enemies that you held turns to someone else, as its row flashes. Picking one plays it.",
-			choices = { { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
+		{ key = "lostSound", kind = "choice", default = "warning", label = "Sound when you lose an enemy", needs = "view", needsIn = { "auto", "mobs" },
+			tip = "Plays once as an enemy of Enemies that you held turns to someone else, as its row flashes. Warning sound, the default, plays the sound of Warning sound while Warn when you lose aggro is on. Picking one plays it.",
+			choices = { { "warning", "Warning sound" }, { "none", "None" }, { "spell", "Spell alert" }, { "chimes", "Chimes" }, { "bell", "Bell" }, { "warhorn", "Warhorn" },
 				{ "raid", "Raid warning" }, { "alarm", "Alarm" }, { "whisper", "Whisper warning" } } },
 	},
 	{

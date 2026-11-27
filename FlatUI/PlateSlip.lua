@@ -349,6 +349,8 @@ local function Above(frame)
 	return Bar(frame)
 end
 
+local Prepare
+
 local function Wait(frame, rec)
 	if rec.waiting then
 		return
@@ -357,6 +359,7 @@ local function Wait(frame, rec)
 	ns.OutOfCombat(function()
 		rec.waiting = nil
 		if recs[frame] == rec and not ns.Forbidden(frame) then
+			ns.EachPart(KEY, PART, Prepare, frame)
 			Draw(frame, StateOf(frame), true)
 		end
 	end)
@@ -389,6 +392,34 @@ local function Place(frame, rec, cue)
 		pcall(cue.holder.SetFrameLevel, cue.holder, level + LEVEL)
 	end
 	return true
+end
+
+local function Tank()
+	local PT = Core()
+	if PT == nil or type(PT.Role) ~= "function" then
+		return false
+	end
+	local ok, role = pcall(PT.Role)
+	return ok and role == "tank"
+end
+
+function Prepare(frame)
+	local rec = recs[frame]
+	if (rec and rec.cue) or Locked(frame) or not Wanted(frame) or not Tank() then
+		return
+	end
+	local unit = frame.unit
+	if ns.IsSecret(unit) or type(unit) ~= "string" then
+		return
+	end
+	local ok, enemy = pcall(UnitCanAttack, "player", unit)
+	if not ok or ns.IsSecret(enemy) or enemy ~= true then
+		return
+	end
+	rec = rec or Record(frame)
+	local cue = Build(frame)
+	rec.cue = cue
+	Place(frame, rec, cue)
 end
 
 local function Work(frame, state, snap)
@@ -468,6 +499,7 @@ EXTRA.show[#EXTRA.show + 1] = function(frame, own)
 	if type(own) == "table" then
 		owns[frame] = own
 	end
+	ns.EachPart(KEY, PART, Prepare, frame)
 	local state = StateOf(frame)
 	if state ~= nil or recs[frame] ~= nil then
 		Draw(frame, state, true)
@@ -501,6 +533,7 @@ EXTRA.refresh[#EXTRA.refresh + 1] = function()
 		if rec then
 			rec.above = false
 		end
+		ns.EachPart(KEY, PART, Prepare, frame)
 		Draw(frame, StateOf(frame), true)
 	end)
 	for frame, rec in pairs(recs) do

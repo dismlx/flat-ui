@@ -254,7 +254,7 @@ function L.Name(row, r, g, b)
 	if not text then
 		return
 	end
-	if ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
+	if L.On() and ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
 		local k = NAME_LIGHT
 		text:SetTextColor(r + (1 - r) * k, g + (1 - g) * k, b + (1 - b) * k, 1)
 	else

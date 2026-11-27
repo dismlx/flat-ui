@@ -782,7 +782,14 @@ function M.More(list, n, hidden)
 end
 
 local function Sound(sample)
-	local kit = KITS[Opt("lostSound")]
+	local choice = Opt("lostSound")
+	if choice == "warning" then
+		if Opt("lost") == false then
+			return
+		end
+		choice = Opt("warnSound")
+	end
+	local kit = KITS[choice]
 	local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
 	if not sound then
 		return
@@ -841,7 +848,7 @@ end
 function M.Draw(list, sample)
 	M.count = type(list) == "table" and #list or 0
 	if M.count == 0 then
-		if M.active then
+		if M.active or (T.frame and T.frame:IsShown()) then
 			M.Rest()
 			T.Showing(false)
 		end
