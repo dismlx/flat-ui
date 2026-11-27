@@ -1080,7 +1080,11 @@ local function RuleLines(items, which, key)
 	local rule = Custom.Rule(key)
 	local typed = Call(B.Search, "Active") == true and CleanRule(Call(B.Search, "Text")) or nil
 	if typed and typed ~= rule then
-		items[#items + 1] = { text = "Keep what the search finds here", part = PART, pick = function()
+		local text = "Keep what the search finds here"
+		if rule then
+			text = ("Keep what the search finds here, not \"%s\""):format(Shorten(rule, RULE_SHOWN))
+		end
+		items[#items + 1] = { text = text, part = PART, pick = function()
 			if SetRule(key, typed) then
 				Say(("%s keeps what %s finds."):format(Plain(Custom.Name(key) or key), typed))
 				Custom.Took(which, key, nil, nil, FLASH.rule)
@@ -2104,6 +2108,10 @@ function ns.BagsCustomLines()
 		local name, count = Plain(names[key]), counts[key] or 0
 		lines[#lines + 1] = { "rename:" .. key, "Rename " .. name }
 		lines[#lines + 1] = { "delete:" .. key, ("Delete %s%s"):format(name, count > 0 and (" (%d placed)"):format(count) or "") }
+		local rule = Custom.Rule(key)
+		if type(rule) == "string" then
+			lines[#lines + 1] = { "unrule:" .. key, ("Stop keeping what \"%s\" finds in %s"):format(Plain(Shorten(rule, RULE_SHOWN)), name) }
+		end
 	end
 	return lines
 end
@@ -2128,6 +2136,14 @@ function ns.BagsCustomPick(id)
 	key = type(id) == "string" and id:match("^delete:(.+)$") or nil
 	if key then
 		return Custom.Delete(key)
+	end
+	key = type(id) == "string" and id:match("^unrule:(.+)$") or nil
+	if key then
+		local rule = Custom.Rule(key)
+		if type(rule) ~= "string" or not SetRule(key, nil) then
+			return false, "Flat UI: " .. SAY.gone
+		end
+		return true, ("Flat UI: %s no longer keeps what %s finds."):format(Plain(Custom.Name(key) or key), Plain(rule))
 	end
 	return false
 end

@@ -1472,6 +1472,39 @@ function ns.SessionMoney()
 end
 Data.SessionMoney = ns.SessionMoney
 
+function ns.SessionSince()
+	local char = ns.Character()
+	local began = type(char) == "table" and Count(char.sessionStartAt) or nil
+	local when = began and Client(nil, "date")
+	if not when then
+		return nil
+	end
+	local ok, parts = pcall(when, "*t", began)
+	if not ok or type(parts) ~= "table" or not ns.Finite(parts.hour) or not ns.Finite(parts.min) then
+		return nil
+	end
+	local hour, minute = math.floor(parts.hour) % 24, math.floor(parts.min) % 60
+	local cvars = type(C_CVar) == "table" and not IsSecret(C_CVar) and C_CVar or nil
+	local military = Ask(cvars and cvars.GetCVarBool or Client(nil, "GetCVarBool"), "timeMgrUseMilitaryTime")
+	local pattern, fallback, shown = _G.TIMEMANAGER_TICKER_24HOUR, "%02d:%02d", hour
+	if military == false then
+		shown = hour % 12 == 0 and 12 or hour % 12
+		if hour < 12 then
+			pattern, fallback = _G.TIME_TWELVEHOURAM, "%d:%02d AM"
+		else
+			pattern, fallback = _G.TIME_TWELVEHOURPM, "%d:%02d PM"
+		end
+	end
+	if type(pattern) == "string" and not IsSecret(pattern) then
+		local okText, text = pcall(string.format, pattern, shown, minute)
+		if okText and type(text) == "string" and text ~= "" then
+			return text
+		end
+	end
+	return fallback:format(shown, minute)
+end
+Data.SessionSince = ns.SessionSince
+
 function ns.SessionRestart()
 	local char = ns.Character()
 	local money, now = Count(Ask(Client(nil, "GetMoney"))), Count(Ask(Client(nil, "time")))
