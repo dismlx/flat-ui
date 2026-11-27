@@ -1128,8 +1128,12 @@ local function SellTip(w, owner)
 		worth = (w.sellUnknown and " for at least %s" or " for %s"):format(Money(value))
 	end
 	tip:SetText("Sell junk", 1, 1, 1)
-	tip:AddLine(("Sells %d %s%s, as Errands sells: grey items with a price and the items of your sell list, one at a time."):format(n,
-		Plural(n, "item", "items"), worth), DIM[1], DIM[2], DIM[3], true)
+	if Selling() then
+		tip:AddLine(("Selling: %d %s left."):format(n, Plural(n, "item", "items")), DIM[1], DIM[2], DIM[3], true)
+	else
+		tip:AddLine(("Sells %d %s%s, as Errands sells: grey items with a price and the items of your sell list, one at a time."):format(n,
+			Plural(n, "item", "items"), worth), DIM[1], DIM[2], DIM[3], true)
+	end
 	if waits > 0 then
 		tip:AddLine(("%d more of your sell list %s for the next click."):format(waits, Plural(waits, "waits", "wait")), DIM[1], DIM[2], DIM[3],
 			true)
@@ -1160,6 +1164,18 @@ local function SellClick(w)
 		print(("Flat UI: Sold nothing: %s."):format(why))
 	end
 	Request("footer", "bags")
+end
+
+function Tips.Again(owner, fn, ...)
+	local tip = GameTooltip
+	if type(owner) ~= "table" or type(tip) ~= "table" or ns.Forbidden(tip) then
+		return
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, owner)
+	local okShown, shown = pcall(owner.IsShown, owner)
+	if ok and owned == true and okShown and shown == true then
+		Run("window", fn, ...)
+	end
 end
 
 local function Busy()
@@ -1518,7 +1534,7 @@ function Footer(w)
 			w.sellCount, w.sellWaits, w.sellValue, w.sellUnknown = n, waits, value, unknown
 			w.sellOn = wanted and (n > 0 or selling)
 			if w.sellOn then
-				w.sell.SetLabel(selling and "Selling..." or ("Sell junk (%d)"):format(n))
+				w.sell.SetLabel(selling and (n > 0 and ("Selling... %d"):format(n) or "Selling...") or ("Sell junk (%d)"):format(n))
 				w.sell.SetUsable(not selling)
 				w.sell:Show()
 			else
@@ -1558,6 +1574,20 @@ function Footer(w)
 		end
 	end
 	ArrangeFoot(w)
+	if w.sell then
+		Tips.Again(w.sell, SellTip, w, w.sell)
+	end
+	for _, kind in ipairs({ "deposit", "takeout" }) do
+		if w[kind] then
+			Tips.Again(w[kind], MoveTip, w, w[kind], kind)
+		end
+	end
+	if w.gold then
+		Tips.Again(w.gold.frame, GoldTip, w, w.gold.frame)
+	end
+	if w.free then
+		Tips.Again(w.free.frame, FreeTip, w, w.free.frame)
+	end
 end
 
 local function StripHeight(w)
@@ -1827,6 +1857,9 @@ local function Tick(w, elapsed)
 	elseif w.pulsing then
 		w.pulsing = nil
 		Run("window", PaintSort, w)
+		if w.icons.sort then
+			Tips.Again(w.icons.sort.button, Tips.sort, w, w.icons.sort.button)
+		end
 	end
 	w.wait = (w.wait or 0) - (Finite(elapsed) and elapsed or 0)
 	if w.wait > 0 then
@@ -2500,6 +2533,9 @@ function Clicks.sort(w)
 		end
 		if not watching and w.which == "bags" then
 			Sorted("bags")
+		end
+		if w.icons.sort then
+			Tips.Again(w.icons.sort.button, Tips.sort, w, w.icons.sort.button)
 		end
 	end
 end

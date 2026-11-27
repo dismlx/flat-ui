@@ -79,6 +79,11 @@ local REMOVE = {
 }
 local SHOWN_FLASH, HIDDEN_NAMES = "Back", 8
 local SPLIT_LINE, JOIN_LINE = "Split by kind", "Join into one section"
+local LISTS = {
+	{ fn = "ErrandsSellLines", pick = "ErrandsSellPick", line = "Your sell list (%d)", title = "Your sell list: click one to take it off" },
+	{ fn = "ErrandsKeepLines", pick = "ErrandsKeepPick", line = "Never sold (%d)", title = "Never sold: click one to take it off" },
+	none = "Nothing on your lists. Alt+right-click an item to sell it from now on.",
+}
 
 local drag = nil
 local parts = setmetatable({}, { __mode = "k" })
@@ -771,6 +776,35 @@ local function PlaceLines(st, key, items, label)
 	end }
 end
 
+local function ListLines(st, items, anchor)
+	local any = false
+	for _, list in ipairs(LISTS) do
+		local ok, rows = pcall(Call, ns, list.fn)
+		if ok and type(rows) == "table" and #rows > 0 then
+			any = true
+			local sub = {}
+			for _, row in ipairs(rows) do
+				local id, name = type(row) == "table" and row[1], type(row) == "table" and row[2]
+				if type(id) == "number" then
+					local text = type(name) == "string" and name:gsub(" %(%d+%)$", "") or tostring(id)
+					sub[#sub + 1] = { text = text:gsub("|", "||"), part = "order", pick = function()
+						local okPick, done, said = pcall(Call, ns, list.pick, id)
+						if okPick and done == true and type(said) == "string" then
+							print(said)
+						end
+					end }
+				end
+			end
+			items[#items + 1] = { text = list.line:format(#sub), part = "order", pick = function()
+				Call(B.Layout, "Menu", anchor, list.title, sub, st.which)
+			end }
+		end
+	end
+	if not any and Fn(ns, LISTS[1].fn) then
+		items[#items + 1] = { text = LISTS.none, header = true }
+	end
+end
+
 function Order.Menu(st, sec, anchor)
 	if not Movable(st, sec) then
 		return
@@ -860,6 +894,9 @@ function Order.Menu(st, sec, anchor)
 		items[#items + 1] = { text = SHOW_HIDDEN:format(hidden), part = "order", pick = function()
 			Order.HiddenMenu(st, anchor)
 		end }
+	end
+	if key == "junk" then
+		ListLines(st, items, anchor)
 	end
 	if key == "keep" then
 		local more = Call(B.Pins, "MenuLines")
