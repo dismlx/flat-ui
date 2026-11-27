@@ -33,6 +33,7 @@ P.OP_POP_FROM, P.OP_POP_IN, P.OP_POP_SCALE, P.OP_FADE = 1.3, 0.12, 0.15, 0.25
 P.EASE_SECONDS = 0.2
 P.COMBO_MAX, P.COMBO_SIZE, P.COMBO_SPACE, P.COMBO_DROP, P.COMBO_DIM = 5, 7, 3, 2, 0.25
 P.COMBO_POP_FROM, P.COMBO_POP_SECONDS = 1.4, 0.15
+P.COMBO_BREATHE_LOW, P.COMBO_BREATHE_SECONDS = 0.55, 0.9
 P.SPACING = 2
 P.GAP, P.KIND_PX = 3, 2
 P.FLASH_GROW = 2
@@ -269,7 +270,7 @@ end
 
 function P.BarColour(spec, o)
 	local gameColour = spec.friendly and P.FRIENDLY or P.HOSTILE
-	if spec.player and not spec.friendly then
+	if spec.player and Get(spec.friendly and "classColoursFriendly" or "classColoursEnemy") == true then
 		local r, g, b = ns.ClassColour()
 		if r then
 			gameColour = { r, g, b }
@@ -440,11 +441,17 @@ function P.NewPlate(S, parent)
 		end)
 		p.opSwipe = swipe
 	end
+	p.opSecsFrame = Frame(p.opFrame)
+	p.opSecsFrame:SetAllPoints(p.opFrame)
+	p.opSecs = Txt(p.opSecsFrame, "OVERLAY")
+	p.opSecs:SetPoint("CENTER", p.opSecsFrame, "CENTER", 0, 0)
+	p.opSecs:SetText("")
 	if type(S.still) == "function" then
 		p.opFrame:SetScript("OnUpdate", function()
 			P.SwipeStill(p)
 			P.OverpowerFade(p)
 			P.OverpowerClock(p)
+			P.OverpowerSeconds(p)
 		end)
 		P.OverpowerMotion(p)
 		p.alphaStep = function(_, elapsed)
@@ -534,7 +541,8 @@ function P.Measure(o, spec, sets)
 	m.nameAbove = not style.inside
 	m.top = m.healthY + m.HH + (m.nameAbove and (m.sp + m.NH) or 0)
 	if spec.auras and P.AurasSeen(spec, o) then
-		m.AS = P.AURA * h
+		local size = Get("auraScale")
+		m.AS = P.AURA * h * (ns.Finite(size) and size > 0 and size / 100 or 1)
 		m.auraY = m.top + m.sp
 		m.top = m.auraY + m.AS
 	end
@@ -597,7 +605,7 @@ function P.HealthText(o, share)
 	elseif format == "both" then
 		return formats.both:format(value, share * 100)
 	elseif format == "missing" then
-		return missing
+		return share >= 1 and "" or missing
 	end
 	return formats.percent:format(share * 100)
 end
@@ -933,10 +941,41 @@ function P.ComboSize()
 	return size, math.max(2, math.floor(size * P.COMBO_SPACE / P.COMBO_SIZE + 0.5)), oy
 end
 
+function P.ComboBreathe(p, on)
+	if p.comboBreathe == nil and on then
+		local ok, group = pcall(function()
+			local made = p.combo:CreateAnimationGroup()
+			ns.Own[made] = true
+			local fade = made:CreateAnimation("Alpha")
+			ns.Own[fade] = true
+			fade:SetFromAlpha(1)
+			fade:SetToAlpha(P.COMBO_BREATHE_LOW)
+			fade:SetDuration(P.COMBO_BREATHE_SECONDS)
+			pcall(fade.SetSmoothing, fade, "IN_OUT")
+			made:SetLooping("BOUNCE")
+			return made
+		end)
+		p.comboBreathe = ok and type(group) == "table" and group or false
+	end
+	local group = p.comboBreathe
+	if not group then
+		return
+	end
+	local okPlaying, playing = pcall(group.IsPlaying, group)
+	playing = okPlaying and playing == true
+	if on and not playing then
+		pcall(group.Play, group)
+	elseif not on and playing then
+		pcall(group.Stop, group)
+		p.combo:SetAlpha(1)
+	end
+end
+
 function P.Combo(p, spec, o, m)
 	local count = spec.combo
 	p.comboB = nil
 	if not (ns.Finite(count) and count > 0 and o.styled and not spec.friendly and Get("comboPoints") == true) then
+		P.ComboBreathe(p, false)
 		p.combo:Hide()
 		for _, square in ipairs(p.comboSquares) do
 			if square.pop then
@@ -963,6 +1002,7 @@ function P.Combo(p, spec, o, m)
 	end
 	p.combo:SetFrameLevel(p.f:GetFrameLevel() + 5)
 	p.combo:Show()
+	P.ComboBreathe(p, full and Get("comboBreathe") == true and not P.Still(p))
 	local fullWas = p.comboFullWas
 	if count >= P.COMBO_MAX then
 		p.comboFullWas = Get("comboFull") == true
@@ -1446,6 +1486,25 @@ function P.OverpowerClock(p)
 	end
 end
 
+function P.OverpowerSeconds(p)
+	local text = p.opSecs
+	if not text then
+		return
+	end
+	local shown = ""
+	if p.opFrame:IsShown() and Get("overpowerSeconds") == true then
+		shown = "3"
+		if p.S and type(p.S.still) == "function" and ns.Finite(p.opEnds) then
+			local now = P.Still(p) and ns.Finite(p.opHeld) and p.opHeld or (type(GetTime) == "function" and GetTime() or 0)
+			shown = tostring(math.max(1, math.ceil(p.opEnds - now)))
+		end
+	end
+	if p.opSecsShown ~= shown then
+		p.opSecsShown = shown
+		text:SetText(shown)
+	end
+end
+
 function P.Overpower(p, spec, o, m)
 	if not (spec.overpower and o.styled and Get("overpower") == true) then
 		p.opFrame:Hide()
@@ -1467,8 +1526,11 @@ function P.Overpower(p, spec, o, m)
 	p.op:SetTexture(P.OverpowerIcon())
 	ns.SetOutline(p.opOutline, true, false)
 	p.opFrame:SetFrameLevel(p.f:GetFrameLevel() + 10)
+	p.opSecsFrame:SetFrameLevel(p.opFrame:GetFrameLevel() + 3)
+	P.Text(p.opSecs, math.max(6, math.floor(size * 0.45 + 0.5)), 100, "game", { 1, 1, 1 })
 	p.opFrame:Show()
 	P.OverpowerSwipe(p)
+	P.OverpowerSeconds(p)
 end
 
 function P.Cast(p, spec, o, m)
@@ -1988,6 +2050,8 @@ function P.Cells(kind)
 			return {
 				{ id = "enemy", label = "Enemy", col = 1, spec = Enemy() },
 				{ id = "player", label = "Enemy player", col = 1, spec = Enemy({ name = names.player, player = true }) },
+				{ id = "friend", label = "Friendly player", col = 1, show = Get("classColoursFriendly") == true,
+					spec = { name = names.friend, level = 18, friendly = true, player = true, health = P.SHARE } },
 				{ id = "hover", label = "Mouseover", col = 1, show = Get("hover") == true, spec = Enemy({ hover = true }) },
 				{ id = "low", label = "Low health", col = 1, show = Get("lowHealth") == true, spec = Enemy({ health = 0.18 }) },
 				{ id = "good", label = "You want", col = 2, show = threat, spec = Enemy({ threat = "threatGood" }) },
@@ -2023,6 +2087,9 @@ function P.Stack(S, layout)
 	local BW = target.plate.m.BW
 	local step = { BW * Get("overlapH") / 100, target.plate.m.top * Get("overlapV") / 100 }
 	local spots = { target = { 0, 0 }, near = { step[1] / 2, step[2] }, far = { -step[1], 0 } }
+	if Get("stackEnemies") ~= true then
+		spots.near = { step[1] * 0.25, target.plate.m.top * 0.35 }
+	end
 	local left, right, bottom, top = math.huge, -math.huge, math.huge, -math.huge
 	for id, spot in pairs(spots) do
 		local entry = by[id]
@@ -2091,6 +2158,8 @@ function P.Parts(S)
 	Set({ "level", "levelSize", "levelShape", "levelGap" }, plate.lvl)
 	Set({ "kindMark" }, (plates.elite or plate).mark)
 	Set({ "colourPlayers" }, (plates.player or plate).bar)
+	Set({ "classColoursEnemy" }, (Live("player") or plate).bar)
+	Set({ "classColoursFriendly" }, (Live("friend") or plate).bar)
 	Set({ "targetBar", "targetBarColour", "target", "targetColour", "targetThickness", "targetFlash" }, (Live("target") or plate).bar)
 	Set({ "focusColour" }, (Live("focus") or Live("target") or plate).bar)
 	Set({ "threat", "threatRole", "threatGood", "threatTransition", "threatBad", "threatSameColours", "threatDamageGood", "threatDamageTransition",
@@ -2103,7 +2172,7 @@ function P.Parts(S)
 	Set({ "castSpark" }, plate.spark)
 	Set({ "castShield" }, (plates.locked or plate).shield)
 	Set({ "castTime" }, plate.ctime)
-	Set({ "auras", "auraCrop", "auraBorderOwn", "auraBorderColour", "auraTimers", "auraStacks", "auraOpacity", "aurasWhen" }, (Live("auraTarget") or plate).auras)
+	Set({ "auras", "auraCrop", "auraBorderOwn", "auraBorderColour", "auraTimers", "auraStacks", "auraScale", "auraOpacity", "aurasWhen" }, (Live("auraTarget") or plate).auras)
 	local player = plates.player or plate
 	Set({ "classEnemy", "classPosition", "classFit", "classSize", "classGap", "classX", "classY", "classBorder", "classShape" }, player.iconFrame)
 	Set({ "classFriendly" }, (plates.friend or plate).iconFrame)
@@ -2114,11 +2183,11 @@ function P.Parts(S)
 	Set({ "questMark", "questMarkSize", "questMarkPlace", "questMarkX", "questMarkY" }, (Live("quest") or plate).quest)
 	Set({ "questMarkCount" }, (Live("quest") or plate).questCount)
 	local overpower = Live("overpower")
-	Set({ "overpower", "overpowerSize", "overpowerX", "overpowerY", "overpowerSwipe" }, overpower and overpower.opFrame or nil)
+	Set({ "overpower", "overpowerSize", "overpowerX", "overpowerY", "overpowerSwipe", "overpowerSeconds" }, overpower and overpower.opFrame or nil)
 	local combo = Live("combo")
 	Set({ "comboPoints", "comboColour", "comboFull", "comboFullColour", "comboSize", "comboY" }, combo and combo.combo or nil)
 	local full = Live("comboFull")
-	Set({ "comboFull", "comboFullColour" }, full and full.combo or (combo and combo.combo) or nil)
+	Set({ "comboFull", "comboFullColour", "comboBreathe" }, full and full.combo or (combo and combo.combo) or nil)
 	local good, changing, bad = Live("good"), Live("changing"), Live("bad")
 	if good and changing and bad then
 		local target = Live("target") or changing
@@ -2139,6 +2208,7 @@ function P.Parts(S)
 		Set({ "threatTanks", "threatTankColour" }, offtank and offtank.bar or good.bar)
 	end
 	Set({ "overlapH", "overlapV", "selectedScale" }, (Live("target") or plate).f)
+	Set({ "stackEnemies", "stackFriends" }, (Live("near") or plate).f)
 	Set({ "minScale", "minAlpha" }, (plates.far or plate).f)
 	Set({ "notSelectedAlpha" }, (plates.near or plate).f)
 	S.parts = parts
