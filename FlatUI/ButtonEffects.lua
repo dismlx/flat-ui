@@ -22,7 +22,9 @@ local _, ns = ...
 -- leaves the pulse on. Without the reticle event (it is not known that this client sends it) the aim is found another way: at each
 -- CURRENT_SPELL_CAST_CHANGED, and a frame later, SpellIsTargeting says whether a spell waits for its spot or for a click on its target, and the
 -- buttons whose slot became current with it (IsCurrentAction, not Attack nor a repeating shot, and not the slots current before it, such as a stance
--- or an aura) pulse (aimSpell -1) until it says no; the events that end an aim of a known spell ask it again instead. Only buttons that show light
+-- or an aura) pulse (aimSpell -1) until it says no; the events that end an aim of a known spell ask it again instead. The slots current before it
+-- (CAST.steady) are read whenever no spell waits: at CURRENT_SPELL_CAST_CHANGED, and a frame after PLAYER_ENTERING_WORLD and each
+-- ACTIONBAR_UPDATE_STATE (SteadySoon), so an aspect or aura already lit at login stays out of the first aim too. Only buttons that show light
 -- up: one the layout hid keeps its place over empty space. Only heights, alpha, colours, Show, Hide and animations of these frames are set in a fight.
 -- Samples (ns.ButtonEffectsSample, out of combat): test mode (ActionBars.lua) plays the cast fill as a 2 s cast that lands, the interrupt flash and a
 -- 2 s aim on the first sample buttons (ns.ButtonSamples, Flat UI's main bar first, then bars 2 to 8), and the proc glow on the interrupt's button
@@ -190,8 +192,8 @@ end
 local CAST = { frames = setmetatable({}, WEAK), lit = {}, aimed = {}, pending = false, FADE = 0.2, ALPHA = 0.4, FLASH = 0.7, AIM_LOW = 0.15, AIM_HIGH = 0.5,
 	AIM_TIME = 0.5, sample = { aim = 0 }, SAMPLE_TIME = 2,
 	-- AIM_FALLBACK: the aimSpell of an aim found by SpellIsTargeting (AimCheck), whose spell is not known. steady: the slots current while no spell
-	-- waits, by slot.
-	AIM_FALLBACK = -1, steady = {} }
+	-- waits, by slot; steadyQueued: a read of them waits for the next frame (SteadySoon).
+	AIM_FALLBACK = -1, steady = {}, steadyQueued = false }
 
 local function CastMake(button)
 	local icon = button.icon
@@ -493,6 +495,21 @@ local function AimSoon()
 	end
 end
 
+-- AimCheck once a frame later, however many events ask in that frame (CAST.steadyQueued): out of an aim it takes the snapshot of the steady slots,
+-- in one it keeps or finds the aim as at CURRENT_SPELL_CAST_CHANGED.
+local function SteadySoon()
+	if CAST.steadyQueued or not (C_Timer and C_Timer.After) then
+		return
+	end
+	CAST.steadyQueued = true
+	C_Timer.After(0, function()
+		CAST.steadyQueued = false
+		if type(ns.OwnOn) == "function" and ns.OwnOn() and not pcall(AimCheck) then
+			pcall(AimClear)
+		end
+	end)
+end
+
 -- Each frame while a cast shows: the fill's height from the cast's times, or its fade once the cast landed.
 local function CastStep()
 	local now = GetTime()
@@ -591,6 +608,12 @@ local function CastEvent(event, ...)
 	-- Not a unit event: its argument is cancelledCast.
 	if event == "CURRENT_SPELL_CAST_CHANGED" then
 		AimSoon()
+		return
+	end
+	-- The steady slots are read at login and as the checked state changes (an aspect, aura, stance or form toggled with no cast change), so the first
+	-- aim of a session leaves them out too.
+	if event == "PLAYER_ENTERING_WORLD" or event == "ACTIONBAR_UPDATE_STATE" then
+		SteadySoon()
 		return
 	end
 	local unit = ...
@@ -1048,6 +1071,8 @@ for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SP
 	pcall(casts.RegisterUnitEvent, casts, event, "player")
 end
 pcall(casts.RegisterEvent, casts, "CURRENT_SPELL_CAST_CHANGED")
+pcall(casts.RegisterEvent, casts, "PLAYER_ENTERING_WORLD")
+pcall(casts.RegisterEvent, casts, "ACTIONBAR_UPDATE_STATE")
 casts:SetScript("OnEvent", function(_, event, ...)
 	if type(ns.OwnOn) == "function" and ns.OwnOn() then
 		if not pcall(CastEvent, event, ...) then
