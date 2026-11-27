@@ -3,7 +3,25 @@ local _, ns = ...
 ns.WhatsNewData = {
 	{
 		version = "0.5.46",
-		lines = {},
+		lines = {
+			"Nameplates: \001Enlarge enemies you are losing\002 is now \001Magnified plate for enemies you are losing\002 (on), under \001Mark enemies you are losing\002 on the \001Threat\002 tab. While you tank, an enemy you are losing gets a larger copy of its plate, drawn over it and above every other plate: its health bar in its threat colour, its name and its raid marker, with the glow and arrow on it. Before, the game kept the plate from changing size in a fight, so only its glow grew, as a red line round the plate.",
+			"Nameplates: the magnified plate grows smoothly with how far your threat has slipped instead of in two steps. It starts at the plate's own size once another member reaches \001Slipping at\002 of your threat (80% by default, the same share the threat list uses). It reaches \001Size of an enemy you have lost\002 once they reach 110% or someone else holds the enemy, easing over a fifth of a second about the centre of the health bar as the share moves.",
+			"Nameplates: the magnified plate shrinks back and goes once you take the enemy back and the share falls under \001Slipping at\002, or once you no longer count as a tank. It goes at once as the plate hides or the row is turned off. Where the game withholds the threat on an enemy, or you are not in a group, one changing hands is drawn halfway and one on someone else at full size.",
+			"Nameplates: the magnified plate of your target or focus carries the \001Target and focus border\002 in \001Target colour\002 or \001Focus colour\002, as the plate under it does, and changes the moment you change target or focus, so the enemy you tab to stands out.",
+			"Nameplates: the magnified plate takes no clicks, so a click on it still reaches the enemy's plate underneath, and it works in a fight. Flat UI no longer tries to resize or move the game's own plate.",
+			"Nameplates: \001Size of an enemy you have lost\002 is now 150% by default and goes up to 200% (before, 130% and up to 160%).",
+			"Nameplates: \001Flash as you take an enemy back\002 now flashes on the magnified plate while it shows.",
+			"Nameplates: test mode's sample nameplate and Setup's \001Nameplate colours and threat\002 step show the magnified plate on the sample with threat you do not want; in test mode it grows in as it appears.",
+			"Nameplates: the \001Mark enemies you are losing\002 line of /flatui status now counts the plates shown magnified, in place of the plates enlarged and the glows that grew while the game kept their plate.",
+			"Setup: the \001Slipping at\002 sentence on the \001Threat list\002 step now says the magnified nameplate starts to grow from that share.",
+			"New \001Target mark\002 (on), under \001Target and focus\002 on the \001Marks and icons\002 tab of \001Nameplates\002: a bright outline round your target's health bar in \001Target mark colour\002 (white at first), one pixel thicker than the threat ring and drawn above the bars of the nameplates round it, so your target reads at a glance in a pack, in a fight too. A nameplate the game first shows in a fight takes its mark as that fight ends.",
+			"New \001Arrows at your target\002 (on): two small arrows in \001Target mark colour\002 point in at your target's health bar from both sides, past what sits beside it (its class icon, level, raid marker, elite icon, threat value and quest mark), above the nameplates round it, and move out with the threat value as it grows in a fight, so they stay clear of the number.",
+			"\001Flash as you change target\002 now flashes just past the target mark and above the nameplates round it, so the flash still shows over the mark.",
+			"\001Target nameplate size\002 (was \001Target nameplate scale\002) and \001Other nameplates' opacity\002 (was \001Opacity of other nameplates with a target\002), the game's own size of your target's nameplate and its fade of the others, now sit under \001Target and focus\002 on the \001Marks and icons\002 tab, with tips that say what they do. The game keeps both, so they show the game's value and Flat UI writes nothing until you move them.",
+			"New \001Spread of enemy nameplates\002 under \001Size and stacking\002: \001Overlap, as the game has it\002, \001A slight spread\002 (the game's stacking for enemies with \001Vertical overlap\002 at 70% and a slightly slower plate motion, so a pack still clusters but every nameplate shows) or \001Stack them\002, the game's full stacking. It sets \001Stack enemy nameplates\002 and \001Vertical overlap\002 and follows them as they change, and is left out where the game lacks or locks them.",
+			"The tip of \001Vertical overlap\002 now says it the right way round: higher spreads stacked nameplates further apart, lower lets them cluster.",
+			"Setup's nameplate drawings show the target mark and its arrows on their target samples, the \001Nameplate size, distance and clicks\002 drawing spreads its plates to match \001Spread of enemy nameplates\002, and test mode's sample nameplate is now your target, with its mark.",
+		},
 	},
 	{
 		version = "0.5.45",
