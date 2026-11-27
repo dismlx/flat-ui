@@ -9,7 +9,8 @@ local _, ns = ...
 -- parts = { [path] = region }, partsOf(stage) }, whose draw may return that width and height; Adapt makes a drawing of the framework from it.
 -- The step pages show one drawing at a time on the stage of D.Build. A place of its own (D.Context) has its own stage, drawings and view: the preview band
 -- of the options window, each card of setup's stops and the picture of the welcome screen. D.PaintIn paints a drawing there and scales it to fit a box,
--- and D.GROUND is the ground behind the cards. D.Card is a small picture of a whole profile, for the ready-made looks of the welcome screen.
+-- and D.GROUND is the ground behind the cards. D.Card is a small picture of a whole profile, for the ready-made looks of the welcome screen. The two
+-- drawings of the Look steps built here (mock-panel and mock-bars, D.Builds) are also the preview band of the Flat UI page and its Colours tab.
 
 local kit = ns.PanelKit
 
@@ -478,6 +479,11 @@ function D.CardView(valuesOf)
 end
 
 local BUILDERS = { ["mock-panel"] = BuildPanel, ["mock-bars"] = BuildBars }
+
+-- True for a drawing this file builds itself (no file registers it): the options window's preview band shows these too (PanelPreview.lua).
+function D.Builds(id)
+	return BUILDERS[id] ~= nil
+end
 
 -- Registered drawings ----------------------------------------------------------------------------
 

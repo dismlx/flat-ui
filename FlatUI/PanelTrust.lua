@@ -2,7 +2,8 @@ local ADDON_NAME, ns = ...
 
 -- What a row says about itself in the options window: a dot and a reset button on a changed row, the reason on a row that is off, a tooltip beside
 -- the control, and the count of changed settings on the tab. The tooltip of the reset button names the value it puts back (Trust.DefaultLine), in
--- the words Trust.ValueText gives a value, which Home's Recent changes and the reload notice (Reload.lua) use too. The widgets are the ones of
+-- the words Trust.ValueText gives a value, which Home's Recent changes and the reload notice (Reload.lua) use too; a click on it says in the strip
+-- what it put back and that Ctrl+Z takes it back (Trust.ResetText), and its arrow takes the text colour under the mouse. The widgets are the ones of
 -- ns.PanelKit.
 
 local Trust = {}
@@ -215,6 +216,18 @@ function Trust.DefaultLine(item)
 	return "Reset to default"
 end
 
+-- What the strip says after the reset arrow: "Reset Border colour: back to #000000. Ctrl+Z puts it back.", or "back to its default" for a value
+-- with no words of its own (the kinds Trust.DefaultLine names).
+function Trust.ResetText(item)
+	local value, words = item.default, nil
+	if (item.kind == "colour" and IsColour(value)) or (item.kind == "bool" and type(value) == "boolean") or (item.kind == "number" and ns.Finite(value))
+		or (item.kind == "choice" and ChoiceLabel(item, value)) then
+		words = Trust.ValueText(item, value)
+	end
+	return ("Reset %s: back to %s. Ctrl+Z puts it back."):format(type(item.label) == "string" and item.label or "the setting",
+		words and words ~= "changed" and words or "its default")
+end
+
 -- Gives a row its dot and reset button. Returns the function that sets them: it takes the unmet need of the row, or nil. A row of setup or of the tracker editor
 -- reads and writes a value of its own, so it has no dot and no reset.
 function Trust.Attach(row, item)
@@ -237,11 +250,13 @@ function Trust.Attach(row, item)
 		local changed = Trust.Changed(item)
 		dot:SetShown(changed)
 		if changed and not reset then
+			-- The strip says what the arrow put back, as Reset page and every Undo do; the write goes into Home's record, so Ctrl+Z takes it back.
 			reset = kit.Button(row.frame, "", 16, function()
 				if row.active then
 					Trust.Hide()
 					kit.Write(item, item.default)
 					kit.Refresh()
+					kit.Say(Trust.ResetText(item))
 				end
 			end)
 			reset:SetHeight(16)
@@ -250,12 +265,20 @@ function Trust.Attach(row, item)
 			glyph:SetSize(10, 10)
 			glyph:SetPoint("CENTER", reset, "CENTER", 0, 0)
 			ns.PanelNav.Cell(glyph, "reset")
-			kit.Painted(function()
-				glyph:SetVertexColor(ns.PanelLook.Colour("text-dim"))
-			end)
+			-- The glyph takes the text colour under the mouse, as the cross of the Search box does.
+			local lit = false
+			local function Paint()
+				glyph:SetVertexColor(ns.PanelLook.Colour(lit and "text" or "text-dim"))
+			end
+			kit.Painted(Paint)
 			-- row.Hover keeps the fill of the button and then shows the tooltip.
 			row.Hover(reset, function()
+				lit = true
+				Paint()
 				Trust.Show(reset, Trust.DefaultLine(item))
+			end, function()
+				lit = false
+				Paint()
 			end)
 		end
 		if reset then

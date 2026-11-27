@@ -2777,6 +2777,8 @@ local function Changed(path)
 	end
 end
 
+-- Each change of a value, and each change of the profile's values (Apply), counts up ns.settingsStamp, so the options window reads its marks of
+-- changed pages again only after one (PanelNav.lua, the sidebar's dots).
 function ns.Set(path, value, quiet)
 	local def = defs[path]
 	if not (db and def) then
@@ -2802,6 +2804,7 @@ function ns.Set(path, value, quiet)
 		elseif def.cvar then
 			ns.CVarSet(def, value, quiet)
 		end
+		ns.settingsStamp = (ns.settingsStamp or 0) + 1
 		if def.changed or not ns.RowLive(def) then
 			Changed(path)
 		end
@@ -2813,6 +2816,7 @@ function ns.Set(path, value, quiet)
 	local changed = ns.Get(path) ~= value
 	values[path] = value
 	if changed then
+		ns.settingsStamp = (ns.settingsStamp or 0) + 1
 		Changed(path)
 		TestChanged(path)
 		-- A row that needs a reload: the notice (Reload.lua) looks again on the next frame.
@@ -3406,6 +3410,7 @@ end
 -- The settings or the positions in force are not those that were: every setting is applied, every module follows,
 -- and the movers put each frame at its place in the new profile. `wasSpots` is the table of positions that was in use.
 local function Apply(wasSpots)
+	ns.settingsStamp = (ns.settingsStamp or 0) + 1
 	if ns.SpotsChanged then
 		ns.SpotsChanged(wasSpots)
 	end
@@ -4518,17 +4523,38 @@ SlashCmdList["FLATUI"] = function(msg)
 		else
 			print((select(2, ns.UseProfile(rest))))
 		end
-	elseif text == "scale off" then
-		ns.Set("general.scaleOn", false)
-		print("Custom UI scale: off")
-	elseif text:find("^scale%s+%d+$") then
+	elseif text == "scale off" or text:find("^scale%s+%d+$") then
+		-- The rows that give the scale named, in the order of Scale.lua's Wanted: Pixel-perfect scale off, then Scale below 65% on under the game's
+		-- 65% (Small scale) and off from there (Custom scale). The value is set before Custom UI scale, which takes the scale on screen when it is
+		-- first turned on with no Custom scale saved. Chat says what came of it once it is written (Scale.lua, ns.ScaleTell).
 		local percent = tonumber(text:match("%d+"))
-		if percent >= 65 and percent <= 115 then
+		if percent and (percent < 35 or percent > 115) then
+			print("Flat UI: /flatui scale takes 35 to 115.")
+			return
+		elseif not percent then
+			ns.Set("general.scaleOn", false)
+		elseif percent >= 65 then
 			ns.Set("general.scale", percent)
+			ns.Set("general.pixelPerfect", false)
+			ns.Set("general.scaleBelow", false)
 			ns.Set("general.scaleOn", true)
-			print(("Custom UI scale: %d%%"):format(percent))
 		else
-			print("/flatui scale takes 65 to 115.")
+			ns.Set("general.scaleSmall", percent)
+			ns.Set("general.pixelPerfect", false)
+			ns.Set("general.scaleBelow", true)
+			ns.Set("general.scaleOn", true)
+		end
+		if type(ns.RefreshPanel) == "function" then
+			pcall(ns.RefreshPanel)
+		end
+		if type(ns.ScaleTell) == "function" then
+			ns.ScaleTell()
+		end
+	elseif text ~= "help" and text ~= "?" and type(ns.OpenPanelSearch) == "function" then
+		-- Any other words open the options window with them in its Search box (Panel.lua); help and ? list the commands.
+		local ok, err = pcall(ns.OpenPanelSearch, typed)
+		if not ok then
+			geterrorhandler()(err)
 		end
 	else
 		print("/flatui - the settings window")
@@ -4539,8 +4565,9 @@ SlashCmdList["FLATUI"] = function(msg)
 		print("/flatui setup - walk round your screen in six short stops")
 		print("/flatui profiles - the ready-made looks; a click puts one in use")
 		print("/flatui welcome - the welcome screen")
-		print("/flatui scale 70 - custom UI scale in percent, 65 to 115")
+		print("/flatui scale 70 - the UI scale in percent, 35 to 115; under 65 uses Small scale")
 		print("/flatui scale off - the game's own UI scale")
+		print("/flatui <words> - opens the options window and searches for them")
 		print("/flatui test - samples of your hidden frames on screen until you turn it off; test on and test off also work")
 		print("/flatui taint - the action button click path, checked for values an add-on changed")
 		print("/flatui lava - what the lava tick timer sees; lava test shows a sample, lava trace prints each hit on you")

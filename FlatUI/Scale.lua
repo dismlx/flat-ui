@@ -4,7 +4,10 @@ local _, ns = ...
 -- tainted code, and the game's next secure layout pass runs tainted: a click on an action button is then refused with
 -- ADDON_ACTION_FORBIDDEN for UseAction (research/reports/2026-10-12-0.4.37, and the report of 2026-10-13). So the scale the game takes is
 -- written to the game's own variables (useUiScale and uiscale), and the game applies it itself, at every login too. Only the row
--- Scale below 65% still calls SetScale, because the game's slider stops at 65%, and its tip says what that costs.
+-- Scale below 65% still calls SetScale, because the game's slider stops at 65%, and its tip says what that costs. Nothing is written in a fight: a
+-- change made in one waits for its end, and says so in chat once a fight while the options window shows. /flatui scale (Core.lua) turns on the rows
+-- that give the scale it names (Custom scale from 65 to 115, Small scale with Scale below 65% under that) and says what came of it in the words of
+-- /flatui status (ns.ScaleTell, ns.ScaleStatus).
 
 local TOLERANCE = 0.0005
 -- A dragged slider sends every step. The scale is written once the value has stopped changing.
@@ -25,6 +28,8 @@ local liveWrite = false
 local direct, reloadNote = false, false
 local pending = false
 local generation = 0
+-- True once a fight's wait was said in chat (Queue), until the scale is applied.
+local told = false
 
 local function Percent(scale)
 	return math.floor(scale * 100 + 0.5)
@@ -198,7 +203,7 @@ local function SetDirect(value)
 end
 
 local function Apply()
-	pending = false
+	pending, told = false, false
 	local value, route = Wanted()
 	if route == "cvar" then
 		if direct then
@@ -216,8 +221,13 @@ local function Apply()
 	end
 end
 
--- Nothing is written in combat.
-local function Queue()
+-- Nothing is written in combat. A change of a row in a fight (`changed`) says once a fight, while the options window shows, that the scale waits
+-- for the fight's end, as the cast bar sizes do (CastBarSize.lua); the game's own events wait without a word.
+local function Queue(changed)
+	if changed and not told and InCombatLockdown() and type(ns.PanelShown) == "function" and ns.PanelShown() == true then
+		told = true
+		print("Flat UI: the UI scale changes when the fight ends.")
+	end
 	if pending then
 		return
 	end
@@ -241,12 +251,12 @@ function ns.ScaleChanged(path)
 	if C_Timer and C_Timer.After then
 		C_Timer.After(SETTLE, function()
 			if mine == generation then
-				Queue()
+				Queue(true)
 			end
 		end)
 	else
 		-- Without a timer every step of the slider is written.
-		Queue()
+		Queue(true)
 	end
 end
 
@@ -310,12 +320,35 @@ function ns.ScaleStatus()
 	return line
 end
 
+-- /flatui scale (Core.lua) says what came of the command once it has been written and checked: the write waits SETTLE after the last change and
+-- is checked SETTLE later, or when the game answers. The line is ScaleStatus's, which says a fight's wait, a refusal and a reload left to do. In a
+-- fight that line says the wait, so Queue does not say it too.
+function ns.ScaleTell()
+	if InCombatLockdown() then
+		told = true
+	end
+	local function Say()
+		print("Flat UI: " .. (ns.ScaleStatus() or "Custom UI scale: off."))
+	end
+	if C_Timer and C_Timer.After then
+		C_Timer.After(2 * SETTLE + 0.2, Say)
+	else
+		Say()
+	end
+end
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
 pcall(frame.RegisterEvent, frame, "PLAYER_ENTERING_WORLD")
 pcall(frame.RegisterEvent, frame, "UI_SCALE_CHANGED")
 pcall(frame.RegisterEvent, frame, "DISPLAY_SIZE_CHANGED")
+pcall(frame.RegisterEvent, frame, "PLAYER_REGEN_ENABLED")
 frame:SetScript("OnEvent", function(_, event)
+	if event == "PLAYER_REGEN_ENABLED" then
+		-- The next fight says its wait again.
+		told = false
+		return
+	end
 	if event == "PLAYER_LOGIN" and Moved() then
 		print("Flat UI: Custom scale " .. MovedLine() .. " Turn on Custom UI scale and Scale below 65% to use it.")
 	end

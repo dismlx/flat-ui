@@ -4,7 +4,8 @@ local _, ns = ...
 -- (ns.OpenProfiles: /flatui profiles, Ready-made on Home, the Profiles page and the list of setup open it) and the card that says what setup's Finish or
 -- a look did (ns.SetupAfter). One frame of Flat UI's own with three views: start (the player's frame drawn as the profile in use draws it, then Set up
 -- my screen, Ready-made looks and Keep this look), tiles (a drawn card of each ready-made look: a click puts it in use) and after (the profile in use,
--- what needs a reload, Back to the profile in use before a look was picked, then Reload, Change it, Move frames, Options and Done). The tiles, the
+-- what needs a reload, Back to the profile in use before a look was picked or setup's Finish made a new profile, or Undo setup after a Finish saved
+-- into the profile in use, then Reload, Change it, Move frames, Options and Done). The tiles, the
 -- profile in use and the flag come from Setup.lua (S.Presets, S.UseReady, S.Flag), the drawings from SetupDraw.lua (D.PaintIn with the frames build's
 -- mock-player, D.Card). When the screen shows and
 -- what Keep this look keeps are settings in the Setup section of the Options and setup tab of the Flat UI page (Config.lua). It hides when a fight starts, and no look is put in
@@ -218,6 +219,32 @@ function W.Back()
 	W.frame:Hide()
 end
 
+-- True while setup's Finish saved into the profile in use and Bring back can still put that profile back as it was (Core.lua, ns.LostProfile): no
+-- other loss came since, the profile is in use, and no reload came between.
+function W.CanUndo(finished)
+	if finished.new or finished.ready then
+		return false
+	end
+	local lost = type(ns.LostProfile) == "function" and ns.LostProfile()
+	return type(lost) == "table" and lost.inUse == true and lost.what == "setup's Finish"
+end
+
+-- Undo setup: the profile in use goes back to what it held before setup's Finish (ns.BringBackProfile, which Bring back on the Profiles page also
+-- calls, and which can make the change again). Game settings and the lists setup changed are not part of a profile and stay. Chat says it, and
+-- the screen closes; a refusal (a fight) is said on the card.
+function W.UndoSetup()
+	local finished = W.finished or {}
+	local ok, why = ns.BringBackProfile()
+	if not ok then
+		W.line:SetText(tostring(why))
+		return
+	end
+	local game = finished.game
+	local kept = not ns.IsSecret(game) and type(game) == "number" and game > 0
+	print(("Flat UI: %s is back as it was before setup.%s"):format(tostring(ns.Profile()), kept and " Game settings setup changed stay as they are." or ""))
+	W.frame:Hide()
+end
+
 -- Same as: the profile most characters of the account use, put in use as it is.
 function W.Same()
 	local name = W.sameName
@@ -327,7 +354,8 @@ function W.AfterNotes(finished)
 	return texts, reload
 end
 
--- The after view, for what setup's Finish or a tile did: `finished` is { name, new, ready, users, reloadLines, kept, problems } (Setup.lua, S.Finish).
+-- The after view, for what setup's Finish or a tile did: `finished` is { name, new, ready, users, reloadLines, kept, problems, game, previous }
+-- (Setup.lua, S.Finish), game the count of game settings Finish wrote and previous the profile in use before.
 function W.ShowAfter(finished)
 	return W.Open("after", type(finished) == "table" and finished or {})
 end
@@ -528,8 +556,10 @@ function W.Build()
 	W.done = kit.Button(frame, "Done", 90, function()
 		frame:Hide()
 	end)
+	-- Back to or Undo setup, whichever the after view shows (W.LayoutAfter sets W.backAction).
 	W.backTo, W.backToText = kit.Button(frame, "Back to", SAME_W, function()
-		W.Back()
+		local action = W.backAction or W.Back
+		action()
 	end)
 	-- The foot and the tick, under the start and tiles views.
 	W.foot = kit.Dim(kit.Label(frame, "GameFontHighlightSmall", "LEFT", 220))
@@ -715,8 +745,9 @@ function W.LayoutTiles(y)
 	return y + 20 + FOOT + PAD
 end
 
--- The after view: what is in use now, a note a line, Back to on a line of its own after a look that took the place of another profile, then the
--- buttons in a row (Reload only when a reload is needed, Change it only after a look). No foot and no tick.
+-- The after view: what is in use now, a note a line, Back to on a line of its own after a look or a new profile of setup's Finish that took the place
+-- of another profile, or Undo setup there after a Finish that saved into the profile in use (while Bring back still can), then the buttons in a row
+-- (Reload only when a reload is needed, Change it only after a look). No foot and no tick.
 function W.LayoutAfter(y)
 	local finished = W.finished or {}
 	W.title:SetText("Your screen is set")
@@ -737,9 +768,11 @@ function W.LayoutAfter(y)
 	if #texts > 0 then
 		y = y + 6
 	end
-	local previous = finished.ready and finished.previous and S.FindProfile(finished.previous)
-	if previous then
-		W.backToText:SetText("Back to " .. S.Short(previous))
+	local previous = (finished.ready or finished.new) and finished.previous and S.FindProfile(finished.previous)
+	local undo = not previous and W.CanUndo(finished)
+	if previous or undo then
+		W.backAction = undo and W.UndoSetup or W.Back
+		W.backToText:SetText(undo and "Undo setup" or "Back to " .. S.Short(previous))
 		W.At(W.backTo, y)
 		W.backTo:Show()
 		y = y + kit.BUTTON + GAP

@@ -1,8 +1,9 @@
 local ADDON_NAME, ns = ...
 
 -- The sidebar of the options window: four fixed rows, then eleven groups with 43 pages, each with its icon. A group folds on a click and the
--- fold is kept per account. A module that is off shows the Off chip. Also the switch widget, and the header of a page that has the module
--- switch. Panel.lua hands the drawing of these to this file; the widgets are the ones of ns.PanelKit.
+-- fold is kept per account. A module that is off shows the Off chip, and one whose pages hold a setting off its default a small dot in the accent
+-- after its name (not in the Icon rail). Also the switch widget, and the header of a page that has the module switch. Panel.lua hands the drawing
+-- of these to this file; the widgets are the ones of ns.PanelKit.
 
 local Nav = {}
 ns.PanelNav = Nav
@@ -221,6 +222,25 @@ function Nav.Sidebar(left, host)
 		b.icon:SetVertexColor(r, g, blue, alpha)
 		Look.Solid(b.chip, "line")
 		kit.Tint(b.chipText, "text-faint")
+		b.dot:SetColorTexture(kit.Accent())
+	end
+
+	-- The modules whose pages (their tabs and Per frame) hold a setting off its default, by the sidebar's entry, as the dots of the tabs count them
+	-- (PanelTabs.lua). Counted again only after a value or the profile changed (Core.lua, ns.settingsStamp), not on every refresh of the window.
+	local marks, markedAt = {}, nil
+	local function Marks()
+		local model, trust = host.Model(), ns.PanelTrust
+		local stamp = tostring(ns.settingsStamp) .. "|" .. tostring(model)
+		if stamp == markedAt or not (model and trust) then
+			return
+		end
+		markedAt, marks = stamp, {}
+		for _, page in ipairs(model.pages or {}) do
+			local top = Nav.Top(model, page)
+			if top and not marks[top] and trust.Count(page) > 0 then
+				marks[top] = true
+			end
+		end
 	end
 
 	-- The chip of a row: Off for a module that is off, After combat for Move frames in a fight.
@@ -235,9 +255,19 @@ function Nav.Sidebar(left, host)
 			b.chip:SetWidth(label == "Off" and 28 or 76)
 			b.chipText:SetWidth(label == "Off" and 28 or 76)
 		end
-		-- The name has the row to the chip, or to the edge when there is none.
+		-- The name has the row to the chip, or to the edge when there is none, less the room of the dot after it while it shows. The dot sits 4
+		-- after the name's words; none in the Icon rail, which shows no names.
+		local dotted = b.entry ~= nil and marks[b.entry] == true and not b.rail and b.text:IsShown()
 		if b.textW then
-			b.text:SetWidth(show and math.max(20, b.textW - (label == "Off" and 36 or 84)) or b.textW)
+			b.text:SetWidth(math.max(20, (show and b.textW - (label == "Off" and 36 or 84) or b.textW) - (dotted and 9 or 0)))
+		end
+		b.dot:SetShown(dotted)
+		if dotted then
+			local ok, words = pcall(b.text.GetStringWidth, b.text)
+			local room = b.text:GetWidth()
+			words = ok and not ns.IsSecret(words) and type(words) == "number" and words > 0 and words or room
+			b.dot:ClearAllPoints()
+			b.dot:SetPoint("LEFT", b.text, "LEFT", math.min(words, room) + 4, 0)
 		end
 		Paint(b)
 	end
@@ -261,6 +291,10 @@ function Nav.Sidebar(left, host)
 		b.chip:SetPoint("RIGHT", frame, "RIGHT", -8, 0)
 		b.chipText = kit.Label(frame, "GameFontHighlightSmall", "CENTER")
 		b.chipText:SetPoint("CENTER", b.chip, "CENTER", 0, 0)
+		-- The dot after the name of a module that holds changes (Marks).
+		b.dot = kit.Fill(frame, "OVERLAY")
+		b.dot:SetSize(5, 5)
+		b.dot:Hide()
 		kit.Painted(function()
 			Paint(b)
 		end)
@@ -288,6 +322,7 @@ function Nav.Sidebar(left, host)
 	end
 
 	function side.Layout()
+		Marks()
 		local width, mode = Look.SideWidth(), Look.Get("sidebar")
 		local rail, plain = mode == "rail", mode == "names"
 		local model, current = host.Model(), host.Current()
@@ -297,6 +332,7 @@ function Nav.Sidebar(left, host)
 			index = index + 1
 			local b = Button(index)
 			b.kind, b.label, b.selected, b.onClick, b.status, b.rail, b.used = kind, text, spec.selected, spec.onClick, spec.status, rail, true
+			b.entry = spec.entry
 			local narrow = kind == "divider"
 			local rowW = narrow and (rail and 24 or width - 2 * PAD) or width - 16
 			b.frame:SetSize(rowW, spec.h)
@@ -385,7 +421,7 @@ function Nav.Sidebar(left, host)
 						end
 					end
 					Put("module", entry.label, {
-						h = ROW_H, icon = CELLS[entry.key] and entry.key or "more", selected = open,
+						h = ROW_H, icon = CELLS[entry.key] and entry.key or "more", selected = open, entry = entry,
 						onClick = function()
 							host.Show(entry)
 						end,
@@ -411,8 +447,9 @@ function Nav.Sidebar(left, host)
 		end
 	end
 
-	-- The chips follow the state of the modules and of the fight.
+	-- The chips follow the state of the modules and of the fight, and the dots the changes.
 	function side.Update()
+		Marks()
 		for _, b in ipairs(pool) do
 			if b.used then
 				Chip(b)
