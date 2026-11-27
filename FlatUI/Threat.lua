@@ -19,6 +19,7 @@ local REARM = 10
 local LOST_TIME = 2
 local TAKEN = { 1, 0.3, 0.3 }
 local OWNER_LIGHT = 0.45
+local BACK_LIGHT = 0.35
 local TIP_SHARE = "%d%% of the threat that pulls aggro: at 100%% %s"
 local TIP_WITHHELD = "The game withholds the threat on this enemy."
 local FADE_IN, FADE_OUT = 0.15, 0.35
@@ -121,6 +122,7 @@ function T.Mob()
 	local mob = Opt("follow") ~= false and T.TankMob() or nil
 	if not mob and type(ns.ThreatMobs) == "table" then
 		mob = ns.ThreatMobs.Worst()
+		T.fallback = mob
 	end
 	return mob
 end
@@ -355,6 +357,7 @@ local function Fades(frame)
 		go:SetScript("OnFinished", function()
 			frame:Hide()
 			frame:SetAlpha(1)
+			ns.Try(KEY, T.Faded)
 		end)
 		return come, go
 	end)
@@ -419,6 +422,13 @@ function T.Frame()
 	T.marker = marker
 	T.fadeIn, T.fadeOut = Fades(frame)
 	return frame
+end
+
+function T.Faded()
+	local mobs = ns.ThreatMobs
+	if type(mobs) == "table" and type(mobs.Faded) == "function" then
+		mobs.Faded()
+	end
 end
 
 function T.Showing(on, now)
@@ -644,6 +654,13 @@ function T.Losing(entry)
 	return ns.Finite(now) and now < T.lostUntil
 end
 
+function T.Fallen(entry)
+	if not T.fallback or Opt("lost") == false or not entry or entry.me or entry.withheld or entry.tanking ~= true then
+		return false
+	end
+	return not (Opt("otherTanks") ~= false and T.OtherTank(entry))
+end
+
 function T.Took(entry)
 	if not T.lostUntil or not entry or entry.me or entry.withheld or entry.tanking ~= true then
 		return false
@@ -674,16 +691,17 @@ end
 
 function T.Lost(entry, who, entries)
 	if who ~= T.lostOn then
-		T.held, T.lostUntil, T.lostOn = nil, nil, who
+		T.held, T.lostUntil, T.lostOn, T.lostSeen = nil, nil, who, nil
 	end
 	if who == nil or not T.tank or Opt("lost") == false or not entry or entry.withheld then
 		T.held = nil
 		return
 	end
 	if entry.tanking then
-		T.held, T.lostUntil = who, nil
+		T.back = T.back or (T.lostSeen ~= nil and T.lostSeen == who)
+		T.held, T.lostUntil, T.lostSeen = who, nil, nil
 	elseif T.lostUntil and T.Calm(entries) then
-		T.lostUntil = nil
+		T.lostUntil, T.lostSeen = nil, nil
 	elseif T.held == who then
 		T.held = nil
 		if T.Calm(entries) then
@@ -691,13 +709,14 @@ function T.Lost(entry, who, entries)
 		end
 		local now = Ask(GetTime)
 		T.lostUntil = ns.Finite(now) and now + LOST_TIME or nil
+		T.lostSeen = who
 		After(LOST_TIME + 0.05, function()
 			ns.Try(KEY, T.Soon)
 		end)
 		local sound = ns.SOUNDS[KITS[Opt("warnSound")] or 0]
 		local mode = ns.TestMode
 		if sound and (who ~= "sample" or (mode ~= nil and mode.Sound("threat.lost"))) then
-			ns.PlayKit(sound[1], KEY)
+			ns.PlayKit(sound[1], KEY, true)
 		end
 	end
 end
@@ -740,7 +759,7 @@ function T.Alarm(entry, who)
 	local sound = ns.SOUNDS[KITS[Opt("warnSound")] or 0]
 	local mode = ns.TestMode
 	if sound and (who ~= "sample" or (mode ~= nil and mode.Sound("threat.warn"))) then
-		ns.PlayKit(sound[1], KEY)
+		ns.PlayKit(sound[1], KEY, true)
 	end
 end
 
@@ -794,7 +813,7 @@ end
 function T.Fill(row, entry)
 	row.mine:SetShown(entry.me == true and Opt("mine") ~= false)
 	row.near:SetShown(T.Others(entry))
-	T.Pulse(row, T.Near(entry) or T.Losing(entry) or T.Took(entry), T.Holding(entry))
+	T.Pulse(row, T.Near(entry) or T.Losing(entry) or T.Took(entry), T.Holding(entry) or T.Fallen(entry))
 	local who = entry.sample or entry.member.unit
 	local jump = row.who ~= who or not T.frame:IsShown()
 	row.who = who
@@ -845,14 +864,26 @@ function T.Place()
 	end
 end
 
+function T.Back(shown, n, own)
+	local ok, r, g, b = pcall(ns.Colour, "nameplates.threatGood")
+	if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+		return
+	end
+	for index = 1, n do
+		if own and shown[index] == own then
+			Look("Flash", T.rows[index], r + (1 - r) * BACK_LIGHT, g + (1 - g) * BACK_LIGHT, b + (1 - b) * BACK_LIGHT)
+		end
+	end
+end
+
 function T.Draw(mob, entries)
 	local n = math.min(entries and #entries or 0, Number("rows", 5), MOST_ROWS)
 	local mobs = type(ns.ThreatMobs) == "table" and ns.ThreatMobs or nil
 	if n < 1 then
-		if mobs then
-			mobs.BelowOff(T.fighting == true)
-		end
 		T.Showing(false)
+		if mobs then
+			mobs.BelowOff(T.fighting == true, T.fadeOut ~= nil and T.fadeOut:IsPlaying())
+		end
 		T.Alarm(nil, nil)
 		T.Lost(nil, nil)
 		T.Tick(mob == "targettarget" or T.Following() or T.Wakes())
@@ -877,6 +908,10 @@ function T.Draw(mob, entries)
 	local shown = T.Shown(entries, n, own, at)
 	for index = 1, n do
 		T.Fill(T.rows[index], shown[index])
+	end
+	if T.back then
+		T.back = nil
+		T.Back(shown, n, own)
 	end
 	for index = n + 1, #T.rows do
 		T.Pulse(T.rows[index], false)
@@ -974,6 +1009,8 @@ function T.Tip(row, owner)
 	end
 	if T.Took(entry) then
 		tip:AddLine("Took the enemy from you: taunt it back", TAKEN[1], TAKEN[2], TAKEN[3], true)
+	elseif T.Fallen(entry) then
+		tip:AddLine("Holds an enemy you are losing: taunt it off", TAKEN[1], TAKEN[2], TAKEN[3], true)
 	elseif T.tank and Opt("otherTanks") ~= false and T.OtherTank(entry) then
 		tip:AddLine("Another tank: calm", DIM[1], DIM[2], DIM[3])
 	elseif T.Others(entry) then
@@ -991,6 +1028,8 @@ function T.Title(mob, entries)
 	T.titleTaken, T.titleForm = false, nil
 	local now = T.lostUntil and Ask(GetTime)
 	if ns.Finite(now) and now < T.lostUntil then
+		taker = T.Taker(entries)
+	elseif mob and T.fallback == mob and Opt("lost") ~= false then
 		taker = T.Taker(entries)
 	end
 	if taker then
@@ -1036,6 +1075,9 @@ end
 function T.OnEvent(event, unit)
 	if event == "UNIT_TARGET" and (IsSecret(unit) or unit ~= "target") then
 		return
+	end
+	if event == "UNIT_PET" and type(ns.ThreatMobs) == "table" then
+		ns.ThreatMobs.roster = nil
 	end
 	T.Soon()
 end
@@ -1138,6 +1180,7 @@ function T.Update()
 	local fighting = on and T.fighting and type(UnitDetailedThreatSituation) == "function" and T.Allowed()
 	HearAll(FIGHT_EVENTS, fighting)
 	Hear("UNIT_TARGET", fighting, "target")
+	T.fallback = nil
 	local mob = fighting and T.Mob() or nil
 	HearAll(ENEMY_EVENTS, mob ~= nil or (fighting and T.Wakes()))
 	if mob then
@@ -1162,7 +1205,7 @@ end
 
 function T.Off()
 	T.sample, T.fighting, T.pending, T.withheld, T.warned = nil, false, nil, false, nil
-	T.held, T.lostUntil, T.lostOn = nil, nil, nil
+	T.held, T.lostUntil, T.lostOn, T.lostSeen, T.back, T.fallback = nil, nil, nil, nil, nil, nil
 	HearAll(FIGHT_EVENTS, false)
 	HearAll(ENEMY_EVENTS, false)
 	Hear("UNIT_TARGET", false)
@@ -1252,6 +1295,9 @@ ns.Register(KEY, {
 			T.Fight(false)
 		end,
 		GROUP_ROSTER_UPDATE = function()
+			if type(ns.ThreatMobs) == "table" then
+				ns.ThreatMobs.roster = nil
+			end
 			if T.fighting then
 				T.Soon()
 			end

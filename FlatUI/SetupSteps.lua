@@ -1380,7 +1380,7 @@ ns.SETUP_STEPS = {
 		{ "partycd.group", "o", "mock-party-cooldowns" },
 		{ "partycd.add", "o", "behaviour", "Adds an ability to the party cooldowns." },
 		{ "partycd.hide", "o", "behaviour", "Hides an ability from the party cooldowns." },
-		{ "partycd.share", "c", "behaviour", "Sends your cooldowns to party members." },
+		{ "partycd.share", "c", "behaviour", "Sends your cooldowns to party members, and in a raid to your subgroup." },
 	} },
 	{ id = "ecd", area = "Party and enemy cooldowns", title = "Enemy cooldowns", draw = "mock-enemy-cooldowns", built = true, rows = {
 		{ "enemycd.enabled", "c", "mock-enemy-cooldowns" },

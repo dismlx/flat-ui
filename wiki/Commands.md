@@ -166,6 +166,7 @@ Guide: [Combat](Combat)
 | `/flatui enemy hide 2139` | Hides an ability, by name or spell ID |
 | `/flatui enemy list` | Lists the abilities shown and whether their use can be seen here |
 | `/flatui enemy clear` | Forgets the running timers of enemies |
+| `/flatui enemy reset` | Puts the abilities back as Flat UI ships them, undoing every add, hide and typed cooldown |
 
 ## Combat text
 
@@ -186,11 +187,12 @@ Guide: [Group](Group)
 
 | Command | What it does |
 | --- | --- |
-| `/flatui threat` | Shows sample bars of the threat list for a few seconds, out of combat, or the four sample enemies while the list shows enemies |
+| `/flatui threat` | Shows sample bars of the threat list for a few seconds, out of combat: with **Your target, then enemies you are losing** two sample enemies under them, with **Enemies you fight** four sample enemies instead |
 | `/flatui healers` | Shows sample bars of the healer mana list for a few seconds, out of combat |
 | `/flatui party add Pummel 12` | Adds an ability to **Party cooldowns** with its cooldown in seconds |
 | `/flatui party hide 6552` | Hides an ability, by name or spell ID |
-| `/flatui party list` | Lists the abilities shown and who shares cooldowns |
+| `/flatui party list` | Lists the abilities shown and who shares cooldowns, also your subgroup's in a raid |
+| `/flatui party reset` | Puts the abilities back as Flat UI ships them, undoing every add, hide and typed cooldown |
 
 ## Character and gear
 

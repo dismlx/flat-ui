@@ -5,6 +5,7 @@ local I = {}
 local CROP = 0.08
 local FLASH = 0.5
 local SOUND_GAP = 1
+local URGENT_GAP = 0.3
 local NO_SOUND = "%s: the game plays no sound, so there is the flash only."
 local IsSecret = ns.IsSecret
 
@@ -341,11 +342,15 @@ function ns.IconFader(list, held)
 	return fader
 end
 
-local lastPlay
+local lastPlay, lastUrgent
 I.sound = nil
-function ns.PlayKit(id, key)
+function ns.PlayKit(id, key, urgent)
 	local now = type(GetTime) == "function" and GetTime() or nil
-	if now and lastPlay and now - lastPlay < SOUND_GAP and now >= lastPlay then
+	local last, gap = lastPlay, SOUND_GAP
+	if urgent then
+		last, gap = lastUrgent, URGENT_GAP
+	end
+	if now and last and now - last < gap and now >= last then
 		I.sound = "throttled"
 		return false
 	end
@@ -362,6 +367,9 @@ function ns.PlayKit(id, key)
 		return false
 	end
 	lastPlay, I.sound = now, "played"
+	if urgent then
+		lastUrgent = now
+	end
 	return true
 end
 

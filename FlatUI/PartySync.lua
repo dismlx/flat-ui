@@ -39,11 +39,7 @@ local function Timers()
 end
 
 function S.Active()
-	if not (ns.Enabled(KEY) and ns.Get(KEY .. ".share") == true) then
-		return false
-	end
-	local P = ns.PartyCooldownsModule
-	return not (P and P.Look() == "raid")
+	return ns.Enabled(KEY) and ns.Get(KEY .. ".share") == true
 end
 
 function S.Open()
@@ -318,8 +314,48 @@ function S.Refresh()
 	S.on = active
 end
 
+function S.Units()
+	local units = { "party1", "party2", "party3", "party4" }
+	if T.Ask(IsInRaid) ~= true or T.Ask(UnitExists, "party1") == true then
+		return units
+	end
+	local P = ns.PartyCooldownsModule
+	units = {}
+	for _, member in ipairs(P and P.RaidMembers() or {}) do
+		units[#units + 1] = member.unit
+	end
+	return units
+end
+
+function S.GroupKey()
+	local guids = {}
+	for _, unit in ipairs(S.Units()) do
+		local guid = Text(UnitGUID, unit)
+		if guid then
+			guids[#guids + 1] = guid
+		end
+	end
+	table.sort(guids)
+	return table.concat(guids, " ")
+end
+
+function S.Regroup()
+	if T.Ask(IsInRaid) ~= true or S.GroupKey() ~= S.groupKey then
+		S.senders = {}
+	end
+end
+
 function S.Roster()
 	S.Refresh()
+	if T.Ask(IsInRaid) == true then
+		local key = S.GroupKey()
+		if key == S.groupKey then
+			return
+		end
+		S.groupKey = key
+	else
+		S.groupKey = nil
+	end
 	S.Hello()
 end
 
@@ -333,8 +369,8 @@ end
 
 function S.Match(sender, guid)
 	local base = sender:match("^([^%-]+)") or sender
-	for index = 1, 4 do
-		local unit = "party" .. index
+	local units = S.Units()
+	for _, unit in ipairs(units) do
 		local ok, name, realm = pcall(UnitName, unit)
 		if ok and Plain(name, "string") and name ~= "" then
 			realm = Plain(realm, "string") and realm ~= "" and realm or nil
@@ -345,8 +381,7 @@ function S.Match(sender, guid)
 	end
 	local known = guid or S.senders[sender]
 	if known then
-		for index = 1, 4 do
-			local unit = "party" .. index
+		for _, unit in ipairs(units) do
 			if Text(UnitGUID, unit) == known then
 				if guid then
 					S.senders[sender] = guid

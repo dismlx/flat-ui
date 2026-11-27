@@ -25,6 +25,7 @@ local HELP = {
 	"/flatui party add Pummel 12 - an ability, a spell ID or a shift-clicked spell, and its cooldown in seconds",
 	"/flatui party hide 6552 - an ability or a spell ID",
 	"/flatui party list - the abilities shown and who shares cooldowns",
+	"/flatui party reset - puts the abilities back as Flat UI ships them",
 }
 
 local IsSecret = ns.IsSecret
@@ -1588,6 +1589,46 @@ function P.SlashList()
 	end
 end
 
+function P.Undone(label, added, hidden, seconds)
+	local parts = {}
+	if added > 0 then
+		parts[#parts + 1] = ("%d added"):format(added)
+	end
+	if hidden > 0 then
+		parts[#parts + 1] = ("%d hidden"):format(hidden)
+	end
+	if seconds > 0 then
+		parts[#parts + 1] = ("%d %s"):format(seconds, seconds == 1 and "cooldown" or "cooldowns")
+	end
+	if #parts == 0 then
+		return ("%s: nothing to undo, the abilities are as shipped."):format(label)
+	end
+	local last = table.remove(parts)
+	local list = #parts > 0 and (table.concat(parts, ", ") .. " and " .. last) or last
+	return ("%s: the abilities are back as shipped (%s undone)."):format(label, list)
+end
+
+ns.AbilitiesUndone = P.Undone
+
+function P.Reset()
+	local saved = P.Saved()
+	if not saved then
+		print("Nothing can be saved yet.")
+		return
+	end
+	local function Size(map)
+		local count = 0
+		for _ in pairs(map) do
+			count = count + 1
+		end
+		return count
+	end
+	local added, hidden, seconds = P.Added(saved), Size(saved.hidden), Size(saved.seconds)
+	saved.added, saved.hidden, saved.seconds, saved.custom = {}, {}, {}, {}
+	P.Changed()
+	print(P.Undone("Party cooldowns", added, hidden, seconds))
+end
+
 function P.Slash(rest)
 	local word, text = (rest or ""):match("^(%S*)%s*(.-)%s*$")
 	word = word:lower()
@@ -1597,6 +1638,8 @@ function P.Slash(rest)
 		P.SlashHide(text)
 	elseif word == "list" then
 		P.SlashList()
+	elseif word == "reset" then
+		P.Reset()
 	else
 		for _, line in ipairs(HELP) do
 			print(line)
@@ -1814,7 +1857,7 @@ end
 
 function P.Group()
 	if ns.PartySync then
-		ns.PartySync.senders = {}
+		ns.PartySync.Regroup()
 	end
 	P.Roster()
 end

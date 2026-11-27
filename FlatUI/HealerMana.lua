@@ -31,6 +31,9 @@ local SAMPLE_DRINK, READY_TIME = 18, 4
 local TITLE_FORMS = { TITLE .. " %d%%", "Healers %d%%", "%d%%" }
 local READY_FORMS = { TITLE .. " %d%% · ready", "Healers %d%% · ready", "%d%% · ready" }
 local PULSE_LOW, PULSE_STEP = 0.4, 0.2
+local TIP_REST, CHAT_MOST = 10, 250
+local TIP_TITLE = "Shift-click: put the healers' mana in chat."
+local CHAT_FIGHT = "Flat UI: healer mana shows its numbers out of combat."
 
 local IsSecret = ns.IsSecret
 local H = { rows = {}, healers = {} }
@@ -291,6 +294,7 @@ function H.Showing(on, now)
 			row.who = nil
 		end
 		H.armed = nil
+		H.UntipAll()
 	end
 	local fading = fadeOut ~= nil and fadeOut:IsPlaying()
 	if on then
@@ -339,11 +343,37 @@ function H.Frame()
 	title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -(PAD + INSET), -PAD)
 	title:SetText(TITLE)
 	H.title = title
+	local strip = Own(CreateFrame("Frame", nil, frame))
+	strip:SetPoint("TOPLEFT", title, "TOPLEFT", 0, 0)
+	strip:SetPoint("TOPRIGHT", title, "TOPRIGHT", 0, 0)
+	strip:SetHeight(14)
+	strip:EnableMouse(true)
+	H.strip = { bar = strip, Tip = H.TitleTip }
+	strip:SetScript("OnEnter", function(self)
+		ns.Try(KEY, H.TitleTip, H.strip, self)
+	end)
+	strip:SetScript("OnLeave", function()
+		pcall(H.Untip, H.strip)
+	end)
+	strip:SetScript("OnMouseUp", function(_, button)
+		if button == "LeftButton" and Ask(IsShiftKeyDown) == true then
+			ns.Try(KEY, H.Chat)
+		end
+	end)
 	local more = ns.OwnText(frame, "OVERLAY", FONT)
 	more:SetJustifyH("LEFT")
 	more:SetWordWrap(false)
 	more:Hide()
 	H.more = more
+	local hit = Own(CreateFrame("Frame", nil, frame))
+	hit:SetAllPoints(more)
+	hit:Hide()
+	H.rest = { bar = hit, Tip = H.RestTip }
+	H.Hover(hit, function(self)
+		ns.Try(KEY, H.RestTip, H.rest, self)
+	end, function()
+		pcall(H.Untip, H.rest)
+	end)
 	H.fadeIn, H.fadeOut = Fades(frame)
 	H.pulse = H.Pulse(title)
 	return frame
@@ -394,9 +424,243 @@ function H.Row(index)
 	drink:SetTexCoord(CROP, 1 - CROP, CROP, 1 - CROP)
 	drink:SetPoint("RIGHT", share, "LEFT", -2, 0)
 	drink:Hide()
-	row = { bar = bar, track = track, name = name, share = share, low = low, drink = drink, drinking = false }
+	row = { bar = bar, track = track, name = name, share = share, low = low, drink = drink, drinking = false, Tip = H.Tip }
 	H.rows[index] = row
+	H.Hover(bar, function(self)
+		ns.Try(KEY, H.Tip, row, self)
+	end, function()
+		pcall(H.Untip, row)
+	end)
 	return row
+end
+
+function H.Hover(region, enter, leave)
+	if type(region.SetMouseMotionEnabled) ~= "function" or type(region.SetMouseClickEnabled) ~= "function" then
+		return false
+	end
+	if not (pcall(region.SetMouseMotionEnabled, region, true) and pcall(region.SetMouseClickEnabled, region, false)) then
+		pcall(region.EnableMouse, region, false)
+		return false
+	end
+	region:SetScript("OnEnter", enter)
+	region:SetScript("OnLeave", leave)
+	return true
+end
+
+function H.Untip(holder)
+	if type(holder) ~= "table" or not holder.tipped then
+		return
+	end
+	holder.tipped = nil
+	local tip = GameTooltip
+	if not ns.Forbidden(tip) then
+		local ok, owned = pcall(tip.IsOwned, tip, holder.bar)
+		if ok and owned == true then
+			tip:Hide()
+		end
+	end
+end
+
+function H.Retip(holder)
+	if type(holder) ~= "table" or not holder.tipped then
+		return
+	end
+	local tip = GameTooltip
+	local ok, owned = false, false
+	if not ns.Forbidden(tip) then
+		ok, owned = pcall(tip.IsOwned, tip, holder.bar)
+	end
+	if ok and owned == true then
+		holder.Tip(holder, holder.bar)
+	else
+		holder.tipped = nil
+	end
+end
+
+function H.UntipAll()
+	for _, row in ipairs(H.rows) do
+		pcall(H.Untip, row)
+	end
+	pcall(H.Untip, H.rest)
+	pcall(H.Untip, H.strip)
+end
+
+local function Named(value)
+	return IsSecret(value) or (type(value) == "string" and value ~= "")
+end
+
+function H.Colour(unit, sample)
+	local r, g, b
+	if sample then
+		r, g, b = ClassRGB(sample[2])
+	else
+		r, g, b = ns.ClassColourOf(unit)
+	end
+	if not r then
+		r, g, b = GREY[1], GREY[2], GREY[3]
+	end
+	return r, g, b
+end
+
+function H.TipName(tip, unit, sample, r, g, b)
+	if sample then
+		return pcall(tip.AddLine, tip, sample[1], r, g, b)
+	end
+	local ok, name = pcall(UnitName, unit)
+	return ok and Named(name) and pcall(tip.AddLine, tip, name, r, g, b)
+end
+
+function H.Tip(row, owner)
+	local tip, sample, unit = GameTooltip, row.sample, row.unit
+	if ns.Forbidden(tip) or not (sample or unit) then
+		return
+	end
+	tip:SetOwner(owner, "ANCHOR_LEFT")
+	local r, g, b = H.Colour(unit, sample)
+	if not H.TipName(tip, unit, sample, r, g, b) then
+		tip:AddLine("Healer", r, g, b)
+	end
+	local read = row.read
+	if row.word then
+		tip:AddLine(row.word, 1, 1, 1)
+	elseif read then
+		tip:AddLine(("Mana %d%%"):format(math.floor(read + 0.5)), 1, 1, 1)
+	elseif row.secret then
+		tip:AddLine("Mana hidden in a fight", DIM[1], DIM[2], DIM[3])
+	end
+	if row.cup and row.left then
+		tip:AddLine(("Drinking: %d %s left"):format(row.left, row.left == 1 and "second" or "seconds"), 1, 1, 1)
+	elseif row.cup then
+		tip:AddLine("Drinking", 1, 1, 1)
+	end
+	local low, ready = Number("lowAt", 30), Number("readyAt", 90)
+	if read and not row.word and low > 0 and read < low then
+		tip:AddLine(("Under Low mana at (%d%%)"):format(low), LOW[1] + (1 - LOW[1]) * 0.35, LOW[2] + (1 - LOW[2]) * 0.35, LOW[3] + (1 - LOW[3]) * 0.35)
+	elseif read and not row.word and ready > 0 and read < ready then
+		tip:AddLine(("Under Ready at (%d%%)"):format(ready), DIM[1], DIM[2], DIM[3])
+	end
+	if sample then
+		tip:AddLine("Sample", DIM[1], DIM[2], DIM[3])
+	end
+	tip:Show()
+	row.tipped = true
+end
+
+function H.State(unit)
+	if Ask(UnitIsConnected, unit) == false then
+		return nil, "Offline"
+	elseif Ask(UnitIsDeadOrGhost, unit) == true then
+		return nil, "Dead"
+	end
+	local ok, value = pcall(UnitPowerPercent, unit, MANA, false, Hundred())
+	if ok and not IsSecret(value) and ns.Finite(value) then
+		return value, nil
+	end
+	return nil, nil
+end
+
+function H.RestTip(holder, owner)
+	local tip, list, from = GameTooltip, H.restList, H.restFrom
+	if ns.Forbidden(tip) or type(list) ~= "table" or not from or from > #list then
+		return
+	end
+	tip:SetOwner(owner, "ANCHOR_LEFT")
+	local total, phase = #list - from + 1, H.restSampled and H.SamplePhase() or nil
+	tip:AddLine(("%d more %s"):format(total, total == 1 and "healer" or "healers"), 1, 1, 1)
+	for index = from, math.min(#list, from + TIP_REST - 1) do
+		local entry = list[index]
+		local unit, sample = not phase and entry or nil, phase and entry or nil
+		local r, g, b = H.Colour(unit, sample)
+		local right, name
+		if sample then
+			right, name = ("%d%%"):format(H.SampleShare(sample, phase)), sample[1]
+		else
+			local share, word = H.State(unit)
+			right = word or (share and ("%d%%"):format(math.floor(share + 0.5))) or "hidden in a fight"
+			local ok, said = pcall(UnitName, unit)
+			name = ok and Named(said) and said or nil
+		end
+		if not (name and pcall(tip.AddDoubleLine, tip, name, right, r, g, b, 1, 1, 1)) then
+			tip:AddDoubleLine("Healer", right, r, g, b, 1, 1, 1)
+		end
+	end
+	if total > TIP_REST then
+		tip:AddLine(("and %d more"):format(total - TIP_REST), DIM[1], DIM[2], DIM[3])
+	end
+	if phase then
+		tip:AddLine("Sample", DIM[1], DIM[2], DIM[3])
+	end
+	tip:Show()
+	holder.tipped = true
+end
+
+function H.TitleTip(holder, owner)
+	local tip = GameTooltip
+	if ns.Forbidden(tip) then
+		return
+	end
+	tip:SetOwner(owner, "ANCHOR_LEFT")
+	tip:AddLine(TIP_TITLE, 1, 1, 1, true)
+	tip:Show()
+	holder.tipped = true
+end
+
+function H.ChatPart(unit)
+	local name = Ask(UnitName, unit)
+	if type(name) ~= "string" or name == "" then
+		return nil
+	end
+	local share, word = H.State(unit)
+	if word then
+		return name .. " " .. word
+	elseif not share then
+		return nil
+	end
+	local part = ("%s %d%%"):format(name, math.floor(share + 0.5))
+	if Opt("drinking") ~= false and AurasOpen() then
+		local cup, ends = Drinking(unit)
+		local left = cup and DrinkLeft(ends) or nil
+		if left then
+			part = part .. (" (drinking %ds)"):format(left)
+		elseif cup then
+			part = part .. " (drinking)"
+		end
+	end
+	return part
+end
+
+function H.Chat()
+	local samples = H.Sampling() and H.Samples() or nil
+	if not samples and Ask(InCombatLockdown) ~= false then
+		print(CHAT_FIGHT)
+		return
+	end
+	local parts = {}
+	if samples then
+		local phase = H.SamplePhase()
+		for _, sample in ipairs(samples) do
+			local part = ("%s %d%%"):format(sample[1], H.SampleShare(sample, phase))
+			if Opt("drinking") ~= false and sample[4] == true and phase ~= "ready" then
+				part = part .. (" (drinking %ds)"):format(phase)
+			end
+			parts[#parts + 1] = part
+		end
+	else
+		for _, unit in ipairs(H.healers) do
+			parts[#parts + 1] = H.ChatPart(unit)
+		end
+	end
+	if #parts == 0 or type(ns.PutInChat) ~= "function" then
+		return
+	end
+	local line = TITLE .. ": " .. parts[1]
+	for index = 2, #parts do
+		if #line + #parts[index] + 2 > CHAT_MOST then
+			break
+		end
+		line = line .. ", " .. parts[index]
+	end
+	ns.PutInChat(line)
 end
 
 function H.Cup(row, on)
@@ -477,6 +741,7 @@ function H.Layout(n, extra)
 		Paint(H.Row(index), file, text)
 	end
 	H.title:SetTextHeight(text)
+	H.strip.bar:SetHeight(text + 2)
 	H.more:SetTextHeight(text)
 	local key = ("%s:%s:%s:%s"):format(n, width, height, extra and 1 or 0)
 	if H.laid == key then
@@ -505,6 +770,7 @@ function H.Layout(n, extra)
 end
 
 function H.Rest(list, n, samples)
+	H.restList, H.restFrom, H.restSampled = list, n + 1, samples or nil
 	local hidden, least = 0, nil
 	for index = n + 1, #list do
 		hidden = hidden + 1
@@ -536,6 +802,8 @@ function H.More(hidden, least)
 		return
 	elseif hidden < 1 then
 		more:Hide()
+		pcall(H.Untip, H.rest)
+		H.rest.bar:Hide()
 		return
 	end
 	local at = Number("lowAt", 30)
@@ -551,6 +819,8 @@ function H.More(hidden, least)
 		more:SetTextColor(DIM[1], DIM[2], DIM[3], 1)
 	end
 	more:Show()
+	H.rest.bar:Show()
+	H.Retip(H.rest)
 end
 
 function H.SamplePhase()
@@ -582,15 +852,13 @@ function H.Samples()
 end
 
 function H.Fill(row, unit, sample)
-	local r, g, b
-	if sample then
-		r, g, b = ClassRGB(sample[2])
-	else
-		r, g, b = ns.ClassColourOf(unit)
-	end
-	if not r then
-		r, g, b = GREY[1], GREY[2], GREY[3]
-	end
+	row.unit, row.sample, row.read, row.word, row.secret, row.cup, row.left = unit, sample, nil, nil, nil, false, nil
+	H.FillRow(row, unit, sample)
+	H.Retip(row)
+end
+
+function H.FillRow(row, unit, sample)
+	local r, g, b = H.Colour(unit, sample)
 	row.bar:SetStatusBarColor(r, g, b, 1)
 	row.bar:Show()
 	local drinks = Opt("drinking") ~= false
@@ -598,6 +866,7 @@ function H.Fill(row, unit, sample)
 		local phase = H.SamplePhase()
 		local value = H.SampleShare(sample, phase)
 		local cup = drinks and sample[4] == true and phase ~= "ready"
+		row.read, row.cup, row.left = value, cup, cup and phase or nil
 		row.name:SetText(sample[1])
 		row.bar:SetValue(value)
 		row.who = nil
@@ -623,6 +892,7 @@ function H.Fill(row, unit, sample)
 	H.Wash(row, unit, nil, word)
 	H.Range(row, unit, nil, word)
 	if word then
+		row.word = word
 		row.bar:SetValue(0)
 		row.who = nil
 		row.share:SetText(word)
@@ -642,10 +912,13 @@ function H.Fill(row, unit, sample)
 	if not ok or not Glide(row.bar, share, jump) then
 		row.bar:SetValue(0)
 	end
+	row.cup, row.left = cup, left
 	if ok and not IsSecret(share) and ns.Finite(share) then
+		row.read = share
 		H.sum, H.count = (H.sum or 0) + share, (H.count or 0) + 1
 		H.least = math.min(H.least or share, share)
 	else
+		row.secret = ok and IsSecret(share) or nil
 		H.hidden = true
 	end
 	local written
@@ -789,6 +1062,7 @@ function H.Draw()
 	H.More(H.Rest(list, n, samples ~= nil))
 	H.Title()
 	for index = n + 1, #H.rows do
+		pcall(H.Untip, H.rows[index])
 		H.rows[index].bar:Hide()
 		H.rows[index].who = nil
 	end
