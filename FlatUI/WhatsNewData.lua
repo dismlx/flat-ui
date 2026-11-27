@@ -3,7 +3,20 @@ local _, ns = ...
 ns.WhatsNewData = {
 	{
 		version = "0.5.49",
-		lines = {},
+		lines = {
+			"Charges: \001Orb style\002 has a new look, \001Resource bar\002, now the default unless you chose another style: each charge is a gem in a socket drawn with the game's own class resource art, in a row like combo points, arcane charges, chi or holy power. Lit gems are the charges left, empty sockets the ones used.",
+			"Charges: each spell has the art that suits it: Lightning Shield the blue charged combo points, Water Shield the chi orbs in sea green, Earth Shield the druid's combo points in earthy green, Maelstrom Weapon the arcane charges in electric blue white, Inner Fire the druid's combo points in gold, Shadowguard the violet arcane charges and Holy Shield the holy power runes. Where the game lacks a piece of that art, the next set or Flat UI's own glow and ring fill in, so the row always draws.",
+			"Charges: the row sits just under the bars of the personal resource display, as wide as they are, and follows them, past a \001Your buffs\002 row on that side, also as Edit Mode moves the display or \001Your buffs\002 changes its place. \001Defensives on you\002, a \001Cooldowns\002 row and the \001Trackers\002 placed at that display sit past it in turn, so nothing overlaps. New row \001Place\002 (\001Under the personal resource display\002; \001Above the personal resource display\002 or \001Own spot\002, the \001Charges\002 box of /flatui move). While that display is off or hidden, the row goes to its own spot.",
+			"Charges: the spell's name shows small above the left end of the row, the charges left as a large number at its right end and the time left small above its right end, outlined in Flat UI's font; where the row is too short for the name and the time side by side, the time sits after the count. New rows \001Name\002 (on) and \001Count\002 (on); \001Time left\002 (on) stays.",
+			"Charges: a gained charge or stack lights its gem with a short glow, a used one plays the game's fade of a spent resource with a white flash (with \001Burst as a charge goes\002), the last charge pulses and the row fades out as the buff goes.",
+			"Charges: new rows \001Fill the width\002 (on), which spreads the gems from end to end of the bars, each keeping its shape, and \001Gem size\002 (20 px), the gems 3 px apart when not spread.",
+			"Charges: new \001Orb style\002 \001Spell art\002: the game's own spell alert art for the buff, Maelstrom Weapon's, fainter on one charge and brighter with each one, with the count, name and time under it. A buff without such art shows the resource bar.",
+			"Charges: Maelstrom Weapon is on a shaman's list. Its stacks show as charges, at least 5 gems, or as many as the game says it can stack, and more once it has had more stacks, at most 10, one more lit with each stack. Its first stack does not pulse, it plays no sound as you spend it, and in a fight it shows its stacks even when it was not on you as the fight began.",
+			"Charges: the orbs of \001Ring round the icon\002, \001Arc over the icon\002 and \001Row under the icon\002 now sit close round the middle and are larger, so ring and orbs read as one, with the spell's name above them while \001Name\002 is on. New row \001Spell icon\002 (off) shows the round icon in the middle; without it the orbs ring the count, which shows at any count while \001Count\002 is on.",
+			"Charges: two buffs at once in the resource bar or spell art sit one above the other.",
+			"Charges: in a fight, while the game hides your buffs, the game lights the gems of the resource bar and the layers of the spell art, in their own art, and writes the count and time left.",
+			"Charges: test mode, a change of its look out of combat and /flatui charges show the sample in the new look; with \001Spell art\002, Maelstrom Weapon gaining a stack each second up to 5, also when test mode is already on as you pick it.",
+		},
 	},
 	{
 		version = "0.5.48",

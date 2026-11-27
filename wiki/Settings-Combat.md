@@ -1,4 +1,4 @@
-Every setting of the **Combat** group of the options window, 342 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Combat](Combat) and [Combat text](Combat-text).
+Every setting of the **Combat** group of the options window, 348 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Combat](Combat) and [Combat text](Combat-text).
 
 Pages: [Cooldowns](#cooldowns) · [Trackers](#trackers) · [Defensives on you](#defensives-on-you) · [Absorb shields](#absorb-shields) · [Charges](#charges) · [Enemy cooldowns](#enemy-cooldowns) · [Combat text](#combat-text)
 
@@ -466,7 +466,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Charges** | On | Your buffs with charges, such as Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, as glowing orbs round their icon: lit orbs are the charges left, faint rings the ones used. It shows while the buff is up. /flatui move places it, /flatui charges shows a sample. |
+| **Charges** | On | Your buffs with charges, such as Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, and the stacks of Maelstrom Weapon, as a row of glowing gems like the game's own class resources, under the bars of the personal resource display: lit gems are the charges left, empty sockets the ones used, with the spell's name, the charges left and the time left. It shows while the buff is up. /flatui charges shows a sample. |
 
 **Spells**
 
@@ -479,15 +479,26 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Orb style** | Ring round the icon | Out of combat with no buff with charges on you, a change of this or another row of the look shows a sample for a few seconds. Choices: Ring round the icon, Arc over the icon, Row under the icon. |
-| **Spin** | Slow | The ring of orbs turns round the icon. On an arc or a row the orbs sway gently instead. Choices: Still, Slow, Fast. |
-| **Icon size** | 40 px | The round spell icon in the middle. The time left and the number on the icon grow and shrink with it. |
-| **Orb size** | 12 px | Each orb, without its soft glow. |
-| **Colour** | Spell's own colour | Spell's own colour: Lightning Shield electric blue, Water Shield sea green, Earth Shield earthy green, Inner Fire gold, Shadowguard violet and Holy Shield warm white gold; a spell you added has your class colour. Choices: Spell's own colour, Class colour, One colour. |
+| **Orb style** | Resource bar | Resource bar: a row of gems in sockets, drawn with the game's own class resource art. Spell art: the game's own spell alert art for the buff, brighter with each charge, with the count and time under it; a buff without such art, such as Lightning Shield, shows the resource bar. Out of combat with no buff with charges on you, a change of this or another row of the look shows a sample for a few seconds. Choices: Resource bar, Spell art, Ring round the icon, Arc over the icon, Row under the icon. |
+| **Fill the width** | On | Under or above the personal resource display, the gems spread out from end to end of its bars, each keeping its shape. Off, the gems sit 3 px apart in the middle, as they do at the row's own spot. With Spell art, the art takes the width of the bars, at most 240 px. Needs **Orb style** at Resource bar or Spell art. |
+| **Gem size** | 20 px | The size of each gem and its socket. The name, count and time grow and shrink with it. With Spell art, it sets only the size of the text under the art. Needs **Orb style** at Resource bar or Spell art. |
+| **Spell icon** | Off | The round spell icon in the middle of the orbs. Off, the orbs ring the count alone. Needs **Orb style** at Ring round the icon or Arc over the icon or Row under the icon. |
+| **Spin** | Slow | The ring of orbs turns round the icon. On an arc or a row the orbs sway gently instead. Choices: Still, Slow, Fast. Needs **Orb style** at Ring round the icon or Arc over the icon or Row under the icon. |
+| **Icon size** | 40 px | The round spell icon in the middle, and the ring the orbs sit on, close round it. The text grows and shrinks with it. Needs **Orb style** at Ring round the icon or Arc over the icon or Row under the icon. |
+| **Orb size** | 12 px | Each orb, without its soft glow. Needs **Orb style** at Ring round the icon or Arc over the icon or Row under the icon. |
+| **Colour** | Spell's own colour | Spell's own colour: Lightning Shield electric blue, Water Shield sea green, Earth Shield earthy green, Maelstrom Weapon electric blue white, Inner Fire gold, Shadowguard violet and Holy Shield warm gold, each with the game's resource art that suits it; a spell you added has your class colour. Class colour and One colour tint the gems. Choices: Spell's own colour, Class colour, One colour. |
 | **Orb colour** | #59B8FF | Needs **Colour** at One colour. |
-| **Show used charges** | On | Each charge used stays as a faint ring in its place, so you see how many are gone. |
-| **Burst as a charge goes** | On | The orb flashes white, swells and fades as its charge goes. Only while the game shows your buffs: in a fight it may hide them, and the orbs then go out without it. |
-| **Time left** | On | Under the icon, amber in its last 10 seconds. |
+| **Show used charges** | On | Each charge used stays as an empty socket, or a faint ring round the icon, so you see how many are gone. Off, only the charges left show. |
+| **Burst as a charge goes** | On | The gem plays the game's fade of a spent resource, or flashes white, swells and fades, as its charge goes. Only while the game shows your buffs: in a fight it may hide them, and the gems then go out without it. |
+| **Name** | On | The spell's name, small, above the left end of the row, beside the count under the art, or above the ring, arc or row of orbs. |
+| **Count** | On | The charges left as a large number at the right end of the row, or under the art or in the middle of the orbs. Off, the number shows only past 10 charges. |
+| **Time left** | On | Above the right end of the row, or after the count where the row is too short for the name and the time side by side; beside the count under the art, or under the orbs. Amber in its last 10 seconds. |
+
+**Position**
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| **Place** | Under the personal resource display | Under or above, the row sits just clear of the bars of the personal resource display, the width of the bars, and follows them, past a Your buffs row on that side; Defensives on you, a Cooldowns row and Trackers placed at that display sit past it in turn. With that display off or hidden, it goes to its own spot. Own spot has a handle in /flatui move. Choices: Under the personal resource display, Above the personal resource display, Own spot. |
 
 **When shown**
 
