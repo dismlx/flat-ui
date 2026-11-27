@@ -686,6 +686,7 @@ ns.SETUP_STEPS = {
 		{ "hud.mapCoords", "o", "mock-minimap" },
 		{ "hud.mapCoordsPlace", "r", "mock-minimap" },
 		{ "hud.mapCoordsDecimals", "r", "mock-minimap" },
+		{ "hud.mapWorldCoords", "o", "behaviour", "Shows your coordinates and the cursor's at the bottom of the world map, so a spot from a guide is easy to find." },
 		{ "hud.mapDurability", "o", "mock-minimap" },
 		{ "hud.mapDurabilityPlace", "r", "mock-minimap" },
 		{ "hud.mapDurabilityWhen", "r", "mock-minimap" },

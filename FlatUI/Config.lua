@@ -2246,6 +2246,8 @@ ns.PAGES = {
 		{ key = "mapCoordsPlace", kind = "choice", default = "below", label = "Coordinates place", needs = "mapCoords", choices = MAP_TEXT_PLACES },
 		{ key = "mapCoordsDecimals", kind = "choice", default = "1", label = "Coordinate decimals", needs = "mapCoords",
 			choices = { { "0", "None (45, 62)" }, { "1", "One (45.3, 62.1)" }, { "2", "Two (45.31, 62.08)" } } },
+		{ key = "mapWorldCoords", kind = "bool", default = true, label = "Coordinates on the world map",
+			tip = "A small line at the bottom of the world map: You 45.2, 61.8 while you are on the map shown, and Cursor 33.0, 12.5 while the pointer is over the map, with Coordinate decimals. Your part is hidden in instances." },
 		{ key = "mapDurability", kind = "bool", default = true, label = "Durability", tip = "Your most worn equipped item. Yellow at 50% or less, red at 20% or less. Point at it for each item you wear; a click opens the character window, in a fight as it ends." },
 		{ key = "mapDurabilityPlace", kind = "choice", default = "below", label = "Durability place", needs = "mapDurability", choices = MAP_TEXT_PLACES },
 		{ key = "mapDurabilityWhen", kind = "choice", default = "always", label = "Durability shows", needs = "mapDurability",
