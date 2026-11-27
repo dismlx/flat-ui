@@ -596,7 +596,7 @@ function ns.ClickPathLines()
 	return lines
 end
 
-local OWN_STATUS = { "buttons", "waiting", "page", "keys", "flyoutkeys", "parked", "leave", "taint", "totem" }
+local OWN_STATUS = { "buttons", "waiting", "page", "keys", "flyoutkeys", "parked", "empty", "leave", "taint", "totem" }
 for _, id in ipairs(OWN_STATUS) do
 	ns.ClickPathReporter(function()
 		local line = ns.OwnStatus and ns.OwnStatus(id)

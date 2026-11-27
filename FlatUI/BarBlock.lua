@@ -88,7 +88,8 @@ local function Slots(n)
 					state.noToggles = true
 				end
 			end
-			local frame = on and GameFrame(bar.frame)
+			local empty = type(ns.OwnBarEmpty) == "function" and ns.OwnBarEmpty(bar.frame) == true
+			local frame = on and not empty and GameFrame(bar.frame)
 			if frame then
 				rows[#rows + 1] = { id = id, bar = bar, frame = frame }
 			end

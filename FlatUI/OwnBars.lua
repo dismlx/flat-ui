@@ -858,19 +858,61 @@ function F.Bare(n)
 	return true
 end
 
+function F.EmptyNames(list)
+	if #list == 1 then
+		return ("action bar %d"):format(list[1])
+	end
+	local words = {}
+	for index, n in ipairs(list) do
+		words[index] = tostring(n)
+	end
+	return ("action bars %s and %s"):format(table.concat(words, ", ", 1, #words - 1), words[#words])
+end
+
+function F.EmptySay(hidden)
+	local saved = ns.Character()
+	if #hidden == 0 or type(saved) ~= "table" or saved.emptyBarsSaid then
+		return
+	end
+	saved.emptyBarsSaid = true
+	local one = #hidden == 1
+	print(("Flat UI: %s %s nothing, so %s until a spell or item is on the cursor. Turn off Hide empty bars on the Action bars page to keep empty bars."):format(
+		F.EmptyNames(hidden), one and "holds" or "hold", one and "it hides" or "they hide"))
+end
+
 function F.Empty()
 	local on = ns.Get("actionbars.emptyBars") == true and not F.Busy(S.editWas)
-	local t = {}
+	local t, hidden = {}, {}
 	for n = 2, 8 do
 		local hide = on and F.Bare(n) or false
 		if (S.emptySet[n] == true) ~= hide then
 			S.emptySet[n] = hide
 			t[#t + 1] = EMPTY:format(n, tostring(hide))
+			if hide then
+				hidden[#hidden + 1] = n
+			end
 		end
 	end
 	if #t > 0 then
 		Run(table.concat(t, "\n"))
+		S.flag.layout = true
+		if type(ns.BarBlockReplan) == "function" then
+			ns.BarBlockReplan()
+		end
+		F.EmptySay(hidden)
 	end
+end
+
+function ns.OwnBarEmpty(name)
+	if not (F.Mode() and S.built) then
+		return false
+	end
+	for n = 2, #BAR do
+		if BAR[n].game == name then
+			return S.emptySet[n] == true
+		end
+	end
+	return false
 end
 
 function F.Missing()
@@ -1418,6 +1460,16 @@ function ns.OwnStatus(id)
 		local leave = _G.MainMenuBarVehicleLeaveButton
 		if leave and leave:IsIgnoringParentAlpha() then
 			return "Vehicle leave button: shown without the main bar."
+		end
+	elseif id == "empty" then
+		local list = {}
+		for n = 2, 8 do
+			if S.emptySet[n] == true then
+				list[#list + 1] = n
+			end
+		end
+		if #list > 0 then
+			return ("Hidden for being empty: %s."):format(F.EmptyNames(list))
 		end
 	elseif id == "totem" then
 		local extra, totem = _G.ExtraActionBarFrame, _G.MultiCastActionBarFrame

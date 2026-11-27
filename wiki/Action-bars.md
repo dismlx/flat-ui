@@ -59,6 +59,10 @@ While a spell or item is on the cursor, every empty button is at full and shows 
 
 The main bar always shows. A bar hides or shows out of combat only: a bar that empties in a fight, or a drag in a fight, waits for the end. Turning the row on or off in a fight with the options window open says so in chat.
 
+The first time bars hide for being empty, chat says so once for the character, as "Flat UI: action bar 3 holds nothing, so it hides until a spell or item is on the cursor. Turn off Hide empty bars on the Action bars page to keep empty bars." Bars that hide together are named in one line. `/flatui status` lists them while they hide, as "Hidden for being empty: action bars 3 and 4."
+
+With the **Bar block** page on, a block closes up round a bar hidden for being empty. It stacks only the bars that show, and its background panel, Flat UI's experience bar and the stance and pet bars sit tight round them, so a half-filled character sees no blank rows. The empty space no longer brings a faded block back under the mouse. As a spell or item is picked up, the empty bars come back in their places.
+
 ### Page arrows on the main bar
 
 **Page arrows on the main bar** (on, under **Buttons**) puts the page number with an up and a down arrow left of the main bar, where the game has them.
