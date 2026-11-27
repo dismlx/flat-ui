@@ -50,10 +50,15 @@ local LINE_WAITS = "Hit table: a change of place waits for the end of the fight.
 local LINE_PET = "Hit table: lowered under the pet frame, or test mode's sample of it, which it would run into."
 local LINE_SANS = "Hit table: the game did not load Flat UI Sans, so the table uses the game font."
 local LINE_GAP = {
-	withheld = "Hit table: the game withheld your %s, so parts of %s show ?.",
-	refused = "Hit table: the game refused your %s, so parts of %s show ?.",
-	missing = "Hit table: this client gives no %s, so parts of %s show ?.",
+	withheld = "Hit table: the game withholds your %s in a fight and has not given them out of one since you logged in, so parts of %s show a dash.",
+	refused = "Hit table: the game refused your %s, so parts of %s show a dash.",
+	missing = "Hit table: this client gives no %s, so parts of %s show a dash.",
 }
+local LINE_OLD = "Hit table: the game withholds your stats in a fight, so the numbers are the last it gave out of one%s."
+local LINE_OLD_FORM = ", in another stance or form"
+local TIP = { title = "Hit table", percent = "Your chances in percent against it, all from one roll for each attack.",
+	cap = "Cap: the most your swings can crit, what misses, dodges, parries, glances and blocks leave; yellow once your crit is past it.",
+	none = "A dark dash: the attack cannot have it, as a parry from behind.", unknown = "A light dash: a number the game does not give, as said below." }
 local LINE_ASSUMED = "Hit table: the game gave no weapon skill for your %s, so it counts %d, the most for your level."
 local LINE_UNKNOWN = "Hit table: your target's level shows as ??, so it counts as level %d."
 local LINE_PLAYER = "Hit table: against a player, dodge, parry and block start at 5%, since the game does not give theirs."
@@ -72,8 +77,8 @@ local LINE_ROLE_BY = "Hit table: %s, since you count as %s (%s)."
 local IsSecret, Finite = ns.IsSecret, ns.Finite
 
 local S = { heads = {}, rows = {}, widths = {}, measures = {}, measured = 0, units = {}, alone = {}, hearing = false, fighting = false, dirty = false,
-	later = false, recheck = false, stepped = false, petWaits = false }
-local Update, Later, Off, Dirty, Apply
+	later = false, recheck = false, stepped = false, petWaits = false, kept = {} }
+local Update, Later, Off, Dirty, Apply, Explain
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -656,7 +661,7 @@ local function Title(read)
 		text = ("Level %d, no target"):format(target.level)
 	else
 		local kind = target.player and "player" or KIND_WORDS[target.kind]
-		text = (target.unknown and "Level ?? (%d)" or "Level %d"):format(target.level) .. (kind and (" " .. kind) or "")
+		text = (target.unknown and "Target level ?? (%d)" or "Target level %d"):format(target.level) .. (kind and (" " .. kind) or "")
 	end
 	for _, line in ipairs(read.lines) do
 		if line.skill then
@@ -681,7 +686,7 @@ local function Value(line, key)
 	if value == false then
 		return "-", FAINT
 	elseif value == nil then
-		return "?", DIM
+		return "-", DIM
 	end
 	local colour = PLAIN
 	if line.over and (key == "crit" or key == "cap") then
@@ -848,6 +853,74 @@ local function Fades(frame)
 	return nil, nil
 end
 
+local function Owned()
+	local tip = GameTooltip
+	if not S.frame or ns.Forbidden(tip) then
+		return false
+	end
+	local ok, owned = pcall(tip.IsOwned, tip, S.frame)
+	return ok and owned == true
+end
+
+local function Untip()
+	if S.tipped and Owned() then
+		pcall(GameTooltip.Hide, GameTooltip)
+	end
+	S.tipped = false
+end
+
+local function Bare(text)
+	local plain = text:gsub("^Hit table: ", "")
+	plain = plain:gsub("^%l", string.upper)
+	return plain
+end
+
+local function Tip()
+	local tip, read = GameTooltip, S.read
+	if ns.Forbidden(tip) or S.visible ~= true or type(read) ~= "table" or type(read.lines) ~= "table" then
+		return
+	end
+	local cap, none, unknown = false, false, false
+	for _, column in ipairs(Columns(read.lines)) do
+		cap = cap or column[1] == "cap"
+		for _, line in ipairs(read.lines) do
+			local value = line.parts[column[1]]
+			none, unknown = none or value == false, unknown or value == nil
+		end
+	end
+	tip:SetOwner(S.frame, "ANCHOR_BOTTOM")
+	tip:AddLine(TIP.title, 1, 1, 1)
+	tip:AddLine(TIP.percent, DIM[1], DIM[2], DIM[3], true)
+	if cap then
+		tip:AddLine(TIP.cap, DIM[1], DIM[2], DIM[3], true)
+	end
+	if none then
+		tip:AddLine(TIP.none, DIM[1], DIM[2], DIM[3], true)
+	end
+	if unknown then
+		tip:AddLine(TIP.unknown, DIM[1], DIM[2], DIM[3], true)
+	end
+	for _, text in ipairs(Explain(read, {})) do
+		tip:AddLine(Bare(text), DIM[1], DIM[2], DIM[3], true)
+	end
+	tip:Show()
+	S.tipped = true
+end
+
+local function Hover()
+	local frame = S.frame
+	local want = S.visible == true and Opt("hitTableHover") ~= false
+	if frame and S.motion ~= want then
+		pcall(frame.SetMouseClickEnabled, frame, false)
+		if pcall(frame.SetMouseMotionEnabled, frame, want) then
+			S.motion = want
+		end
+	end
+	if not want then
+		Untip()
+	end
+end
+
 local function Visible(on, now)
 	local frame, come, go = S.frame, S.fadeIn, S.fadeOut
 	local fading = go ~= nil and go:IsPlaying()
@@ -875,6 +948,7 @@ local function Visible(on, now)
 		end
 	end
 	S.visible = on
+	Hover()
 end
 
 Update = function(force)
@@ -886,6 +960,9 @@ Update = function(force)
 	S.dead = Ask(UnitIsDeadOrGhost, "target") == true
 	local allowed = Allowed()
 	if not allowed and S.laid and not force then
+		if not S.fighting and type(calc.Keep) == "function" then
+			calc.Keep(S.kept)
+		end
 		Visible(false)
 		return
 	end
@@ -894,7 +971,7 @@ Update = function(force)
 		against = "boss"
 	end
 	local read = calc.Read({ lines = Opt("hitTableLines"), special = Opt("hitTableSpecial") ~= false, against = against,
-		facing = Opt("hitTableFacing"), rules = Opt("hitTableRules") })
+		facing = Opt("hitTableFacing"), rules = Opt("hitTableRules") }, S.kept)
 	S.read = read
 	local lines = read.lines
 	local columns, title, note = Columns(lines), Title(read), Note(read)
@@ -909,6 +986,13 @@ Update = function(force)
 	Layout(g, lines)
 	Fill(columns, lines, title, note)
 	Visible(allowed and #lines > 0, force)
+	if S.tipped then
+		if Owned() then
+			Tip()
+		else
+			S.tipped = false
+		end
+	end
 end
 
 local function Recheck()
@@ -1063,6 +1147,7 @@ Off = function()
 	Hear(false)
 	S.dirty, S.read = false, nil
 	if S.frame then
+		pcall(Untip)
 		for _, fade in ipairs({ S.fadeIn, S.fadeOut }) do
 			pcall(fade.Stop, fade)
 		end
@@ -1079,6 +1164,12 @@ local function Build()
 	ns.Own[frame] = true
 	frame:SetFrameStrata("LOW")
 	frame:EnableMouse(false)
+	frame:SetScript("OnEnter", function()
+		Safe(Tip)
+	end)
+	frame:SetScript("OnLeave", function()
+		pcall(Untip)
+	end)
 	frame:SetSize(1, 1)
 	frame:Hide()
 	local rail = CreateFrame("Frame", nil, UIParent)
@@ -1211,9 +1302,16 @@ ns.AddStatus(KEY, function()
 	if not read then
 		return lines
 	end
+	return Explain(read, lines)
+end)
+
+Explain = function(read, lines)
 	if not read.level then
 		lines[#lines + 1] = LINE_NO_LEVEL
 		return lines
+	end
+	if read.old then
+		lines[#lines + 1] = LINE_OLD:format(read.otherForm and LINE_OLD_FORM or "")
 	end
 	local unknown = {}
 	for _, line in ipairs(read.lines) do
@@ -1271,7 +1369,7 @@ ns.AddStatus(KEY, function()
 		lines[#lines + 1] = LINE_EMPTY
 	end
 	return lines
-end)
+end
 
 if ns.TestMode then
 	ns.TestMode.Register("hittable", { module = KEY, label = "Hit table", Start = ns.HitTableRefresh, Stop = ns.HitTableRefresh })

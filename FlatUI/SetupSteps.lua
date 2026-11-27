@@ -1098,6 +1098,7 @@ ns.SETUP_STEPS = {
 		{ "hud.hitTableFacing", "o", "behaviour", "Chooses whether the hit table counts parries and blocks, which come only from the front." },
 		{ "hud.hitTableRules", "r", "behaviour", "Chooses the hit cap against a boss: 9% as tests of Classic found it, or 8% as the game's tooltip says." },
 		{ "hud.hitTableShow", "o", "behaviour", "Chooses whether the hit table shows with an enemy targeted, in combat, or always." },
+		{ "hud.hitTableHover", "o", "behaviour", "Says, as you point at the hit table, what its columns and dashes mean and why a number is from before the fight; clicks still go through it." },
 		{ "hud.hitTableFont", "r", "behaviour", "Chooses Flat UI Sans or the game font for the hit table." },
 		{ "hud.hitTableSize", "o", "behaviour", "Sets the size of the text of the hit table, from 70% to 200%." },
 		{ "hud.hitTableBack", "r", "behaviour", "Draws a flat background with a thin border behind the hit table." },
