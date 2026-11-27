@@ -150,6 +150,8 @@ The **World and cursor** page, under **Helpers**, can put a pulsing glow on the 
 2. Put the `FlatUI` folder in the `Interface\AddOns` folder of your WoW: Forever install.
 3. Start the game and type `/flatui`.
 
+The [wiki](https://github.com/dismlx/flat-ui/wiki) has a guide to each group of the options window and a list of every setting with its default.
+
 ## Commands
 
 - `/flatui` opens the settings window.
@@ -280,6 +282,16 @@ python3 tools/dev/make_whatsnew.py
 ```
 
 It needs Python 3. `--check` writes nothing; it says whether the file is what `CHANGELOG.md` makes.
+
+## Wiki
+
+The [wiki](https://github.com/dismlx/flat-ui/wiki) is made from the `wiki` folder: a guide for each group of the options window, written by hand, and a settings page for each group that lists every setting with its default. `tools/dev/make_wiki.py` makes the settings pages (`wiki/Settings-*.md`) and the footer from `FlatUI/Config.lua`, `FlatUI/PanelNav.lua`, `FlatUI/PanelTabs.lua` and `FlatUI/FlatUI.toc`; run it after each change to the options:
+
+```
+python3 tools/dev/make_wiki.py
+```
+
+It needs Python 3 and Lua 5.4. `--check` writes nothing; it says whether the pages are what the options make. A push to `main` that changes the `wiki` folder publishes it to the wiki with `.github/workflows/wiki.yml`, which replaces the whole wiki with the folder.
 
 ## Credits
 
