@@ -1,6 +1,10 @@
 ## 0.5.42
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- New: **Delete a section** on the Bags page lists every section you can delete now, in the order your bag window shows them. It includes Flat UI's own sections and your own, which are marked (yours) and show how many items are placed in them. Choose one to delete it in both windows and for all your characters. Its items go to the next section that takes them, so nothing is lost, and chat says "Flat UI: deleted Potions from the bags. Deleted sections on the Bags page brings it back."
+- While **Equipment**, **Consumables** or **Trade goods** shows its kinds apart, **Delete a section** lists them together, after one line that deletes the whole group at once, such as "Equipment: all 8 kinds". The group's own section, which holds the rest, is marked (the rest). A whole group deleted stays deleted if you change its row later: that line also deletes the group's sections the row does not show now, and **Deleted sections** marks those (not in use now).
+- Other is never in the list, since it takes whatever no other section does. New items and Free slots are not either: they are shelves, not sections. A section of your own deleted in **Delete a section** goes as it does from its title's menu, with its items back in their own sections, and **Bring back** in **Custom sections** still restores it.
+- Flat UI's bag sections are now deleted rather than hidden. A section title's right-click menu says **Delete this section**, and the Bags page row is **Deleted sections** ("Choose one to bring it back"). The dim title after the last section reads **Deleted (3)** and opens a **Bring back** list. A section that comes back flashes Back, and the tips, chat lines and the Folded sections mark (deleted) use the same words.
 
 ## 0.5.41
 
