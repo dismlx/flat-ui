@@ -271,6 +271,9 @@ local function RefreshResource()
 	if ns.HealthLeftSync then
 		ns.HealthLeftSync()
 	end
+	if ns.ResourceBarrierSync then
+		ns.ResourceBarrierSync()
+	end
 end
 
 ns.Register("resource", {

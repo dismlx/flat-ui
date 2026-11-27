@@ -1532,6 +1532,13 @@ function ns.AbsorbsTargetShown()
 	return ns.Enabled(KEY) and Opt("target") == true
 end
 
+function ns.AbsorbTotal(unit)
+	if unit ~= "player" or not ns.Enabled(KEY) then
+		return 0
+	end
+	return (A.Known())
+end
+
 function ns.AbsorbsMoved()
 	if A.holder and ns.Enabled(KEY) then
 		ns.Try(KEY, A.Place)

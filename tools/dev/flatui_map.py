@@ -1287,19 +1287,19 @@ def loop_over_list(f, k):
 AREAS = [
     ("core", "Core and settings", """Config Core TaintScan Scale Fonts Fade LayoutSpots LayoutText ConfigGame Options Reload
         Panel ProfileSwitch ProfileShare PanelLook PanelCards PanelSamples PanelColour PanelTrust PanelSearch PanelNav
-        PanelTabs PanelHome PanelPreview TestMode TestUnits TestHud"""),
+        PanelTabs PanelHome PanelPreview WhatsNewData WhatsNew TestMode TestUnits TestHud"""),
     ("setup", "Setup", "SetupSteps SetupProfiles SetupStops Setup SetupWalk SetupWelcome"),
     ("unitframes", "Unit frames", """ClassData UnitFrames UnitFramePortrait UnitFrameLevel UnitFrameCells UnitFrameLooks
         UnitFrameHead UnitText UnitParts UnitExtras UnitGroupMarks UnitDruidMana UnitManaRule UnitPetTarget UnitHots HealthColour
         PetFrameSize"""),
     ("nameplates", "Nameplates, combat text and cast bars", """Nameplates PlateThreat PlateColours PlateThreatLook PlateText
-        PlateClick PlateThreatText PlateOverpower PlateQuest PlateCombo PlateTarget CombatBurst CombatTextSpells CombatText ScrollText CombatCues Bars CastTime CastTicks CastRank
+        PlateClick PlateThreatText PlateSlip PlateOverpower PlateQuest PlateCombo PlateTarget CombatBurst CombatTextSpells CombatText ScrollText CombatCues Bars CastTime CastTicks CastRank
         Interrupt CastBarSize"""),
     ("actionbars", "Action bars", """ActionBars OwnBars OwnPaint ButtonText Cooldowns CooldownLooks ButtonStates CooldownData
         ProcData Procs ProcArt ProcGlow ButtonEffects ProcTriggers BarBlock BarBlockButtons BarBlockLists Blocks"""),
     ("trackers", "Trackers and cooldowns", """Trackers TrackerSound TrackerSlots IconRow Tracking Defensives PartyCooldowns
-        PartySync EnemyCooldowns Threat HealerMana GroupTools OwnBuffs TrackerShapes TrackerKinds TrackerMarks
-        TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs PingBar"""),
+        PartySync EnemyCooldowns Threat ThreatLook ThreatMobs HealerMana GroupTools OwnBuffs TrackerShapes TrackerKinds TrackerMarks
+        TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs ResourceBarrier PingBar"""),
     ("hud", "HUD, windows, movers, chat and tooltips", """BagSort BagKey Bags BagsData BagsCategories BagsSearch BagsItems
         BagsLayout BagsWindow BagsBank BagsSlots BagsCurrency BagsTooltip BagsOrder BagsPins BagsCustom Windows ItemMarks CharacterDurability CharacterThorns StatTips StatTipsMore Hud MapButtons
         AuraTime XpStats XpBar QuestCount QuestieSkin MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable HitTableTip Chat

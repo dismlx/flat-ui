@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: Flat UI
 ## Notes: Thin dark borders on the default interface. /flatui
-## Version: 0.5.42
+## Version: 0.5.43
 ## Author: dismlx
 ## X-License: MIT
 ## X-Curse-Project-ID: 1750813
@@ -30,6 +30,7 @@ PlateThreatLook.lua
 PlateText.lua
 PlateClick.lua
 PlateThreatText.lua
+PlateSlip.lua
 PlateOverpower.lua
 PlateQuest.lua
 PlateCombo.lua
@@ -59,11 +60,14 @@ PartyCooldowns.lua
 PartySync.lua
 EnemyCooldowns.lua
 Threat.lua
+ThreatLook.lua
+ThreatMobs.lua
 HealerMana.lua
 GroupTools.lua
 PingBar.lua
 OwnBuffs.lua
 Absorbs.lua
+ResourceBarrier.lua
 TrackerShapes.lua
 TrackerKinds.lua
 TrackerMarks.lua
@@ -217,3 +221,5 @@ SetupDrawMovers.lua
 Setup.lua
 SetupWalk.lua
 SetupWelcome.lua
+WhatsNewData.lua
+WhatsNew.lua
