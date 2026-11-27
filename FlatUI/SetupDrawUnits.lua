@@ -29,7 +29,8 @@ local ADDON_NAME, ns = ...
 -- drawn, as they come into view and each time the row is turned on, in the live blink's steps (UnitGroupMarks.lua Blink). The setup's party frames show Mara's Star with
 -- Raid marker on party frames, and Fay dead while someone resurrects her, with the game's resurrection icon centred on her picture (or on its empty
 -- square with Picture None in Separate parts), or at the left end of her health bar with Picture None in One frame, with Resurrection icon on party
--- frames (UnitGroupMarks.lua PlaceRez). Role icons for leaves out the icons of the
+-- frames (UnitGroupMarks.lua PlaceRez), and Dru, out of range, away with a grey AFK at the bottom of his picture (or its empty square), or at the left
+-- end of his health bar with Picture None in One frame, with AFK on party frames (UnitGroupMarks.lua PlaceAfk), in the Party frames step. Role icons for leaves out the icons of the
 -- roles it leaves out on the party frames and the raid cells, as the live frames do (UnitParts.lua X.roleLeftOut). Its raid cells show the marks of
 -- their rows: Aria's Skull (Raid marker on raid frames), her leader crown and Dru's
 -- assistant icon (Leader and assistant icons on raid frames), Eli away with a grey AFK where the status text sits (AFK on raid frames), and Cole as your target, with the border of Border for your target in the game's white or
@@ -911,11 +912,11 @@ local function Sample(id)
 		local debuffed = number == 1 or number == 3
 		-- low: Mara's health while Low health border is on, so that the border shows (E.bars). dispel and hots: Mara's Magic debuff you can dispel and
 		-- the heals over time of yours on Bex (PaintMarks). marker: Mara's Star, with Raid marker on party frames (E.icons). dead and rez: Fay lies dead
-		-- while someone resurrects her, with Resurrection icon on party frames (E.icons).
+		-- while someone resurrects her, with Resurrection icon on party frames (E.icons). afk: Dru, out of range, is away too, with AFK on party frames.
 		return { kind = "party", cap = number == 1 and "Party" or nil, name = member[1], level = 19, class = member[2], player = true, react = FRIENDLY, role = member[3],
 			leader = number == 1, number = number, away = number == 4, auras = debuffed and { { "debuff", number == 1 and "magic" or "poison", false, 3, "12" } } or nil,
 			debuff = number == 1 and TYPE.magic or nil, low = number == 1 and 0.15 or nil, dispel = number == 1 and "magic" or nil, marker = number == 1 and 1 or nil,
-			hots = number == 2 and SampleHots(class) or nil, dead = number == 5 or nil, rez = number == 5 or nil }
+			hots = number == 2 and SampleHots(class) or nil, dead = number == 5 or nil, rez = number == 5 or nil, afk = number == 4 or nil }
 	end
 	number = tonumber(id:match("^partypet(%d)$"))
 	if number then
@@ -1014,8 +1015,9 @@ function E.make(stage, id, given)
 		Tex(top, "OVERLAY", 3), Tex(top, "OVERLAY", 2)
 	o.pvpTimer = Text(top)
 	o.shade = Tex(top, "OVERLAY", 7)
-	-- The resurrection icon of a party frame (E.icons).
+	-- The resurrection icon and the AFK word of a party frame (E.icons).
 	o.rez = sample.kind == "party" and Tex(top, "OVERLAY", 3) or nil
+	o.afk = sample.kind == "party" and Text(top) or nil
 	-- The spark of Five-second rule on the setup's player frame (E.manaRule); test mode shows the live spark's own sweep (UnitManaRule.lua).
 	o.rule = sample.kind == "player" and given == nil and Tex(top, "OVERLAY", 4) or nil
 	o.auras = {}
@@ -1033,7 +1035,7 @@ function E.make(stage, id, given)
 	-- The regions the rows of the steps mark (design.md 4.3, part marks). body: the frame's box, placed in both styles and shown in One frame.
 	o.parts = { root = root, body = o.box, pic = o.pic, health = o.health, power = o.power, row = row, name = o.name, level = o.level, healthText = o.healthText,
 		powerText = o.powerText, pred = o.pred, shield = o.shield, absorb = o.absorb, kmark = o.kmark, kword = o.kword, kline = o.rLine, plate = o.plateIcon,
-		flag = o.flag, leader = o.leader, role = o.role, marker = o.marker, attack = o.attack, happy = o.happy, dead = o.deadText, rez = o.rez, aura = o.auras[1] and o.auras[1].frame,
+		flag = o.flag, leader = o.leader, role = o.role, marker = o.marker, attack = o.attack, happy = o.happy, dead = o.deadText, rez = o.rez, afk = o.afk, aura = o.auras[1] and o.auras[1].frame,
 		count = o.auras[1] and o.auras[1].count, time = o.auras[1] and o.auras[1].time, picLevel = o.picLevel, timer = o.pvpTimer, shadow = o.shadow,
 		petTarget = o.petTarget and o.petTarget.frame }
 	-- The rows of the druid mana bar mark it for a druid, and the power bar it hangs from for any other class, who never sees it.
@@ -1835,6 +1837,9 @@ function E.icons(o, g, L)
 	if o.rez then
 		o.rez:Hide()
 	end
+	if o.afk then
+		o.afk:Hide()
+	end
 	o.picLevel:Hide()
 	o.pvpTimer:Hide()
 	o.shade:Hide()
@@ -1917,6 +1922,21 @@ function E.icons(o, g, L)
 				o.rez:SetPoint("LEFT", o.health, "LEFT", REZ.inset, 0)
 			end
 			o.rez:Show()
+		end
+		-- A party member who is away: a soft grey AFK at the bottom of the picture or the empty square, or with none in One frame at the left end of the
+		-- health bar, in the bar text face at Small frame text size with an outline unless Bar text outline gives one (UnitGroupMarks.lua PlaceAfk,
+		-- StyleAfk). Not on a dead or offline member.
+		if o.afk and s.afk and not s.dead and not s.offline and L.on and Get("partyAfk") == true then
+			o.afk:SetText("AFK")
+			o.afk:ClearAllPoints()
+			if square then
+				o.afk:SetPoint("BOTTOM", o.pic, "BOTTOM", 0, 2)
+			else
+				o.afk:SetPoint("LEFT", o.health, "LEFT", 2, 0)
+			end
+			Style(o.afk, { percent = tonumber(g.smallTextSize) or 100, face = g.barTextFace ~= "default" and ns.FontFile(g.barTextFace) or nil,
+				flags = FLAGS[g.barTextOutline] or "OUTLINE", r = 0.8, g = 0.8, b = 0.8 })
+			o.afk:Show()
 		end
 		if shown and s.happy and g.petHappiness then
 			Art(o.happy, "happy")
@@ -2633,7 +2653,7 @@ local MARK = {
 	bossPowerBar = { "boss", "power" },
 	raidRangeAlpha = { "raid", "cell" }, raidRoleIcon = { "raid", "role" }, raidName = { "raid", "name" }, raidStatusText = { "raid", "status" },
 	raidFrameMarker = { "raid", "marker" }, raidLeaderIcon = { "raid", "lead" }, targetBorder = { "raid", "target" }, targetColour = { "raid", "target" },
-	partyFrameMarker = { "party1", "marker" }, partyRezIcon = { "party5", "rez" }, roleIconRoles = { "party1", "role" }, raidAfk = { "raid", "afk" },
+	partyFrameMarker = { "party1", "marker" }, partyRezIcon = { "party5", "rez" }, roleIconRoles = { "party1", "role" }, raidAfk = { "raid", "afk" }, partyAfk = { "party4", "afk" },
 }
 
 -- Builds a scene: the frames of a list of items on a root frame, with a caption under each. make: the function for an item that is not a unit frame.

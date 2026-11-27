@@ -458,7 +458,6 @@ ns.SETUP_STEPS = {
 		{ "unitframes.dispelSound", "o", "behaviour", "Plays a sound as a party or raid member gets a debuff you can dispel, at most once every 2 seconds." },
 		{ "unitframes.dispelFlash", "o", "mock-unit-frame" },
 		{ "unitframes.partyFrameMarker", "o", "mock-unit-frame" },
-		{ "unitframes.partyAfk", "o", "behaviour", "Shows a grey AFK on the picture of a party member who is away, or at the left end of the health bar with no picture, and hides it while they are dead or offline." },
 	} },
 	{ id = "uf-player", area = "Unit frames", title = "Player and target frames", draw = "mock-unit-frame", built = true, rows = {
 		{ "unitframes.playerPicture", "c", "mock-unit-frame" },
@@ -522,6 +521,7 @@ ns.SETUP_STEPS = {
 		{ "unitframes.partyRangeDim", "c", "mock-party-frames" },
 		{ "unitframes.partyRangeOpacity", "r", "mock-party-frames" },
 		{ "unitframes.partyRezIcon", "o", "mock-party-frames" },
+		{ "unitframes.partyAfk", "o", "mock-party-frames" },
 		{ "unitframes.hotSquares", "o", "mock-party-frames" },
 		{ "unitframes.hotCorner", "r", "mock-party-frames" },
 		{ "unitframes.hotSize", "r", "mock-party-frames" },
