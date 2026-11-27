@@ -63,7 +63,10 @@ local _, ns = ...
 -- a client that will not make them shows the lines still, as before 0.5.35. No target fades out over a quarter of a second as it goes (0.5.41,
 -- WarnFade: an Alpha animation of its own, the final opacity kept, that hides the line as it ends; the frame stays shown meanwhile): as a target
 -- is taken, the fight ends or the row goes off. No target back during the fade stops it and shows whole at once; HideAll, test mode's sample and
--- a refresh of the page (Apply) hide it at once, so a row change never leaves it half faded. Nothing shows while the interface is hidden: Alt+Z hides UIParent
+-- a refresh of the page (Apply) hide it at once, so a row change never leaves it half faded. Low health and Low mana fade out the same way as they
+-- go (0.5.42, LowFade: on the line, not on its holder, whose opacity is the withheld share), as the fight ends or the player dies, and at once
+-- with the row off, HideAll and test mode's sample; a line back during its fade shows whole. Each breath restarts as No target or a Low line
+-- comes on, so the three lines breathe in one 1.2-second cycle (0.5.42; each started on its own before). Nothing shows while the interface is hidden: Alt+Z hides UIParent
 -- (Blizzard_FrameXML/Bindings_Camelot.xml:1310-1318), a cinematic is a full screen panel that hides it (Blizzard_UIParentPanelManager/Mainline/
 -- UIPanelWindows.lua:42, Shared/UIParentPanelManager.lua:281-283 and 444-446) and a movie hides it (Blizzard_FrameXML/MovieFrame.lua:59-62). Then
 -- +Combat and -Combat do not start, a fading one goes, and no sound plays; No target is hidden with UIParent. Nothing of the game is changed.
@@ -574,6 +577,15 @@ local function ShowWarning()
 	Look(line, "warn")
 	line:Show()
 	Animate(S.breathe, true)
+	-- The Low lines that show breathe again with it, so the three share one cycle (0.5.42).
+	if S.low then
+		for _, kind in ipairs(LOW_KINDS) do
+			local rec = S.low[kind]
+			if rec.on then
+				Animate(rec.breathe, true)
+			end
+		end
+	end
 	S.warned = true
 	S.warnings = S.warnings + 1
 	Place()
@@ -663,16 +675,78 @@ local function LookLow()
 	end
 end
 
--- Shows or hides one line's holder, its breath playing while it shows.
-local function ShowLow(rec, on)
+-- The fade of one Low line as it goes (0.5.42), as WarnFade fades No target: an Alpha animation of the line's own from whole to nothing in
+-- WARN_FADE seconds, the final opacity kept, that hides the holder and gives the line back its opacity as it ends. On the line, not on the
+-- holder, whose opacity comes from the withheld share, so nothing withheld is read. Made once; false when the client would not make it.
+local function LowFade(rec)
+	if rec.fade == nil then
+		local line, holder = rec.line, rec.holder
+		local ok, group = pcall(function()
+			local made = line:CreateAnimationGroup()
+			local fade = made:CreateAnimation("Alpha")
+			fade:SetFromAlpha(1)
+			fade:SetToAlpha(0)
+			fade:SetDuration(WARN_FADE)
+			made:SetToFinalAlpha(true)
+			made:SetScript("OnFinished", function()
+				rec.fading = nil
+				pcall(holder.Hide, holder)
+				pcall(line.SetAlpha, line, 1)
+			end)
+			return made
+		end)
+		rec.fade = ok and not ns.IsSecret(group) and type(group) == "table" and group or false
+	end
+	return rec.fade or nil
+end
+
+-- Stops the fade of a Low line that runs; hide also hides its holder at once.
+local function StopLowFade(rec, hide)
+	if not rec.fading then
+		return
+	end
+	rec.fading = nil
+	Animate(rec.fade or nil, false)
+	if hide then
+		pcall(rec.holder.Hide, rec.holder)
+	end
+	pcall(rec.line.SetAlpha, rec.line, 1)
+end
+
+-- Shows or hides one line's holder, its breath playing while it shows. A line that comes on breathes again with No target and the other Low line
+-- that show, so all share one cycle (0.5.42). A line that goes fades out over WARN_FADE while the interface shows, as No target does (0.5.42;
+-- at once before); at once with quick (HideLow: the row off, HideAll, test mode's sample) or S.lowQuick. A line back during its fade shows whole.
+local function ShowLow(rec, on, quick)
+	quick = quick or S.lowQuick
 	if rec.on == on then
+		if quick and not on then
+			StopLowFade(rec, true)
+		end
 		return
 	end
 	rec.on = on
-	pcall(rec.holder.SetShown, rec.holder, on)
-	Animate(rec.breathe, on)
-	if not on then
-		pcall(rec.line.SetAlpha, rec.line, 1)
+	if on then
+		StopLowFade(rec, false)
+		pcall(rec.holder.Show, rec.holder)
+		Animate(rec.breathe, true)
+		if S.warned then
+			Animate(S.breathe, true)
+		end
+		for _, kind in ipairs(LOW_KINDS) do
+			local other = S.low and S.low[kind]
+			if other and other ~= rec and other.on then
+				Animate(other.breathe, true)
+			end
+		end
+		return
+	end
+	Animate(rec.breathe, false)
+	pcall(rec.line.SetAlpha, rec.line, 1)
+	local fade = not quick and InterfaceShown() and LowFade(rec)
+	if fade and pcall(fade.Play, fade) then
+		rec.fading = true
+	else
+		pcall(rec.holder.Hide, rec.holder)
 	end
 end
 
@@ -809,7 +883,7 @@ local function HideLow()
 	S.lowSampled = nil
 	if S.low then
 		for _, kind in ipairs(LOW_KINDS) do
-			ShowLow(S.low[kind], false)
+			ShowLow(S.low[kind], false, true)
 		end
 	end
 	Shown()
@@ -1135,8 +1209,13 @@ local function HideSample()
 		end
 	end
 	if S.lowSampled then
-		S.lowSampled = nil
-		PaintBoth()
+		-- The sample goes at once, as No target's does.
+		S.lowSampled, S.lowQuick = nil, true
+		local ok, err = pcall(PaintBoth)
+		S.lowQuick = nil
+		if not ok then
+			error(err, 0)
+		end
 	end
 end
 

@@ -23,8 +23,9 @@ local _, ns = ...
 -- seconds, so a cast, a swing and a hit sent together count in any order. It cannot know whose hit it is when a player outside your group hits
 -- an enemy you hold, nor, in a group, a proc that casts nothing.
 -- While test mode is on (TestMode.lua), a sample number shows in each place that shows them every 1.5 seconds (ns.CombatTextTestStep); like the
--- samples of /flatui combat test they are no hit reports and count in no number of /flatui status. /flatui combat test also plays one quiet round
--- of the combat alerts whose rows are on, two seconds apart, out of a fight while test mode is off (ns.CombatCuesTestRound).
+-- samples of /flatui combat test they are no hit reports and count in no number of /flatui status; the Fire crit of the Outgoing area reads
+-- "824 Fireball" there while Whose hits is Yours and Spell names is After every spell (OutSample, 0.5.42). /flatui combat test also plays one
+-- quiet round of the combat alerts whose rows are on, two seconds apart, out of a fight while test mode is off (ns.CombatCuesTestRound).
 
 local KEY = "combattext"
 -- 40 is the game's own height above the enemy, and every 5 points are 0.00375 of WorldTextScreenY_v2: 60 gives 0.015, the value Retail ships (CVars_live.lua:1652).
@@ -3889,12 +3890,19 @@ local function OutIcon(which)
 	return (mode == "all" or mode == "spells") and Icon(133) or nil
 end
 
--- The samples of the Outgoing scroll area (OUT_SAMPLES).
+-- The samples of the Outgoing scroll area (OUT_SAMPLES). The Fire crit reads its spell's name after it, the client's own name of Fireball (spell
+-- 133, else "Fireball"), while Whose hits is Yours and Spell names is After every spell, as a real hit of a spell does there (MINE.Draw; 0.5.42).
 local function OutSample(sample)
 	local kinds, amounts = stats.kind, stats.amount
 	local kind, value, _, crit, r, g, b, _, scale = Describe(sample[1], sample[2], sample[3], sample[4])
 	if kind then
-		ns.ScrollText.Show("out", kind, value, "%s", crit, r, g, b, scale, sample[2], true, OutIcon(sample[5]))
+		local format = "%s"
+		if kind == "amount" and sample[5] == "spell" and Opt("whose") == "one" and Opt("abilityName") == "every" then
+			local ok, name = pcall(C_Spell.GetSpellName, 133)
+			name = ok and Plain(name, "string") and name ~= "" and name or "Fireball"
+			format = "%s " .. name:gsub("%%", "%%%%")
+		end
+		ns.ScrollText.Show("out", kind, value, format, crit, r, g, b, scale, sample[2], true, OutIcon(sample[5]))
 	end
 	stats.kind, stats.amount = kinds, amounts
 end

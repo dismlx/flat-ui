@@ -10,12 +10,14 @@ local _, ns = ...
 --   cast bars: the border and background of ApplyCastBar (Bars.lua:597-622), the plate behind the spell name, the spark, the shield, the icon and
 --   the spell name of ApplyCastParts and ns.CastText (Bars.lua:707-816), the cover colour of CastColour (956-972), the marks of Marks (1020-1088),
 --   the sizes and the place of the spell name of CastBarSize.lua:92-150, the rank after the spell name of CastRank.lua, the tick marks of a
---   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks), dim where the channel has passed them, the pushback past
+--   channel on the player bar of CastTicks.lua (the last row, Drain Life with 5 ticks) in Channel tick colour (0.5.42), dim where the channel has
+--   passed them, the pushback past
 --   the right end of the player bar of CastTime.lua (+0.4 on the first row), the whole cast after the seconds left while Total cast time too is
 --   on (1.0 / 2.5 on the first row), and the interrupt colours of Interrupt.lua on the Target row (ready), the Focus row (on cooldown) and the
 --   Target, out of range row (Frostbolt, ready but out of range, 0.5.39) while Interrupt readiness is on: on the fill with Flat fill, else on the
 --   strip along the bar's bottom edge, Interrupt strip height thick; the name of the cast's target ("> Jon", in a warrior's class colour, 0.5.41)
---   past the end of the Target row while Target of enemy casts is on, the pushback in Pushback colour, and the latency zone (in Latency zone
+--   past the end of the Target row while Target of enemy casts is on, a sample "4" inside the left end of the Focus row in Interrupt on cooldown
+--   colour while Seconds until your interrupt is ready is on (0.5.42), the pushback in Pushback colour, and the latency zone (in Latency zone
 --   colour, 0.5.41) and the spell icon of the player and pet bars while their rows are on, with or without Flat fill (0.5.39; with Flat fill only before).
 --   resource display: ApplyResourceBar, JoinBar, ApplyResourceFill, ApplyResourceText (Bars.lua:78-165), the custom colours (Bars.lua:195-250).
 --   swing timers: ApplySwingTimer, ApplySwingFill, ApplySwingText, ApplySwingRange, ApplySwingReverse, ApplySwingIdle (Bars.lua:335-530), and the
@@ -37,7 +39,8 @@ local _, ns = ...
 -- channel, interrupted or shield, the interrupted one in Interrupted colour or the game's interrupted fill) at a share of its run, an enemy's in
 -- the interrupt colour its kick names (ready, cooling or far), DC.Swing and DC.PaintSwing for a swing timer (the main hand of a warrior, druid or
 -- hunter with Queued ability colour over the second half of each swing), and DC.CastProgress and DC.SwingProgress for the parts that move (the
--- player bar's pushback, +0.4 over the second half of a cast and -0.8 of a channel).
+-- player bar's pushback, +0.4 over the second half of a cast and through the Interrupted hold, and -0.8 of a channel). The player and pet icon,
+-- the pushback and the name of the cast's target stay while the cast is interrupted, as the live bars keep them through that hold (0.5.42).
 
 ns.SetupDrawings = ns.SetupDrawings or {}
 
@@ -370,6 +373,16 @@ local function NewCastBar(inst, parent, spec)
 			row.time:SetText(spec.time)
 		end
 	end
+	-- The seconds until the player's interrupt is ready, inside the left end of an enemy cast it is on cooldown for (CastTime.lua, 0.5.42).
+	if spec.kick == "cooling" then
+		row.kickTime = NewText(bar)
+		if row.kickTime then
+			row.kickTime:SetPoint("LEFT", bar, "LEFT", 4, 0)
+			row.kickTime:SetJustifyH("LEFT")
+			row.kickTime:SetText(spec.kickTime or "4")
+			row.kickTime:Hide()
+		end
+	end
 	if spec.aim then
 		row.aim = NewText(bar)
 		if row.aim then
@@ -433,6 +446,7 @@ local function BuildCast(stage)
 	for _, row in ipairs(rows) do
 		if row.ticks then
 			p["castbars.ticks"] = p["castbars.ticks"] or row.bar
+			p["castbars.ticksColour"] = p["castbars.ticksColour"] or row.bar
 		end
 	end
 	p["castbars.flat"] = player.fill
@@ -454,6 +468,7 @@ local function BuildCast(stage)
 	end
 	p["castbars.ownTime"] = target.time
 	p["castbars.castTarget"] = target.aim
+	p["castbars.kickTime"] = focus.kickTime or focus.bar
 	p["castbars.playerTime"] = player.time
 	p["castbars.timeTotal"] = target.time
 	p["castbars.pushback"], p["castbars.pushbackColour"] = player.push, player.push
@@ -587,7 +602,7 @@ local function DimTicks(row, part)
 end
 
 -- The tick marks of a channel on a bar that has them, at even steps of its width, while Channel ticks on the player bar is on (CastTicks.lua), the
--- ones the channel has passed dimmed.
+-- ones the channel has passed dimmed, in Channel tick colour at 60% (0.5.42).
 local function PaintTicks(row, look, state, w, part)
 	local list = row.ticks
 	if not list then
@@ -595,6 +610,15 @@ local function PaintTicks(row, look, state, w, part)
 	end
 	local on = look.enabled and G("castbars.ticks") == true and state == "channel"
 	local n = #list + 1
+	if on then
+		local ok, r, g, b = pcall(ns.Colour, "castbars.ticksColour")
+		if not (ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+			r, g, b = 1, 1, 1
+		end
+		for _, mark in ipairs(list) do
+			mark:SetColorTexture(r, g, b, 0.6)
+		end
+	end
 	for k, mark in ipairs(list) do
 		if on then
 			mark:ClearAllPoints()
@@ -639,11 +663,11 @@ local function ShowTime(row, look, opt, state)
 	end
 end
 
--- The name of an enemy cast's target past the end of a bar that has one (spec.aim) while Target of enemy casts is on, as CastTime.lua writes it, and
--- none while the cast is interrupted, as it empties as the cast ends.
-local function ShowAim(row, look, state)
+-- The name of an enemy cast's target past the end of a bar that has one (spec.aim) while Target of enemy casts is on, as CastTime.lua writes it,
+-- also while the cast is interrupted, as it stays through the bar's Interrupted hold (0.5.42).
+local function ShowAim(row, look)
 	if row.aim then
-		row.aim:SetShown(look.enabled and G("castbars.castTarget") == true and state ~= "interrupted")
+		row.aim:SetShown(look.enabled and G("castbars.castTarget") == true)
 	end
 end
 
@@ -706,16 +730,25 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 				Place(row.aim, "LEFT", bar, "RIGHT", 4, 0)
 			end
 			row.aim:SetText(spec.aim or "")
-			ShowAim(row, look, state)
+			ShowAim(row, look)
 			local ar, ag, ab = AimRGB(spec)
 			Look(row.aim, look.percent, ar, ag, ab, look.outline)
 		end
 	else
 		row.icon:SetSize(h, h)
 		Place(row.icon, "RIGHT", bar, "LEFT", -5, 0)
-		row.icon:SetShown(enabled and G("castbars.playerIcon") == true and state ~= "interrupted")
+		-- Also while the cast is interrupted, as Bars.lua keeps the icon through the Interrupted hold (0.5.42).
+		row.icon:SetShown(enabled and G("castbars.playerIcon") == true)
 	end
 	PaintTicks(row, look, state, w, part)
+	-- The seconds until the player's interrupt is ready on an enemy cast it is on cooldown for, while Seconds until your interrupt is ready and
+	-- Interrupt readiness on enemy casts are on, in Interrupt on cooldown colour and the spell name's size and outline.
+	if row.kickTime then
+		row.kickTime:SetShown(enabled and kick == "cooling" and G("castbars.kickTime") == true and G("castbars.interrupt") == true
+			and (state == "cast" or state == "channel"))
+		local kr, kg, kb = ns.Colour("castbars.interruptCooling")
+		Look(row.kickTime, look.percent, kr, kg, kb, look.outline)
+	end
 	-- The spell name.
 	if row.text then
 		local mode = "top10"
@@ -741,11 +774,11 @@ local function PaintCastBar(row, look, opt, state, part, w, h, name, kick)
 		Look(row.time, look.percent, nil, nil, nil, look.outline)
 	end
 	-- The pushback past the right end of a player bar while Pushback on your bar is on: the setup row's sample, in Pushback colour in the spell
-	-- name's size.
+	-- name's size, also while the cast is interrupted, as CastTime.lua keeps the total through the Interrupted hold (0.5.41).
 	if row.push then
 		row.pushOn = enabled and G("castbars.pushback") == true
 		row.push:SetText(spec.push or "")
-		row.push:SetShown(row.pushOn and spec.push ~= nil and state ~= "interrupted")
+		row.push:SetShown(row.pushOn and spec.push ~= nil)
 		local pr, pg, pb = ns.Colour("castbars.pushbackColour")
 		Look(row.push, look.percent, pr, pg, pb, look.outline)
 	end
@@ -824,7 +857,8 @@ end
 
 -- The moving parts of a painted bar: its fill and spark at `part`, its state's colour, the spell name of a new state, the seconds left (and the
 -- whole cast, `total` seconds, after them while Total cast time too is on), and on a player bar a sample pushback over the second half of a cast
--- (+0.4) or a channel (-0.8, the share left under a half).
+-- (+0.4) or a channel (-0.8, the share left under a half), and the +0.4 of the interrupted cast through its Interrupted hold, as CastTime.lua keeps
+-- the total on the live bar (0.5.42).
 function DC.CastProgress(row, state, part, left, name, total)
 	if not row.look then
 		return
@@ -838,7 +872,7 @@ function DC.CastProgress(row, state, part, left, name, total)
 		PaintTicks(row, row.look, state, row.w, part)
 		PlaceLatency(row, row.look, state, row.w)
 		ShowTime(row, row.look, row.opt, state)
-		ShowAim(row, row.look, state)
+		ShowAim(row, row.look)
 	elseif state == "channel" then
 		DimTicks(row, part)
 	end
@@ -851,7 +885,8 @@ function DC.CastProgress(row, state, part, left, name, total)
 		end
 	end
 	if row.push then
-		local sample = ns.Finite(part) and ((state == "cast" and part >= 0.5 and "+0.4") or (state == "channel" and part <= 0.5 and "-0.8")) or nil
+		local sample = state == "interrupted" and "+0.4"
+			or ns.Finite(part) and ((state == "cast" and part >= 0.5 and "+0.4") or (state == "channel" and part <= 0.5 and "-0.8")) or nil
 		if sample then
 			row.push:SetText(sample)
 		end

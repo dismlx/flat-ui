@@ -56,14 +56,30 @@ local _, ns = ...
 -- UnitSpellTargetClass, withheld too (UnitDocumentation.lua:3148-3163), goes untouched to C_ClassColor.GetClassColor, which takes a withheld
 -- argument (ClassColorDocumentation.lua:11-25), and its colour to SetTextColor, which does too (SimpleFontStringAPIDocumentation.lua:675-686), as
 -- PlateThreatText.lua colours the name of an enemy's target; never compared or used as a key, and white whenever a step raises (no class given).
--- It takes the font of the bar's spell name and empties as the cast ends. /flatui status counts the casts that named their target, and how many
--- of those names showed in a class colour.
+-- It takes the font of the bar's spell name. Since 0.5.42 it stays as the cast ends, while the bar fades or holds Interrupted, and empties as the
+-- bar hides, the row goes off or the unit is no enemy; the next cast writes its own. /flatui status counts the casts that named their target, and
+-- how many of those names showed in a class colour.
+-- Seconds until your interrupt is ready (on by default, Text and icon tab of Cast bars, while Interrupt readiness on enemy casts is on; 0.5.42): a
+-- font string of the addon's own inside the left end of the target and focus bars (LEFT of the bar's LEFT, +4), made ahead out of a fight as the
+-- name of the cast's target is, in the font of the bar's spell name and Interrupt on cooldown colour. On each look of the poll, while the bar casts
+-- or channels, its shield does not plainly show and Interrupt.lua says every usable interrupt of the player's is on cooldown
+-- (ns.InterruptReady false), it counts down the cooldown of the first: ns.InterruptCooldown gives the game's duration object
+-- (C_Spell.GetSpellCooldownDuration, the global cooldown left out), which goes untouched to a duration text binding with a seconds formatter, as
+-- the time of a cast does, or by the poll to SetFormattedText of its GetRemainingDuration when the binding raises. It empties as the interrupt is
+-- ready, the cast ends or the row goes off. /flatui status counts the casts that showed it.
 -- Sound when you are interrupted (None at first, main tab of Cast bars; 0.5.41): while the row names a sound and the page is on, a frame of its own
 -- hears the player's UNIT_SPELLCAST_INTERRUPTED and UNIT_SPELLCAST_CHANNEL_STOP (RegisterUnitEvent, started and stopped by ns.CastTimeSync and the
 -- row's changed handler, ns.CastKickedSoundPicked) and plays the sound (ns.PlayKit, ns.SOUNDS of IconRow.lua, at most once a second) when their
 -- interruptedBy (UnitDocumentation.lua:4627-4640, 4742-4755) names someone: withheld, which says it is there and is never compared, or a plain GUID
 -- that is not the player's. The game's bar takes a stop without it for a plain one (Shared/CastingBarFrame.lua:137-139), so moving, jumping,
 -- Escape and a channel run to its end play nothing. Picking a sound plays it once while the options window shows. /flatui status counts the sounds.
+-- Test mode's first sample Interrupted of a session plays it once too (ns.CastKickedSample, 0.5.42), not counted there.
+-- Sound when your focus casts (None at first, main tab of Cast bars; 0.5.42): while the row names a sound and the page and Interrupt readiness on
+-- enemy casts are on, a second frame of the block's own hears UNIT_SPELLCAST_START and UNIT_SPELLCAST_CHANNEL_START of the focus alone
+-- (RegisterUnitEvent on "focus", so the unit the event gives, which may be withheld for an enemy, is never compared), and a frame later, once the
+-- game's focus bar has taken the cast (C_Timer.After 0), plays the sound while ns.InterruptReady("focus") is a plain true (ready and in range of
+-- an enemy) and the focus bar's BorderShield does not plainly show, at most once a second. Started and stopped with KickListen; picking a sound
+-- plays it once (ns.CastKickedSoundPicked). /flatui status counts the sounds.
 local OWN_ROW, MINE_ROW, PLATE_ROW, PUSH_ROW = "castbars.ownTime", "castbars.playerTime", "nameplates.castTime", "castbars.pushback"
 local TOTAL_ROW, AIM_ROW = "castbars.timeTotal", "castbars.castTarget"
 local EVERY = 0.1
@@ -508,10 +524,18 @@ end
 
 -- One look at a target or focus bar: the name of its cast's target past its end while an enemy casts or channels at someone and the game would
 -- show that name (UnitShouldDisplaySpellTargetName, a plain answer, UnitDocumentation.lua:3116-3130), asked on every look, so a new target or a
--- new cast counts at once.
+-- new cast counts at once. Once the cast ends, a name that shows stays, in its colour, while the bar still shows (its fade, its Interrupted hold),
+-- the row is on and the unit is an enemy, so a kicked cast still says whom it was aimed at; it goes as the bar hides (0.5.42).
 local function AimLook(bar, unit, on)
 	local aim = aims[bar]
-	if not (on and (Flag(bar.casting) or Flag(bar.channeling)) and Hostile(unit)) then
+	local casts = Flag(bar.casting) or Flag(bar.channeling)
+	if not casts and aim and aim.shown and on and Hostile(unit) then
+		local ok, shown = pcall(bar.IsShown, bar)
+		if ok and Flag(shown) then
+			return
+		end
+	end
+	if not (on and casts and Hostile(unit)) then
 		AimHide(aim)
 		return
 	end
@@ -555,8 +579,187 @@ local function LookAims(on)
 	end
 end
 
+-- Seconds until your interrupt is ready -----------------------------------------------------------------------------
+
+-- KT: shown (the casts that showed the seconds, for /flatui status), live (the bars that show them now, which keeps the poll running) and refused
+-- (the game would not write them). KickTimeOn, LookKicks and KickAhead are the block's own, below.
+local KT = { shown = 0, live = 0, refused = false }
+local KickTimeOn, LookKicks, KickAhead
+do
+	local KICK_TIME_ROW, KICK_COLOUR_ROW = "castbars.kickTime", "castbars.interruptCooling"
+	-- kicks: per target or focus bar, its seconds { fs, shown, font, hex, id, mode, binding, duration }, false when they could not be made;
+	-- kickQueued: a make waits for the end of the fight.
+	local kicks, kickQueued = setmetatable({}, weak), setmetatable({}, weak)
+
+	-- The row, the page and Interrupt readiness on enemy casts are on.
+	function KickTimeOn()
+		return Get(KICK_TIME_ROW) == true and Get("castbars.interrupt") == true and ns.Enabled("castbars")
+	end
+
+	-- The font string inside the left end of a bar (LEFT +4), made once out of a fight on a bar the game may protect, as MakeAim makes its own.
+	local function MakeKick(bar)
+		local kick = kicks[bar]
+		if kick ~= nil then
+			return kick or nil
+		end
+		if InCombatLockdown() and ns.MaybeProtected(bar) then
+			if not kickQueued[bar] then
+				kickQueued[bar] = true
+				ns.OutOfCombat(function()
+					kickQueued[bar] = nil
+					pcall(MakeKick, bar)
+				end)
+			end
+			return nil
+		end
+		local fs = ns.OwnText(bar, "OVERLAY", "GameFontHighlightSmall")
+		if fs == nil then
+			kicks[bar] = false
+			return nil
+		end
+		fs:SetPoint("LEFT", bar, "LEFT", 4, 0)
+		fs:SetJustifyH("LEFT")
+		fs:SetText("")
+		fs:Hide()
+		kick = { fs = fs, shown = false }
+		kicks[bar] = kick
+		return kick
+	end
+
+	local function KickHide(kick)
+		if kick and kick.shown then
+			if kick.mode == "binding" and kick.binding ~= nil then
+				pcall(kick.binding.SetEnabled, kick.binding, false)
+			end
+			pcall(kick.fs.SetText, kick.fs, "")
+			pcall(kick.fs.Hide, kick.fs)
+			kick.shown, kick.id, kick.mode, kick.duration = false, nil, nil, nil
+			KT.live = math.max(0, KT.live - 1)
+		end
+	end
+
+	-- Interrupt on cooldown colour on the seconds, set again only when the row changed.
+	local function KickColour(kick)
+		local hex = Get(KICK_COLOUR_ROW)
+		if kick.hex == hex then
+			return
+		end
+		local r, g, b = ns.Colour(KICK_COLOUR_ROW)
+		if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+			r, g, b = 0.85, 0.45, 0.18
+		end
+		pcall(kick.fs.SetTextColor, kick.fs, r, g, b)
+		kick.hex = hex
+	end
+
+	-- The first way, as the time of a cast: the game's duration text binding with a seconds formatter on the font string.
+	local function KickBind(kick, duration)
+		local binding = kick.binding
+		if binding == nil then
+			binding = C_DurationUtil.CreateDurationTextBinding()
+			binding:SetFormatter(C_StringUtil.CreateSecondsFormatter())
+			binding:SetFontString(kick.fs)
+			kick.binding = binding
+		end
+		binding:SetDuration(duration)
+		binding:SetEnabled(true)
+	end
+
+	-- The second way: the seconds left, rounded, written on each look; SetFormattedText takes them withheld.
+	local function KickWrite(kick)
+		kick.fs:SetFormattedText("%.0f", kick.duration:GetRemainingDuration())
+	end
+
+	-- True for a plain true from the bar's shield: the cast cannot be interrupted, so its seconds would say nothing.
+	local function Shielded(bar)
+		local shield = bar.BorderShield
+		if ns.IsSecret(shield) or type(shield) ~= "table" then
+			return false
+		end
+		local ok, shown = pcall(shield.IsShown, shield)
+		return ok and Flag(shown)
+	end
+
+	-- One look at a target or focus bar: while its enemy casts or channels and every usable interrupt of the player's is on cooldown
+	-- (ns.InterruptReady false), the seconds until the first is back, from its duration object, which is never read here. A new interrupt on
+	-- cooldown (another rank or a stance's) is bound again; the duration object goes to the binding untouched.
+	local function KickLook(bar, unit, on)
+		local kick = kicks[bar]
+		local duration, id = nil, nil
+		if on and (Flag(bar.casting) or Flag(bar.channeling)) and type(ns.InterruptReady) == "function"
+			and type(ns.InterruptCooldown) == "function" and ns.InterruptReady(unit) == false and not Shielded(bar) then
+			duration, id = ns.InterruptCooldown()
+		end
+		if duration == nil then
+			KickHide(kick)
+			return
+		end
+		kick = kick or MakeKick(bar)
+		if not kick then
+			return
+		end
+		if not kick.shown or kick.id ~= id then
+			if not kick.shown then
+				AimFont(bar, kick)
+			end
+			KickColour(kick)
+			kick.id, kick.duration = id, duration
+			local bound = pcall(KickBind, kick, duration)
+			if not bound and kick.binding ~= nil then
+				-- A binding that refused this duration lets go of the font string, so the poll writes it alone.
+				pcall(kick.binding.SetEnabled, kick.binding, false)
+			end
+			if bound then
+				kick.mode = "binding"
+			elseif pcall(KickWrite, kick) then
+				kick.mode = "poll"
+			else
+				KT.refused = true
+				KickHide(kick)
+				return
+			end
+		elseif kick.mode == "poll" and not pcall(KickWrite, kick) then
+			KT.refused = true
+			KickHide(kick)
+			return
+		end
+		if not kick.shown then
+			kick.fs:Show()
+			kick.shown = true
+			KT.shown, KT.live = KT.shown + 1, KT.live + 1
+		end
+	end
+
+	-- One look at the target and focus bars while the row is on, and at those that showed seconds when it went off.
+	function LookKicks(on)
+		for _, entry in ipairs(OWN) do
+			local bar = _G[entry[1]]
+			if bar ~= nil and not ns.IsSecret(bar) and not ns.Forbidden(bar) and (on or kicks[bar]) then
+				KickLook(bar, entry[2], on)
+			end
+		end
+	end
+
+	-- Made ahead out of a fight while `make`, so the first cast of one shows its seconds; a change of Interrupt on cooldown colour reaches them at once.
+	function KickAhead(make)
+		for _, entry in ipairs(OWN) do
+			local bar = _G[entry[1]]
+			if bar ~= nil and not ns.IsSecret(bar) and not ns.Forbidden(bar) then
+				local kick = kicks[bar]
+				if make and kick == nil then
+					kick = MakeKick(bar)
+				end
+				if kick then
+					pcall(KickColour, kick)
+				end
+			end
+		end
+	end
+end
+
 local function Step()
 	pcall(LookAims, AimOn())
+	pcall(LookKicks, KickTimeOn())
 	LookList(OWN, OwnOn())
 	LookList(MINE, MineOn())
 	ns.EachPlate(LookPlate, PlateRow())
@@ -582,8 +785,8 @@ local function Fades()
 end
 
 local function Wanted()
-	-- The name of a cast's target goes on while the time has stopped.
-	if AimOn() then
+	-- The name of a cast's target and the seconds of the interrupt go on while the time has stopped.
+	if AimOn() or KickTimeOn() or KT.live > 0 then
 		return true
 	end
 	for _, aim in pairs(aims) do
@@ -936,11 +1139,13 @@ end
 -- Sound when you are interrupted --------------------------------------------------------------------------
 
 -- K: frame (the block's own, false when it could not be made), on (the events are heard), at (GetTime of the last sound), played (the sounds
--- played, for /flatui status).
-local K = { frame = nil, on = false, at = nil, played = 0 }
+-- played, for /flatui status). The same for Sound when your focus casts (0.5.42): focusFrame, focusOn, focusAt, focusPlayed, and focusByUnit
+-- (its events went by unit, so the unit they give is never compared).
+local K = { frame = nil, on = false, at = nil, played = 0, focusFrame = nil, focusOn = false, focusAt = nil, focusPlayed = 0, focusByUnit = false }
 local KickListen
 do
-	local KICK_ROW, KICK_GAP = "castbars.kickedSound", 1
+	local KICK_ROW, KICK_GAP, FOCUS_ROW = "castbars.kickedSound", 1, "castbars.focusSound"
+	local FOCUS_EVENTS = { "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START" }
 	-- The places of the sound choices in ns.SOUNDS (IconRow.lua), as CombatCues.lua has them.
 	local KITS = { spell = 1, chimes = 2, bell = 3, warhorn = 4, raid = 5, alarm = 6, whisper = 7 }
 	local KICK_EVENTS = { "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_CHANNEL_STOP" }
@@ -987,8 +1192,86 @@ do
 		end
 	end
 
-	-- The events are heard only while the row is not None and the page is on.
+	-- Sound when your focus casts (0.5.42): while the row names a sound, the page and Interrupt readiness on enemy casts are on.
+	local function FocusOn()
+		return ns.Enabled("castbars") and KITS[Get(FOCUS_ROW)] ~= nil and Get("castbars.interrupt") == true
+	end
+
+	-- A frame after the focus starts a cast or a channel, once the game's bar has taken it: the sound plays while the player's interrupt is ready
+	-- and in range of the focus (ns.InterruptReady a plain true; "far", false and nil play nothing) and the focus bar's shield does not plainly
+	-- show, at most once in KICK_GAP seconds.
+	local function FocusLook()
+		if not (K.focusOn and FocusOn()) or type(ns.InterruptReady) ~= "function" or ns.InterruptReady("focus") ~= true then
+			return
+		end
+		local bar = PlayerBar("FocusFrameSpellBar")
+		local shield = bar and bar.BorderShield
+		if shield ~= nil and not ns.IsSecret(shield) and type(shield) == "table" then
+			local ok, shown = pcall(shield.IsShown, shield)
+			if ok and Flag(shown) then
+				return
+			end
+		end
+		local now = GetTime()
+		if K.focusAt and now >= K.focusAt and now - K.focusAt < KICK_GAP then
+			return
+		end
+		local kit = KITS[Get(FOCUS_ROW)]
+		local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
+		if sound and type(ns.PlayKit) == "function" then
+			K.focusAt = now
+			if ns.PlayKit(sound[1], "castbars") then
+				K.focusPlayed = K.focusPlayed + 1
+			end
+		end
+	end
+
+	-- The unit of an event heard by unit is the focus, and is never compared; heard without, only a plain "focus" counts.
+	local function FocusEvent(_, _, unit)
+		if not K.focusOn then
+			return
+		end
+		if not K.focusByUnit and (ns.IsSecret(unit) or unit ~= "focus") then
+			return
+		end
+		pcall(C_Timer.After, 0, function()
+			pcall(FocusLook)
+		end)
+	end
+
+	local function FocusListen()
+		local on = FocusOn()
+		if on == K.focusOn then
+			return
+		end
+		if K.focusFrame == nil then
+			local ok, frame = pcall(CreateFrame, "Frame")
+			K.focusFrame = ok and not ns.IsSecret(frame) and type(frame) == "table" and frame or false
+			if K.focusFrame then
+				ns.Own[frame] = true
+				frame:SetScript("OnEvent", FocusEvent)
+			end
+		end
+		local frame = K.focusFrame
+		if not frame then
+			return
+		end
+		K.focusOn = on
+		local byUnit = true
+		for _, event in ipairs(FOCUS_EVENTS) do
+			if not on then
+				pcall(frame.UnregisterEvent, frame, event)
+			elseif not (frame.RegisterUnitEvent and pcall(frame.RegisterUnitEvent, frame, event, "focus")) then
+				pcall(frame.RegisterEvent, frame, event)
+				byUnit = false
+			end
+		end
+		K.focusByUnit = on and byUnit
+	end
+
+	-- The events of both rows are heard only while their row is not None and the page is on (and, for the focus, Interrupt readiness).
 	function KickListen()
+		pcall(FocusListen)
 		local on = KickOn()
 		if on == K.on then
 			return
@@ -1012,6 +1295,17 @@ do
 			elseif not (frame.RegisterUnitEvent and pcall(frame.RegisterUnitEvent, frame, event, "player")) then
 				pcall(frame.RegisterEvent, frame, event)
 			end
+		end
+	end
+
+	-- Test mode's sample Interrupted on the player bar (TestHud.lua) plays the sound once a session, so it can be judged with the bar in view
+	-- (ns.TestMode.Sound, asked only while the row names a sound); None plays nothing, and it counts in no number of /flatui status (0.5.42).
+	function ns.CastKickedSample()
+		local kit = ns.Enabled("castbars") and KITS[Get(KICK_ROW)]
+		local sound = kit and ns.SOUNDS and ns.SOUNDS[kit]
+		local mode = ns.TestMode
+		if sound and type(ns.PlayKit) == "function" and type(mode) == "table" and type(mode.Sound) == "function" and mode.Sound("castkicked") then
+			ns.PlayKit(sound[1], "castbars")
 		end
 	end
 
@@ -1090,6 +1384,7 @@ function ns.CastTimeSync()
 	if not InCombatLockdown() then
 		pcall(AimAhead)
 	end
+	pcall(KickAhead, KickTimeOn() and not InCombatLockdown())
 	pcall(PushListen, PushOn())
 	pcall(KickListen)
 	-- A change of Pushback colour reaches a total that shows at once.
@@ -1129,11 +1424,18 @@ function ns.StatusLines()
 		lines[#lines + 1] = ("Target of enemy casts: %d casts named their target, %d in its class colour and %d in white."):format(state.aimed,
 			state.aimClass, state.aimed - state.aimClass)
 	end
+	if KickTimeOn() then
+		lines[#lines + 1] = KT.refused and ("Seconds until your interrupt is ready: shown on %d casts; the game would not write them once."):format(KT.shown)
+			or ("Seconds until your interrupt is ready: shown on %d casts."):format(KT.shown)
+	end
 	if PushOn() then
 		lines[#lines + 1] = P.last and ("Pushback on your bar: the last shown was %+.1f."):format(P.last) or "Pushback on your bar: no pushback seen yet."
 	end
 	if K.on then
 		lines[#lines + 1] = ("Sound when you are interrupted: %d played."):format(K.played)
+	end
+	if K.focusOn then
+		lines[#lines + 1] = ("Sound when your focus casts: %d played."):format(K.focusPlayed)
 	end
 	return lines
 end

@@ -10,7 +10,9 @@ local _, ns = ...
 -- once it is on its way: each frame its place is worked out again from its own start time and spot (GetTime, so the frame rate does not
 -- matter). A Straight or Arc number that would start within a line of a number still near the start takes the next free lane, the same
 -- path moved sideways by about the width of a number, first away from the character and then to the other side, four lanes at most
--- (SHAPE.lanes), and starts at once, so a burst shows side by side. Only when every lane is busy near the start does it wait, see-through
+-- (SHAPE.lanes), and starts at once, so a burst shows side by side. An Outgoing number with a spell name after it (Spell names After every spell,
+-- 0.5.42) takes a lane as wide as its name (half a height more for each letter) and only the first two lanes, on its path and away from the
+-- character, so a burst of named numbers reads as two clean columns. Only when every lane is busy near the start does it wait, see-through
 -- and still at its start, for the lane that frees first, and start there: SHAPE.wait seconds at most after it came or after the number
 -- ahead of it in that lane started, and never more than SHAPE.most seconds after it came, so a flood of hits that goes on is never further
 -- behind (ns.ScrollLane). No number starts lower or higher than its spot (up to 0.5.23 a number in a burst started a line further back
@@ -297,9 +299,10 @@ end
 -- A burst of up to 20 numbers in one frame starts four at a time, each four a line or SHAPE.wait (the sooner) after the four before; in a
 -- flood of hits that goes on a wait does not grow past SHAPE.most, and a number held to it covers some of the number ahead of it in its
 -- lane, or all of it in a burst of more than 20. The setup drawing of combat text takes its lanes from here too.
-function ns.ScrollLane(newest, height, now)
+-- count, when given, takes only the first lanes of SHAPE.lanes: a named number of the Outgoing area takes the first two (0.5.42, Add).
+function ns.ScrollLane(newest, height, now, count)
 	local pick, at, first, age
-	for lane = 1, #SHAPE.lanes do
+	for lane = 1, count or #SHAPE.lanes do
 		local last = newest[lane]
 		if not last then
 			return lane, now
@@ -484,13 +487,19 @@ local function Add(area, kind, value, format, crit, r, g, b, scale, flag, icon, 
 	item.length = SHAPE.length * ns.CombatWorldScale()
 	item.life = style == "static" and SHAPE.still or SHAPE.life[Opt("speed")] or SHAPE.life.normal
 	item.hold = style == "static" and SHAPE.stillHold or SHAPE.hold
-	-- A Straight or Arc number takes a lane, moved sideways from its path and never along it; a Horizontal or Static number takes a row.
-	local start, lane = now, nil
+	-- A Straight or Arc number takes a lane, moved sideways from its path and never along it; a Horizontal or Static number takes a row. An
+	-- amount of the Outgoing area with a spell name after it (After every spell: a format of "%s " and the name, CombatText.lua) takes a lane as
+	-- wide as its name, half a height a letter more, as the numbers over enemies estimate a name, and only the two lanes on its path and away
+	-- from the character, so a burst reads as two columns and the rest wait their turn (0.5.42).
+	local start, lane, named = now, nil, 0
+	if area.key == "out" and kind == "amount" and type(format) == "string" and not ns.IsSecret(format) and format ~= "%s" then
+		named = math.max(0, #format - 3)
+	end
 	if PATH[style] then
-		lane, start = ns.ScrollLane(area.lanes, height, now)
+		lane, start = ns.ScrollLane(area.lanes, height, now, named > 0 and 2 or nil)
 	end
 	item.start, item.lane, item.x0, item.y0 = start, lane, x, y
-	item.rx = lane and area.side * SHAPE.lanes[lane] * SHAPE.lane * Height(area) or 0
+	item.rx = lane and area.side * SHAPE.lanes[lane] * (SHAPE.lane + 0.5 * named) * Height(area) or 0
 	item.ry = lane and 0 or Row(area, item, now)
 	Place(item, now)
 	item.text:Show()

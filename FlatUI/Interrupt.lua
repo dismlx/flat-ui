@@ -6,7 +6,8 @@ local _, ns = ...
 -- off, the target and focus bars take the colour on a thin strip along their bottom edge instead (Bars.lua, ns.CastKickSync, 0.5.37), so the row
 -- shows on those bars at the defaults too. The icon of the
 -- interrupt in the cooldown row gets a gold border while the target or the focus casts something it can stop, the interrupt is ready and the
--- caster is in its range (Cooldowns.lua hands its icons to ns.InterruptIcons).
+-- caster is in its range (Cooldowns.lua hands its icons to ns.InterruptIcons). While every usable interrupt is on cooldown, ns.InterruptCooldown
+-- gives the game's duration object of the first, which CastTime.lua counts down inside the left end of the target and focus bars (0.5.42).
 -- Range: while an interrupt is ready, the game is asked whether the caster is in range of it (C_Spell.IsSpellInRange, SpellDocumentation.lua:947-963,
 -- no withheld answer; read as Cooldowns.lua reads it), for the ready ones of the player's own that can be cast now: a plain false for every one
 -- of them is out of range, and no answer, or the pet's Spell Lock (whose range is the pet's), counts as in range. The answer for a unit is kept for
@@ -354,6 +355,31 @@ function ns.InterruptReady(unit)
 	return nil
 end
 
+-- The game's duration object of the cooldown of the player's own interrupt on cooldown, the global cooldown left out
+-- (C_Spell.GetSpellCooldownDuration(id, true), SpellDocumentation.lua:327-342, as Pulse.lua and Cooldowns.lua ask it), and the id of its rank: the
+-- first of the class's that is known, can be cast and is not ready, the pet's Spell Lock left out. Never read or compared here: CastTime.lua hands
+-- it to a duration text binding (Seconds until your interrupt is ready, 0.5.42). Nil while the events are not heard, or none is on cooldown or the
+-- game gives none. It never raises.
+function ns.InterruptCooldown()
+	if not S.full then
+		return nil
+	end
+	local call = type(C_Spell) == "table" and C_Spell.GetSpellCooldownDuration or nil
+	if type(call) ~= "function" then
+		return nil
+	end
+	for _, ab in ipairs(Abilities()) do
+		if ab.id ~= nil and ab.usable and not ab.pet and ab.ready == false then
+			local ok, duration = pcall(call, ab.id, true)
+			if ok and duration ~= nil then
+				return duration, ab.id
+			end
+			return nil
+		end
+	end
+	return nil
+end
+
 -- The border on the cooldown row -----------------------------------------------------------------------------------------
 
 local function GlowOn()
@@ -672,6 +698,10 @@ ns.InterruptSync = SafeSync
 -- The row Interrupt readiness on enemy casts changed: the covers read it on their next frame, and the events start or stop.
 function ns.InterruptChanged()
 	SafeSync()
+	-- Seconds until your interrupt is ready works while this row is on (CastTime.lua).
+	if type(ns.CastTimeSync) == "function" then
+		pcall(ns.CastTimeSync)
+	end
 end
 
 -- For Cooldowns.lua, after each layout of the row, out of combat: its icons, each { frame, spell, top }, top the frame above the icon's sweep. The
