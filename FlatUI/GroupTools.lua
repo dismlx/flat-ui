@@ -7,7 +7,8 @@ local _, ns = ...
 -- Movers.lua: the top left corner of the row is the top left corner of the box). While test mode is on (TestMode.lua, out of combat only) Show
 -- reads as Always, the tick shows a sample tally of 4/5 with a sample Eli not ready for 6 seconds, then 5/5 in green for 4 with the flash and
 -- Sound when all are ready (once each time test mode comes on), again and again (G.SampleTick), the pull button counts down from Countdown length in
--- the warm colour, again and again, with its red last seconds and its flash at each 0, the Skull is lit as your target's marker while the target
+-- the warm colour, again and again, with its red last seconds, its flash and Go for one step at each 0, holding still while the test mode bar's
+-- Moving is off as the sample tally does (G.CountStep), the Skull is lit as your target's marker while the target
 -- wears none, and the role poll's tooltip lists a sample party's roles, names in their class colours, while its count reads 1 for the sample Kai
 -- (G.SampleOn); a real ready check, countdown, marker or roles take their place. No frame or setting of the game is changed.
 --
@@ -21,7 +22,8 @@ local _, ns = ...
 -- EnhanceQoLDungeonRaid/Init.lua:440 stops one. The right button reads the attributes that end in 2, with any key held (SecureTemplates.lua:
 -- 101-133), so a right-click takes the marker off your target, every marker with the clear, and stops the countdown. Shift and Ctrl turn a
 -- marker and the clear on the player and on the focus (shift-unit* and ctrl-unit*, which SecureButton_GetModifiedUnit reads: SecureTemplates.lua:
--- 118-143), with either button, so Shift-right-click takes the player's marker off; a focus that does not exist makes the click do nothing
+-- 118-143), with either button, so Shift-right-click takes the player's marker off, on the clear too (its shift-action2 and ctrl-action2 are
+-- clear, not clear-all, so only a plain right-click takes every marker off); a focus that does not exist makes the click do nothing
 -- (717-718), and a marker greyed for no target still marks the player with Shift. A secure button listens for
 -- the release of the mouse button (useOnKeyDown false, SecureTemplates.lua:792-800), as those of Reload.lua do. InitiateRolePoll has no
 -- restriction (UnitRoleDocumentation.lua:29-36) and the game's own buttons call it from a plain click (Mainline/
@@ -41,7 +43,8 @@ local _, ns = ...
 -- colour (ns.ClassColourOf, plain answers only), and the result stays 8 seconds after the check ends. The pull countdown: from START_TIMER of the
 -- player countdown type (Enum.StartTimerType.PlayerCountdown, TimerConstantsDocumentation.lua:13-16; timeRemaining,
 -- WorldStateInfoDocumentation.lua:43-62) its number counts the seconds left in the warm colour, the last three in red, once a second
--- (C_Timer.NewTicker), and goes back to Countdown length at 0, with the white flash, or on STOP_TIMER_OF_TYPE. Both change only FontStrings and
+-- (C_Timer.NewTicker), and at 0 gives the white flash and reads Go in the green of a full ready check for a second and a half, then Countdown
+-- length again, as it does at once on STOP_TIMER_OF_TYPE (one after the Go keeps it). Both change only FontStrings and
 -- textures of the icons of Flat UI's own, never a secure button, so in a fight too. Out of combat the mouse wheel over the pull button makes
 -- Countdown length a second longer or shorter (3 to 60 seconds, G.Wheel): an OnMouseWheel script of the addon's own on its own secure button, set
 -- as the button is made, out of combat; in a fight it does nothing.
@@ -61,7 +64,8 @@ local _, ns = ...
 -- says a left-click takes it off. It follows PLAYER_TARGET_CHANGED and RAID_TARGET_UPDATE (EncounterInfoDocumentation.lua:86), in a fight too,
 -- as only the outline of an icon of Flat UI's own changes. The role poll's tooltip lists who has which role (UnitGroupRolesAssigned and UnitName,
 -- plain answers only), each name in its class colour: a line for each role in a party, and there "No tank" or "No healer" in the warm colour
--- when nobody holds that role while someone holds one, the counts in a raid, and in the warm colour who has none, written again on
+-- when nobody holds that role while someone holds one, the counts in a raid, and in the warm colour who has none, or while nobody holds a
+-- tank, healer or damage role only a dim "Nobody has picked a role yet." (in test mode the sample roles, as its count reads 1), written again on
 -- PLAYER_ROLES_ASSIGNED (PartyInfoDocumentation.lua:829) while the mouse is over it. The corner of its icon counts in the warm colour how many
 -- members have no role (a plain NONE), as the tick shows its tally, only once someone in the group holds a tank, healer or damage role (most
 -- groups on Forever pick none, and the whole group would read as missing), grey while the role poll is greyed, hidden at 0 and out of a group
@@ -88,9 +92,10 @@ local FONT = "GameFontHighlightSmall"
 -- The text-dim of the windows (PanelLook.lua) for the lines of a tooltip, and the warm colour of the reason a button is greyed.
 local DIM = { 0.66, 0.68, 0.62 }
 local WARN = { 0.9, 0.72, 0.36 }
--- The green of a ready check that all answered ready, how long its tally stays after it ends, and the step of the countdown's number.
+-- The green of a ready check that all answered ready, how long its tally stays after it ends, the step of the countdown's number, and how long
+-- the pull button reads Go, in that green, as a countdown reaches 0.
 local ALL_READY = { 0.4, 0.9, 0.4 }
-local KEEP_TALLY, COUNT_STEP = 8, 1
+local KEEP_TALLY, COUNT_STEP, GO_TIME = 8, 1, 1.5
 -- The red of the last seconds of a countdown, from how many seconds left, and the shortest and longest Countdown length the mouse wheel sets (the
 -- row's own limits, Config.lua).
 local LAST_RED, LAST_FROM = { 1, 0.3, 0.3 }, 3
@@ -350,12 +355,15 @@ end
 -- The attributes of a secure button; those that end in 2 are for the right button (header). The countdown's macrotext is set by G.Countdown. A
 -- marker and the clear act on the player with Shift held and on the focus with Ctrl, either button: the secure marker action reads its unit
 -- through SecureButton_GetModifiedUnit (SecureTemplates.lua:118-143, 582-603), which finds shift-unit* and ctrl-unit*, and does nothing for a
--- focus that does not exist (717-718); no modifier leaves the unit to the action, the target.
+-- focus that does not exist (717-718); no modifier leaves the unit to the action, the target. The clear's right button with Shift or Ctrl is
+-- clear too (shift-action2, ctrl-action2), which the lookup finds before *action2 (SecureButton_GetModifiedAttribute tries the modifier
+-- first), since clear-all would ignore the unit and take every marker off (RemoveRaidTargets).
 function G.Attributes(entry)
 	if entry.kind == "mark" then
 		return { type = "raidtarget", marker = entry.marker, action = "toggle", ["*action2"] = "clear", ["shift-unit*"] = "player", ["ctrl-unit*"] = "focus" }
 	elseif entry.kind == "clear" then
-		return { type = "raidtarget", action = "clear", ["*action2"] = "clear-all", ["shift-unit*"] = "player", ["ctrl-unit*"] = "focus" }
+		return { type = "raidtarget", action = "clear", ["*action2"] = "clear-all", ["shift-action2"] = "clear", ["ctrl-action2"] = "clear",
+			["shift-unit*"] = "player", ["ctrl-unit*"] = "focus" }
 	elseif entry.kind == "check" then
 		return { type = "macro", macrotext = "/readycheck" }
 	end
@@ -611,12 +619,21 @@ function G.Countdown()
 	end
 end
 
--- The countdown's number: the seconds left in the warm colour while a countdown runs, red for the last LAST_FROM of them, else Countdown length,
--- dim while the button is greyed.
+-- The countdown's number: Go in the green of a full ready check for GO_TIME after a countdown reached 0 (G.goUntil), the seconds left in the warm
+-- colour while a countdown runs, red for the last LAST_FROM of them, else Countdown length, dim while the button is greyed.
 function G.PullText(entry)
 	local text = entry and entry.text
 	if not text then
 		return
+	end
+	if G.goUntil then
+		local now = Ask(GetTime)
+		if ns.Finite(now) and now < G.goUntil then
+			text:SetText("Go")
+			text:SetTextColor(ALL_READY[1], ALL_READY[2], ALL_READY[3], 1)
+			return
+		end
+		G.goUntil = nil
 	end
 	local now = G.ends and Ask(GetTime)
 	if now then
@@ -861,7 +878,7 @@ function G.Lines(entry)
 			key = KeyText("RAIDTARGET" .. entry.marker)
 		else
 			title, lines = "Clear markers", { "Left-click takes the marker off your target.", "Right-click takes every marker off.",
-				"Shift-click takes yours off, Ctrl-click your focus's." }
+				"Shift-click takes yours off, Ctrl-click your focus's, with either button." }
 			key = KeyText("RAIDTARGETNONE")
 		end
 		if key then
@@ -966,13 +983,20 @@ G.Units = Units
 -- The roles of the group for the role poll's tooltip, added to lines: who has which role, from plain answers of UnitGroupRolesAssigned and UnitName
 -- only (UnitDocumentation.lua:1318-1332; a withheld role or name is left out). In a party a line for each role that has names; in a raid one line
 -- of counts, then the names of those with no role, ROLE_NAMES at most. The second answer marks the line of those with no role, written in the
--- warm colour. Out of a group nothing is added, but while test mode is on and the group gives no plain role a sample party's roles are, one of
--- them with no role.
+-- warm colour. Out of a group nothing is added. Until someone holds a plain tank, healer or damage role (held, the rule of G.RoleCount), as in
+-- most groups on Forever, the group's names are not listed: a group with plain NONE roles gets one dim line, NOBODY, with nothing warm, and
+-- while test mode is on a sample party's roles are added instead, one of them with no role, so the tooltip matches the count of 1.
+local NOBODY = "Nobody has picked a role yet."
+
 function G.Roles(lines)
-	local names, any = { TANK = {}, HEALER = {}, DAMAGER = {}, NONE = {} }, false
-	if Truth(IsInGroup) == true then
+	local names, any, held = { TANK = {}, HEALER = {}, DAMAGER = {}, NONE = {} }, false, false
+	local grouped = Truth(IsInGroup) == true
+	if grouped then
 		for _, unit in ipairs(Units()) do
 			local role, name = Ask(UnitGroupRolesAssigned, unit), Ask(UnitName, unit)
+			if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
+				held = true
+			end
 			local list = type(role) == "string" and names[role] or nil
 			if list and type(name) == "string" and name ~= "" then
 				list[#list + 1] = Coloured(unit, name)
@@ -980,8 +1004,11 @@ function G.Roles(lines)
 			end
 		end
 	end
-	if not any then
+	if not held or not any then
 		if not Testing() then
+			if grouped and not held and #names.NONE > 0 then
+				lines[#lines + 1] = NOBODY
+			end
 			return lines, nil
 		end
 		lines[#lines + 1] = "Sample roles:"
@@ -1140,9 +1167,9 @@ local function PlayerCountdown(kind)
 	return kind == (ns.Finite(value) and value or PLAYER_COUNTDOWN)
 end
 
--- Stops the countdown's step and gives the number back its length.
+-- Stops the countdown's step and gives the number back its length; a Go that shows goes too (G.CountStep sets it again after this at a real 0).
 function G.CountdownOver()
-	G.ends, G.sampleCount = nil, nil
+	G.ends, G.sampleCount, G.goUntil = nil, nil, nil
 	local ticker = G.ticker
 	G.ticker = nil
 	if ticker and type(ticker.Cancel) == "function" then
@@ -1152,21 +1179,44 @@ function G.CountdownOver()
 	G.Faint()
 end
 
--- One step of the countdown: the number, and the end at 0, where the pull button gives the white flash of cooldown icons (IconRow.lua). The sample
--- of test mode flashes too, and starts again from Countdown length while test mode is on.
+-- True while the test mode bar's Moving is off, which holds every sample still (TestMode.lua, TM.Moving).
+local function Frozen()
+	local mode = ns.TestMode
+	return mode ~= nil and type(mode.Moving) == "function" and mode.Moving() == false
+end
+
+-- One step of the countdown: the number, and the end at 0, where the pull button gives the white flash of cooldown icons (IconRow.lua) and reads
+-- Go in green for GO_TIME (G.goUntil, G.PullText), then Countdown length again. The sample of test mode flashes too and reads Go for one step,
+-- then starts again from Countdown length while test mode is on; while the test mode bar's Moving is off, each step pushes its end on by a step,
+-- so its number and its flash hold where they are and carry on when Moving comes back. A real countdown is never held.
 function G.CountStep()
 	local now = Ask(GetTime)
+	if G.sampleCount and G.ends and Frozen() then
+		G.ends = G.ends + COUNT_STEP
+		return
+	end
 	if not G.ends or not now or G.ends - now < 0.5 then
 		local entry = G.ends and now and G.Entry("pull")
 		if entry then
 			ns.IconFlash(entry)
 		end
 		if G.sampleCount and now and Testing() then
-			G.ends = now + Seconds()
+			G.ends, G.goUntil = now + Seconds() + COUNT_STEP, now + 0.9 * COUNT_STEP
 			G.PullText(G.Entry("pull"))
 			return
 		end
 		G.CountdownOver()
+		if entry then
+			local mark = now + GO_TIME
+			G.goUntil = mark
+			G.PullText(entry)
+			After(GO_TIME, function()
+				if G.goUntil == mark then
+					G.goUntil = nil
+					ns.Try(KEY, G.PullText, G.Entry("pull"))
+				end
+			end)
+		end
 		return
 	end
 	G.PullText(G.Entry("pull"))
@@ -1192,7 +1242,7 @@ function G.TimerStarted(kind, remaining)
 		G.CountdownOver()
 		return
 	end
-	G.ends, G.sampleCount = now + remaining, nil
+	G.ends, G.sampleCount, G.goUntil = now + remaining, nil, nil
 	G.Wake()
 	G.StartTicker()
 	-- With no ticker the number shows the length the countdown started with, until it ends.
@@ -1207,9 +1257,9 @@ function G.TimerStarted(kind, remaining)
 	G.PullText(G.Entry("pull"))
 end
 
--- STOP_TIMER_OF_TYPE: a stopped player countdown.
+-- STOP_TIMER_OF_TYPE: a stopped player countdown. One that already reached 0 and reads Go keeps its Go, should the game say so as it ends.
 function G.TimerStopped(kind)
-	if PlayerCountdown(kind) then
+	if PlayerCountdown(kind) and not (G.goUntil and not G.ends) then
 		G.CountdownOver()
 	end
 end

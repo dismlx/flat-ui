@@ -9,7 +9,9 @@ local _, ns = ...
 -- shows its party as raid-style frames the rows hang from those frames, the unit read from each frame. In a raid group the game shows
 -- no party member frames, so the player's own row and the rows of the subgroup stack in a holder of their own with a handle in
 -- /flatui move, each row labelled with the member's name in his class colour (RAID_CLASS_COLORS, plain answers only, else white), right-aligned
--- on one line and cut at the room of the label. The row of a member who is dead, a ghost or offline (UnitIsDeadOrGhost, UnitIsConnected, plain
+-- on one line and cut at the room of the label. With Rows stack Up (Down by default) the stack keeps its bottom on the bottom of its box, the
+-- player's own row still on top, so more rows grow upward instead of down over the action bars (P.PlaceStack, P.Stacked), as Bars stack has it
+-- for the Threat list and Healer mana. The row of a member who is dead, a ghost or offline (UnitIsDeadOrGhost, UnitIsConnected, plain
 -- answers only: a withheld one changes nothing) fades to 35% with its label, also in a fight, as both are frames of the addon's own, and comes
 -- back as he is up again; its tooltips say Dead or Offline. With Dim members out of range (on by default) the row of a member the game says is
 -- out of range fades to 45% with its label, also in a fight, as Healer mana's bars do (P.Range: UnitInRange's answer goes unread to
@@ -930,26 +932,36 @@ function P.Stack()
 	return P.stack
 end
 
--- Puts the stack at the spot of its handle.
+-- Puts the stack at the spot of its handle: its top left corner at the top left corner of the box, or with Rows stack Up its bottom left corner
+-- at the bottom left corner of the box. The stack is the box's size, so either way it covers the box, and P.Stacked hangs the rows from its top
+-- or stands them on its bottom.
 function P.PlaceStack(stack)
 	stack:ClearAllPoints()
-	local x, y = ns.MoverSpot(MOVER, "TOPLEFT")
+	local corner = Opt("grow") == "up" and "BOTTOMLEFT" or "TOPLEFT"
+	local x, y = ns.MoverSpot(MOVER, corner)
 	if x then
-		stack:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+		stack:SetPoint(corner, UIParent, "BOTTOMLEFT", x, y)
 	else
 		stack:SetPoint("CENTER", UIParent, "CENTER", STACK_X, STACK_Y)
 	end
 end
 
--- Hangs a row in its place in the stack, below the rows before it, with the room for its label to the left.
-function P.Stacked(row, stack, position, size)
-	if row.stackAt == position and row.stackSize == size and row.anchored then
+-- Hangs a row in its place in the stack, below the rows before it, with the room for its label to the left. With Rows stack Up the last of the
+-- total rows stands on the bottom of the stack and the rows before it above, so the player's own row stays on top and more rows push it up.
+function P.Stacked(row, stack, position, size, total)
+	local up = Opt("grow") == "up"
+	total = total or position
+	if row.stackAt == position and row.stackSize == size and row.stackTotal == total and row.stackUp == up and row.anchored then
 		return
 	end
 	local holder = row.holder
 	holder:ClearAllPoints()
-	holder:SetPoint("TOPLEFT", stack, "TOPLEFT", LABEL_W, -(position - 1) * (size + SPACING))
-	row.stackAt, row.stackSize = position, size
+	if up then
+		holder:SetPoint("BOTTOMLEFT", stack, "BOTTOMLEFT", LABEL_W, (total - position) * (size + SPACING))
+	else
+		holder:SetPoint("TOPLEFT", stack, "TOPLEFT", LABEL_W, -(position - 1) * (size + SPACING))
+	end
+	row.stackAt, row.stackSize, row.stackTotal, row.stackUp = position, size, total, up
 	row.frame, row.side, row.above, row.aboveFrame, row.anchored = nil, nil, nil, nil, true
 end
 
@@ -1156,22 +1168,25 @@ function P.SyncRaid(members)
 		list[#list + 1] = member
 		P.raidUnits[member.unit] = true
 	end
-	local wanted, position = {}, 0
+	-- The rows are taken first and placed once their number is known, which Rows stack Up stands them on (P.Stacked).
+	local wanted, rows = {}, {}
 	for _, member in ipairs(list) do
 		local unit = member.unit
 		local owner = Text(UnitGUID, unit) or (member.own and "player" or nil)
 		local row = owner and P.Take(owner)
 		if row then
-			position = position + 1
+			rows[#rows + 1] = row
 			wanted[owner] = true
 			row.unit, row.class, row.own = unit, Text(UnitClassBase, unit), member.own
 			row.level = T.Ask(UnitLevel, unit)
 			row.race, row.raceFile = P.Race(unit)
 			P.Fit(row, size, count, "right")
-			P.Stacked(row, stack, position, size)
 			P.Label(row, stack, Text(UnitName, unit), row.class)
 			row.holder:Show()
 		end
+	end
+	for position, row in ipairs(rows) do
+		P.Stacked(row, stack, position, size, #rows)
 	end
 	stack:Show()
 	return wanted
@@ -1857,22 +1872,24 @@ function P.SyncSample()
 			list[#list + 1] = { owner = "test:" .. index, class = member[2], name = member[1], gone = member[3], far = member.far }
 		end
 	end
-	local wanted, position = {}, 0
+	local wanted, rows = {}, {}
 	for _, member in ipairs(list) do
 		local row = P.Take(member.owner)
 		if row then
-			position = position + 1
+			rows[#rows + 1] = row
 			wanted[member.owner] = true
 			row.unit, row.class, row.own, row.level, row.race, row.raceFile = nil, member.class, nil, nil, nil, nil
 			row.sampleGone, row.sampleFar = member.gone, member.far
 			P.Fit(row, size, count, "right")
-			P.Stacked(row, stack, position, size)
 			P.Label(row, stack, member.name, member.class)
 			P.Hold(row)
 			P.Fade(row, member.gone)
 			P.Range(row)
 			row.holder:Show()
 		end
+	end
+	for position, row in ipairs(rows) do
+		P.Stacked(row, stack, position, size, #rows)
 	end
 	for owner, row in pairs(P.assigned) do
 		if not wanted[owner] then
