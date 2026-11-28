@@ -909,6 +909,7 @@ ns.SETUP_STEPS = {
 		{ "windows.more", "c", "mock-window-set" },
 	} },
 	{ id = "win-look", area = "Windows", title = "Window look and controls", draw = "mock-window", built = true, rows = {
+		{ "windows.theme", "o", "behaviour", "Gives the windows near-black backgrounds, deep red borders and red highlights, with a faint red glow round each window." },
 		{ "windows.opacity", "c", "mock-window" },
 		{ "windows.panel", "c", "mock-window" },
 		{ "windows.accent", "c", "mock-window" },
@@ -930,6 +931,7 @@ ns.SETUP_STEPS = {
 		{ "windows.titleSize", "o", "mock-window" },
 		{ "windows.titleOwn", "o", "mock-window" },
 		{ "windows.titleColour", "r", "mock-window" },
+		{ "windows.guideSkin", "o", "behaviour", "Gives the windows of the levelling guide this row names, its arrow, item buttons and menus, Flat UI's look while that addon is loaded." },
 	} },
 	{ id = "win-art", area = "Windows", title = "Window backdrops", draw = "mock-window", built = true, rows = {
 		{ "windows.raceArt", "c", "mock-window" },

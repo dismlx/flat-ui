@@ -2,7 +2,7 @@ Every setting of the **HUD** group of the options window, 165 in all, with its d
 
 Pages: [Minimap](#minimap) · [Buffs and debuffs](#buffs-and-debuffs) · [Quests and loot](#quests-and-loot) · [Messages and timers](#messages-and-timers) · [Experience and menu bars](#experience-and-menu-bars) · [Data panels](#data-panels)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.50.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.51.
 
 ## Minimap
 

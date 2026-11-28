@@ -2,7 +2,7 @@ Every setting of the **Helpers** group of the options window, 101 in all, with i
 
 Pages: [Errands](#errands) · [Drink and health macros](#drink-and-health-macros) · [Consumables bar](#consumables-bar) · [Mount key](#mount-key) · [World and cursor](#world-and-cursor)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.50.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.51.
 
 ## Errands
 

@@ -1,8 +1,8 @@
-Every setting of the **Chat and windows** group of the options window, 125 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Chat and windows](Chat-and-windows).
+Every setting of the **Chat and windows** group of the options window, 127 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Chat and windows](Chat-and-windows).
 
 Pages: [Chat](#chat) · [Tooltips](#tooltips) · [Windows](#windows)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.50.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.51.
 
 ## Chat
 
@@ -205,6 +205,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.50.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
+| **Theme** | Flat | Starcaller Dark Side gives the game's windows, Flat UI's own windows (bags and bank, gear comparison, item finder, trinket queue, What's new, copy boxes) and the options window near-black backgrounds and deep red borders, with titles, the chosen tab, highlights and ticked check boxes in a deep red, and a faint red glow round each window that brightens a little while you point at it. Your colours below and the options window's accent stay as you set them, for Flat. Choices: Flat, Starcaller Dark Side. |
 | **Window opacity** | 80% |  |
 | **Button and slot colour** | #1E1E1E |  |
 | **Highlight colour** | #D9D9D9 |  |
@@ -252,6 +253,12 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.50.
 | **Title size** | 100% |  |
 | **Own title colour** | Off |  |
 | **Title colour** | #FFD100 | Needs **Own title colour** on. |
+
+**Other addons**
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| **RestedXP's windows** | On | While that guide addon is loaded: its guide window and the steps in it, its arrow, its item and target buttons, its menus and its other windows take Flat UI's flat backdrop, thin border, bar texture and the fonts of the Fonts page, in the colours of Theme. Without it this row does nothing, and its own settings are never changed. Off gives it its own look back, in full after /reload. |
 
 ### Which windows
 

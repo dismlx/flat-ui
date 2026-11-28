@@ -387,10 +387,10 @@ local function Leaving(entry, closed)
 end
 
 local function Paint(entry)
-	local r, g, b = ns.Colour(KEY .. ".panel")
+	local r, g, b = ns.WindowColour(KEY .. ".panel")
 	ns.SetOutlineFill(entry.outline, r, g, b, 1)
 	ns.SetOutline(entry.outline, true, true)
-	r, g, b = ns.Colour(KEY .. ".accent")
+	r, g, b = ns.WindowColour(KEY .. ".accent")
 	for _, bar in ipairs(entry.bars) do
 		bar:SetColorTexture(r, g, b, 0.9)
 		bar:Show()

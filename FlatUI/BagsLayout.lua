@@ -118,7 +118,7 @@ local function Plain(text)
 end
 
 local function LookRGB(key, r, g, b)
-	local ok, cr, cg, cb = pcall(ns.Colour, "windows." .. key)
+	local ok, cr, cg, cb = pcall(ns.WindowColour, "windows." .. key)
 	if ok and Finite(cr) and Finite(cg) and Finite(cb) then
 		return cr, cg, cb
 	end
@@ -2092,7 +2092,7 @@ local function Fit()
 end
 
 local function MenuPaint()
-	local r, g, b = ns.Colour("general.backdrop")
+	local r, g, b = ns.WindowColour("general.backdrop")
 	ns.SetOutlineFill(menu.outline, r, g, b, 0.95)
 	ns.SetOutline(menu.outline, true, true)
 	local pr, pg, pb = LookRGB("panel", 0.12, 0.12, 0.12)

@@ -136,7 +136,7 @@ local function Hex(r, g, b)
 end
 
 local function LookRGB(key, r, g, b)
-	local ok, cr, cg, cb = pcall(ns.Colour, "windows." .. key)
+	local ok, cr, cg, cb = pcall(ns.WindowColour, "windows." .. key)
 	if ok and Finite(cr) and Finite(cg) and Finite(cb) then
 		return cr, cg, cb
 	end
@@ -148,7 +148,7 @@ local function Opacity()
 	if not Finite(value) then
 		value = ns.Get("windows.opacity")
 	end
-	return Finite(value) and math.max(0, math.min(1, value / 100)) or 0.8
+	return ns.WindowOpacity(Finite(value) and math.max(0, math.min(1, value / 100)) or 0.8)
 end
 
 local function TextWidth(text)
@@ -418,7 +418,7 @@ function Grip.Paint(w)
 end
 
 local function PaintWindow(w)
-	local r, g, b = ns.Colour("general.backdrop")
+	local r, g, b = ns.WindowColour("general.backdrop")
 	ns.SetOutlineFill(w.outline, r, g, b, Opacity())
 	ns.SetOutline(w.outline, true, true)
 	local ar, ag, ab = LookRGB("accent", 0.85, 0.85, 0.85)
@@ -1999,7 +1999,7 @@ local function Make(which)
 	frame:Hide()
 	local w = { which = which, frame = frame, icons = {}, rules = {}, plates = {}, offset = 0 }
 	windows[which] = w
-	w.outline = ns.Outline(frame, frame)
+	w.outline = ns.ThemeOutline(ns.Outline(frame, frame), true)
 	MakeBar(w)
 	MakeView(w)
 	MakeFoot(w)

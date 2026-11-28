@@ -131,7 +131,7 @@ local function Call(name, ...)
 end
 
 local function RGB(path, r, g, b)
-	local ok, cr, cg, cb = pcall(ns.Colour, path)
+	local ok, cr, cg, cb = pcall(ns.WindowColour, path)
 	if ok and Finite(cr) and Finite(cg) and Finite(cb) then
 		return cr, cg, cb
 	end

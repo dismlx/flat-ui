@@ -1,0 +1,75 @@
+name: Checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Install Lua 5.4
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.4
+
+      - name: Lua parses
+        run: |
+          set -euo pipefail
+          for f in FlatUI/*.lua extras/Provisions/*.lua tools/test/FlatUI_test.lua; do luac5.4 -p "$f"; done
+
+      - name: Lua 5.1 only
+        run: python3 tools/dev/lua51_check.py FlatUI/*.lua extras/Provisions/*.lua
+
+      - name: No comments in code
+        run: |
+          python3 - <<'PY'
+          import glob, re, sys
+          LONG = re.compile(r'\[(=*)\[')
+          hits = []
+          for path in sorted(glob.glob('FlatUI/*.lua') + glob.glob('extras/Provisions/*.lua')):
+              s = open(path, encoding='utf-8').read()
+              i, n = 0, len(s)
+              while i < n:
+                  if s.startswith('--', i):
+                      hits.append('%s:%d' % (path, s.count('\n', 0, i) + 1))
+                      j = s.find('\n', i)
+                      i = n if j < 0 else j
+                      continue
+                  m = LONG.match(s, i)
+                  if m:
+                      j = s.find(']' + m.group(1) + ']', m.end())
+                      i = n if j < 0 else j + len(m.group(1)) + 2
+                      continue
+                  c = s[i]
+                  if c in '"\'':
+                      j = i + 1
+                      while j < n and s[j] != c and s[j] != '\n':
+                          j += 2 if s[j] == '\\' else 1
+                      i = j + 1
+                      continue
+                  i += 1
+          for hit in hits:
+              print('comment at ' + hit)
+          sys.exit(1 if hits else 0)
+          PY
+
+      - name: Made files match their sources
+        run: |
+          set -euo pipefail
+          python3 tools/dev/make_whatsnew.py --check
+          python3 tools/dev/make_wiki.py --check
+
+      - name: Test suite
+        run: |
+          set -o pipefail
+          lua5.4 tools/test/FlatUI_test.lua FlatUI | tee suite.txt | grep -E "^FAIL|passed, " || true
+          tail -1 suite.txt | grep -qE "passed, 0 failed$"

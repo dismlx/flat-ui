@@ -24,6 +24,9 @@ local K = {
 	MAX_SCALE = 5, MAX_SECONDS = 120, MAX_MOST = 20,
 	GHOST = 0.25, STEP = 0.6, LOOP = 3, TICK = 0.1, COUNT = 28, TIME = 26, TIME_LAST = 2, TIME_GROW = 1.15,
 	FONT = "NumberFontNormal", FULL_LOW = 0.35,
+	BURST_FROM = 1.35, BURST_TIME = 0.25, BURST_FADE = 0.1, BURST_BRIGHT = 2,
+	BREATHE_UP = 1.03, BREATHE_LOW = 0.6, BREATHE_TIME = 1, FLICKER_LOW = 0.35, FLICKER_TIME = 0.12, FLICKER_AT = 2,
+	MIST_DEEP = 180, MIST_ALPHA = 0.5, MIST_IN = 0.4, MIST_OUT = 0.25, MIST_BLEND = "BLEND",
 }
 
 local G = {
@@ -38,7 +41,7 @@ local G = {
 	TopLeft = { w = K.SHORT, h = K.SHORT, point = "BOTTOMRIGHT", rel = "TOPLEFT", x = 0, dx = -1, dy = 0 },
 }
 
-local holder, PlaceHolder
+local holder, PlaceHolder, mist
 local pool, ups, fading, last = {}, {}, {}, {}
 local T = { clock = 0, ticking = false }
 local GAME = { recs = {} }
@@ -110,6 +113,26 @@ local function Locations(location)
 	return K.SIDES[location] or { location }
 end
 
+local function OwnLook(look)
+	if type(look) ~= "table" then
+		return nil
+	end
+	local made = { add = look.add == true, burst = look.burst == true, breathe = look.breathe == true, mist = look.mist == true }
+	local tint = look.tint
+	if type(tint) == "table" then
+		local colour = {}
+		for i = 1, 3 do
+			local value = tint[i]
+			colour[i] = Plain(value, "number") and math.max(0, math.min(1, value)) or nil
+		end
+		made.tint = (colour[1] and colour[2] and colour[3]) and colour or nil
+	end
+	if not (made.add or made.burst or made.breathe or made.mist or made.tint) then
+		return nil
+	end
+	return made
+end
+
 local function Normalise(data)
 	data = type(data) == "table" and data or {}
 	local file, location, scale = data.file, data.location, data.scale
@@ -145,7 +168,7 @@ local function Normalise(data)
 	local most = data.most
 	most = Plain(most, "number") and most >= 2 and math.min(math.floor(most), K.MAX_MOST) or nil
 	return { file = file, location = location, scale = scale, colour = colour, arc = arc, alpha = alpha, turn = turn, pulse = data.pulse ~= false,
-		seconds = seconds, most = most }
+		seconds = seconds, most = most, look = OwnLook(data.look) }
 end
 
 local function ProcRgb(entry)
@@ -158,6 +181,17 @@ local function ProcRgb(entry)
 	return nil
 end
 
+local function PageColour()
+	local path = KEY .. ".procColour"
+	local def = ns.Def(path)
+	return ns.IsSet(path) and not (type(def) == "table" and ns.Get(path) == def.default)
+end
+
+local function Tint(art)
+	local tint = not art.colour and art.look and art.look.tint
+	return tint or nil
+end
+
 local function ColourOf(entry, art)
 	local own = type(entry) == "table" and entry.colour
 	if (Plain(own, "string") or art.arc) and ProcRgb(entry) then
@@ -165,6 +199,13 @@ local function ColourOf(entry, art)
 	end
 	if art.colour then
 		return art.colour[1], art.colour[2], art.colour[3]
+	end
+	local tint = Tint(art)
+	if tint then
+		if PageColour() and ProcRgb(entry) then
+			return ProcRgb(entry)
+		end
+		return tint[1], tint[2], tint[3]
 	end
 	if art.arc then
 		return K.FALLBACK[1], K.FALLBACK[2], K.FALLBACK[3]
@@ -176,6 +217,9 @@ local function TextColour(entry, art)
 	local own = type(entry) == "table" and entry.colour
 	if not Plain(own, "string") and not art.arc and art.colour then
 		return art.colour[1], art.colour[2], art.colour[3]
+	end
+	if not Plain(own, "string") and not art.arc and Tint(art) then
+		return ColourOf(entry, art)
 	end
 	local r, g, b = ProcRgb(entry)
 	if r then
@@ -202,9 +246,8 @@ local function Release(piece)
 	piece.fill:Hide()
 	piece.count:Hide()
 	piece.time:Hide()
-	for _, set in pairs(piece.looks) do
-		set.fadeIn:Stop()
-		set.pulse:Stop()
+	for _, group in ipairs(piece.groups) do
+		group:Stop()
 	end
 	piece.animOut:Stop()
 	piece:Hide()
@@ -226,7 +269,7 @@ local function Pulse(piece, up, down, seconds)
 	return group
 end
 
-local function FadeIn(piece, seconds, pulse)
+local function FadeIn(piece, seconds)
 	local group = piece:CreateAnimationGroup()
 	local fadeIn = group:CreateAnimation("Alpha")
 	fadeIn:SetFromAlpha(0)
@@ -238,21 +281,96 @@ local function FadeIn(piece, seconds, pulse)
 	group:SetScript("OnFinished", function()
 		piece:SetAlpha(1)
 		if piece.live and piece.pulses then
-			pulse:Play()
+			piece.pulse:Play()
 		end
 	end)
 	return group
 end
 
-local function UseLook(piece, look)
-	piece.look = look
-	for name, set in pairs(piece.looks) do
-		if name ~= look then
-			set.fadeIn:Stop()
-			set.pulse:Stop()
+local function Burst(piece)
+	local group = piece:CreateAnimationGroup()
+	local grow = group:CreateAnimation("Scale")
+	grow:SetScaleFrom(K.BURST_FROM, K.BURST_FROM)
+	grow:SetScaleTo(1, 1)
+	grow:SetDuration(K.BURST_TIME)
+	grow:SetSmoothing("OUT")
+	local show = group:CreateAnimation("Alpha")
+	show:SetFromAlpha(0)
+	show:SetToAlpha(1)
+	show:SetDuration(K.BURST_FADE)
+	group:SetScript("OnPlay", function()
+		piece.spent = 0
+		piece:SetAlpha(0)
+	end)
+	group:SetScript("OnUpdate", function(_, elapsed)
+		piece.spent = (piece.spent or 0) + (Plain(elapsed, "number") and elapsed or 0)
+		local left = math.max(0, 1 - piece.spent / K.BURST_TIME)
+		piece.tex:SetAlpha(math.min(1, (piece.base or 0) * (1 + (K.BURST_BRIGHT - 1) * left)))
+	end)
+	group:SetScript("OnStop", function()
+		piece.tex:SetAlpha(piece.base or 0)
+	end)
+	group:SetScript("OnFinished", function()
+		piece:SetAlpha(1)
+		piece.tex:SetAlpha(piece.base or 0)
+		if piece.live and piece.pulses then
+			piece.pulse:Play()
+		end
+	end)
+	return group
+end
+
+local function Breathe(piece)
+	local group = piece:CreateAnimationGroup()
+	group:SetLooping("REPEAT")
+	for order, step in ipairs({ { 1 / K.BREATHE_UP, 1, K.BREATHE_LOW }, { K.BREATHE_UP, K.BREATHE_LOW, 1 } }) do
+		local scale = group:CreateAnimation("Scale")
+		scale:SetScaleFrom(1, 1)
+		scale:SetScaleTo(step[1], step[1])
+		scale:SetDuration(K.BREATHE_TIME)
+		scale:SetSmoothing("IN_OUT")
+		scale:SetOrder(order)
+		local fade = group:CreateAnimation("Alpha")
+		fade:SetFromAlpha(step[2])
+		fade:SetToAlpha(step[3])
+		fade:SetDuration(K.BREATHE_TIME)
+		fade:SetSmoothing("IN_OUT")
+		fade:SetOrder(order)
+	end
+	return group
+end
+
+local function Flicker(piece)
+	local group = piece:CreateAnimationGroup()
+	group:SetLooping("BOUNCE")
+	local fade = group:CreateAnimation("Alpha")
+	fade:SetFromAlpha(1)
+	fade:SetToAlpha(K.FLICKER_LOW)
+	fade:SetDuration(K.FLICKER_TIME)
+	fade:SetSmoothing("IN_OUT")
+	return group
+end
+
+local function LookKey(look, own, flicker)
+	own = own or {}
+	return look .. (own.burst and "+burst" or "") .. (own.breathe and (flicker and "+flicker" or "+breathe") or "")
+end
+
+local function UseLook(piece, look, own, flicker)
+	own = own or {}
+	piece.look = LookKey(look, own, flicker)
+	local set = piece.looks[look]
+	local animIn = own.burst and piece.own.burst or set.fadeIn
+	local pulse = set.pulse
+	if own.breathe then
+		pulse = flicker and piece.own.flicker or piece.own.breathe
+	end
+	for _, group in ipairs(piece.groups) do
+		if group ~= animIn and group ~= pulse then
+			group:Stop()
 		end
 	end
-	piece.animIn, piece.pulse = piece.looks[look].fadeIn, piece.looks[look].pulse
+	piece.animIn, piece.pulse = animIn, pulse
 end
 
 local function MakePiece()
@@ -279,7 +397,16 @@ local function MakePiece()
 	for look, steps in pairs({ game = { K.FADE_IN, K.PULSE_UP, K.PULSE_DOWN, K.PULSE_TIME },
 		soft = { K.SOFT_FADE_IN, K.SOFT_UP, K.SOFT_DOWN, K.SOFT_TIME } }) do
 		local pulse = Pulse(piece, steps[2], steps[3], steps[4])
-		piece.looks[look] = { pulse = pulse, fadeIn = FadeIn(piece, steps[1], pulse) }
+		piece.looks[look] = { pulse = pulse, fadeIn = FadeIn(piece, steps[1]) }
+	end
+	piece.own = { burst = Burst(piece), breathe = Breathe(piece), flicker = Flicker(piece) }
+	piece.groups = {}
+	for _, set in pairs(piece.looks) do
+		piece.groups[#piece.groups + 1] = set.fadeIn
+		piece.groups[#piece.groups + 1] = set.pulse
+	end
+	for _, name in ipairs({ "burst", "breathe", "flicker" }) do
+		piece.groups[#piece.groups + 1] = piece.own[name]
 	end
 	piece.animOut = piece:CreateAnimationGroup()
 	local fadeOut = piece.animOut:CreateAnimation("Alpha")
@@ -379,6 +506,7 @@ local function Dress(rec, piece, first)
 	local n = most and (rec.stacks or most) or nil
 	local building = n ~= nil and n < most
 	if building and not art.turn then
+		piece.base = base * K.GHOST
 		piece.tex:SetAlpha(base * K.GHOST)
 		piece.fill:SetTexture(art.file)
 		local r, g, b = ColourOf(rec.entry, art)
@@ -388,7 +516,8 @@ local function Dress(rec, piece, first)
 		piece.fill:Show()
 	else
 		piece.fill:Hide()
-		piece.tex:SetAlpha(building and base * (K.GHOST + (1 - K.GHOST) * n / most) or base)
+		piece.base = building and base * (K.GHOST + (1 - K.GHOST) * n / most) or base
+		piece.tex:SetAlpha(piece.base)
 	end
 	local count, time = piece.count, piece.time
 	if first and n then
@@ -419,6 +548,114 @@ local function Dress(rec, piece, first)
 	rec.timeLeft = nil
 end
 
+local function MakeMist()
+	local frame = CreateFrame("Frame", nil, UIParent)
+	ns.Own[frame] = true
+	frame:Hide()
+	frame:SetAllPoints(UIParent)
+	frame:SetFrameStrata("BACKGROUND")
+	local made = { frame = frame, sides = {} }
+	for index, point in ipairs({ "LEFT", "RIGHT" }) do
+		local side = frame:CreateTexture(nil, "BACKGROUND")
+		ns.Own[side] = true
+		side:SetPoint("TOP" .. point, frame, "TOP" .. point, 0, 0)
+		side:SetPoint("BOTTOM" .. point, frame, "BOTTOM" .. point, 0, 0)
+		made.sides[index] = side
+	end
+	for _, step in ipairs({ { "fadeIn", 0, 1, K.MIST_IN }, { "fadeOut", 1, 0, K.MIST_OUT } }) do
+		local group = frame:CreateAnimationGroup()
+		local fade = group:CreateAnimation("Alpha")
+		fade:SetFromAlpha(step[2])
+		fade:SetToAlpha(step[3])
+		fade:SetDuration(step[4])
+		made[step[1]] = group
+		made[step[1] .. "Step"] = fade
+	end
+	made.fadeIn:SetScript("OnPlay", function()
+		made.since = Now()
+		frame:SetAlpha(0)
+	end)
+	made.fadeIn:SetScript("OnFinished", function()
+		frame:SetAlpha(1)
+	end)
+	made.fadeOut:SetScript("OnFinished", function()
+		if made.rec == nil then
+			frame:Hide()
+		end
+	end)
+	return made
+end
+
+local function PaintMist(r, g, b, art)
+	local deep = K.MIST_DEEP * Setting("artSize", K.SIZE) / K.SIZE * art.scale
+	local alpha = K.MIST_ALPHA * Opacity() * art.alpha
+	local key = table.concat({ r, g, b, deep, alpha }, "|")
+	if mist.key == key then
+		return true
+	end
+	local ok = pcall(function()
+		local solid, clear = CreateColor(r, g, b, alpha), CreateColor(r, g, b, 0)
+		for index, side in ipairs(mist.sides) do
+			side:SetWidth(deep)
+			side:SetColorTexture(1, 1, 1, 1)
+			side:SetBlendMode(K.MIST_BLEND)
+			if index == 1 then
+				side:SetGradient("HORIZONTAL", solid, clear)
+			else
+				side:SetGradient("HORIZONTAL", clear, solid)
+			end
+		end
+	end)
+	mist.key = ok and key or nil
+	return ok
+end
+
+local function MistOut(now)
+	if not mist then
+		return
+	end
+	mist.rec = nil
+	local from = 1
+	if mist.fadeIn:IsPlaying() then
+		local since = Plain(mist.since, "number") and mist.since or Now()
+		from = math.max(0, math.min(1, (Now() - since) / K.MIST_IN))
+	end
+	mist.fadeIn:Stop()
+	if now or not mist.frame:IsShown() or from <= 0 then
+		mist.fadeOut:Stop()
+		mist.frame:Hide()
+	elseif not mist.fadeOut:IsPlaying() then
+		mist.fadeOutStep:SetFromAlpha(from)
+		mist.fadeOutStep:SetDuration(math.max(0.05, K.MIST_OUT * from))
+		mist.frame:SetAlpha(from)
+		mist.fadeOut:Play()
+	end
+end
+
+local function Mist(rec, r, g, b, wanted, again)
+	if not mist then
+		return
+	end
+	if not (wanted and PaintMist(r, g, b, rec.art)) then
+		if mist.rec == rec then
+			MistOut()
+		end
+		return
+	end
+	if mist.rec ~= rec then
+		local shown = mist.frame:IsShown() and mist.fadeOut:IsPlaying()
+		mist.rec = rec
+		mist.fadeOut:Stop()
+		mist.frame:Show()
+		if again or shown then
+			mist.fadeIn:Stop()
+			mist.frame:SetAlpha(1)
+		else
+			mist.fadeIn:Play()
+		end
+	end
+end
+
 local function GameIcon(entry)
 	local slots = ns.TrackerSlots
 	local call = type(slots) == "table" and slots.InUse
@@ -433,6 +670,9 @@ local function Layout(rec, again)
 	rec.drew = true
 	local wanted = Locations(rec.art.location)
 	local building = Building(rec)
+	local own = rec.art.look
+	local moves = not building and own or nil
+	local blend = own and own.add and "ADD" or "BLEND"
 	for name, piece in pairs(rec.pieces) do
 		if name ~= wanted[1] and name ~= wanted[2] then
 			rec.pieces[name] = nil
@@ -461,13 +701,15 @@ local function Layout(rec, again)
 			local ok = pcall(piece.tex.SetTexture, piece.tex, rec.art.file)
 			rec.drew = rec.drew and ok
 			piece.tex:SetVertexColor(r, g, b)
+			pcall(piece.tex.SetBlendMode, piece.tex, blend)
+			pcall(piece.fill.SetBlendMode, piece.fill, blend)
 			piece.pulses = rec.art.pulse and not building
 			Dress(rec, piece, name == wanted[1])
 			local look = Look()
-			if piece.look ~= look then
+			if piece.look ~= LookKey(look, moves, rec.flicker) then
 				local moving = piece.animIn:IsPlaying() or piece.pulse:IsPlaying()
-				UseLook(piece, look)
-				if moving and not piece.fresh then
+				UseLook(piece, look, moves, rec.flicker)
+				if moving and not piece.fresh and not piece.animIn:IsPlaying() then
 					piece:SetAlpha(1)
 					if piece.pulses then
 						piece.pulse:Play()
@@ -501,6 +743,7 @@ local function Layout(rec, again)
 		end
 	end
 	rec.first = rec.pieces[wanted[1]]
+	Mist(rec, r, g, b, moves ~= nil and moves.mist and next(rec.pieces) ~= nil, again)
 	Wake()
 end
 
@@ -561,12 +804,36 @@ local function Clock(rec)
 	return true
 end
 
+local function Flickers(rec)
+	local own = rec.art.look
+	if not (own and own.breathe) or Building(rec) then
+		return false
+	end
+	local left
+	if type(ns.ProcEnds) == "function" then
+		local ok, ends = pcall(ns.ProcEnds, rec.entry)
+		if ok and Plain(ends, "number") then
+			left = ends - Now()
+		end
+	end
+	if not (left ~= nil and left > 0) then
+		return false
+	end
+	local want = left <= K.FLICKER_AT
+	if want ~= (rec.flicker == true) then
+		rec.flicker = want
+		Layout(rec)
+	end
+	return true
+end
+
 local function Step()
 	local busy = false
 	for _, rec in ipairs(ups) do
 		local sampled = Sample(rec)
 		local timed = Clock(rec)
-		busy = busy or sampled or timed
+		local flicker = Flickers(rec)
+		busy = busy or sampled or timed or flicker
 	end
 	return busy
 end
@@ -630,6 +897,8 @@ local function Build()
 			pool[#pool + 1] = piece
 		end
 	end
+	local made, own = pcall(MakeMist)
+	mist = made and own or nil
 	return true
 end
 
@@ -738,6 +1007,9 @@ function ns.ProcArtHide(entry, now)
 		return true
 	end
 	table.remove(ups, index)
+	if mist and mist.rec == rec then
+		MistOut(now)
+	end
 	for _, piece in pairs(rec.pieces) do
 		piece.live = false
 		if now or piece.byGame or not piece:IsShown() then
@@ -770,6 +1042,7 @@ function ns.ProcArtReset()
 	for piece in pairs(fading) do
 		Release(piece)
 	end
+	MistOut(true)
 	for _, rec in pairs(GAME.recs) do
 		if rec then
 			pcall(rec.container.SetAlpha, rec.container, 0)
@@ -1232,6 +1505,7 @@ function ns.ProcArtParts(rec, button, entry)
 			texture:SetTexture(art.file)
 			Corners(texture, geometry, art.turn)
 			texture:SetVertexColor(r, g, b)
+			pcall(texture.SetBlendMode, texture, art.look and art.look.add and "ADD" or "BLEND")
 			texture:SetAlpha(alpha * art.alpha)
 		end
 		handle.key = key
