@@ -781,6 +781,9 @@ local function AddClassRows(wanted, ready)
 	local added, skipped, have, full = 0, {}, {}, false
 	for _, row in ipairs(wanted) do
 		local why = Missing(row)
+		if ready and row.kind == "item" then
+			why = nil
+		end
 		if OnList(list, row) then
 			have[#have + 1] = row.name
 		elseif #list >= K.MAX_TRACKERS then
