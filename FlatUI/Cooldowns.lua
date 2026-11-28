@@ -1648,7 +1648,8 @@ local function Place(row)
 		note = NO_POSITION
 		local display = PersonalResourceDisplayFrame
 		if display ~= nil and not ns.Forbidden(display) then
-			local over = type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder("below") or nil
+			local over = type(ns.ChargesHolder) == "function" and ns.ChargesHolder("below") or nil
+			over = over or (type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder("below") or nil)
 			if over then
 				frame:SetPoint("CENTER", over, "BOTTOM", x, y - GAP)
 			else
@@ -1885,6 +1886,7 @@ local function Layout()
 		RangeWatch()
 		R.Call("AfterLayout")
 		R.TellHitTable()
+		R.TellTrackers()
 		return
 	end
 	Holder():Show()
@@ -1924,11 +1926,23 @@ local function Layout()
 	RangeWatch()
 	R.Call("AfterLayout")
 	R.TellHitTable()
+	R.TellTrackers()
 end
 
 function R.TellHitTable()
 	if type(ns.HitTableMoved) == "function" then
 		pcall(ns.HitTableMoved)
+	end
+end
+
+function R.TellTrackers()
+	local frames, row = ns.CooldownRow()
+	local told = #frames .. (row and row:IsShown() and "+" or "-")
+	if R.told ~= told then
+		R.told = told
+		if type(ns.TrackerPlaceAgain) == "function" then
+			pcall(ns.TrackerPlaceAgain)
+		end
 	end
 end
 

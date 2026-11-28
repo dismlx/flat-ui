@@ -188,6 +188,7 @@ end
 
 local function Pass()
 	V.queued = false
+	local was = V.applied
 	V.applied = Rows()
 	local restore = not ns.Enabled(KEY) or AtGame()
 	if restore and not V.walked then
@@ -228,6 +229,14 @@ local function Pass()
 		end
 	end
 	V.changed = changed
+	if was ~= V.applied then
+		if ns.ErrorTextRefont ~= nil then
+			pcall(ns.ErrorTextRefont)
+		end
+		if ns.ZoneTitleRefont ~= nil then
+			pcall(ns.ZoneTitleRefont)
+		end
+	end
 end
 
 local function Queue(changed)

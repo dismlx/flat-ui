@@ -967,6 +967,42 @@ local function ResetThese()
 	end)
 end
 
+local function HideThese()
+	local H = ns.HideFrames
+	if Fighting() or not H then
+		return
+	end
+	local keys, seen, keyless, all = {}, {}, {}, true
+	for _, name in ipairs(Names()) do
+		local key = H.Key(name)
+		if key and not seen[key] then
+			seen[key] = true
+			keys[#keys + 1] = key
+			all = all and H.Ticked(key)
+		elseif not key then
+			keyless[#keyless + 1] = name
+		end
+	end
+	if #keys > 0 then
+		for _, key in ipairs(keys) do
+			if H.Ticked(key) == all then
+				H.Set(key, not all)
+			end
+		end
+		for _, name in ipairs(Names()) do
+			Kit().ShowHandle(name)
+		end
+		MM.Layout()
+		MM.Refresh(true)
+	end
+	local told = "hide:" .. table.concat(keyless, "|")
+	if #keyless > 0 and S.told ~= told then
+		S.told = told
+		print(("Flat UI: %s %s no row on the Hidden frames page, so %s."):format(Joined(keyless), #keyless == 1 and "has" or "have",
+			#keyless == 1 and "it stays" or "they stay"))
+	end
+end
+
 local function Centre(name)
 	local kit = Kit()
 	local look = kit.looks[name]
@@ -1067,6 +1103,15 @@ local function BuildGroup(panel)
 			.. "places stay put. Undo takes them all back in one step."
 	end)
 	reset:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -36 - 4 * GROUP_ROW)
+	local hide
+	hide, ui.groupHide = Button(body, "Hide these", GROUP_BUTTON, HideThese, nil, function()
+		if ui.groupHideText == "Show these" then
+			return "Show these", "Shows every selected frame again that a tick on the Hidden frames page hides."
+		end
+		return "Hide these", "Hides every selected frame that has a row on the Hidden frames page, as a tick there does. The Hidden group of the frame list "
+			.. "shows each one again with its eye."
+	end)
+	hide:SetPoint("TOPLEFT", body, "TOPLEFT", 12 + GROUP_BUTTON + 8, -36 - 4 * GROUP_ROW)
 	ui.groupNote = Text(body, "GameFontHighlightSmall", "text-dim")
 	ui.groupNote:SetPoint("TOPLEFT", body, "TOPLEFT", 12, -40 - 5 * GROUP_ROW)
 	ui.groupNote:SetWidth(GROUP_W - 24)
@@ -1088,7 +1133,7 @@ local function BuildInspector()
 	ui.sideNone:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -38)
 	ui.sideNone:SetWidth(SIDE_W - 24)
 	ui.sideNone:SetText("Select a frame. Drag across empty space to select every box it touches, Shift to add them, Ctrl to take them away. "
-		.. "Shift or Ctrl and click a box adds it or takes it away.")
+		.. "Shift or Ctrl and click a box adds it or takes it away. Ctrl-A selects every box that can move.")
 	local body = Make("Frame", panel)
 	body:SetAllPoints(panel)
 	ui.sideBody = body
@@ -1185,6 +1230,16 @@ local function RefreshGroup(count)
 	for _, label in ipairs(ui.spread) do
 		label:SetAlpha(#names >= 3 and 1 or 0.4)
 	end
+	local H, any, all = ns.HideFrames, false, true
+	for _, name in ipairs(Names()) do
+		local key = H and H.Key(name)
+		if key then
+			any, all = true, all and H.Ticked(key)
+		end
+	end
+	ui.groupHideText = any and all and "Show these" or "Hide these"
+	ui.groupHide:SetText(ui.groupHideText)
+	ui.groupHide:SetAlpha(any and 1 or 0.4)
 	local note = "Drag one of them to move them all. The arrow keys move them, Shift ten at a time."
 	if #skipped == 1 then
 		note = "1 of them stays put: it is hidden, not on screen now or placed by the game."
@@ -1497,8 +1552,8 @@ local TIPS = {
 	end,
 	list = function()
 		return "Frame list", "Shows or hides the list of frames at the left. Click a name to choose its frame, Shift or Ctrl and click to add it or take it away. "
-			.. "Drag across empty space to select every box it touches, Shift to add them, Ctrl to take them away; Escape lets them go. "
-			.. "The arrow keys move what is selected, Shift ten at a time."
+			.. "Drag across empty space to select every box it touches, Shift to add them, Ctrl to take them away; Ctrl-A selects every box that can move, "
+			.. "and Escape lets them go. The arrow keys move what is selected, Shift ten at a time."
 	end,
 	undo = function()
 		local count, again = UndoSteps(), UndoSteps(S.redo)
@@ -1922,6 +1977,17 @@ local function BuildSweep()
 	ui.sweep = frame
 end
 
+local function SelectAll()
+	local kit, set = Kit(), {}
+	for name in pairs(kit.handles) do
+		local look = kit.looks[name]
+		if look and look.shown and not look.placedByGame and not S.hidden[name] then
+			set[name] = true
+		end
+	end
+	MM.Choose(set)
+end
+
 local function BuildKeys()
 	local keys = Make("Frame")
 	keys:SetFrameStrata("FULLSCREEN_DIALOG")
@@ -1954,6 +2020,9 @@ local function BuildKeys()
 		elseif key == "Z" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and not (ui.ask and ui.ask:IsShown()) then
 			handled = true
 			Try(MM.Undo)
+		elseif key == "A" and type(IsControlKeyDown) == "function" and IsControlKeyDown() and not (ui.ask and ui.ask:IsShown()) then
+			handled = true
+			Try(SelectAll)
 		elseif ARROWS[key] and next(S.chosen) and not (ui.ask and ui.ask:IsShown()) then
 			local step = type(IsShiftKeyDown) == "function" and IsShiftKeyDown() and SHIFT_STEP or 1
 			Try(function()

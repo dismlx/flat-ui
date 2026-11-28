@@ -2,7 +2,7 @@ Every setting of the **Action bars** group of the options window, 126 in all, wi
 
 Pages: [Action bars](#action-bars) · [Bar block](#bar-block) · [Class and item bars](#class-and-item-bars)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 ## Action bars
 

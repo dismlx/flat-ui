@@ -17,9 +17,11 @@ local READERS = {
 	["errands.sellTwelve"] = "bags",
 	["barblock.background"] = "actionbars",
 	["trackers.ammoMin"] = "datapanels", ["trackers.thrownMin"] = "datapanels",
+	["trackers.enabled"] = "charges", ["trackers.procAuto"] = "charges",
 	["cooldowns.place"] = "trackers", ["cooldowns.size"] = "trackers", ["cooldowns.spacing"] = "trackers", ["cooldowns.perRow"] = "trackers",
-	["cooldowns.rows"] = "trackers",
+	["cooldowns.rows"] = "trackers", ["cooldowns.enabled"] = "trackers",
 	["defensives.own"] = "ownbuffs", ["defensives.enabled"] = "ownbuffs", ["defensives.place"] = "ownbuffs",
+	["ownbuffs.barTexture"] = "defensives",
 	["unitframes.numberStyle"] = "nameplates",
 	["nameplates.threatRole"] = { "hud", "chat" },
 	["hud.hitTableRules"] = "chat",
@@ -596,7 +598,7 @@ function ns.ClickPathLines()
 	return lines
 end
 
-local OWN_STATUS = { "buttons", "waiting", "page", "keys", "flyoutkeys", "parked", "leave", "taint", "totem" }
+local OWN_STATUS = { "buttons", "waiting", "page", "keys", "flyoutkeys", "parked", "empty", "leave", "taint", "totem" }
 for _, id in ipairs(OWN_STATUS) do
 	ns.ClickPathReporter(function()
 		local line = ns.OwnStatus and ns.OwnStatus(id)
@@ -891,6 +893,7 @@ local function AtlasExists(name)
 	end
 	return false
 end
+ns.AtlasExists = AtlasExists
 
 function ns.ClassAtlas(token)
 	if type(token) ~= "string" or IsSecret(token) then
@@ -1018,6 +1021,12 @@ end
 
 function ns.TextSize(fontString, percent, flags)
 	return ns.TextStyle(fontString, { percent = percent, flags = flags })
+end
+
+function ns.TextStyleForget(fontString)
+	if fontString ~= nil and not IsSecret(fontString) then
+		fonts[fontString] = nil
+	end
 end
 
 local FONT_FACES = { { "friz", "Fonts\\FRIZQT__.TTF", "Friz Quadrata" }, { "arial", "Fonts\\ARIALN.TTF", "Arial Narrow" },
@@ -2506,7 +2515,7 @@ local function Refusal()
 	if not db then
 		return "Profiles are not ready yet."
 	end
-	return InCombatLockdown() and "Profiles change after combat." or nil
+	return InCombatLockdown() and "Profiles change after the fight." or nil
 end
 
 local function Apply(wasSpots)

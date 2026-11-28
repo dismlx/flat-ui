@@ -95,7 +95,7 @@ local Q, R, D = {}, {}, {}
 local S = { pending = nil, fails = {}, nextTry = {}, refused = {}, said = {}, noted = {}, equippedAt = {}, heldAt = {}, heard = {}, uses = {},
 	tipLen = {}, kinds = {}, levels = {}, loading = {}, autoWas = {}, once = {}, why = {}, untilAt = {}, nextAt = {}, next = {}, token = 0,
 	soon = false, quietUntil = 0, version = 0, runs = 0, faults = {}, bags = nil, order = nil, fightTries = 0, normalised = false,
-	fallback = false, listening = false, ear = nil, pattern = nil, late = nil, ridingBack = {}, ridingOff = {}, rode = {},
+	fallback = false, listening = false, ear = nil, pattern = nil, late = nil, ridingOff = {}, rode = {},
 	tipMarks = setmetatable({}, { __mode = "k" }), tipHooked = false }
 ns.TrinketQueue = Q
 
@@ -234,6 +234,17 @@ function R.Normalise(store)
 			for key, id in pairs(store.held) do
 				if not SLOTS[key] or not (Whole(id) or id == 0) then
 					store.held[key] = nil
+				end
+			end
+		end
+	end
+	if store.riding ~= nil then
+		if type(store.riding) ~= "table" then
+			store.riding = nil
+		else
+			for key, id in pairs(store.riding) do
+				if not SLOTS[key] or not (Whole(id) or id == 0) then
+					store.riding[key] = nil
 				end
 			end
 		end
@@ -901,6 +912,46 @@ function D.Mounted()
 	return Ask(IsMounted) == true and not R.Yes(UnitOnTaxi, "player")
 end
 
+function D.Back(n)
+	local store = Q.Store(false)
+	local riding = store and store.riding
+	return type(riding) == "table" and riding[n] or nil
+end
+
+function D.SetBack(n, id)
+	local store = Q.Store(id ~= nil)
+	if not store then
+		return
+	end
+	if type(store.riding) ~= "table" then
+		if id == nil then
+			return
+		end
+		store.riding = {}
+	end
+	store.riding[n] = id
+	if next(store.riding) == nil then
+		store.riding = nil
+	end
+end
+
+function D.Forget()
+	local store = Q.Store(false)
+	local riding = store and store.riding
+	if type(riding) ~= "table" then
+		return
+	end
+	local keep = D.RidingSlot()
+	for _, n in ipairs(ORDER) do
+		if n ~= keep then
+			riding[n] = nil
+		end
+	end
+	if next(riding) == nil then
+		store.riding = nil
+	end
+end
+
 function D.Riding(n, now, threshold, blocked, blockedAt, quiet)
 	local slot = SLOTS[n]
 	local worn, otherWorn = R.Worn(slot), R.Worn(SLOTS[OTHER[n]])
@@ -921,11 +972,11 @@ function D.Riding(n, now, threshold, blocked, blockedAt, quiet)
 		end
 	else
 		S.ridingOff[n] = nil
-		back = S.ridingBack[n]
+		back = D.Back(n)
 		if back == nil then
 			return nil
 		elseif worn ~= RIDING or back == 0 then
-			S.ridingBack[n] = nil
+			D.SetBack(n, nil)
 			return nil
 		end
 	end
@@ -939,7 +990,7 @@ function D.Riding(n, now, threshold, blocked, blockedAt, quiet)
 	elseif R.Locked(slot) then
 		return "locked"
 	elseif ride then
-		S.ridingBack[n] = S.ridingBack[n] or worn or 0
+		D.SetBack(n, D.Back(n) or worn or 0)
 		return "riding", nil, RIDING, ride
 	end
 	local why, at, entry, copy
@@ -953,7 +1004,7 @@ function D.Riding(n, now, threshold, blocked, blockedAt, quiet)
 	if home then
 		return "dismounted", nil, back, home
 	elseif not retry then
-		S.ridingBack[n] = nil
+		D.SetBack(n, nil)
 	end
 	if why then
 		return why, Earliest(at, retry)
@@ -968,6 +1019,7 @@ function D.Pass()
 	local quiet = now < S.quietUntil
 	local wake, before = nil, D.Signature()
 	local riding = Q.Running() and not Q.Paused() and D.RidingSlot()
+	D.Forget()
 	for _, n in ipairs(ORDER) do
 		local why, at, item, copy = nil, nil, nil, nil
 		if riding == n then
@@ -1028,6 +1080,7 @@ end
 function D.Idle()
 	S.token = S.token + 1
 	R.Ear(false)
+	D.Forget()
 	for _, n in ipairs(ORDER) do
 		local why = D.Static(n) or "auto"
 		S.rode[n] = nil
@@ -1128,7 +1181,7 @@ function Q.Confirmed(pending)
 		R.Hold(pending.name, pending.item)
 	else
 		if pending.why == "dismounted" then
-			S.ridingBack[pending.name] = nil
+			D.SetBack(pending.name, nil)
 		end
 		if ns.Get("trinkets.say") == true then
 			local why = T.EMPTY_SLOT
@@ -1203,7 +1256,7 @@ function Q.Equipped(slot)
 		R.Hold(n, worn or 0)
 	end
 	if not pending and now >= S.quietUntil and D.RidingSlot() == n then
-		S.ridingBack[n] = nil
+		D.SetBack(n, nil)
 		S.ridingOff[n] = D.Mounted() or nil
 	end
 	S.version = S.version + 1
@@ -1677,6 +1730,12 @@ function R.TipFilled(tooltip, data)
 	if not (rawequal(tooltip, GameTooltip) or rawequal(tooltip, ItemRefTooltip)) or ns.Forbidden(tooltip)
 		or type(data) ~= "table" or IsSecret(data) or not Q.Running() or ns.Get("trinkets.tipLine") ~= true then
 		return
+	end
+	if type(ns.TrinketWindowOwns) == "function" then
+		local got, owner = Call(tooltip.GetOwner, tooltip)
+		if got and ns.TrinketWindowOwns(owner) then
+			return
+		end
 	end
 	local id = data.id
 	if not Whole(id) then

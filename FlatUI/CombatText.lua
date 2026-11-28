@@ -1240,6 +1240,29 @@ local function Spawn(plate, unit, kind, value, extra, crit, r, g, b, class, sign
 	return true
 end
 
+function ns.CombatWordOver(unit, text, r, g, b, icon, sample)
+	if not (ns.Enabled(KEY) and Opt("source") == "front") or ns.IsSecret(unit) or type(unit) ~= "string" or type(text) ~= "string" then
+		return false
+	end
+	local plate = Plate(unit)
+	if not plate then
+		return false
+	end
+	local token = plate.unitToken
+	if Plain(token, "string") and token ~= "" then
+		unit = token
+	end
+	if Plain(icon, "number") then
+		text = ("|T%d:0:0:0:0:64:64:5:59:5:59|t "):format(icon) .. text
+	end
+	local shown = stats.shown
+	local ok, done = pcall(Spawn, plate, unit, "word", text, nil, false, r, g, b, nil, nil, nil, ns.CombatWordSize())
+	if sample then
+		stats.shown = shown
+	end
+	return ok and done == true
+end
+
 local function Shown(value)
 	if ns.IsSecret(value) then
 		return "withheld"
@@ -3274,6 +3297,9 @@ local function Test()
 	end
 	if type(ns.CombatCuesTestRound) == "function" then
 		ns.CombatCuesTestRound()
+	end
+	if Opt("kicks") == true and type(ns.CastLandWordSample) == "function" then
+		ns.CastLandWordSample()
 	end
 	if Opt("where") == "scroll" then
 	elseif Opt("source") ~= "front" then

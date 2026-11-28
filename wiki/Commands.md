@@ -14,9 +14,9 @@ Guide: [Getting started](Getting-started)
 | `/flatui new` (or `/flatui changes`) | Opens **What's new** on the newest version that has notes |
 | `/flatui new 0.5.45` | Opens **What's new** on that version, if it is one of the newest six. The window's "<" and ">" buttons step through the others. |
 | `/flatui options` | Opens Flat UI's page in the game's own options, which has one button that opens Flat UI. In a fight, after it. |
-| `/flatui border colour` | Any other words open the options window with them in **Search**: the results show lit, Enter opens the first, and a miss shows the closest pages. Typed in a fight before the window was first opened, the window opens as the fight ends with the search run. |
-| `/flatui #changed` | Lists every setting of the profile in use that you changed |
-| `/flatui #changed nameplate` | Lists the changed settings that match the other words |
+| `/flatui border colour` | Any other words open the options window with them in **Search**: the results show lit, Enter opens the first, and a miss shows the closest pages. US spellings and plurals work too, as `/flatui border color`. Typed in a fight before the window was first opened, the window opens as the fight ends with the search run. |
+| `/flatui #changed` | Lists every setting of the profile in use that you changed. **Reset these** at the foot of the window resets all it lists as one step. |
+| `/flatui #changed nameplate` | Lists the changed settings that match the other words, in their names, tips or choices |
 | `/flatui help` (or `/flatui ?`) | Lists the commands |
 
 While setup has the options window, a search from chat waits: chat says to search once setup is closed.
@@ -63,6 +63,8 @@ Guide: [Layout](Layout)
 | `/flatui move reset windows` | Puts every window back to its default place and size |
 | `/flatui grab` | Picks the frame under the mouse to move. In a fight it starts when the fight ends. |
 | `/flatui hide` | Opens the **Hidden frames** page, where a tick hides a frame of the game |
+| `/flatui hide tracker` | Hides that frame or shows it again, and says so: "Flat UI: Objective tracker is hidden. /flatui hide tracker shows it again." It takes a row's name or part of it, as `minimap`, `buffs` or `objective tracker`, and works from a macro. In a fight the change waits for its end. |
+| `/flatui hide list` | Names the frames you have hidden, or says "Flat UI: no frame is hidden." |
 
 The [Layout](Layout) guide covers the boxes, the toolbar, selecting several frames and the keys.
 
@@ -116,7 +118,7 @@ Guide: [Combat](Combat)
 | `/flatui pulse test` | Shows a pulse at each spot in use |
 | `/flatui pulse ignore Frost Nova` | Leaves a spell or item out: a name, an ID or a shift-clicked link |
 | `/flatui pulse watch Frost Nova` | Lets it pulse again |
-| `/flatui pulse list` | Says what pulses, what is left out, and the own sounds and spots |
+| `/flatui pulse list` | Says what pulses, what is left out, the own sounds and spots, and **When it pulses** |
 | `/flatui pulse sound Frost Nova bell` | Gives one its own pulse sound. `none` silences it, and `page` gives it the page's sound again. |
 | `/flatui pulse spot Frost Nova 2` | Sends one to pulse spot 2 (1, 2 or 3). `1` puts it back. |
 
@@ -146,8 +148,11 @@ Guide: [Combat](Combat)
 | `/flatui tracker set 1 shape bar` | Draws one tracker as an `icon`, `bar` or `text` |
 | `/flatui tracker set 1 health 40` | Shows pet tracker 1's health in red under 40% |
 | `/flatui tracker set 3 kit bell` | Gives tracker 3 a sound of its own, as the **Sound** row of **Edit a tracker** does |
-| `/flatui tracker proc colour 1 ffd100` | Sets one proc's colour; `proc time` and `proc trigger` set its time and trigger |
-| `/flatui tracker check` | Says what each tracker shows and why, and what happened in the last fight |
+| `/flatui tracker proc colour 1 ffd100`, `proc colour Execute ff3030` | Gives a proc its own colour, by its number in `/flatui tracker list` or, for a proc of your class, its name or its number in **Remove a proc**; the art, border and glow take it at once. `proc trigger` sets its trigger |
+| `/flatui tracker proc sound Overpower bell` | Gives a proc its own sound: `none`, `spell`, `chimes`, `bell`, `warhorn`, `raid`, `alarm` or `whisper`. `none` silences it |
+| `/flatui tracker proc time Revenge 5` | Gives a proc its own time in seconds; `0` is no time limit |
+| `/flatui tracker proc reset Execute` | Puts a proc's colour, sound and time back as the page has them |
+| `/flatui tracker check` | Says what each tracker shows and why, what happened in the last fight, and which trackers have a sound the game does not play in a fight |
 | `/flatui tracker test` | Shows each look for 3 seconds: fine, low, missing, then the game's own look |
 
 ### Defensives, absorbs and enemy cooldowns
@@ -160,12 +165,13 @@ Guide: [Combat](Combat)
 | `/flatui absorbs test` | Shows sample bars of **Absorb shields** for a few seconds |
 | `/flatui absorbs check` | Says the amount, time and secrecy of each shield on you |
 | `/flatui absorbs add 17`, `remove 17`, `list` | Adds, removes or lists the shields it follows |
-| `/flatui charges` | Shows a sample of **Charges** for 8 seconds, out of combat and while none of its buffs is on you |
-| `/flatui charges add Lightning Shield`, `remove`, `list` | Adds a buff with charges by name, spell ID or shift-clicked spell, takes one off, or lists them |
+| `/flatui charges` | Shows a sample of **Charges** in its look for 8 seconds, out of combat and while none of its buffs is on you: Lightning Shield losing its charges, or Maelstrom Weapon gaining stacks with **Spell art** while the **Proc alerts** art does not build up its stacks |
+| `/flatui charges add Lightning Shield`, `remove`, `list` | Adds a buff with charges or stacks by name, spell ID or shift-clicked spell, takes one off, or lists them |
 | `/flatui enemy add Blink 15` | Adds an enemy ability and its cooldown in seconds |
 | `/flatui enemy hide 2139` | Hides an ability, by name or spell ID |
 | `/flatui enemy list` | Lists the abilities shown and whether their use can be seen here |
 | `/flatui enemy clear` | Forgets the running timers of enemies |
+| `/flatui enemy reset` | Puts the abilities back as Flat UI ships them, undoing every add, hide and typed cooldown |
 
 ## Combat text
 
@@ -177,8 +183,8 @@ Guide: [Combat text](Combat-text)
 | `/flatui combat test` | Shows sample numbers for you, over your target and over friendly units, and one round of the combat alerts |
 | `/flatui combat reset` | Puts the game's combat number settings back to their defaults, and turns **Place combat numbers** off |
 | `/flatui combat trace` | Prints each hit report and signal of yours in chat, until you type it again |
-| `/flatui announce` | Says where **Announce blocks, dodges and parries** sends its lines now, or why it sends nothing |
-| `/flatui announce test` | Writes sample lines in your own chat window only, never sent to the group |
+| `/flatui announce` | Says where **Announce blocks, dodges and parries** and **Announce your interrupts** send their lines now, or why they send nothing |
+| `/flatui announce test` | Writes sample lines in your own chat window only, never sent to the group, with a defensive and an interrupt line while those rows are on |
 
 ## Group
 
@@ -186,11 +192,12 @@ Guide: [Group](Group)
 
 | Command | What it does |
 | --- | --- |
-| `/flatui threat` | Shows sample bars of the threat list for a few seconds, out of combat, or the four sample enemies while the list shows enemies |
+| `/flatui threat` | Shows sample bars of the threat list for a few seconds, out of combat: with **Your target, then enemies you are losing** two sample enemies under them, with **Enemies you fight** four sample enemies instead |
 | `/flatui healers` | Shows sample bars of the healer mana list for a few seconds, out of combat |
 | `/flatui party add Pummel 12` | Adds an ability to **Party cooldowns** with its cooldown in seconds |
 | `/flatui party hide 6552` | Hides an ability, by name or spell ID |
-| `/flatui party list` | Lists the abilities shown and who shares cooldowns |
+| `/flatui party list` | Lists the abilities shown and who shares cooldowns, also your subgroup's in a raid |
+| `/flatui party reset` | Puts the abilities back as Flat UI ships them, undoing every add, hide and typed cooldown |
 
 ## Character and gear
 

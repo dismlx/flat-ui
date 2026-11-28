@@ -30,7 +30,7 @@ local SAY = {
 	combat = "Flat UI: test mode comes on when the fight ends.",
 	stays = "Flat UI: test mode stays off.",
 	setup = "Flat UI: finish or close Setup first.",
-	pause = "Flat UI: test mode pauses for combat.",
+	pause = "Flat UI: test mode pauses for the fight.",
 	line = "Samples fill in for hidden frames; your real frames take over when they show. Esc > Edit Mode shows the game's own previews.",
 	windows = "Open a game window (C, P, N...) to see its look change.",
 	place = "%s: no place yet (open Edit Mode once)",
@@ -576,7 +576,8 @@ local function UpdateBar()
 		return
 	end
 	local count = Samples()
-	ui.title:SetText(S.paused and "Test mode: paused for combat" or count == 1 and "Test mode · 1 sample" or ("Test mode · %d samples"):format(count))
+	ui.title:SetText(S.paused and "Test mode · paused for the fight" or count == 1 and "Test mode · 1 sample" or ("Test mode · %d samples"):format(count))
+	ui.title:SetWidth(S.paused and BAR_W - 100 or 190)
 	ui.live:SetShown(not S.paused)
 	PaintBar()
 	local text = SAY.line
@@ -1082,7 +1083,7 @@ function TM.Status()
 	for _, si in ipairs(standins) do
 		shown = shown + (si.shown and 1 or 0)
 	end
-	return ("Test mode: %s (%s), %d samples, %d stand-ins shown"):format(S.paused and "paused for combat" or "on", SOURCES[S.source] or "?",
+	return ("Test mode: %s (%s), %d samples, %d stand-ins shown"):format(S.paused and "paused for the fight" or "on", SOURCES[S.source] or "?",
 		running, shown)
 end
 

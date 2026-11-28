@@ -1,8 +1,8 @@
-Every setting of the **HUD** group of the options window, 164 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [HUD](HUD).
+Every setting of the **HUD** group of the options window, 165 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [HUD](HUD).
 
 Pages: [Minimap](#minimap) · [Buffs and debuffs](#buffs-and-debuffs) · [Quests and loot](#quests-and-loot) · [Messages and timers](#messages-and-timers) · [Experience and menu bars](#experience-and-menu-bars) · [Data panels](#data-panels)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 ## Minimap
 
@@ -48,23 +48,23 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | **Coordinates** | On | Your place on the zone map. Hidden in instances, where the game gives no position, and while the game's own coordinates show under the map (the game's Options, Interface, Coordinates), so you see one line; turn those off for this one. Point at it for the zone and subzone; a click opens the world map, in a fight as it ends, and Shift-click puts the zone and coordinates in the chat box. |
-| **Coordinates place** | Below the map | Choices: Above the map, Below the map. Needs **Coordinates** on. |
+| **Coordinates place** | Below the map | On the map, at the bottom puts the line just inside the map's bottom edge, outlined so it reads over the ground, raised on a round map to stay inside the circle. A line there takes no room under the map, so the addon button row and the zone name keep their place. Choices: Above the map, Below the map, On the map, at the bottom. Needs **Coordinates** on. |
 | **Coordinate decimals** | One (45.3, 62.1) | Choices: None (45, 62), One (45.3, 62.1), Two (45.31, 62.08). Needs **Coordinates** on. |
 | **Coordinates on the world map** | On | A small line at the bottom of the world map: You 45.2, 61.8 while you are on the map shown, and Cursor 33.0, 12.5 while the pointer is over the map, with Coordinate decimals. Your part is hidden in instances. |
 | **Name of who pings the map** | On | The name of a group member who pings the minimap, in their class colour, by the ping for about 3 seconds, at Text size. Your own pings show none. |
 | **Durability** | On | Your most worn equipped item. Yellow at 50% or less, red at 20% or less. Point at it for each item you wear; a click opens the character window, in a fight as it ends. |
-| **Durability place** | Below the map | Choices: Above the map, Below the map. Needs **Durability** on. |
+| **Durability place** | Below the map | On the map, at the bottom puts the line just inside the map's bottom edge, outlined so it reads over the ground, raised on a round map to stay inside the circle. A line there takes no room under the map, so the addon button row and the zone name keep their place. Choices: Above the map, Below the map, On the map, at the bottom. Needs **Durability** on. |
 | **Durability shows** | Always | The line comes as an item wears to the mark, yellow at 50% or less and red at 20% or less, and goes after a repair. Choices: Always, At 50% or less, At 20% or less. Needs **Durability** on. |
 | **Frame rate and latency** | Off | Frames per second, then your home and world latency in milliseconds. Point at it for both latencies and Flat UI's memory. |
-| **Frame rate place** | Below the map | Choices: Above the map, Below the map. Needs **Frame rate and latency** on. |
+| **Frame rate place** | Below the map | On the map, at the bottom puts the line just inside the map's bottom edge, outlined so it reads over the ground, raised on a round map to stay inside the circle. A line there takes no room under the map, so the addon button row and the zone name keep their place. Choices: Above the map, Below the map, On the map, at the bottom. Needs **Frame rate and latency** on. |
 | **Show** | Frame rate and latency | What the line by the minimap shows. Choices: Frame rate and latency, Frame rate only, Latency only. Needs **Frame rate and latency** on. |
 | **Latency** | Home and world | Home is chat and the auction house, world is combat and other players. Choices: Home and world, The higher one, Home only, World only. Needs **Show** at Frame rate and latency or Latency only. |
 | **Colour by value** | On | Frame rate red under 30 and yellow under 60; latency yellow over 100 ms and red over 200 ms. Needs **Frame rate and latency** on. |
 | **Time** | Off | Your local time or the realm's. Point at it for both and the time of this session; a click opens the stopwatch and alarm, Shift-click the calendar, in a fight as it ends. The game's clock beside the zone name has its own row, Clock, under Buttons. |
-| **Time place** | Above the map | Choices: Above the map, Below the map. Needs **Time** on. |
+| **Time place** | Above the map | On the map, at the bottom puts the line just inside the map's bottom edge, outlined so it reads over the ground, raised on a round map to stay inside the circle. A line there takes no room under the map, so the addon button row and the zone name keep their place. Choices: Above the map, Below the map, On the map, at the bottom. Needs **Time** on. |
 | **Local or realm time** | Local time | Choices: Local time, Realm time. Needs **Time** on. |
 | **Time format** | 24 hours (14:05) | Choices: 24 hours (14:05), 12 hours (2:05 PM). Needs **Time** on. |
-| **Text size** | 100% | The lines of text above and below the map: coordinates, durability, frame rate and time, and also the coordinates on the world map and the name of who pings. In test mode, a line with nothing to show shows a sample, so you can see where it sits. |
+| **Text size** | 100% | The lines of text around the map: coordinates, durability, frame rate and time, and also the coordinates on the world map and the name of who pings. In test mode, a line with nothing to show shows a sample, so you can see where it sits. |
 
 **Border and background**
 
@@ -98,7 +98,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | **Duration size** | 100% |  |
-| **Duration format** | No space (8m) | Also the totem times under the player frame. Minutes and seconds shows 28:41 under an hour and plain seconds in the last minute; an hour or more keeps the short form, as 2h. Choices: As the game has it (8 m), No space (8m), Minutes and seconds (28:41). |
+| **Duration format** | No space (8m) | Also the totem times under the player frame. Minutes and seconds shows 28:41 under an hour and plain seconds in the last minute; an hour or more reads as hours and minutes, as 1h42, and a day or more keeps the short form. Choices: As the game has it (8 m), No space (8m), Minutes and seconds (28:41). |
 | **Duration colour** | White | Also the totem times under the player frame. Choices: As the game has it (gold, white under 90 s), White, White, red near the end. |
 | **Red under** | 10 s | The time turns red once this little is left. Also the totem times under the player frame. Needs **Duration colour** at White, red near the end. |
 | **Tenths below** | 0 s | Under this many seconds the time on a buff or debuff shows tenths, as 4.3. 0 means never. The totem times stay in whole seconds, as the game gives them. |
@@ -218,6 +218,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Bar text place** | On the bar | Choices: On the bar, Above the bar, Right of the bar. Needs **Experience bar** at Flat UI's. |
 | **Bar text size** | 105% | On the game's bar, not applied while Leave the game's action bars alone is on. |
 | **Bar texture** | `soft` | On the game's bar it needs Flat fill and is not applied while Leave the game's action bars alone is on. |
+| **Bar art** | Flat fill | The game's modern art fills Flat UI's experience bar in the game's purple, blue while you are rested, and the reputation bar in its standing's red, orange, yellow, green or blue, on the game's dark bar background. Bar texture, Experience colour and the standing colours give way to it; Bar background off leaves out the dark background. The tooltip, the quest stretch, the gains and the text work as before. Choices: Flat fill, The game's modern art. Needs **Experience bar** at Flat UI's. |
 | **Tooltip** | On | Experience, rested and standing on mouse-over, and what is left to level or to the next standing, and a hunter's pet's experience while it is still levelling. Needs **Experience bar** at Flat UI's. |
 | **Clicks on the bar** | On | Shift-click puts your progress in the chat box, ready to send. Ctrl-click counts the session's levelling and reputation numbers from now. A click on the reputation bar opens your reputations, in a fight as it ends. Needs **Experience bar** at Flat UI's. |
 | **Animate gains** | On | The fill slides up to its new value and the part you just gained glows for a moment. A new level flashes the bar gold, and a new standing in its colour; another faction or a lower standing shows at once. A quest that becomes ready to hand in lights the part it adds to the quest stretch. Needs **Experience bar** at Flat UI's. |

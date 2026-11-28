@@ -7,7 +7,7 @@ local W = { tiles = {}, notes = {}, view = "start" }
 ns.Welcome = W
 
 local GAME = "Game look"
-local COMBAT = "In combat. Pick a look after combat."
+local COMBAT = "In a fight. Pick a look after it."
 local WIDTH, PAD, MARK, GAP, TILE_GAP, FOOT, SAME_W = 640, 16, 28, 8, 10, 18, 200
 local INNER = WIDTH - 2 * PAD
 local BAND_Y, BAND_H, DRAW_H, MOST = 92, 120, 112, 1.8

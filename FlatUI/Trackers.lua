@@ -67,7 +67,7 @@ local HELP = {
 	"/flatui tracker set 1 shape bar - icon, bar or text, and colour 4d99e6 for a bar or text",
 	"/flatui tracker set 1 happy on - a pet tracker is low while a hunter's pet is not happy",
 	"/flatui tracker set 1 health 40 - a pet tracker shows your pet's health in red under 40%, or clear to use the page's",
-	"/flatui tracker proc colour 1 ffd100 - one proc's colour, time (proc time 1 10) or trigger (proc trigger 1 overlay)",
+	"/flatui tracker proc colour 1 ffd100 - one proc's colour, sound (proc sound 1 bell), time (proc time 1 10) or trigger (proc trigger 1 overlay); proc reset 1 puts them back. A proc of your class also goes by its name",
 	"/flatui tracker check - what each tracker shows and why, and what happened in the last fight",
 	"/flatui tracker check sound - the game's own sound when a tracked buff ends, until /reload",
 	"/flatui tracker test - each look for 3 seconds: fine, low, missing, then the game's own look",
@@ -1178,6 +1178,9 @@ function ns.TrackerSet(index, word, text)
 		value = nil
 	end
 	entry[key] = value
+	if key == "kit" then
+		K.KitWarn(value, entry)
+	end
 	return Done(("Tracker %d: %s is %s."):format(index, word, text), key)
 end
 
@@ -1287,6 +1290,9 @@ function ns.TrackerSetOwn(index, key, value)
 		return false, "That value is not allowed for this tracker."
 	end
 	entry[key] = value
+	if key == "kit" and value ~= nil then
+		K.KitWarn(value, entry)
+	end
 
 	return Done()
 end
@@ -1772,7 +1778,7 @@ local function Fill(entry, reading)
 	local kind = KINDS[entry.kind]
 	local charges = not (kind and type(kind.Count) == "function")
 	if charges and Value(entry, "barFill") == "charges" and entry.charged and reading.count and top and top >= 1 then
-		return math.min(1, reading.count / top)
+		return math.min(1, reading.count / top), top
 	end
 	if reading.expires and reading.length then
 		return math.max(0, math.min(1, (reading.expires - Now()) / reading.length))
@@ -1834,7 +1840,7 @@ local function Looks(entry, reading, how)
 		end
 	end
 	if how ~= "last" then
-		look.fill = Fill(entry, reading)
+		look.fill, look.top = Fill(entry, reading)
 	end
 	if entry.charged and Value(entry, "counts") then
 		if how == "last" then
@@ -2878,7 +2884,10 @@ local function Place(place, holder, total, tallest, grow)
 		local anchored = false
 		local display = PersonalResourceDisplayFrame
 		if display ~= nil and not ns.Forbidden(display) then
-			local over = type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder(Opt("side") == "below" and "below" or "above") or nil
+			local side = Opt("side") == "below" and "below" or "above"
+			local charges = type(ns.ChargesHolder) == "function" and ns.ChargesHolder(side) or nil
+			local over = charges or (type(ns.OwnBuffsHolder) == "function" and ns.OwnBuffsHolder(side) or nil)
+			local named = charges and "the Charges row" or "the Your buffs row"
 			if Opt("side") == "below" then
 				local row, depth = CooldownsBelow()
 				if row then
@@ -2886,14 +2895,14 @@ local function Place(place, holder, total, tallest, grow)
 					K.where[place] = "below the Cooldown icons row"
 				elseif over then
 					holder:SetPoint("CENTER", over, "BOTTOM", x, y - GAP - tallest / 2)
-					K.where[place] = "below the Your buffs row"
+					K.where[place] = "below " .. named
 				else
 					holder:SetPoint("CENTER", LowestBar(display), "BOTTOM", x, y - GAP - tallest / 2)
 					K.where[place] = "below the personal resource display"
 				end
 			elseif over then
 				holder:SetPoint("CENTER", over, "TOP", x, y + GAP + tallest / 2)
-				K.where[place] = "above the Your buffs row"
+				K.where[place] = "above " .. named
 			else
 				holder:SetPoint("CENTER", HighestBar(display), "TOP", x, y + GAP + tallest / 2)
 				K.where[place] = "above the personal resource display"
@@ -3103,10 +3112,16 @@ local function Layout()
 		HideHolders()
 		K.EndKinds()
 		shown = {}
+		if type(ns.ChargesRecheck) == "function" then
+			ns.ChargesRecheck()
+		end
 		return
 	end
 	if type(ns.ProcAutoBuild) == "function" then
 		ns.EachPart(KEY, "procs", ns.ProcAutoBuild)
+	end
+	if type(ns.ChargesRecheck) == "function" then
+		ns.ChargesRecheck()
 	end
 	local entries, wanted = OnEntries(), {}
 	tracked = #entries
@@ -4205,11 +4220,37 @@ local function Refresh()
 	GameSound()
 end
 
+K.KIT_NAMES = { spell = "Spell alert", chimes = "Chimes", bell = "Bell", warhorn = "Warhorn" }
+K.KIT_WARN = "Trackers: %s plays for a buff between fights only. In a fight the game plays only Raid warning, Alarm or Whisper warning."
+
+function K.KitWarn(word, entry)
+	local name, fights = K.KIT_NAMES[word], ns.TrackerKitInFights
+	if not name or type(fights) ~= "function" or fights(word) then
+		return
+	end
+	if entry and not (entry.kind == nil or entry.kind == "buff" or entry.kind == "debuff") then
+		return
+	end
+	for _, row in ipairs({ "sound", "comes", "stacks" }) do
+		local on
+		if entry then
+			on = Value(entry, row)
+		else
+			on = Opt(row)
+		end
+		if on == true then
+			print(K.KIT_WARN:format(name))
+			return
+		end
+	end
+end
+
 function ns.TrackerKitChanged()
 	ns.Try(KEY, Refresh)
 	if not InCombatLockdown() and type(ns.PlayKit) == "function" then
 		ns.PlayKit(K.KITS[Opt("kit")] or K.KITS.raid, KEY)
 	end
+	K.KitWarn(Opt("kit"))
 end
 
 function ns.TrackerLookChanged(path)

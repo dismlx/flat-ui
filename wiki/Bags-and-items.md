@@ -23,6 +23,8 @@ The title bar holds the name of the character whose bags you see, and buttons th
 
 **Size.** **Width in slots** is 12 (from 6 to 30), **Bank width in slots** is 16 (from 6 to 36), and **Slot size** is 36 px (from 24 to 48). You can also drag the small grip at a window's free corner, the bag window's bottom left or the bank window's bottom right, to make it wider or narrower one column at a time, up to what fits on your screen. Double-click the grip to put the width back to 12 (16 for the bank). A drag or a double-click is one change in **Recent changes** on the options window's **Home** page, so Ctrl+Z puts it back.
 
+**Menus.** A section title's right-click menu groups its lines under faint thin lines: moving the section, this section's own lines, those for every section, the lists and your own sections' lines. Escape closes an open menu of either window first, such as a section title's menu, the Characters picker or a bag's settings, and the bags stay open; a second Escape closes them. In a fight the first Escape closes both.
+
 **Nothing moves while the window is open.** What you loot gathers at the top under New items. Anything else that comes into your bags meanwhile, such as an item from the bank or gear you take off, gathers there too, under Added. Point at the New items or Added title for what came in, each item with its count, and what it is worth at a merchant.
 
 ### The footer
@@ -39,8 +41,8 @@ The footer shows your gold, your currencies and your free slots.
 
 **Free slots.** Only the backpack and normal bags count as free space. Trade bags, quivers, ammo pouches, soul bags, the reagent bag and the keyring take only certain items. The count pulses twice in red when your last free slot fills, or when the window opens full. In Sections, the Free slots title says how many are free, as "12 of 80", gold at 4 or fewer and red when none is left.
 
-- **Free slots** (in Sections): **One per kind of bag** (the default) shows one slot with the number free in normal bags and, in your own bags, one for each kind of special bag with room. **Every free slot** shows them all. Drop an item on a free slot to put it there.
-- **Say when your bags fill** (on): chat says once, also with the bag window closed, "Flat UI: your bags are full (0 of 80 free)." It says it again only after a slot frees up, and at most once in 10 seconds.
+- **Free slots** (in Sections): **One per kind of bag** (the default) shows one slot with the number free in normal bags and, in your own bags, one for each kind of special bag with room. **Every free slot** shows them all. Drop an item on a free slot to put it there. The Free label in the footer lights faintly under the mouse, and in Sections a click on it switches between the two, as one change in **Recent changes** that Ctrl+Z undoes.
+- **Say when your bags fill** (on): chat says once, also with the bag window closed, "Flat UI: your bags are full (0 of 80 free)." With junk in your bags it goes on to say how many slots that junk takes and what it is worth: "Junk takes 6 slots, worth 1g 4s: Sell junk at a merchant frees them." It says it again only after a slot frees up, and at most once in 10 seconds.
 - **Sound when your bags fill**: **None** (the default), **Bell**, **Chimes**, **Alarm** or **Raid warning**, played with the line in chat.
 
 ### Bag slots
@@ -76,7 +78,7 @@ The split sections fold, move, take drops and can be deleted like any other. Rig
 - **By kind** (the default): gear by slot and item level, the rest by kind, then quality, name and stack size.
 - **Best quality first**, **By name** or **Highest item level first**.
 
-Keep in place always keeps the order of your bags.
+Keep in place always keeps the order of your bags. Right-click a section's title for **Order: By kind** to change it there too, in both windows at once, as one change in **Recent changes** that Ctrl+Z undoes.
 
 ### Folding, moving and colouring sections
 
@@ -108,7 +110,7 @@ Drop an item on a section's title, on its + slot or anywhere among its slots, to
 - A drop on the section the item would go to anyway keeps it there too, so changing **Equipment**, **Consumables** or **Trade goods** never moves it.
 - An item's tooltip in these windows says when it is placed by hand in its section.
 
-**Items placed by hand** on the page lists them. Choose one to put it back in its own section, or the first line to put them all back. A section title's right-click menu also puts back the items placed there. Until the next put back or a reload, the same menu, or the first line of **Items placed by hand**, brings them back again. At most 2000 items are placed by hand.
+**Items placed by hand** on the page lists them. Choose one to put it back in its own section, or the first line to put them all back. A section title's right-click menu also puts back the items placed there. Until the next put back or a reload, the same menu, or the first line of **Items placed by hand**, brings them back again, also a single item you chose there. At most 2000 items are placed by hand.
 
 **Placing a whole search.** With a search typed, a section title's right-click menu has **Place the 7 items that match the search here**. It places every item the search finds in other sections there at once, New items too but not those of Junk or Keep in place. So `#boe q>=uncommon` fills an Auction section of your own in one click.
 
@@ -192,7 +194,7 @@ Item levels and bag sizes show in both windows, also for your other characters.
 - Alt+right-click it in the bag window. Alt+right-click it again to take it off; a grey one then goes on your keep list.
 - Type `/flatui sell` and the item.
 
-Quest items, items with no sell price and pinned items stay off the list. Right-click the Junk title for **Your sell list (5)** and **Never sold (2)**, each a small menu of its items by name, also of those no longer in your bags. A click takes one off.
+Quest items, items with no sell price and pinned items stay off the list. Right-click the Junk title for **Your sell list (5)** and **Never sold (2)**, each a small menu of its items, also of those no longer in your bags, each with its icon and its name in its quality's colour. Point at one for the item's tooltip. A click takes one off, and the menu opens again without it until the list is empty.
 
 Two rows of the **Errands** page apply here too: **Sell at most 12 at a time**, so the items of your sell list that are not grey go 12 a click, and **Say what was done**, for the line in chat after a sale. They change only while Errands is on. See [Helpers](Helpers).
 
@@ -228,7 +230,7 @@ A change counts from your next visit to a banker.
 With Flat UI's bank window:
 
 - **Open the bags at the banker** (on) opens your bags with it.
-- **Deposit and Take out** (on) adds two buttons. **Deposit** puts the items of your bags that match the search in the bank, one at a time, out of combat. **Take out** does the same the other way. At the banker, a section's right-click menu also puts the whole section in the bank, or takes it out in the bank window, with no search.
+- **Deposit and Take out** (on) adds two buttons. **Deposit** puts the items of your bags that match the search in the bank, one at a time, out of combat. **Take out** does the same the other way. While one runs, its button reads "Stop (12)" and counts down; click it to stop. At the banker, a section's right-click menu also puts the whole section in the bank, or takes it out in the bank window, with no search.
 - Point at a bank bag slot to light that bag's items and see how full it is. Each bank bag shows its free slots in its corner. Click one to show only that bag until you click it again, and drag it to pick it up.
 
 ### Other characters
@@ -278,7 +280,7 @@ The **Item slots** page works on the game's own windows and the Character window
 ### Item level
 
 - **Item level in bags and bank** (on): in the game's bag and bank windows. The **Bags** page has its own **Item level** row.
-- **Item level on equipped gear** (on): on the slots of the Character window.
+- **Item level on equipped gear** (on): on the slots of the Character window, and your average item level under your level, in **Item level colour** (gold at Gold, white otherwise), to set beside the one the Inspect window shows. It follows your gear as you change it.
 - **Item level in the equipment flyout** (on): on the bag items that fit a slot, shown while you hold Alt over the slot.
 - **Item level on the Inspect window** (on): on each slot, and the player's average item level under their level.
 - **Item level corner on gear**: **Bottom left** (the default), **Bottom right**, **Top left** or **Top right**, on the Character and Inspect windows. Bags and the flyout keep the bottom left.

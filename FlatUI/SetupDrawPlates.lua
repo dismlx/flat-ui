@@ -720,6 +720,18 @@ function P.TargetFlash(p, spec, o)
 	end
 end
 
+function P.FlashPlace(p)
+	local frame = p.tflashFrame
+	if frame == nil then
+		return
+	end
+	local copy = p.slipCopy
+	local copied = type(copy) == "table" and copy.on == true and type(copy.bar) == "table" and ns.Finite(copy.level)
+	frame:ClearAllPoints()
+	frame:SetAllPoints(copied and copy.bar or p.bar)
+	frame:SetFrameLevel(copied and copy.level + 11 or p.bar:GetFrameLevel() + 12)
+end
+
 function P.Level(p, spec, o, m)
 	P.Put(p, p.lvl, "BOTTOMLEFT", m.LX, m.LY, m.LW, m.LH)
 	local style = o.level
@@ -1834,6 +1846,7 @@ function P.Plate(p, spec, sets)
 	if type(ns.PlateMarkSample) == "function" then
 		pcall(ns.PlateMarkSample, p, spec, o, m)
 	end
+	P.FlashPlace(p)
 	if type(ns.PlateSlipBox) == "function" then
 		pcall(ns.PlateSlipBox, p)
 	end
@@ -2215,7 +2228,10 @@ function P.Parts(S)
 	Set({ "targetBar", "targetBarColour", "target", "targetColour", "targetThickness", "targetFlash" }, (Live("target") or plate).bar)
 	Set({ "focusColour" }, (Live("focus") or Live("target") or plate).bar)
 	local marked = Live("target") or plate
-	Set({ "targetMark", "targetMarkColour", "targetMarkGlow", "targetArrows", "targetArrowSize" }, type(ns.PlateMarkShown) == "function" and ns.PlateMarkShown(marked) or marked.bar)
+	Set({ "targetMark", "targetMarkColour", "targetMarkGlow", "targetArrows", "targetArrowSize", "targetArrowsLow", "targetArrowsMove" },
+		type(ns.PlateMarkShown) == "function" and ns.PlateMarkShown(marked) or marked.bar)
+	local focused = Live("focus") or marked
+	Set({ "focusMark" }, type(ns.PlateMarkShown) == "function" and ns.PlateMarkShown(focused, true) or focused.bar)
 	Set({ "threat", "threatRole", "threatGood", "threatTransition", "threatBad", "threatSameColours", "threatDamageGood", "threatDamageTransition",
 		"threatDamageBad" }, plates.threat and plates.threat.chips.f or plate.bar)
 	Set({ "hover", "hoverColour" }, (Live("hover") or plate).bar)

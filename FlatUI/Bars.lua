@@ -289,9 +289,9 @@ local SWING_TIMERS = {
 	{ "SwingTimerRangedFrame", "ranged" },
 }
 
-local SWING_GRACE, SWING_FADE = 0.4, 0.25
+local SWING_GRACE, SWING_FADE, SWING_IN = 0.4, 0.25, 0.15
 local idleSince, swingFaded = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
-local combatLeft = setmetatable({}, { __mode = "k" })
+local combatLeft, swingShown, swingRising = setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" }), setmetatable({}, { __mode = "k" })
 
 local function SwingIdle(timer)
 	local mode = ns.Enabled("swing") and ns.Get("swing.idle")
@@ -307,6 +307,10 @@ local function SwingIdle(timer)
 		if not ok or ns.IsSecret(fighting) then
 			return false
 		elseif fighting ~= false then
+			local left = combatLeft[timer]
+			if left == nil or (type(left) == "number" and GetTime() - left >= SWING_FADE) then
+				swingShown[timer] = GetTime()
+			end
 			combatLeft[timer] = true
 			return false
 		end
@@ -320,6 +324,10 @@ local function SwingIdle(timer)
 	if ns.IsSecret(ending) then
 		return false
 	elseif ending ~= nil then
+		local since = idleSince[timer]
+		if since ~= nil and GetTime() - since >= SWING_GRACE + SWING_FADE then
+			swingShown[timer] = GetTime()
+		end
 		idleSince[timer] = nil
 		return false
 	end
@@ -532,6 +540,12 @@ local function SwingFadeStep(timer)
 		if t and t >= 0 and t < SWING_FADE then
 			left = 1 - t / SWING_FADE
 		end
+		local from = (mode == "combat" or mode == "hide") and swingShown[timer] or nil
+		local into = from and GetTime() - from
+		if left == nil and into and into >= 0 and into < SWING_IN then
+			left = into / SWING_IN
+			swingRising[timer] = true
+		end
 	end
 	local base, own = swingFaded[timer], seen[timer]
 	local whole = own and own.whole
@@ -545,9 +559,10 @@ local function SwingFadeStep(timer)
 		SwingWholeAlpha(whole, left)
 	elseif base ~= nil then
 		swingFaded[timer] = nil
-		if not swinging or mode == "combat" then
+		if not swinging or mode == "combat" or swingRising[timer] then
 			pcall(bar.SetAlpha, bar, base)
 		end
+		swingRising[timer] = nil
 		SwingWholeAlpha(whole, 1)
 	end
 end
@@ -910,6 +925,16 @@ end
 local function SwingInFlight()
 	if not ns.Enabled("swing") then
 		return false
+	end
+	local rising, from = false, GetTime()
+	EachTimer(function(timer)
+		local shown, editing = swingShown[timer], timer.isInEditMode
+		if shown and from >= shown and from - shown < SWING_IN and not (ns.IsSecret(editing) or editing == true) then
+			rising = true
+		end
+	end)
+	if rising then
+		return true
 	end
 	if ns.Get("swing.idle") == "combat" then
 		local fading, at = false, GetTime()
@@ -1409,7 +1434,13 @@ local function CastCover(bar, record)
 		ns.Note(record.key, ("%s: the game refused a fill on one cast bar, which keeps its default fill."):format(ns.modules[record.key].label))
 		return false
 	end
-	record.fill, record.cover, record.failed = fill, cover, nil
+	local dim = bar:CreateTexture(nil, layer, nil, math.min(sublevel + 2, 7))
+	ns.Own[dim] = true
+	dim:SetColorTexture(0, 0, 0, 1)
+	dim:SetAllPoints(cover)
+	dim:SetAlpha(0)
+	dim:Hide()
+	record.fill, record.cover, record.dim, record.failed = fill, cover, dim, nil
 	if record.key == "castbars" then
 		Count("castbars", bar)
 	end
@@ -1785,6 +1816,32 @@ local function PaintFlash(bar, record, state, r, g, b, shield, otherwise)
 	end
 end
 
+local function Blink(holder, texture, rest, peak)
+	local group = holder.blink
+	if group == nil then
+		local ok, made = pcall(function()
+			local blink = texture:CreateAnimationGroup()
+			local down = blink:CreateAnimation("Alpha")
+			down:SetFromAlpha(rest)
+			down:SetToAlpha(peak)
+			down:SetDuration(0.12)
+			down:SetOrder(1)
+			local up = blink:CreateAnimation("Alpha")
+			up:SetFromAlpha(peak)
+			up:SetToAlpha(rest)
+			up:SetDuration(0.13)
+			up:SetOrder(2)
+			return blink
+		end)
+		group = ok and not ns.IsSecret(made) and type(made) == "table" and made or false
+		holder.blink = group
+	end
+	if group then
+		pcall(group.Stop, group)
+		pcall(group.Play, group)
+	end
+end
+
 local function PaintCast(bar, record)
 	if not record.cover and not CastCover(bar, record) then
 		return
@@ -1796,8 +1853,10 @@ local function PaintCast(bar, record)
 	if state == "none" then
 		if record.shown then
 			cover:Hide()
+			record.dim:Hide()
 			record.shown, record.state = false, nil
 		end
+		record.kick = nil
 		PaintBorder(bar, nil)
 		HideMarks(record)
 		return
@@ -1805,7 +1864,11 @@ local function PaintCast(bar, record)
 	if state == "withheld" and not (CreateColor and cover.SetVertexColorFromBoolean) then
 		state = otherwise
 	end
+	local was = record.kick
 	record.kick = Kick(bar, record, state)
+	if record.kick == true and (was == false or was == "far") and (state == "cast" or state == "channel") then
+		Blink(record, record.dim, 0, 0.65)
+	end
 	if state == "withheld" then
 		cover:SetVertexColorFromBoolean(shield, ColourObject(record, "shield"), ColourObject(record, otherwise))
 		record.state, record.hex = state, nil
@@ -1826,6 +1889,7 @@ local function PaintCast(bar, record)
 	end
 	if not record.shown then
 		cover:Show()
+		record.dim:Show()
 		record.shown = true
 	end
 	PaintMarks(bar, record, state)
@@ -1898,6 +1962,7 @@ function ns.CastFill(key, bar, on)
 	following[bar] = on and record or nil
 	if not on and record.shown and not forbidden then
 		record.cover:Hide()
+		record.dim:Hide()
 		record.shown, record.state = false, nil
 		PaintBorder(bar, nil)
 		HideMarks(record)
@@ -1944,29 +2009,7 @@ do
 	end
 
 	local function BlinkStrip(strip)
-		local group = strip.blink
-		if group == nil then
-			local ok, made = pcall(function()
-				local blink = strip.tex:CreateAnimationGroup()
-				local down = blink:CreateAnimation("Alpha")
-				down:SetFromAlpha(1)
-				down:SetToAlpha(0.3)
-				down:SetDuration(0.12)
-				down:SetOrder(1)
-				local up = blink:CreateAnimation("Alpha")
-				up:SetFromAlpha(0.3)
-				up:SetToAlpha(1)
-				up:SetDuration(0.13)
-				up:SetOrder(2)
-				return blink
-			end)
-			group = ok and not ns.IsSecret(made) and type(made) == "table" and made or false
-			strip.blink = group
-		end
-		if group then
-			pcall(group.Stop, group)
-			pcall(group.Play, group)
-		end
+		Blink(strip, strip.tex, 1, 0.3)
 	end
 
 	local function MakeStrip(bar)

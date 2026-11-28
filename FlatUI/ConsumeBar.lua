@@ -22,7 +22,22 @@ local K = {
 	LINE_BROKEN = LABEL .. ": the game made no secure button, so the bar stays hidden.",
 	LINE_COUNT = LABEL .. ": %d buttons, %d of them from your list of %d.",
 	BAGS_HINT = " It shows while Buttons is Your list or Your list, then the rest.",
+	LOW = 3, LIT = 0.14, SUNK = 0.3, GCD = 1.5, TIP_EVERY = 1, BUFF_GAP = 0.5, BUFF_EVERY = 30,
+	BUFF = { 0.3, 0.85, 0.4 }, READY = { 0.4, 0.85, 0.45 }, ACCENT = { 0.85, 0.85, 0.85 },
+	MAIN = 16, OFF = 17, TEMPORARY = 15,
+	HANDS = { INVTYPE_WEAPON = true, INVTYPE_WEAPONOFFHAND = true, INVTYPE_2HWEAPON = true },
+	ONTO = {},
+	WEAPON_ITEMS = {
+		8928, 8927, 8926, 6950, 6949, 6947, 20844, 8985, 8984, 2893, 2892, 10922, 10921, 10920, 10918, 9186, 6951, 5237, 3776, 3775,
+		23122, 18262, 12404, 7964, 2871, 2863, 2862, 12643, 7965, 3241, 3240, 3239,
+		23123, 20749, 20750, 20746, 20744, 20748, 20747, 20745, 3824, 3829,
+	},
+	MAIN_LINE = "Click: on your main hand.",
+	BOTH_LINE = "Click: on your main hand. Right-click: on your off hand.",
 }
+for _, id in ipairs(K.WEAPON_ITEMS) do
+	K.ONTO[id] = true
+end
 
 local KINDS = {
 	{ key = "other", row = "kindOther" },
@@ -50,7 +65,7 @@ local SHARE = { BOTTOMLEFT = { 0, 0 }, BOTTOMRIGHT = { 1, 0 }, TOPLEFT = { 0, 1 
 local WHICH = { bags = true, list = true, both = true }
 
 local C = {
-	entries = {}, shown = {}, instant = {}, uses = {}, names = {}, pending = {}, none = {},
+	entries = {}, shown = {}, instant = {}, uses = {}, spells = {}, names = {}, pending = {}, none = {},
 	queued = false, told = false, broken = false, fighting = false, cleaned = false,
 }
 ns.ConsumeBar = C
@@ -168,6 +183,25 @@ function C.Called(id)
 	return C.Name(id) or ("item %d"):format(id)
 end
 
+function C.SpellOf(id)
+	local known = C.spells[id]
+	if known ~= nil then
+		return known or nil
+	end
+	local call = Api("C_Item", "GetItemSpell") or (type(GetItemSpell) == "function" and GetItemSpell or nil)
+	if not call then
+		return nil
+	end
+	local ok, _, spell = pcall(call, id)
+	spell = ok and not IsSecret(spell) and Whole(spell) or nil
+	if spell then
+		C.spells[id] = spell
+	elseif C.Name(id) then
+		C.spells[id] = false
+	end
+	return spell
+end
+
 function C.HasUse(id)
 	local known = C.uses[id]
 	if known ~= nil then
@@ -221,6 +255,66 @@ function C.Cooldown(id)
 		return start, duration
 	end
 	return 0, 0
+end
+
+function C.Wait(entry)
+	if entry.plus or entry.sample or not entry.id then
+		return nil
+	end
+	local start, duration = C.Cooldown(entry.id)
+	if not (start and duration > K.GCD) then
+		return nil
+	end
+	local left = start + duration - Now()
+	return left > 0 and left or nil
+end
+
+function C.Clock(seconds)
+	local whole = math.max(0, math.ceil(seconds))
+	if whole >= 3600 then
+		return ("%d:%02d:%02d"):format(math.floor(whole / 3600), math.floor(whole % 3600 / 60), whole % 60)
+	end
+	return ("%d:%02d"):format(math.floor(whole / 60), whole % 60)
+end
+
+function C.Onto(id)
+	if K.ONTO[id] == true then
+		return true
+	end
+	local info = C.Instant(id)
+	return type(info) == "table" and info.class == CONSUMABLE and info.sub == K.TEMPORARY
+end
+
+function C.OffWeapon()
+	local id = Whole(Ask(GetInventoryItemID, "player", K.OFF))
+	local info = id and C.Instant(id)
+	return type(info) == "table" and info.slot ~= nil and K.HANDS[info.slot] == true
+end
+
+function C.BuffLeft(entry)
+	if entry.sample or not entry.id then
+		return "off"
+	end
+	local kind = C.KindOf(entry.id)
+	if kind ~= "elixir" and kind ~= "scroll" then
+		return "off"
+	end
+	local spell = C.SpellOf(entry.id)
+	local get = spell and Api("C_UnitAuras", "GetPlayerAuraBySpellID")
+	if not get then
+		return "off"
+	end
+	local ok, aura = pcall(get, spell)
+	if not ok or IsSecret(aura) then
+		return "keep"
+	elseif type(aura) ~= "table" then
+		return "off"
+	end
+	local ends = aura.expirationTime
+	if IsSecret(ends) then
+		return "keep"
+	end
+	return "on", Finite(ends) and ends > 0 and ends or nil
 end
 
 function C.Scan()
@@ -498,6 +592,28 @@ local function Text(parent, font, point, x, y)
 	return text
 end
 
+local function Wash(parent, sublevel, r, g, b, a, blend)
+	local texture = Own(parent:CreateTexture(nil, "OVERLAY", nil, sublevel))
+	texture:SetAllPoints(parent)
+	texture:SetColorTexture(r, g, b, a)
+	if blend then
+		texture:SetBlendMode(blend)
+	end
+	texture:Hide()
+	return texture
+end
+
+local function Accent()
+	local look = ns.PanelLook
+	if type(look) == "table" and type(look.Colour) == "function" then
+		local ok, r, g, b = pcall(look.Colour, "accent")
+		if ok and Finite(r) and Finite(g) and Finite(b) then
+			return r, g, b
+		end
+	end
+	return K.ACCENT[1], K.ACCENT[2], K.ACCENT[3]
+end
+
 function C.Entry(index)
 	local entry = C.entries[index]
 	if entry then
@@ -520,8 +636,14 @@ function C.Entry(index)
 			C.Ready(entry)
 		end
 	end
+	entry.lit = Wash(top, -2, 1, 1, 1, K.LIT, "ADD")
+	entry.sunk = Wash(top, -1, 0, 0, 0, K.SUNK)
 	entry.countText = Text(top, K.COUNT_FONT, "BOTTOMRIGHT", -1, 2)
 	entry.keyText = Text(top, K.KEY_FONT, "TOPLEFT", 2, -2)
+	entry.buffText = Text(top, K.KEY_FONT, "TOPRIGHT", -2, -2)
+	if entry.buffText then
+		entry.buffText:SetTextColor(K.BUFF[1], K.BUFF[2], K.BUFF[3], 1)
+	end
 	entry.cover = C.Cover(entry)
 	if not entry.cover then
 		C.broken = true
@@ -542,9 +664,9 @@ function C.Cover(entry)
 	local done = pcall(function()
 		cover:SetFrameLevel(entry.frame:GetFrameLevel() + 5)
 		cover:EnableMouse(true)
-		cover:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonUp")
-		cover:SetScript("PreClick", function(_, button)
-			ns.Try(KEY, C.PreClick, entry, button)
+		cover:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonDown", "RightButtonUp")
+		cover:SetScript("PreClick", function(_, button, down)
+			ns.Try(KEY, C.PreClick, entry, button, down)
 		end)
 		cover:SetScript("PostClick", function(_, button, down)
 			ns.Try(KEY, C.PostClick, entry, button, down)
@@ -599,12 +721,45 @@ end
 
 function C.Arm(entry)
 	local item = (entry.id and not entry.sample) and ("item:" .. entry.id) or nil
-	if entry.armed == item then
+	local onto = item ~= nil and C.Onto(entry.id)
+	local off = onto and C.OffWeapon()
+	local armed = item and (onto and (off and item .. ":both" or item .. ":main") or item) or nil
+	if entry.armed == armed then
 		return
 	end
 	local cover = entry.cover
-	if pcall(cover.SetAttribute, cover, "item", item) and pcall(cover.SetAttribute, cover, "*type1", item and "item" or nil) then
-		entry.armed = item
+	local done = pcall(function()
+		cover:SetAttribute("item", item)
+		cover:SetAttribute("*type1", item and "item" or nil)
+		cover:SetAttribute("*target-slot1", onto and K.MAIN or nil)
+		cover:SetAttribute("*type2", off and "item" or nil)
+		cover:SetAttribute("*target-slot2", off and K.OFF or nil)
+		cover:SetAttribute("shift-type2", off and "stop" or nil)
+	end)
+	if done then
+		entry.armed, entry.onto, entry.off = armed, onto, off
+	end
+end
+
+function C.Press(entry, down)
+	if entry.plus then
+		return
+	end
+	local sunk = down == true and entry.id ~= nil
+	if (entry.pressed or false) == sunk then
+		return
+	end
+	entry.pressed = sunk
+	if entry.sunk then
+		entry.sunk:SetShown(sunk)
+	end
+	local texture, frame = entry.texture, entry.frame
+	texture:ClearAllPoints()
+	if sunk then
+		texture:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+		texture:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 1, -1)
+	else
+		texture:SetAllPoints(frame)
 	end
 end
 
@@ -612,9 +767,14 @@ function C.Park(entry)
 	if entry.hover then
 		C.Leave(entry)
 	end
+	C.Press(entry, false)
 	entry.id, entry.list, entry.place, entry.sample, entry.sampleCount = nil, nil, nil, nil, nil
-	entry.cd, entry.shownIcon, entry.lastCount, entry.empty = nil, nil, nil, nil
+	entry.cd, entry.shownIcon, entry.lastCount, entry.empty, entry.buffed = nil, nil, nil, nil, nil
 	entry.long, entry.ends = false, nil
+	if entry.buffText then
+		entry.buffText:SetText("")
+	end
+	C.Shade(entry)
 	pcall(entry.cooldown.Clear, entry.cooldown)
 	entry.frame:Hide()
 	entry.cover:Hide()
@@ -680,6 +840,9 @@ function C.Layout(wanted)
 		end
 		if entry.keyText then
 			entry.keyText:SetTextHeight(math.max(7, math.floor(size * 0.28 + 0.5)))
+		end
+		if entry.buffText then
+			entry.buffText:SetTextHeight(math.max(7, math.floor(size * 0.28 + 0.5)))
 		end
 	end
 	local count = #shown
@@ -805,6 +968,82 @@ function C.Shade(entry)
 	else
 		ns.SetOutlineFill(entry.outline, nil, nil, nil, nil)
 	end
+	if entry.plus then
+		return
+	end
+	if entry.lit then
+		entry.lit:SetShown(entry.hover == true)
+	end
+	if entry.hover then
+		ns.SetOutlineColour(entry.outline, Accent())
+	elseif entry.buffed then
+		ns.SetOutlineColour(entry.outline, K.BUFF[1], K.BUFF[2], K.BUFF[3])
+	else
+		ns.SetOutlineColour(entry.outline, nil, nil, nil)
+	end
+end
+
+function C.PaintBuff(entry)
+	local state, ends = C.BuffLeft(entry)
+	if state == "keep" then
+		return entry.buffed == true
+	end
+	local on = state == "on"
+	local text = entry.buffText
+	if text then
+		local words = ""
+		if on and ends then
+			local minutes = math.max(1, math.ceil((ends - Now()) / 60))
+			words = minutes > 99 and ("%dh"):format(math.floor(minutes / 60 + 0.5)) or ("%dm"):format(minutes)
+		end
+		text:SetText(words)
+	end
+	entry.buffed = on
+	return on
+end
+
+function C.Buffs()
+	local any = false
+	for _, entry in ipairs(C.shown) do
+		if entry.id then
+			if C.PaintBuff(entry) then
+				any = true
+			end
+			C.Shade(entry)
+		end
+	end
+	C.BuffClock(any)
+end
+
+function C.BuffClock(any)
+	if not any or C.buffClock then
+		return
+	end
+	C.buffClock = true
+	if not After(K.BUFF_EVERY, function()
+		C.buffClock = false
+		if ns.Enabled(KEY) then
+			ns.Try(KEY, C.Buffs)
+		end
+	end) then
+		C.buffClock = false
+	end
+end
+
+function C.AuraChanged()
+	if C.buffSoon then
+		return
+	end
+	C.buffSoon = true
+	if not After(K.BUFF_GAP, function()
+		C.buffSoon = false
+		if ns.Enabled(KEY) then
+			ns.Try(KEY, C.Buffs)
+		end
+	end) then
+		C.buffSoon = false
+		C.Buffs()
+	end
 end
 
 function C.Sweep(entry)
@@ -890,7 +1129,7 @@ function C.PaintEntry(entry)
 	local text = entry.countText
 	if text then
 		if Opt("count") ~= false and (count > 1 or empty or entry.list or entry.sample) then
-			local colour = empty and K.RED or K.WHITE
+			local colour = empty and K.RED or (not entry.sample and count <= K.LOW and K.WARN) or K.WHITE
 			text:SetText(tostring(math.floor(count)))
 			text:SetTextColor(colour[1], colour[2], colour[3], 1)
 		else
@@ -901,6 +1140,7 @@ function C.PaintEntry(entry)
 		entry.keyText:SetText(C.KeyOf(entry.index) or "")
 	end
 	C.Sweep(entry)
+	C.BuffClock(C.PaintBuff(entry))
 	C.Shade(entry)
 	if entry.hover and C.Owned(entry) then
 		C.Tip(entry)
@@ -920,6 +1160,10 @@ end
 function C.Sweeps()
 	for _, entry in ipairs(C.shown) do
 		C.Sweep(entry)
+	end
+	local entry = C.hover
+	if entry and not entry.plus and entry.cooling ~= true and C.Wait(entry) and C.Owned(entry) then
+		C.Tip(entry)
 	end
 end
 
@@ -1078,6 +1322,16 @@ function C.Lines(entry)
 		lines[1] = "Sample: your consumables show here while test mode is on."
 		return nil, lines, warm
 	end
+	local left = C.Wait(entry)
+	if left then
+		lines[1] = "Ready in " .. C.Clock(left)
+		warm[1] = true
+		entry.cooling = true
+	elseif entry.cooling == true then
+		lines[1] = "Ready"
+		warm[1] = K.READY
+		entry.cooling = false
+	end
 	if entry.empty then
 		lines[#lines + 1] = "None in your bags."
 		warm[#lines] = true
@@ -1087,6 +1341,9 @@ function C.Lines(entry)
 		lines[#lines + 1] = "Drop a consumable here to put it in this place."
 	else
 		lines[#lines + 1] = "Shift+right-click: onto your list."
+	end
+	if entry.onto then
+		lines[#lines + 1] = entry.off and K.BOTH_LINE or K.MAIN_LINE
 	end
 	local key = C.KeyOf(entry.index)
 	if key then
@@ -1109,15 +1366,51 @@ function C.Tip(entry)
 			tip:SetItemByID(entry.id)
 		end
 		for index, line in ipairs(lines) do
-			local colour = warm[index] and K.WARN or K.DIM
+			local colour = warm[index] == true and K.WARN or warm[index] or K.DIM
 			tip:AddLine(line, colour[1], colour[2], colour[3], true)
 		end
 		tip:Show()
 	end)
+	C.TipWatch()
+end
+
+function C.StopTip()
+	local ticker = C.tipTicker
+	C.tipTicker = nil
+	if type(ticker) == "table" and type(ticker.Cancel) == "function" then
+		pcall(ticker.Cancel, ticker)
+	end
+end
+
+function C.TipWatch()
+	local entry = C.hover
+	local want = entry ~= nil and entry.hover == true and entry.cooling == true
+	if want and not C.tipTicker then
+		if type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
+			local ok, ticker = pcall(C_Timer.NewTicker, K.TIP_EVERY, function()
+				if not ns.Try(KEY, C.TipTick) then
+					C.StopTip()
+				end
+			end)
+			C.tipTicker = ok and ticker or nil
+		end
+	elseif not want and C.tipTicker then
+		C.StopTip()
+	end
+end
+
+function C.TipTick()
+	local entry = C.hover
+	if entry and entry.cooling == true and C.Owned(entry) then
+		C.Tip(entry)
+	else
+		C.StopTip()
+	end
 end
 
 function C.Enter(entry)
 	entry.hover = true
+	entry.cooling = nil
 	C.hover = entry
 	C.Fade()
 	C.Shade(entry)
@@ -1129,9 +1422,12 @@ function C.Leave(entry)
 		return
 	end
 	entry.hover = false
+	entry.cooling = nil
+	C.Press(entry, false)
 	if C.hover == entry then
 		C.hover = nil
 	end
+	C.TipWatch()
 	C.Fade()
 	C.Shade(entry)
 	if C.Owned(entry) then
@@ -1144,22 +1440,28 @@ function C.Recent(entry)
 	return recent ~= nil and recent.entry == entry and Now() - recent.at < K.RECENT
 end
 
-function C.PreClick(entry, button)
-	entry.held = false
-	if button ~= "LeftButton" or not entry.armed or Fighting() then
+function C.PreClick(entry, button, down)
+	C.Press(entry, down)
+	entry.held = nil
+	local attribute = (button == "LeftButton" and "*type1") or (button == "RightButton" and entry.off and "*type2") or nil
+	if not attribute or not entry.armed or Fighting() then
 		return
 	end
 	if C.CursorItem() or C.Recent(entry) then
-		if pcall(entry.cover.SetAttribute, entry.cover, "*type1", nil) then
-			entry.held = true
+		if pcall(entry.cover.SetAttribute, entry.cover, attribute, nil) then
+			entry.held = attribute
 		end
 	end
 end
 
 function C.PostClick(entry, button, down)
+	if down ~= true then
+		C.Press(entry, false)
+	end
 	if entry.held then
-		entry.held = false
-		if Fighting() or not pcall(entry.cover.SetAttribute, entry.cover, "*type1", "item") then
+		local attribute = entry.held
+		entry.held = nil
+		if Fighting() or not pcall(entry.cover.SetAttribute, entry.cover, attribute, "item") then
 			entry.armed = nil
 			C.Queue()
 		end
@@ -1251,6 +1553,12 @@ end
 
 function C.CursorChanged()
 	if not Fighting() then
+		C.Apply(false)
+	end
+end
+
+function C.Equipped()
+	if C.panel and #C.shown > 0 then
 		C.Apply(false)
 	end
 end
@@ -1363,6 +1671,8 @@ ns.Register(KEY, {
 		PLAYER_LEVEL_UP = C.Tints,
 		GET_ITEM_INFO_RECEIVED = C.Received,
 		CURSOR_CHANGED = C.CursorChanged,
+		UNIT_AURA = C.AuraChanged,
+		PLAYER_EQUIPMENT_CHANGED = C.Equipped,
 		UPDATE_BINDINGS = C.Paint,
 		PLAYER_REGEN_DISABLED = C.FightStarts,
 		PLAYER_REGEN_ENABLED = C.AfterFight,
@@ -1373,6 +1683,12 @@ ns.Register(KEY, {
 		end,
 		CURSOR_CHANGED = function()
 			return C.Mode() ~= "bags"
+		end,
+		UNIT_AURA = function(unit)
+			return not IsSecret(unit) and unit == "player" and #C.shown > 0
+		end,
+		PLAYER_EQUIPMENT_CHANGED = function(slot)
+			return not IsSecret(slot) and (slot == K.MAIN or slot == K.OFF)
 		end,
 	},
 })

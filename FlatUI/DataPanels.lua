@@ -1489,7 +1489,23 @@ function P.Cover(slot, button, item)
 end
 
 function P.Secure(panel)
-	if not panel or P.InCombat() then
+	if not panel then
+		return
+	end
+	if P.InCombat() then
+		local armed = false
+		for _, slot in ipairs(panel.slots) do
+			if slot.secure then
+				armed = true
+			end
+		end
+		if armed and not P.secureQueued then
+			P.secureQueued = true
+			ns.OutOfCombat(function()
+				P.secureQueued = nil
+				pcall(P.SecureAll)
+			end)
+		end
 		return
 	end
 	for _, slot in ipairs(panel.slots) do

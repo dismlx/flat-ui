@@ -5,7 +5,7 @@ local STEPS = ns.SETUP_STEPS
 local S = { views = {}, lines = {}, boxes = {}, showAll = {}, everyOpen = false, version = 0 }
 ns.Setup = S
 
-local COMBAT_LINE = "In combat. Finish after combat."
+local COMBAT_LINE = "In a fight. Finish setup after it."
 local NOT_FINISHED = "Flat UI setup is not finished. /flatui setup continues it."
 local DRAW_H, BAR_H = 220, 44
 local PAGE_Y, PAGE_H = kit.HEADER + DRAW_H, 234 + kit.HEIGHT - 620

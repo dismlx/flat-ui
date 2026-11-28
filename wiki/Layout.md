@@ -13,7 +13,7 @@ The **Layout** group decides where things sit and when they show. It holds four 
 - Escape first lets go of any selected boxes. With nothing selected, it asks **Keep your changes?** and says how many frames moved. **Keep moving** goes back to the boxes, **Discard** puts every frame back as it was when you opened them, and **Keep** keeps them.
 - While the boxes are open, every faded frame is at full, so a frame at 0% is never an empty box. After **Done**, faded frames wait **Wait before fading** and fade again.
 
-The boxes do not open in a fight. Typed in a fight, `/flatui move` says "Flat UI: /flatui move opens when the fight ends." and the boxes open as it ends; typing it again in the same fight takes that back. The **Move frames** row reads **After combat** while you are in a fight. If a fight starts while the boxes are open, chat says "Flat UI: Movers pause for combat." and they open again as it ends.
+The boxes do not open in a fight. Typed in a fight, `/flatui move` says "Flat UI: /flatui move opens when the fight ends." and the boxes open as it ends; typing it again in the same fight takes that back. The **Move frames** row reads **After the fight** while you are in a fight. If a fight starts while the boxes are open, chat says "Flat UI: Movers pause for combat." and they open again as it ends.
 
 ### Moving one frame
 
@@ -41,6 +41,7 @@ A grey box moves with the frame it hangs from. A hidden frame the game has not p
 
 - A click on a box selects it alone. Shift or Ctrl and click adds a box to the selection or takes it away, as on a name in the frame list.
 - Press on empty space and drag to draw a rectangle. Every box it touches is selected as you let go, except the boxes of frames the game places. Shift and drag adds them to the selection, Ctrl and drag takes them away.
+- Ctrl-A selects every box that can move: every shown box except those of frames the game places and those hidden with their eye in the frame list, including boxes behind the toolbar or the inspector. The arrow keys, the align buttons and **Reset these** then work on them all.
 - A click on empty space, or Escape, lets go of them all.
 - Drag any selected box and the others move with it, keeping their places to one another. With **Snap** on, the box under the mouse snaps and the others follow it.
 - The arrow keys move what is selected 1 unit, Shift and an arrow key 10.
@@ -51,6 +52,7 @@ With two or more selected, the inspector reads, for example, "3 frames selected"
 - **Centre horizontally** and **Centre vertically**, on the middle of the space they cover together.
 - **Distribute across** and **Distribute down**. The outer two stay put and the gaps between them all become the same. These need three or more frames.
 - **Reset these**, which puts each selected frame you moved back where the game has it.
+- **Hide these**, beside it, which hides every selected frame that has a row on the **Hidden frames** page, as a tick there does. It reads **Show these** when all of them are hidden already, and shows them again. It is dimmed when no selected frame has such a row, and chat names once any selected frame that has none, as "Flat UI: Chat has no row on the Hidden frames page, so it stays."
 
 A frame that is hidden, not on screen now or placed by the game stays put in these group moves, and the inspector says how many stay put.
 
@@ -177,7 +179,7 @@ These rows bring faded frames back to full while something is going on:
 - **While casting**: while you cast or channel, for a moment after each instant spell or item, and for **Wait before fading** after. So a buff, a meal, a hearthstone or an instant spell outside a fight brings the bars back.
 - **While a proc is up** (on as Flat UI comes): an action bar that holds the spell of a proc alert of the **Trackers** page, such as Overpower, Revenge or Execute, is at full while the proc is up. See [Combat](Combat).
 - **Until health and mana are full**: faded frames stay at full while your health, or your mana if you have mana, is under full. So the bars are there while you eat and drink after a fight. Not while you are dead.
-- **While a key is held**: **None**, **Shift**, **Ctrl** or **Alt**. Holding the key brings every faded frame back to full at once, the frames a **When shown** rule keeps faded too, so you can glance at a cooldown or your bags. They fade again after **Wait before fading** once you let go. It does nothing while you type in a box.
+- **While a key is held**: **None**, **Shift**, **Ctrl** or **Alt**. Holding the key brings every faded frame back to full at once, the frames a **When shown** rule keeps faded too and the bars of a block that fades on the **Bar block** page, so you can glance at a cooldown or your bags. They fade again after **Wait before fading** once you let go. It does nothing while you type in a box.
 
 ## Hidden frames
 
@@ -199,7 +201,7 @@ Each tick's tip says what goes with the frame and what still works. For example,
 
 In `/flatui move`, Shift and right-click a box to hide its frame, or press **Hide frame** in the inspector. The **Hidden** group at the top of the frame list shows a frame again with its eye. A change made in a fight waits for its end. **Fading** leaves a hidden frame alone: once it is back, it comes back at its own opacity and fades again from there.
 
-`/flatui hide` opens the **Hidden frames** page.
+`/flatui hide` opens the **Hidden frames** page. `/flatui hide tracker` hides the objective tracker, or shows it again if it is hidden, and says which in chat; it takes any row's name or part of it, as `minimap`, `buffs` or `objective tracker`, so a macro can hide a frame for a boss and bring it back after. In a fight the change waits for its end. `/flatui hide list` names the frames you have hidden.
 
 ## Tooltip position
 

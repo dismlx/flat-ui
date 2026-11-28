@@ -113,6 +113,9 @@ local function CastStandIn(spec)
 				pcall(ns.CastWatchSample, "target")
 			elseif state == "interrupted" and type(ns.CastLandSample) == "function" then
 				pcall(ns.CastLandSample)
+				if type(ns.CastLandWordSample) == "function" then
+					pcall(ns.CastLandWordSample)
+				end
 			end
 		end
 		if spec.cool then
@@ -235,6 +238,9 @@ local function AuraTime(seconds)
 			return ("%d:%02d"):format(math.floor(seconds / 60), math.floor(seconds % 60))
 		end
 		return ("%d"):format(math.max(0, seconds))
+	end
+	if format == "clock" and seconds < 86400 then
+		return ("%dh%02d"):format(math.floor(seconds / 3600), math.floor(seconds % 3600 / 60))
 	end
 	if (format == "tight" or format == "clock") and type(cooldown) == "string" and not cooldown:find("%%d%s") then
 		form = form:gsub("(%%d)%s+", "%1")

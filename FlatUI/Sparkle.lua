@@ -224,10 +224,10 @@ local function Queue()
 	ns.OutOfCombat(Apply)
 end
 
-function ns.SparkleChanged()
+function ns.SparkleChanged(path)
 	Queue()
 	if ns.SparkleGlowChanged then
-		ns.SparkleGlowChanged()
+		ns.SparkleGlowChanged(path)
 	end
 end
 

@@ -4,7 +4,7 @@ local FORMAT, COLOUR, TOTEM_SIZE, WARN_AT = "hud.durationFormat", "hud.durationC
 local TENTHS_AT = "hud.durationTenths"
 local FRAMES = { "BuffFrame", "DebuffFrame", "ExternalDefensivesFrame" }
 local NOTE = "Unit frames: Duration format: the game withholds totem times in fights, and they keep the game's format."
-local WARN, RED, CLOCK_TO = 10, { 1, 0.3, 0.3 }, 3600
+local WARN, RED, CLOCK_TO, DAY = 10, { 1, 0.3, 0.3 }, 3600, 86400
 local weak = { __mode = "k" }
 local sized = setmetatable({}, weak)
 local tight = nil
@@ -84,6 +84,8 @@ local function After(button, timeLeft)
 			else
 				text:SetFormattedText("%d", math.floor(math.max(0, timeLeft)))
 			end
+		elseif clock and ns.Finite(timeLeft) and timeLeft < DAY then
+			text:SetFormattedText("%dh%02d", math.floor(timeLeft / 3600), math.floor(timeLeft % 3600 / 60))
 		elseif type(timeLeft) == "number" and Tight() then
 			local game, number = _G.SecondsToTimeAbbrev(timeLeft)
 			if tight[game] then

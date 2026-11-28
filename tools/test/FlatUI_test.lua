@@ -10931,7 +10931,7 @@ local function usable(W, row)
 end
 
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.48" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.49" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do
@@ -58841,9 +58841,9 @@ do
 		local seen = H.watch(N)
 		N.combat = true
 		local fought = { H.r(N.ns.UseProfile("Raid")), H.r(N.ns.NewProfile("Solo")), H.r(N.ns.CopyProfile("Raid")), H.r(N.ns.DeleteProfile("Raid")), H.r(N.ns.ResetProfile()), H.r(N.ns.ImportProfile(H.THICK)) }
-		check("profiles, combat: every change is refused with the same words", table.concat(fought, "|") == ("false Profiles change after combat.|"):rep(5) .. "false Profiles change after combat.", table.concat(fought, "|"))
+		check("profiles, combat: every change is refused with the same words", table.concat(fought, "|") == ("false Profiles change after the fight.|"):rep(5) .. "false Profiles change after the fight.", table.concat(fought, "|"))
 		check("profiles, combat: and nothing was saved, applied or told", H.same(N.env.FlatUIDB, before) and N.ns.Profile() == "Default" and seen.refreshed == 0 and next(seen.told) == nil and #N.errors == 0)
-		check("profiles, combat: the command says the same, and the text of the profile can still be read", N.slash("profile Raid") == "Profiles change after combat." and N.ns.ExportProfile():sub(1, 8) == "FlatUI1:")
+		check("profiles, combat: the command says the same, and the text of the profile can still be read", N.slash("profile Raid") == "Profiles change after the fight." and N.ns.ExportProfile():sub(1, 8) == "FlatUI1:")
 		N.combat = false
 		check("profiles, combat: after the fight the change is made", H.r(N.ns.UseProfile("Raid")) == "true Using Raid." and N.ns.Profile() == "Raid")
 	end
@@ -61006,7 +61006,7 @@ function PT.runControls()
 		W.advance(0.4)
 		local def = ns.Def("nameplates.enabled")
 		local body, line = ns.PanelTrust.Current()
-		check("trust: a row that is off says which setting it needs, in the tooltip", line ~= nil and plain(line) == "Needs " .. (def and def.label or "nameplates.enabled") .. "." and PT.strip(W) ~= plain(line),
+		check("trust: a row that is off says which setting it needs, in the tooltip", line ~= nil and plain(line) == "Needs " .. (def and def.label or "nameplates.enabled") .. ". Click to go to it." and PT.strip(W) ~= plain(line),
 			tostring(line))
 		ns.Set("nameplates.nameSize", 130)
 		ns.RefreshPanel()
@@ -64075,14 +64075,14 @@ function PT.runSetup()
 		SU.press(W, "Finish")
 		SU.frame(W)
 		W.ns.PanelKit.Refresh()
-		check("setup: Finish in combat makes nothing and the strip says to finish after combat", ns.Profile() == "Default" and W.env.FlatUIDB.profiles.Quiet == nil and S.cur == S.REVIEW and PT.strip(W) == "In combat. Finish after combat."
+		check("setup: Finish in combat makes nothing and the strip says to finish after combat", ns.Profile() == "Default" and W.env.FlatUIDB.profiles.Quiet == nil and S.cur == S.REVIEW and PT.strip(W) == "In a fight. Finish setup after it."
 			and #W.cvarWrites == 0, tostring(PT.strip(W)))
 		check("setup: the window works in combat, with the choices still in the draft", S.draft.values["general.thickness"] == 3 and PT.button(W, "Finish").alpha < 1 and #W.protectedCalls == 0 and #W.violations == 0)
 		W.combat = false
 		W.fire("PLAYER_REGEN_ENABLED")
 		W.flush()
 		W.ns.PanelKit.Refresh()
-		check("setup: and when the fight is over the line goes", PT.strip(W) ~= "In combat. Finish after combat." and PT.button(W, "Finish").alpha == 1)
+		check("setup: and when the fight is over the line goes", PT.strip(W) ~= "In a fight. Finish setup after it." and PT.button(W, "Finish").alpha == 1)
 		local thickness = ns.Get("general.thickness")
 		check("setup: before Finish the profile in use, the game's setting and the positions are as they were", thickness == 1 and #W.cvarWrites == 0 and ns.Get("nameplates.maxDistance") == 45)
 		SU.press(W, "Finish")
@@ -64732,7 +64732,7 @@ function PT.runSetup()
 			SU.press(W, "Use Healer")
 			SU.frame(W)
 			check("setup profiles: Use Healer in combat makes nothing, saves no draft and says to finish after combat", ns.Profile() == "Default" and S.draft.preset == nil and not NP.drafts(W) and not ns.SetupHasDraft()
-				and S.cur == 0 and PT.strip(W) == "In combat. Finish after combat.", tostring(PT.strip(W)))
+				and S.cur == 0 and PT.strip(W) == "In a fight. Finish setup after it.", tostring(PT.strip(W)))
 			W.combat = false
 			W.fire("PLAYER_REGEN_ENABLED")
 			S.Update()
@@ -66044,7 +66044,7 @@ function PT.runNav()
 		check("window nav: and shows no chip out of combat", N.chip(W, "Move frames") == nil)
 		W.combat = true
 		W.update(1)
-		check("window nav: in a fight Move frames says After combat", N.chip(W, "Move frames") == "After combat")
+		check("window nav: in a fight Move frames says After the fight", N.chip(W, "Move frames") == "After the fight")
 		W.combat = false
 		W.update(1)
 		PT.press(W, PT.page(W, "Flat UI setup"))

@@ -8,6 +8,7 @@ end
 
 local PAD, GAP, INSET, MARK_GAP = 4, 2, 4, 2
 local STEP, TURN = 0.2, 3
+local RAID_STEP, ROSTER_TIME = 0.5, 2
 local MOST_ROWS, PLATES, MOST_SHARE = 10, 40, 999
 local FONT = "GameFontHighlightSmall"
 local WHITE = "Interface\\Buttons\\WHITE8X8"
@@ -349,8 +350,22 @@ function M.Members()
 	return list
 end
 
+function M.Roster()
+	local now, calm = Ask(GetTime), Opt("otherTanks") ~= false
+	local at = M.rosterAt
+	if M.roster and M.rosterCalm == calm and ns.Finite(now) and ns.Finite(at) and now >= at and now - at < ROSTER_TIME then
+		return M.roster
+	end
+	M.roster, M.rosterAt, M.rosterCalm = M.Members(), now, calm
+	return M.roster
+end
+
+function M.Step()
+	return Ask(IsInRaid) == true and RAID_STEP or STEP
+end
+
 function M.Read()
-	local list, members = {}, M.Members()
+	local list, members = {}, M.Roster()
 	if #members == 0 then
 		return list
 	end
@@ -445,6 +460,7 @@ function M.Rank(list)
 		end
 		mob.seq = rec.seq
 		mob.turned = mob.state == "lost" and (rec.state == "held" or rec.state == "slipping")
+		mob.back = rec.state == "lost" and (mob.state == "held" or mob.state == "slipping")
 		rec.state = mob.state
 		mob.close = mob.state == "slipping" and ns.Finite(mob.share) and math.floor(mob.share / BUCKET) or 0
 		if mob.state == "lost" then
@@ -588,6 +604,22 @@ function M.Untip(row)
 		if ok and owned == true then
 			tip:Hide()
 		end
+	end
+end
+
+function M.Retip(row)
+	if not row.tipped then
+		return
+	end
+	local tip = GameTooltip
+	local ok, owned = false, false
+	if not ns.Forbidden(tip) then
+		ok, owned = pcall(tip.IsOwned, tip, row.bar)
+	end
+	if ok and owned == true then
+		M.Tip(row, row.bar)
+	else
+		row.tipped = nil
 	end
 end
 
@@ -753,6 +785,7 @@ function M.Fill(row, mob)
 	row.mine:SetShown(mob.target == true)
 	Wash(row, mob.state, r, g, b)
 	row.bar:Show()
+	M.Retip(row)
 end
 
 function M.Clear(from)
@@ -823,7 +856,7 @@ local function Sound(sample)
 	if sample and not (mode ~= nil and mode.Sound("threat.enemies")) then
 		return
 	end
-	ns.PlayKit(sound[1], KEY)
+	ns.PlayKit(sound[1], KEY, true)
 end
 
 function M.Turned(list, n, sample)
@@ -835,6 +868,9 @@ function M.Turned(list, n, sample)
 				local r, g, b = Lighter(StateColour("lost"))
 				Look("Flash", M.rows[index], r, g, b)
 			end
+		elseif mob.back and index <= n then
+			local r, g, b = Lighter(StateColour("held"))
+			Look("Flash", M.rows[index], r, g, b)
 		end
 	end
 	if any then
@@ -913,10 +949,10 @@ end
 
 function M.Tick(on)
 	if on and not M.ticker then
-		local token = {}
+		local token, step = {}, M.Step()
 		M.ticker = token
 		if type(C_Timer) == "table" and type(C_Timer.NewTicker) == "function" then
-			local ok, ticker = pcall(C_Timer.NewTicker, STEP, function()
+			local ok, ticker = pcall(C_Timer.NewTicker, step, function()
 				ns.Try(KEY, T.Update)
 			end)
 			token.handle = ok and ticker or nil
@@ -925,12 +961,12 @@ function M.Tick(on)
 			local function Again()
 				if M.ticker == token then
 					ns.Try(KEY, T.Update)
-					if M.ticker == token and not After(STEP, Again) then
+					if M.ticker == token and not After(step, Again) then
 						M.ticker = nil
 					end
 				end
 			end
-			if not After(STEP, Again) then
+			if not After(step, Again) then
 				M.ticker = nil
 			end
 		end
@@ -952,11 +988,14 @@ function M.Update()
 		mode = "sample"
 	end
 	if mode ~= M.mode then
-		M.mode, M.known = mode, {}
+		M.mode, M.known, M.last, M.readAt = mode, {}, nil, nil
 	end
 	M.Tick(mode == "live")
 	if mode == "live" then
-		M.Draw(M.Read(), false)
+		if M.Due() or M.last == nil then
+			M.last = M.Read()
+		end
+		M.Draw(M.last, false)
 	elseif mode == "sample" then
 		M.Draw(M.Samples(), true)
 	else
@@ -1047,7 +1086,7 @@ function M.Due()
 		return true
 	end
 	local last = M.readAt
-	if ns.Finite(last) and now >= last and now - last < STEP * 0.9 then
+	if ns.Finite(last) and now >= last and now - last < M.Step() * 0.9 then
 		return false
 	end
 	M.readAt = now
@@ -1118,6 +1157,7 @@ function M.Below(unit)
 	if mode ~= M.mode then
 		M.mode, M.known, M.last, M.readAt = mode, {}, nil, nil
 	end
+	M.fading = nil
 	M.Tick(not sample)
 	local fresh = sample or M.unranked or M.Due() or M.last == nil
 	if fresh then
@@ -1155,7 +1195,7 @@ function M.Below(unit)
 	M.Suffix(unit, lost)
 end
 
-function M.BelowOff(keep)
+function M.BelowOff(keep, fading)
 	if M.mode == "both:live" or M.mode == "both:sample" then
 		M.Tick(false)
 		if not (keep and M.mode == "both:live") then
@@ -1164,8 +1204,24 @@ function M.BelowOff(keep)
 		M.last, M.readAt, M.unranked = nil, nil, nil
 	end
 	if not M.below then
+		M.fading = nil
 		return
 	end
+	if fading then
+		M.fading = true
+		return
+	end
+	M.Unlay()
+end
+
+function M.Faded()
+	if M.fading then
+		M.Unlay()
+	end
+end
+
+function M.Unlay()
+	M.fading = nil
 	M.below, M.belowLaid, M.shown = nil, nil, 0
 	M.Clear(1)
 	Look("Forget", M.rows)
@@ -1187,6 +1243,7 @@ function M.Stop()
 		M.known, M.mode = {}, nil
 	end
 	M.count, M.shown, M.last, M.readAt, M.belowLaid, M.unranked, M.worst = 0, 0, nil, nil, nil, nil, nil
+	M.roster, M.rosterAt, M.fading = nil, nil, nil
 	if M.line then
 		M.line:Hide()
 	end

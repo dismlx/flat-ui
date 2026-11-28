@@ -1290,7 +1290,7 @@ AREAS = [
         PanelTabs PanelHome PanelPreview WhatsNewData WhatsNew TestMode TestUnits TestHud"""),
     ("setup", "Setup", "SetupSteps SetupProfiles SetupStops Setup SetupWalk SetupWelcome"),
     ("unitframes", "Unit frames", """ClassData UnitFrames UnitFramePortrait UnitFrameLevel UnitFrameCells UnitFrameLooks
-        UnitFrameHead UnitText UnitParts UnitExtras UnitFrameSpots UnitGroupMarks UnitDruidMana UnitManaRule UnitPetTarget UnitHots HealthColour
+        UnitFrameHead UnitText UnitParts UnitExtras UnitFrameSpots UnitTrail UnitGroupMarks UnitDruidMana UnitManaRule UnitPetTarget UnitHots HealthColour
         PetFrameSize"""),
     ("nameplates", "Nameplates, combat text and cast bars", """Nameplates PlateThreat PlateColours PlateThreatLook PlateText
         PlateClick PlateThreatText PlateSlip PlateOverpower PlateQuest PlateCombo PlateTarget PlateMark PlateSpread CombatBurst CombatTextSpells CombatText ScrollText CombatCues AvoidAnnounce Bars CastTime CastTicks CastRank
@@ -1299,7 +1299,7 @@ AREAS = [
         ProcData Procs ProcArt ProcGlow ButtonEffects ProcTriggers BarBlock BarBlockButtons BarBlockLists Blocks"""),
     ("trackers", "Trackers and cooldowns", """Trackers TrackerSound TrackerSlots IconRow Tracking Defensives PartyCooldowns
         PartySync EnemyCooldowns Threat ThreatLook ThreatMobs HealerMana GroupTools OwnBuffs TrackerShapes TrackerKinds TrackerMarks
-        TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs ResourceBarrier ChargesLook ChargesGame Charges PingBar"""),
+        TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs ResourceBarrier ChargesLook ChargesBar ChargesGame Charges PingBar"""),
     ("hud", "HUD, windows, movers, chat and tooltips", """BagSort BagKey Bags BagsData BagsCategories BagsSearch BagsItems
         BagsLayout BagsWindow BagsBank BagsSlots BagsCurrency BagsTooltip BagsOrder BagsPins BagsCustom Windows ItemMarks CharacterDurability CharacterThorns StatTips StatTipsMore Hud MapButtons
         AuraTime XpStats XpBar QuestCount QuestieSkin MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable HitTableTip Chat
@@ -1480,7 +1480,7 @@ def build(args):
         links.append(link)
     links.sort(key=lambda l: (-l["count"], l["from"], l["to"]))
 
-    test_path = os.path.join(repo, "FlatUI_test.lua")
+    test_path = os.path.join(repo, "tools", "test", "FlatUI_test.lua")
     labels = read_tests(test_path) if os.path.exists(test_path) else []
 
     page_by_key = {p["key"]: p["label"] for p in page_list}
@@ -1607,7 +1607,7 @@ def build(args):
     data = collections.OrderedDict()
     data["meta"] = collections.OrderedDict([
         ("title", "Flat UI map"), ("version", version), ("generated_by", VERSION_LABEL),
-        ("source", "FlatUI/*.lua in TOC order, FlatUI/Config.lua (ns.PAGES, run by lua5.4), FlatUI_test.lua; game names "
+        ("source", "FlatUI/*.lua in TOC order, FlatUI/Config.lua (ns.PAGES, run by lua5.4), tools/test/FlatUI_test.lua; game names "
                    "from Forever's interface source (Interface/AddOns, Blizzard_APIDocumentationGenerated) and the "
                    "client lists of wowless (apis.yaml, events.yaml, cvars.yaml)")])
     data["summary"] = summary

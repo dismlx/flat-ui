@@ -121,6 +121,7 @@ In test mode every row shows, with sweeps that loop. An empty row gets three sam
 **What pulses**
 
 - **Shortest cooldown** (5 s): a shorter cooldown does not pulse, nor does the global cooldown.
+- **When it pulses**: **Always** (the default), **In combat only**, or **Not while mounted or in a city**, which keeps the pulse quiet on a mount, on a flight path and where the game rests you, in a city or an inn. A cooldown that ends while it is quiet does not pulse later. `/flatui pulse test` and the samples of the look still show, and `/flatui pulse list` names the rule.
 - **Your pet's abilities** (off) pulses your pet's abilities too, such as Spell Lock, Seduction, Sacrifice or Dash. A pet casts some of these on its own, which then pulse each time; leave those out with **Leave out**.
 - **Leave out** stops one spell or item from pulsing, a spell with all its ranks. **Put back** lets it pulse again.
 
@@ -131,12 +132,13 @@ In test mode every row shows, with sweeps that loop. An empty row gets three sam
 - **Sound** (**None** by default) plays with each pulse. **Sound of one spell or item** gives one a sound of its own.
 - **Name under the icon** (on) shows the name as it fades. An item's name is in its quality's colour.
 - **Grow as it fades** (off) swells the icon by a quarter as it fades out.
+- **Burst as it shows** (on) bursts the game's star flash, the one its own cooldowns show as they end, once over the icon as it comes in: white for a spell, in the item's quality colour for an item.
 
 **Spots**
 
 **Pulse spots** (**One**, **Two** or **Three**) lets pulses show at up to three places. Each spot has its own box in `/flatui move` (**Cooldown pulse**, **Cooldown pulse, spot 2** and **Cooldown pulse, spot 3**) and pulses on its own. **Icon size** is the size at spot 1, and **Icon size at spot 2** and **Icon size at spot 3** set the others. **Spot of one spell or item** sends one to a spot of its own; one without it pulses at spot 1.
 
-Out of combat, changing **Icon size**, **How long it shows**, **Opacity**, **Sound**, **Name under the icon**, **Grow as it fades** or **Pulse spots** shows a test pulse at each spot in use, in the new look. A **Sound** you pick plays with it. With two or three spots, each spot's test pulse shows another of your watched spells, named as "Spot 2: Frost Nova", so you can tell the spots apart. A pick in **Sound of one spell or item** or **Spot of one spell or item** pulses that one's own icon at its spot, with its own sound.
+Out of combat, changing **Icon size**, **How long it shows**, **Opacity**, **Sound**, **Name under the icon**, **Grow as it fades**, **Burst as it shows** or **Pulse spots** shows a test pulse at each spot in use, in the new look. A **Sound** you pick plays with it. With two or three spots, each spot's test pulse shows another of your watched spells, named as "Spot 2: Frost Nova", so you can tell the spots apart. A pick in **Sound of one spell or item** or **Spot of one spell or item** pulses that one's own icon at its spot, with its own sound.
 
 ### Cooldown commands
 
@@ -153,7 +155,7 @@ Out of combat, changing **Icon size**, **How long it shows**, **Opacity**, **Sou
 | `/flatui pulse ignore <spell or item>` | Leaves one out. `/flatui pulse watch` puts it back |
 | `/flatui pulse sound <spell or item> bell` | Gives one its own pulse sound. `none` silences it, and `page` gives it the page's sound again |
 | `/flatui pulse spot <spell or item> 2` | Sends one to pulse spot 2. `1` puts it back |
-| `/flatui pulse list` | Says what pulses, what is left out, and the own sounds and spots |
+| `/flatui pulse list` | Says what pulses, what is left out, the own sounds and spots, and **When it pulses** |
 
 ## Trackers
 
@@ -226,7 +228,7 @@ A tracker you fix, by casting the buff, restocking or putting a poison back on, 
 - casts your buff, stance or form
 - calls your pet, revives it or sets it to fight
 - casts a group buff on a member who lacks it
-- conjures a missing or low mana gem, water, food, Healthstone or Soulstone with the best spell you know for it
+- conjures a missing or low mana gem, water, food, Healthstone or Soulstone with the best spell you know for it. An improved Healthstone, from Improved Healthstone, counts as a Healthstone, so the tracker stays clear while one is in the bags
 - casts the minimap tracking you last had on, such as Find Herbs or Track Beasts.
 
 The tooltip says what a click does ("A click casts Conjure Mana Ruby."), or that you lack the reagent. An item no spell makes, such as an Ankh, takes no click.
@@ -250,6 +252,7 @@ A click still goes through to the world, except on a tracker that a click can fi
 
 - **Shape** draws each tracker as an **Icon** (the default), a **Bar** or **Text**. Icons take **Icon size**; bars and text take **Bar width** and **Bar height**, in **Colour**.
 - **Bar fill** fills a bar by **Charges** or **Time left**. A buff without charges fills by time left.
+- A bar glides as it fills and empties, with a thin bright spark riding its edge as on the game's cast bar. A bar filled by **Charges** has a thin notch between charges, for 2 to 10 charges, so 2 of 3 Lightning Shield, Inner Fire or Shadowguard charges reads at a glance.
 - **Charges**, **Name** (on bars and text) and **Time left** choose what each tracker shows.
 - **Row direction** lays the trackers out **From the middle**, **Left to right**, **Right to left**, **Column, downward** or **Column, upward**. A column stacks them under each other, left-aligned, as timer bars usually are.
 - **Close up the gaps** (off) lets a hidden tracker take no room, so the ones that show sit together, centred or from the start as **Row direction** says. In a fight nothing moves: the row keeps the places it had when the fight began, and a tracker that shows there takes a place after them.
@@ -287,7 +290,7 @@ Under **Missing**:
 - **Sound when it drops** (on) plays as a tracked buff ends.
 - **Sound when it comes** and **Sound when it stacks** (both off) play as a buff or debuff comes back or gains a stack.
 - **Sound when it turns low** (off) plays once as a tracker goes from fine to low. The game hides buffs in a fight, so a buff turns low by sound between fights.
-- **Sound** (**Raid warning** by default) is the sound they all use. Out of combat, a pick plays it once.
+- **Sound** (**Raid warning** by default) is the sound they all use. Out of combat, a pick plays it once. **Raid warning**, **Alarm** and **Whisper warning** also play for a buff in a fight, since the game plays them. **Spell alert**, **Chimes**, **Bell** and **Warhorn** play only while the game shows your buffs, so a buff that drops in a fight is silent with them: a pick of one of those, with a buff sound on, says so in chat, and `/flatui tracker check` names the trackers it leaves silent in a fight.
 
 ### Proc alerts tab
 
@@ -300,7 +303,7 @@ Proc alerts show the moment a proc of yours is up, such as Overpower after a dod
 - **Procs of your class** (on) shows every proc of your class whose spell you know, without adding it.
 - **Add a proc** adds another one. For a spell that is not listed, type `/flatui tracker add proc`, the buff, `for` and the spell it is for, as `/flatui tracker add proc Shadow Trance for Shadow Bolt`. A proc you add keeps its own colour, time and sound.
 - **Remove a proc** also lists the procs of your class. One you remove stays off for this character. **Bring back a proc** shows it again.
-- **Colour** (gold) is the border of a proc alert, and the plain arc of a proc with no art of its own. `/flatui tracker proc colour 1 ffd100` gives a proc you added, here number 1 in `/flatui tracker list`, its own colour, which also tints its art.
+- **Colour** (gold) is the border of a proc alert, and the plain arc of a proc with no art of its own. `/flatui tracker proc colour 1 ffd100` gives a proc you added, here number 1 in `/flatui tracker list`, its own colour, which also tints its art. It works on the procs of your class too, by name or by the number **Remove a proc** shows, as `/flatui tracker proc colour Execute ff3030`, and a name may hold spaces, as Mongoose Bite. `proc sound Overpower bell` gives a proc its own sound (`none` silences it, as `proc sound Clearcasting none`), `proc time Revenge 5` its own time, and `proc reset Execute` puts all three back. The art, the border and the button glow take a new colour at once.
 - **Sound** (**Spell alert** by default) plays as a proc comes up.
 
 **Art beside the character**
@@ -309,15 +312,17 @@ Proc alerts show the moment a proc of yours is up, such as Overpower after a dod
 - **Art size** (150%) sets its size; 100% is the game's size.
 - **Art opacity** (40%) sets how solid it is; 65% is the game's. The game's Spell Alert Opacity has no effect here.
 - **Art height** (0) raises or lowers it.
+- **Stacks build the art** (on) is for Maelstrom Weapon, which is one of the procs of a shaman's class. Its art over your character starts as a faint outline and fills a fifth with each stack, with a large outlined count on it in the proc's colour. At 5 stacks the art is full and pulses, the count turns white, the proc sound plays and, with **Glow on the action button**, Lightning Bolt, Chain Lightning and the heals glow. In a fight, while the game hides your buffs, the game itself fills the art and writes the number. Off, the art shows at 5 stacks alone and the stacks show on **Charges**.
+- **Seconds left on the art** (on) writes the seconds a proc with a time has left, such as Overpower, Revenge, Riposte or Nature's Grace, as a large, thin, outlined number on its art in its colour. For its last 2 seconds it turns white and grows a little, and it fades out with the art. Execute and other procs with no time show none.
 - The **Proc art** box in `/flatui move` puts the art anywhere. It sits in the middle of the screen until you move it.
 
 **Glow**
 
 - **Glow on the action button** (off) puts a glow on the button that casts the spell the proc is for, and a border in the proc's colour, which needs **Restyle action bars**. The glow eases out over about 0.2 seconds as the proc is used or runs out.
 - **Glow style**: **Soft** (the default) is a faint glow that hugs the button's edge and breathes slowly, with a slow, gentle pulse of the art. **As the game has it** is the game's burst and loop, which lie over the buttons beside it, and the game's own pulse and fade-in of the art. With **Art size** at 100% and **Art opacity** at 65%, it is the game's whole look. The art and **Glow on procs** of the cooldown icons follow this row, with or without **Glow on the action button**.
-- **Seconds left on the button** (on, with **Glow on the action button**) counts down the seconds left of a proc with a time, such as Overpower, Revenge, Riposte or Mongoose Bite, in a small number on its glowing button in the proc's colour. It takes the **Hotkey size** and **Button text outline** of the **Button text** page, and sits in a corner the hotkey, macro name and count leave free. For its last 2 seconds the number turns white and grows a little. Execute and other procs with no time show none.
+- **Seconds left on the button** (on) counts down the seconds left of a proc with a time, such as Overpower, Revenge, Riposte or Mongoose Bite, in a small number on its button in the proc's colour. With **Glow on the action button** off, the number shows alone, with no glow and no border, and fades as the proc is used or ends. It takes the **Hotkey size** and **Button text outline** of the **Button text** page, and sits in a corner the hotkey, macro name and count leave free. For its last 2 seconds the number turns white and grows a little. Execute and other procs with no time show none.
 
-With the options window open, out of a fight and test mode off, a change of **Art beside the character**, **Art size**, **Art opacity**, **Art height**, **Glow on the action button**, **Glow style**, **Seconds left on the button** or **Colour** shows your class's first proc for 4 seconds in the new look, with no sound.
+With the options window open, out of a fight and test mode off, a change of **Art beside the character**, **Art size**, **Art opacity**, **Art height**, **Stacks build the art**, **Seconds left on the art**, **Glow on the action button**, **Glow style**, **Seconds left on the button** or **Colour** shows your class's first proc for 4 seconds in the new look, with no sound. A proc that stacks, such as Maelstrom Weapon, steps from 1 to 5 stacks in it and in test mode.
 
 The **Fading** page can bring a faded action bar back to full while a proc is up for one of its buttons; see [Layout](Layout).
 
@@ -373,9 +378,11 @@ To share trackers, use **Export trackers** and **Import trackers** under **Share
 | `/flatui tracker set 1 happy on` | A pet tracker is low while a hunter's pet is not happy |
 | `/flatui tracker use 2 <item>` | Sets what weapon tracker 2 puts on its weapon with a click |
 | `/flatui tracker proc colour 1 ffd100` | One added proc's colour. `proc time 1 10` sets its time |
+| `/flatui tracker proc sound Overpower bell` | A proc's own sound, or `none` to silence it. A proc of your class goes by its name, as `proc colour Execute ff3030` |
+| `/flatui tracker proc reset Execute` | A proc's colour, sound and time as the page has them again |
 | `/flatui tracker export` | Opens **Share**, to copy every tracker as text. `import` opens it to paste trackers |
 | `/flatui tracker test` | Each look for 3 seconds: fine, low, missing, then the game's own look |
-| `/flatui tracker check` | What each tracker shows and why, and what happened in the last fight |
+| `/flatui tracker check` | What each tracker shows and why, what happened in the last fight, and which trackers have a sound the game does not play in a fight |
 
 ## Defensives on you
 
@@ -389,6 +396,7 @@ The **Defensives on you** page (on by default) shows a row of icons for the shie
 ### Look
 
 - **Icon size** (32). The time left and the charges on an icon grow and shrink with it.
+- **Time left**: **On the icon** (the default), **Thin bar under the icon** or **Off**. The bar runs down with the time left, in the **Bar texture** of **Your buffs**, so the two rows can match, and the caster's name moves under it. That row stays open while this one is the bar and **Your buffs** is on, even with the time of **Your buffs** on the icon, and a change reaches this bar at once. The bars the game draws in a fight change once the game shows your buffs again.
 - **Spacing** (3), **Caster's name** (on) and **Icon border** (on).
 - **Buff tooltips** shows the game's own tooltip over each icon: **On** (the default), **Out of combat only** or **Off**. A click still goes through to the world. Settings on the **Tooltips** page do not change this tooltip.
 - **Your own defensives** (on) also shows the ones you cast on yourself, such as Shield Wall or Ice Barrier.
@@ -406,7 +414,7 @@ The **Defensives on you** page (on by default) shows a row of icons for the shie
 
 ### Seeing it
 
-Out of combat with no defensive on you, changing **Place**, **X offset**, **Y offset**, **Icon size**, **Spacing**, **Caster's name**, **Icon border** or **Flash when one lands** shows sample icons where the row now sits, for about 4 seconds. Picking a sound plays it and shows the samples landing.
+Out of combat with no defensive on you, changing **Place**, **X offset**, **Y offset**, **Icon size**, **Time left**, **Spacing**, **Caster's name**, **Icon border** or **Flash when one lands** shows sample icons where the row now sits, for about 4 seconds. Picking a sound plays it and shows the samples landing.
 
 `/flatui test icons` shows three sample icons for 8 seconds, out of combat only. They flash as they appear, play **Sound when one lands**, and **Sound when one ends** as they go. A chat line names each sound and whether the game played it: "Sound when one lands: Raid warning, played." A pull ends the samples at once: "Defensives on you: the pull ended the test."
 
@@ -443,6 +451,8 @@ As damage eats a shield, its bar and the total bar glide down over about a quart
 ### Colour
 
 **Colour by school** (on) draws a shield that takes one school in its colour: Fire Ward orange, Frost Ward light blue, Shadow Ward violet and Mana Shield grey. A shield that takes every school, and the total, are in **Shield colour**.
+
+**Shield stripes** (on) lays the game's striped shield pattern over each bar's fill, as the game draws absorbs on its later frames, tinted by the colour under it, with a soft bright edge where the fill ends. The bars the game draws in a fight have it too.
 
 ### Which shields
 
@@ -484,32 +494,55 @@ The **Personal resource display** page can also lay your shields over its health
 
 ## Charges
 
-The **Charges** page (on by default) shows your own buffs that have charges as a round spell icon with a ring of glowing orbs round it, one for each charge. Lit orbs are the charges left, each a soft sphere in the spell's colour with a faint glow. The display stays on screen while the buff is up and fades out as it leaves you.
+The **Charges** page (on by default) shows your own buffs that have charges as a row of glowing gems, like the game's own class resources: combo points, arcane charges, chi or holy power. Each charge is a gem in a socket: lit gems are the charges left, and empty sockets the ones used. The spell's name sits small above the left end of the row, the charges left as a large number at its right end, and the time left small above its right end, all outlined; where the row is too short for the name and the time side by side, the time sits after the count. The row sits just under the bars of the personal resource display, the width of the bars, stays while the buff is up and fades out as it leaves you.
 
-It covers Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, and any buff with more than one charge that you add yourself.
+It covers Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, the stacks of a shaman's Maelstrom Weapon, and any buff with more than one charge that you add yourself.
 
-### How the orbs move
+### The gems of each spell
 
-- With **Show used charges** (on), each charge you use stays as a faint ring in its place, so you see how many are gone.
-- With **Burst as a charge goes** (on), the orb of a charge that goes flashes white, swells and fades in about a third of a second.
-- As you cast the buff again, or it gains charges, the orbs light in turn, each with a small pop.
-- On the last charge, the last orb pulses amber, and red in the buff's last 10 seconds.
-- There are as many orbs as the most charges the buff has had since you cast it, at most 10. With more, the number shows on the icon.
-- Two buffs at once, such as a priest's Inner Fire and Shadowguard, sit side by side in one row, centred.
+Each spell has the game's resource art that suits it, in its own colour:
+
+- Lightning Shield: the blue charged combo points, electric blue.
+- Water Shield: the chi orbs, tinted sea green.
+- Earth Shield: the druid's combo points, tinted earthy green.
+- Maelstrom Weapon: the arcane charges, tinted electric blue white.
+- Inner Fire: the druid's combo points, tinted gold.
+- Shadowguard: the arcane charges, violet.
+- Holy Shield: the holy power runes, warm gold.
+- A spell you added: the charged combo points in your class colour.
+
+Where the game lacks a piece of that art, the next set fills in for it, and then Flat UI's own soft glow and ring, so the row always draws.
+
+### How the gems move
+
+- As a charge goes, its gem plays the game's fade of a spent resource with a quick white flash, with **Burst as a charge goes** (on).
+- As you cast the buff again, or it gains charges or stacks, the gems light in turn, each with a short glow.
+- On the last charge, the last gem pulses.
+- There are as many gems as the most charges the buff has had since you cast it, at most 10. Maelstrom Weapon has at least 5 gems, or as many as the game says it can stack, and more once it has had more stacks, at most 10; it lights one more with each stack, and its first stack does not pulse. In a fight it shows its stacks even when it was not on you as the fight began.
+- While the **Proc alerts** art builds up Maelstrom Weapon's stacks over your character (**Art beside the character** and **Stacks build the art** on, as they are at first), its stacks show there and not here. Turn either off and they show here, as gems, or as its art with **Spell art**.
+- With **Show used charges** (on), each charge you use stays as an empty socket. Off, only the charges left show.
+- Two buffs at once, such as a priest's Inner Fire and Shadowguard, sit one above the other, or side by side with the ring, arc or row of orbs.
 
 ### Look
 
-- **Orb style**: a **Ring round the icon** (the default), an **Arc over the icon** or a **Row under the icon**.
-- **Spin** (**Slow** by default, or **Still** or **Fast**) turns the ring, or sways the orbs of an arc or a row.
-- **Icon size** (40 px) and **Orb size** (12 px) set the sizes.
-- **Colour**: the **Spell's own colour** (the default: Lightning Shield electric blue, Water Shield sea green, Earth Shield earthy green, Inner Fire gold, Shadowguard violet, Holy Shield warm white gold, and your class colour for a spell you added), your **Class colour**, or **One colour**, set with **Orb colour**.
-- **Time left** (on) writes the time under the icon, amber in its last 10 seconds.
+- **Orb style**: **Resource bar** (the default), **Spell art**, **Ring round the icon**, **Arc over the icon** or **Row under the icon**.
+- **Spell art** shows the game's own spell alert art for the buff, Maelstrom Weapon's for now, fainter on one charge and brighter with each one, with the count, time and name under it. A buff without such art, such as Lightning Shield, shows the resource bar. Maelstrom Weapon shows here only while **Art beside the character** or **Stacks build the art** of **Proc alerts** is off; with both on, its stacks build the **Proc alerts** art instead.
+- **Fill the width** (on) spreads the gems out from end to end of the bars, each keeping its shape. Off, the gems sit 3 px apart in the middle, as they do at the row's own spot. With **Spell art**, the art takes the width of the bars, at most 240 px.
+- **Gem size** (20 px) sets the size of each gem and its socket. The text grows and shrinks with it. With **Spell art**, it sets only the size of the text under the art.
+- **Name**, **Count** and **Time left** (all on) choose the text. The time turns amber in its last 10 seconds. With **Count** off, the number shows only past 10 charges.
+- **Colour**: the **Spell's own colour** (the default, as listed above), your **Class colour**, or **One colour**, set with **Orb colour**. Class colour and One colour tint the gems.
+
+The ring, arc and row of orbs round the icon stay as choices. Their orbs sit close round the middle, with the spell's name above them while **Name** is on, and **Spell icon** (off) shows the round spell icon there; without it the orbs ring the count. **Spin** (**Slow** by default, or **Still** or **Fast**) turns the ring, or sways the orbs of an arc or a row, and **Icon size** (40 px) and **Orb size** (12 px) set their sizes.
+
+### Where it sits
+
+**Place** puts the row **Under the personal resource display** (the default), **Above the personal resource display**, or at its **Own spot**. Under or above, it sits just clear of the bars, past a **Your buffs** row on that side, and follows them, also as Edit Mode moves the display or **Your buffs** changes its place. **Defensives on you**, a **Cooldowns** row and the **Trackers** placed at that display sit past it in turn. Above the display, **Defensives on you** and the **Trackers** both start at its top edge, so with both there, put the **Trackers** on the other **Side of the personal resource display** or move one with its **Y offset**. While that display is off or hidden, the row goes to its own spot, the **Charges** box of `/flatui move`, under the middle of the screen until you move it.
 
 ### When it shows
 
-**Only in combat** and **Hide while mounted** (both off) hide it at those times. **Sound when the last charge goes** (**None** by default) plays as such a buff leaves you on its last charge before its time is up.
+**Only in combat** and **Hide while mounted** (both off) hide it at those times, and the rows past it close up. **Sound when the last charge goes** (**None** by default) plays as such a buff leaves you on its last charge before its time is up; Maelstrom Weapon, which you spend on purpose, plays none.
 
-In a fight, while the game hides your buffs, the game itself lights the orbs and writes the time left. The bursts, pops and pulse come back once it shows your buffs again.
+In a fight, while the game hides your buffs, the game itself lights the gems and writes the count and time left. The glows, fades and pulse come back once it shows your buffs again. Under or above the display, the row keeps room in a fight for each such buff you have, so one you cast as the fight goes on does not run over the rows past it or over another.
 
 ### Which spells
 
@@ -517,13 +550,13 @@ In a fight, while the game hides your buffs, the game itself lights the orbs and
 
 ### Seeing it
 
-`/flatui move` places it (the **Charges** box, under the middle of the screen). Test mode, a change of its look out of combat, and `/flatui charges` show a sample: Lightning Shield with 3 charges, one used every 2 seconds, then cast again.
+Test mode, a change of its look out of combat, and `/flatui charges` show a sample in the look you chose: Lightning Shield with 3 charges, one used every 2 seconds, then cast again, or with **Spell art**, Maelstrom Weapon gaining a stack each second up to 5. While the **Proc alerts** art builds up Maelstrom Weapon's stacks, the **Spell art** sample is Lightning Shield in the resource bar.
 
 ### Charges commands
 
 | Command | What it does |
 | --- | --- |
-| `/flatui charges` | A sample for 8 seconds, out of combat and while none of its buffs is on you |
+| `/flatui charges` | A sample for 8 seconds in the look you chose, out of combat and while none of its buffs is on you |
 | `/flatui charges add Lightning Shield` | Adds a buff with charges, by name, spell ID or shift-clicked spell |
 | `/flatui charges remove Lightning Shield` | Takes one off |
 | `/flatui charges list` | Lists the buffs it shows |
@@ -541,6 +574,7 @@ The game hides enemy casts, and their buffs in a fight. Abilities that give a bu
 - **Interrupts**, **Defensives**, **Crowd control breaks**, **Wards and immunities** and **Offensive cooldowns** are on. **Mobility** is off.
 - **Add an ability** adds another one. For a spell that is not listed, type `/flatui enemy add`, the ability and its cooldown in seconds, as `/flatui enemy add Blink 15`.
 - **Hide an ability** hides one you do not want.
+- What you add or hide is saved for your whole account, not for one profile. `/flatui enemy reset` puts the list back as Flat UI ships it and says what it undid.
 - **Crowd control break in arenas** (off) shows an enemy's crowd control break on the target and focus bars in an arena, so it needs **Place** at **Both** or **Bars for target and focus**.
 
 ### Where the icons show
@@ -574,6 +608,7 @@ Test mode puts a Kick, an Ice Block and a Divine Shield on the target and focus 
 | `/flatui enemy hide 2139` | Hides an ability, by name or spell ID |
 | `/flatui enemy list` | The abilities shown, and whether their use can be seen here |
 | `/flatui enemy clear` | Forgets the running timers of enemies |
+| `/flatui enemy reset` | Puts the abilities back as Flat UI ships them, undoing every add, hide and typed cooldown |
 | `/flatui test icons` | Three sample icons on **Enemy cooldowns**, among other pages |
 
 ## Combat text

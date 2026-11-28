@@ -75,7 +75,7 @@ An Elite, Rare or Boss shows in several ways, each with its own row:
 - **Elite or Rare word**: Elite, Rare, Rare Elite or Boss in the name row.
 - **Line under the name row** (off at first): a thin coloured line between the name row and the health bar.
 
-An enemy that another player has tapped, which gives you no experience or loot, turns grey, as the game's own frames grey it. This shows in the name row and in a **Health bar colour** or **Name colour** of Class or Reaction.
+An enemy that another player has tapped, which gives you no experience or loot, turns grey, as the game's own frames grey it. This shows in the name row, in a **Health bar colour** or **Name colour** of Class or Reaction, in a **Portrait border** of **Class or reaction colour** (the whole frame's border in **One frame**) and on the pet target frame.
 
 ### Health and power bars
 
@@ -87,6 +87,7 @@ Under **Bars** on the **Bars and pictures** tab:
 - **Power bar width**, in **Separate parts**, is **Same as the health bar** (the default) or **Game's width**, which can run past the health bar on the target, focus and target of target frames.
 - **Hide empty power bar** (on) hides the power bar of a unit that has no power.
 - **Colour health bars by health left** (off at first) turns the health bars from green through yellow to red as health drops, in the three **Health left** colours of the **Colours** tab of the **Flat UI** page. It works on raid cells, raid-style party frames and the pet target frame too, also in a fight.
+- **Lost health trail** (on) shows the chunk of health a hit took as a pale band that drains smoothly down to the new health over a fraction of a second, so a big hit reads at a glance. Heals still jump up at once, and a new target never drains from the old one's health. It needs **Flat bars**, and is not on raid cells, nor with **Dark health bar, colour shows what is lost**.
 
 Each frame's tab has a **Health bar colour** row: **Health colour**, **Class** or **Reaction**. The player, party and target of target frames start at **Class**; the others start at **Health colour**. On the target frame, **Class** applies to players, and other units take their reaction colour.
 
@@ -141,6 +142,8 @@ The **Player frame** tab has the usual **Picture**, **Name**, **Level**, **Healt
 - **Combat icon** (on) keeps the game's crossed swords while you are in a fight.
 - **Combat and resting icons** at **Above the portrait** (the default) puts the crossed swords and the sleeping letters just above the portrait's top right corner, clear of the picture, or above the whole frame in **One frame**. **Game's spot** puts them back where the game draws them. It changes out of combat.
 
+In a raid, the game's gold Group tab over the player frame gives way to a small Group 3 in the name font, just above the right end of the name row, or above the whole frame in **One frame**.
+
 #### Druid mana in forms
 
 **Druid mana in forms** (on) gives a druid in Bear or Cat Form a thin mana bar under the player frame. It fades in as you shift and out as you shift back to caster form.
@@ -155,13 +158,17 @@ The **Player frame** tab has the usual **Picture**, **Name**, **Level**, **Healt
 
 #### Energy tick
 
-**Energy tick** (off at first) is for a rogue or a druid in Cat Form. A thin spark crosses the energy bar every 2 seconds and reaches its right end as the next energy comes in, so you can time an opener or a finishing move. It finds the beat from the first tick it sees and keeps it in a fight. It hides in other forms and for other classes.
+**Energy tick** (off at first) is for a rogue or a druid in Cat Form. A thin spark crosses the energy bar every 2 seconds and reaches its right end as the next energy comes in, so you can time an opener or a finishing move. It finds the beat from the first tick it sees and keeps it in a fight. It hides in other forms and for other classes. `/flatui status` says whether it is in step and how long ago the last tick came, or that it waits for the first tick of 15 energy or more. Where the game sends energy in small steps, there is no beat to show, and the status and a note say so.
 
 Turning **Five-second rule** or **Energy tick** on in a fight waits for the fight to end.
 
 ### Target, focus and boss frames
 
 The **Target frame**, **Focus frame** and **Boss frames** tabs have the usual picture, name, level, health colour, text and power bar rows. The **Boss frames** tab also has **Long names**: **Cut with dots** (the default) or **Smaller text**, which shrinks a long name to 75% before cutting it.
+
+The raid marker of the target and the focus sits just above Flat UI's picture, or above the right end of the name row with **Picture** at **None**. A quest unit's mark sits on the picture's lower right corner, and the game's rare star hides while **Portrait border colour**, **Mark after the level** or **Elite or Rare word** shows the rank.
+
+A rogue's or a Cat Form druid's combo points ring Flat UI's target picture, the way the game's ring hugs its round portrait, or sit at the right end of the health bar with **Picture** at **None**. While the character can have combo points, the target of target moves right just far enough to keep the ring clear. Both change out of combat.
 
 On the **Icons and auras** tab, **Dead text** (on) keeps the game's Dead across the health bar of a dead target, focus, boss or target of target, and **Raid marker on target, focus, boss and pet target frames** (on) shows their raid markers.
 
@@ -170,6 +177,8 @@ On the **Icons and auras** tab, **Dead text** (on) keeps the game's Dead across 
 The **Target of target frame** tab covers the target's target and the focus's target. **Long names** is **Smaller text** at first.
 
 **Position** at **Beside the target frame** (the default) puts the frame just right of the target frame with their tops in line, and the focus target beside the focus frame, in either **Frame style**. It goes with the target frame wherever `/flatui move` puts it. **Game's spot** leaves it below and to the right, where the game puts it. It changes out of combat.
+
+With the frame beside the target frame, the target's and the focus's cast bars keep the spot the game gives them when there is no target of target: just under the frame, or under the aura rows while the unit has auras. They no longer drop as the enemy's target comes and goes, also in a fight.
 
 ### Pet frame and pet target
 
@@ -188,6 +197,8 @@ Turning the frame on or off, or a new width, waits for the end of a fight.
 ### Party frames
 
 The **Party frames** tab also covers the party pets: **Party pet picture**, and **Name** and **Long names** for both.
+
+**Party power bars for** is **Every member** at first. **Healers only** keeps the power bar on members with the healer role and fades the others' bars, as **Hide empty power bar** does, also in a fight and as roles change. A member with no role, as in most groups made without the group finder, keeps theirs.
 
 Under **Range**, **Dim members out of range** (off at first) darkens a member's picture, name row and bars while they are out of your range, to **Out of range opacity** (50%). Their pet's frame dims by its own range, and the debuff icons under the frame stay clear.
 
@@ -247,7 +258,7 @@ The rest of the **Icons and auras** tab:
 
 ### Changes made in a fight
 
-The game protects unit frames in a fight, so some changes wait for its end. This covers the layout rows (**Frame style**, **Portrait size**, **Space between parts**, **Name room**, **Level position**, **Corners**, **Portrait shape**), **Shadow behind each frame**, **Custom pet frame size**, **Dim members out of range**, **Low health border**, the text formats, the party and raid marks and the heal over time squares. While the options window is open, chat says so once a fight, such as "Flat UI: unit frames take their new layout when the fight ends."
+The game protects unit frames in a fight, so some changes wait for its end. This covers the layout rows (**Frame style**, **Portrait size**, **Space between parts**, **Name room**, **Level position**, **Corners**, **Portrait shape**), **Shadow behind each frame**, **Custom pet frame size**, **Dim members out of range**, **Low health border**, the text formats, the party and raid marks and the heal over time squares. While the options window is open, chat says so once a fight, such as "Flat UI: unit frames take their new layout when the fight ends." The target of target's **Position** and **Combat and resting icons** have their own lines: "Flat UI: the target of target frame moves when the fight ends." and "Flat UI: the combat and resting icons move when the fight ends." A new target in a fight stays silent.
 
 ### Setup and test mode
 
@@ -301,9 +312,11 @@ Three rows under **Look** help you time your next spell. Each works with or with
 - **Interrupt on cooldown colour** (orange) while it cools down.
 - **Interrupt out of range colour** (grey-blue) while it is ready but the caster is out of its range.
 
-On flat nameplate cast bars, and on the target and focus bars with **Flat fill** on, the whole fill takes the colour. With **Flat fill** off, a thin strip along the bottom of the target and focus cast bars takes it. **Interrupt strip height** sets the strip from 1 to 6 screen pixels (2 at first). As your interrupt comes back, or you come into range during the cast, the strip blinks once as it turns to **Interrupt ready colour**. A cast that cannot be interrupted keeps its colour.
+On flat nameplate cast bars, and on the target and focus bars with **Flat fill** on, the whole fill takes the colour. With **Flat fill** off, a thin strip along the bottom of the target and focus cast bars takes it. **Interrupt strip height** sets the strip from 1 to 6 screen pixels (2 at first). As your interrupt comes back, or you come into range during the cast, the strip blinks once as it turns to **Interrupt ready colour**. A flat fill does the same: the whole fill dips and comes back once over a quarter second as it turns, on nameplates too, so the change is hard to miss in a fight. A cast that cannot be interrupted keeps its colour.
 
 **Seconds until your interrupt is ready** (on), on the **Text and icon** tab, counts the seconds left on your interrupt inside the left end of the target or focus cast bar, so you see whether Kick is back before the cast lands. It works for a warlock's Felhunter's Spell Lock too. The number goes as the bar turns to **Interrupt ready colour**.
+
+The cast bar on the nameplate of your target, and of your focus, counts the same seconds. As the spell name takes the left end of a nameplate cast bar, the number sits inside its right end, just left of the cast time, in white on a **Flat nameplate cast bar**.
 
 On the **States and text** tab of **Cooldowns**, **Glow on your interrupt** (on) rings your interrupt's icon on the cooldown row in gold while your target or focus casts something you can interrupt and the interrupt is ready. See [Combat](Combat).
 
@@ -313,7 +326,7 @@ Four rows under **Sound** on the **General** tab play a sound of your choice. Ea
 
 - **Sound when you are interrupted** plays as an enemy's Kick, Counterspell, Pummel, Earth Shock or stun stops your cast or channel, so you hear the lockout while you watch the boss. Moving, jumping or pressing Escape plays nothing.
 - **Sound when your interrupt lands** plays as your interrupt, or your Felhunter's Spell Lock, stops an enemy's cast, at most once a second. A kick that missed, came late or came after another player's stays silent.
-- **Sound when your focus casts** plays as the enemy you focus starts a cast or channel while your interrupt is ready and in range. It plays again, once a cast, as your interrupt comes back or you come into range during the cast. It needs **Interrupt readiness on enemy casts**.
+- **Sound when your focus casts** plays as the enemy you focus starts a cast or channel while your interrupt is ready and in range. It plays again, once a cast, as your interrupt comes back or you come into range during the cast, and only when the cast began while your interrupt was down or out of range. It needs **Interrupt readiness on enemy casts**.
 - **Sound when your target casts** does the same for your target. When your target is also your focus, only the focus sound plays.
 
 `/flatui status` counts the sounds played this session, as "Sound when your interrupt lands: 7 played."
@@ -391,7 +404,8 @@ How the icons look:
 - **Time left** is **On the icon** at first, or **Under the icon**, **Thin bar under the icon** or **Off**. The time turns amber in its last 5 seconds.
 - **Icon size** (40), **Spacing** (3) and **Icon border** (on) set the icons. The numbers grow and shrink with the icon.
 - **Flash when one lands** (on) gives an icon a quick white flash as its buff comes, also in a fight, though not when you cast a buff again while it shows.
-- **Sound when one ends** (None at first, or **Raid warning**, **Alarm** or **Whisper warning**) plays once as one of your class's short buffs leaves you, also in a fight. A buff with a tracker is left out, since the tracker has its own sound.
+- **Sound when one ends** (None at first, or **Raid warning**, **Alarm** or **Whisper warning**) plays once as one of your class's short buffs leaves you, also in a fight. A buff whose tracker plays its own sound as it drops is left out; a tracker with **Sound when it drops** off, or a sound the game does not play in a fight, no longer silences it.
+- **Bar texture** fills the thin bar under each icon, here and on **Defensives on you**, so the two rows match. It is dimmed while neither page has **Time left** at **Thin bar under the icon**.
 - **Buff tooltips** shows the game's tooltip over an icon **On**, **Out of combat only** or **Off**. A click still goes through to the world.
 
 Where it sits:
@@ -423,7 +437,7 @@ The **Swing timers** page restyles the game's main hand, off hand and ranged swi
 ### When the timers show
 
 - **Out of range opacity** (40%, the game's own) sets how see-through a timer is while your target is out of its reach.
-- **Show the timer** is **Always**, **In combat** (the default) or **Only while swinging**. **In combat** and **Only while swinging** fade the timer and its border out over a quarter second as the fight ends or the swings stop. It works while the timer's border is on. With Edit Mode's own Visibility at In combat, the game hides the timer itself, at once.
+- **Show the timer** is **Always**, **In combat** (the default) or **Only while swinging**. **In combat** and **Only while swinging** fade the timer and its border in over about 0.15 seconds as a fight or the first swing starts, and out over a quarter second as the fight ends or the swings stop. It works while the timer's border is on. With Edit Mode's own Visibility at In combat, the game hides the timer itself, at once.
 
 `/flatui test` shows the swing timers while the game would show them.
 

@@ -2,7 +2,7 @@ Every setting of the **Helpers** group of the options window, 101 in all, with i
 
 Pages: [Errands](#errands) · [Drink and health macros](#drink-and-health-macros) · [Consumables bar](#consumables-bar) · [Mount key](#mount-key) · [World and cursor](#world-and-cursor)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 ## Errands
 
@@ -129,7 +129,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Show the consumables bar** | Off | A bar of buttons for your consumables: a click uses the item from whichever bag holds it, also in a fight. Each shows how many you carry, its cooldown and its tooltip. The first six have keys under Flat UI in the game's Key Bindings. /flatui move places it. |
+| **Show the consumables bar** | Off | A bar of buttons for your consumables: a click uses the item from whichever bag holds it, also in a fight. Each shows how many you carry, its cooldown and its tooltip, with the time left while it cools down, and an elixir, flask or scroll whose buff is on you has a green border and its minutes left. The first six have keys under Flat UI in the game's Key Bindings. /flatui move places it. |
 
 **Buttons**
 
@@ -137,7 +137,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | --- | --- | --- |
 | **Buttons** | Every consumable in your bags | Every consumable in your bags: one button for each item, never from the bank, in the order of the Bags page at Each kind, then by name; Kinds in your bags leaves kinds out. Your list: only the items you chose, in your order. Your list, then the rest: your list first, then the other consumables of your bags. Choices: Every consumable in your bags, Your list, Your list, then the rest. |
 | **An item of your list with none left** | Show it greyed with 0 | It stays on the bar, so its button keeps its place. A click on it says in chat that your bags hold none. Choices: Show it greyed with 0, Leave a gap. Needs **Buttons** at Your list or Your list, then the rest. |
-| **Show count** | On | How many you carry across your bags. A stack of one shows no number, but on a button of your list; none shows a red 0. |
+| **Show count** | On | How many you carry across your bags. A stack of one shows no number, but on a button of your list; 3 or fewer shows amber, and none a red 0. |
 
 **Your list**
 
@@ -157,7 +157,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Elixirs and flasks** | On |  |
 | **Scrolls** | On |  |
 | **Bandages** | On |  |
-| **Enhancements** | On | Oils, sharpening stones, weightstones and the like. |
+| **Enhancements** | On | Oils, sharpening stones, weightstones and the like. A click puts an oil or a stone on your main hand, and a right-click on a weapon in your off hand. |
 | **Explosives and devices** | On |  |
 | **Other consumables** | On | Healthstones, mana gems and the rest. They come first on the bar. |
 
@@ -190,11 +190,11 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Quest item sparkle** | On | Quest items in the world sparkle. Sets a game setting that the game's options do not show. Turned off, the game's own value is back from its next start. |
 | **Sparkle strength** | Strongest | Thickens the sparkle by raising the game's Particle Density, and its Spell Density where the game has one, raid settings too: Strong to High and Reduced, Strongest to Ultra and Everything. A higher value of yours stays. More particles can cost frame rate in busy fights. As the game has it, or Quest item sparkle off, puts your own values back. Choices: As the game has it, Strong, Strongest. Needs **Quest item sparkle** on. |
 | **Glow on the nearest object** | On | A pulsing glow, gold or by what it is, with twinkling stars on the herb, vein or quest object your Interact Key would use. It shows only while the game gives that object a nameplate: Enable Interact Key in the game's Controls options and Interact Key Icons at Show All in Accessibility. Turn on what the glow needs sets both. In a fight, a new object gets it once the fight ends. Needs **Quest item sparkle** on. |
-| **Glow colour** | Gold | By what it is: herbs glow green, ore copper, quest objects gold, and loot and chests white, so you tell nodes apart at a glance. Choices: Gold, By what it is. Needs **Glow on the nearest object** on. |
-| **Glow size** | 100% | Sizes the glow, its ring and its stars together, at once on an object that glows now. A change in a fight waits for its end. Needs **Glow on the nearest object** on. |
+| **Glow colour** | Gold | By what it is: herbs glow green, ore copper, quest objects gold, and loot and chests white, so you tell nodes apart at a glance. Picking one out of a fight, with nothing glowing near you, shows the glow for 3 seconds above the middle of the screen, By what it is stepping through the four colours. Choices: Gold, By what it is. Needs **Glow on the nearest object** on. |
+| **Glow size** | 100% | Sizes the glow, its ring and its stars together, at once on an object that glows now. With nothing glowing near you, a change out of a fight shows the glow at its new size for 3 seconds above the middle of the screen. A change in a fight waits for its end. Needs **Glow on the nearest object** on. |
 | **Glow sound** | None | Plays once as the glow lands on an object, out of a fight and at most once every 2 seconds, so a herb or vein that comes into reach rings softly. Picking one plays it. Choices: None, Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. Needs **Glow on the nearest object** on. |
 | **Turn on what the glow needs** |  | Ticks the game's Enable Interact Key and sets its Interact Key Icons to Show All, out of a fight, so herbs, veins and quest objects get the nameplate the glow sits on. Show All also shows the key's icons over enemies. A line in chat says what changed. Needs **Glow on the nearest object** on. |
-| **Maximum camera distance** | Off | The camera zooms out to 2.6, past the 2.0 that the game's Max Camera Distance allows, and glides out there as you tick it. A game setting, the same in every profile. Turned off, the distance you had is back. |
+| **Maximum camera distance** | Off | The camera zooms out to 2.6, past the 2.0 that the game's Max Camera Distance allows, and glides out there as you tick it. A game setting, the same in every profile. Turned off, the distance you had is back. Ticked in a fight, it changes and glides out as the fight ends, and chat says so. |
 
 **Cursor**
 
@@ -202,8 +202,8 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | --- | --- | --- |
 | **Cursor ring** | Off | A ring around the mouse pointer, so you find it at a glance. It takes no clicks, hides while you turn the camera with the mouse, and in combat only fades in and out with the fight. When you shake the mouse shows no ring until you shake the pointer from side to side: then it fades in swollen, eases back to its size and fades out about a second later. Changing the ring here out of a fight shows it for a moment. Choices: Always, In combat only, When you shake the mouse, Off. |
 | **Cursor ring size** | 32 | Needs **Cursor ring** at Always or In combat only or When you shake the mouse. |
-| **Cursor ring colour** | #B991E4 | Needs **Cursor ring** at Always or In combat only or When you shake the mouse. |
-| **Class colour** | Off | Paints the ring in your class colour in place of Cursor ring colour. Needs **Cursor ring** at Always or In combat only or When you shake the mouse. |
+| **Class colour** | Off | Paints the ring in your class colour in place of Cursor ring colour, which greys out while it is on. Needs **Cursor ring** at Always or In combat only or When you shake the mouse. |
+| **Cursor ring colour** | #B991E4 | Needs **Class colour** at False. |
 | **Grow when you shake the mouse** | On | A quick side-to-side shake of the mouse swells the ring to two and a half times its size, and it eases back over half a second, so you find the pointer at once. Needs **Cursor ring** at Always or In combat only. |
 | **Cast progress on the ring** | On | Your cast or channel runs round the ring. Ticking it here out of a fight plays a sample cast. Needs **Cursor ring** at Always or In combat only. |
 | **Cast progress colour** | #33B6E6 | Changing it here out of a fight plays a sample cast round the ring, with the global cooldown inside. Needs **Cast progress on the ring** on. |

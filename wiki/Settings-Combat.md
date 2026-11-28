@@ -1,8 +1,8 @@
-Every setting of the **Combat** group of the options window, 342 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Combat](Combat) and [Combat text](Combat-text).
+Every setting of the **Combat** group of the options window, 358 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Combat](Combat) and [Combat text](Combat-text).
 
 Pages: [Cooldowns](#cooldowns) · [Trackers](#trackers) · [Defensives on you](#defensives-on-you) · [Absorb shields](#absorb-shields) · [Charges](#charges) · [Enemy cooldowns](#enemy-cooldowns) · [Combat text](#combat-text)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 ## Cooldowns
 
@@ -196,6 +196,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | **Shortest cooldown** | 5 s | A shorter cooldown does not pulse, nor does the global cooldown. |
+| **When it pulses** | Always | In combat only keeps the pulse quiet between fights. Not while mounted or in a city keeps it quiet on a mount, on a flight path and where the game rests you, in a city or an inn. A cooldown that ends while it is quiet does not pulse later. /flatui pulse test and the samples of the look still show. Choices: Always, In combat only, Not while mounted or in a city. |
 | **Your pet's abilities** | Off | Spell Lock, Seduction, Sacrifice, Dash and the like pulse as they come back, as your own spells do. A pet casts some of its abilities on its own, which then pulse each time: Leave out takes one away. |
 | **Leave out** |  | A spell is left out with all its ranks. For one that is not listed, type /flatui pulse ignore and its name. |
 | **Put back** |  |  |
@@ -211,6 +212,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Sound of one spell or item** |  | Choose one, then open the list again for its own sound. One without it plays Sound. Out of combat, a pick shows it. |
 | **Name under the icon** | On | The spell or item that is ready again, fading with the icon. An item's name is in its quality's colour. |
 | **Grow as it fades** | Off | The icon swells by a quarter as it fades out. |
+| **Burst as it shows** | On | The game's star flash, the one its own cooldowns show as they end, bursts once over the icon as it comes in: white for a spell, in the item's quality colour for an item. |
 
 **Spots**
 
@@ -341,7 +343,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Sound when it comes** | Off | For a buff or debuff tracker, in the kit of Sound. |
 | **Sound when it stacks** | Off | For a buff or debuff tracker, in the kit of Sound. |
 | **Sound when it turns low** | Off | Once as a tracker goes from fine to low, by its Low at rows, Item minimum, Ammunition minimum or the pet rows, in the kit of Sound. The game hides buffs in a fight, so a buff turns low by sound between fights. |
-| **Sound** | Raid warning | Out of combat, a pick plays it once. Edit a tracker gives one tracker a sound of its own. Choices: Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. |
+| **Sound** | Raid warning | Out of combat, a pick plays it once. Edit a tracker gives one tracker a sound of its own. Raid warning, Alarm and Whisper warning also play for a buff in a fight, since the game plays them. The others play only while the game shows your buffs, so a buff that drops in a fight is silent with them. Choices: Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. |
 
 ### Proc alerts
 
@@ -353,7 +355,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Add a proc** |  | For another spell, type /flatui tracker add proc and its name. A proc you add keeps its own colour, time and sound. |
 | **Remove a proc** |  | Also lists the procs of your class. One you remove stays off for this character. |
 | **Bring back a proc** |  | A proc of your class you removed shows again without being added. Needs **Procs of your class** on. |
-| **Colour** | #FFD100 | The border of a proc alert, and the plain arc of a proc with no art of its own. /flatui tracker proc colour sets one proc's colour, which also tints its art. |
+| **Colour** | #FFD100 | The border of a proc alert, and the plain arc of a proc with no art of its own. /flatui tracker proc colour sets one proc's colour, which also tints its art, and works on the procs of your class too, by name: /flatui tracker proc colour Execute ff3030. proc sound Overpower bell, proc time Revenge 5 and proc reset Execute set a proc's sound and time or put them back. |
 | **Sound** | Spell alert | Choices: None, Spell alert, Chimes, Bell, Warhorn, Raid warning, Alarm, Whisper warning. |
 
 **Art beside the character**
@@ -364,6 +366,8 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Art size** | 150% | 100% is the game's size. Needs **Art beside the character** on. |
 | **Art opacity** | 40% | 65% is the game's. The game's Spell Alert Opacity has no effect here. Needs **Art beside the character** on. |
 | **Art height** | 0 | Positive moves the art up from its Proc art box in /flatui move. Needs **Art beside the character** on. |
+| **Stacks build the art** | On | Maelstrom Weapon fills its art a fifth per stack from a faint outline, with the count on it. At 5 stacks it is full and pulses, the proc sound plays and, with Glow on the action button, Lightning Bolt glows. In a fight the game draws the fill and the number. Off, the art shows at 5 stacks alone and the stacks show on Charges. Needs **Art beside the character** on. |
+| **Seconds left on the art** | On | The seconds a proc with a time has left, such as Overpower or Revenge, as a large number on its art in its colour, white and a little larger for the last 2 seconds. It fades out with the art. Execute and other procs with no time show none. Needs **Art beside the character** on. |
 
 **Glow**
 
@@ -371,7 +375,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | --- | --- | --- |
 | **Glow on the action button** | Off | A glow on the button that casts the spell the proc is for, and a border in the proc's colour, which needs Restyle action bars. With Glow style Soft the glow takes the proc's colour too. |
 | **Glow style** | Soft | Soft: a faint glow that hugs the button's edge and breathes slowly, and a slow, gentle pulse of the art. As the game has it: the game's burst and loop, which lie over the buttons beside it, and the game's own pulse and fade-in of the art; with Art size 100% and Art opacity 65% it is the game's whole look. The art, Glow on procs of the cooldown icons and Game glow on Flat UI's own buttons follow it too, with or without Glow on the action button. Choices: Soft, As the game has it. |
-| **Seconds left on the button** | On | While a proc with a time, such as Overpower or Revenge, is up, its glowing button counts down the seconds left in the proc's colour, at Hotkey size and Button text outline, in a corner clear of the hotkey, macro name and count. It turns white and grows a little for the last 2 seconds. Execute and other procs with no time show none. Needs **Glow on the action button** on. |
+| **Seconds left on the button** | On | While a proc with a time, such as Overpower or Revenge, is up, its button counts down the seconds left in the proc's colour, at Hotkey size and Button text outline, in a corner clear of the hotkey, macro name and count. It turns white and grows a little for the last 2 seconds. Execute and other procs with no time show none. With Glow on the action button off, the number shows alone, with no glow and no border. |
 
 ## Defensives on you
 
@@ -387,6 +391,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **X offset** | 0 | Moves the row left or right of where Place puts it. Out of combat with no defensive on you, the samples show the new spot as you drag. Needs **Place** at Above the player frame or At the personal resource display. |
 | **Y offset** | 0 | Moves the row up or down from where Place puts it. Needs **Place** at Above the player frame or At the personal resource display. |
 | **Icon size** | 32 | Out of combat with no defensive on you, a change of this or another row of the look shows samples in the new look for a few seconds. The time left turns amber in its last 5 seconds. The numbers on the icon grow and shrink with it. |
+| **Time left** | On the icon | A thin bar under the icon runs down with the time left, in the Bar texture of Your buffs, open there while this row is the bar and Your buffs is on, and the caster's name moves under it. The bars the game draws in a fight change once the game shows your buffs again. Choices: On the icon, Thin bar under the icon, Off. |
 | **Spacing** | 3 |  |
 | **Caster's name** | On |  |
 | **Icon border** | On |  |
@@ -437,6 +442,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | --- | --- | --- |
 | **Colour by school** | On | A shield that takes one school in its colour: Fire Ward orange, Frost Ward light blue, Shadow Ward violet, Mana Shield grey. One that takes every school is in Shield colour. |
 | **Shield colour** | #FFE08A | Shields that take every school, and the total. |
+| **Shield stripes** | On | The striped shield pattern over each bar's fill, as the game draws absorbs on its later frames, with a soft bright edge where the fill ends. Also on the bars the game draws in a fight. |
 
 **Shields**
 
@@ -466,7 +472,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Charges** | On | Your buffs with charges, such as Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, as glowing orbs round their icon: lit orbs are the charges left, faint rings the ones used. It shows while the buff is up. /flatui move places it, /flatui charges shows a sample. |
+| **Charges** | On | Your buffs with charges, such as Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, and the stacks of Maelstrom Weapon while the Proc alerts art does not build them, as a row of glowing gems like the game's own class resources, under the bars of the personal resource display: lit gems are the charges left, empty sockets the ones used, with the spell's name, the charges left and the time left. It shows while the buff is up. /flatui charges shows a sample. |
 
 **Spells**
 
@@ -479,22 +485,33 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Orb style** | Ring round the icon | Out of combat with no buff with charges on you, a change of this or another row of the look shows a sample for a few seconds. Choices: Ring round the icon, Arc over the icon, Row under the icon. |
-| **Spin** | Slow | The ring of orbs turns round the icon. On an arc or a row the orbs sway gently instead. Choices: Still, Slow, Fast. |
-| **Icon size** | 40 px | The round spell icon in the middle. The time left and the number on the icon grow and shrink with it. |
-| **Orb size** | 12 px | Each orb, without its soft glow. |
-| **Colour** | Spell's own colour | Spell's own colour: Lightning Shield electric blue, Water Shield sea green, Earth Shield earthy green, Inner Fire gold, Shadowguard violet and Holy Shield warm white gold; a spell you added has your class colour. Choices: Spell's own colour, Class colour, One colour. |
+| **Orb style** | Resource bar | Resource bar: a row of gems in sockets, drawn with the game's own class resource art. Spell art: the game's own spell alert art for the buff, brighter with each charge, with the count and time under it; a buff without such art, such as Lightning Shield, shows the resource bar. Maelstrom Weapon has such art, but while Art beside the character and Stacks build the art of Proc alerts are on, its stacks show on that art and not here. Out of combat with no buff with charges on you, a change of this or another row of the look shows a sample for a few seconds. Choices: Resource bar, Spell art, Ring round the icon, Arc over the icon, Row under the icon. |
+| **Fill the width** | On | Under or above the personal resource display, the gems spread out from end to end of its bars, each keeping its shape. Off, the gems sit 3 px apart in the middle, as they do at the row's own spot. With Spell art, the art takes the width of the bars, at most 240 px. Needs **Orb style** at Resource bar or Spell art. |
+| **Gem size** | 20 px | The size of each gem and its socket. The name, count and time grow and shrink with it. With Spell art, it sets only the size of the text under the art. Needs **Orb style** at Resource bar or Spell art. |
+| **Spell icon** | Off | The round spell icon in the middle of the orbs. Off, the orbs ring the count alone. Needs **Orb style** at Ring round the icon or Arc over the icon or Row under the icon. |
+| **Spin** | Slow | The ring of orbs turns round the icon. On an arc or a row the orbs sway gently instead. Choices: Still, Slow, Fast. Needs **Orb style** at Ring round the icon or Arc over the icon or Row under the icon. |
+| **Icon size** | 40 px | The round spell icon in the middle, and the ring the orbs sit on, close round it. The text grows and shrinks with it. Needs **Orb style** at Ring round the icon or Arc over the icon or Row under the icon. |
+| **Orb size** | 12 px | Each orb, without its soft glow. Needs **Orb style** at Ring round the icon or Arc over the icon or Row under the icon. |
+| **Colour** | Spell's own colour | Spell's own colour: Lightning Shield electric blue, Water Shield sea green, Earth Shield earthy green, Maelstrom Weapon electric blue white, Inner Fire gold, Shadowguard violet and Holy Shield warm gold, each with the game's resource art that suits it; a spell you added has your class colour. Class colour and One colour tint the gems. Choices: Spell's own colour, Class colour, One colour. |
 | **Orb colour** | #59B8FF | Needs **Colour** at One colour. |
-| **Show used charges** | On | Each charge used stays as a faint ring in its place, so you see how many are gone. |
-| **Burst as a charge goes** | On | The orb flashes white, swells and fades as its charge goes. Only while the game shows your buffs: in a fight it may hide them, and the orbs then go out without it. |
-| **Time left** | On | Under the icon, amber in its last 10 seconds. |
+| **Show used charges** | On | Each charge used stays as an empty socket, or a faint ring round the icon, so you see how many are gone. Off, only the charges left show. |
+| **Burst as a charge goes** | On | The gem plays the game's fade of a spent resource, or flashes white, swells and fades, as its charge goes. Only while the game shows your buffs: in a fight it may hide them, and the gems then go out without it. |
+| **Name** | On | The spell's name, small, above the left end of the row, beside the count under the art, or above the ring, arc or row of orbs. |
+| **Count** | On | The charges left as a large number at the right end of the row, or under the art or in the middle of the orbs. Off, the number shows only past 10 charges. |
+| **Time left** | On | Above the right end of the row, or after the count where the row is too short for the name and the time side by side; beside the count under the art, or under the orbs. Amber in its last 10 seconds. |
+
+**Position**
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| **Place** | Under the personal resource display | Under or above, the row sits just clear of the bars of the personal resource display, the width of the bars, and follows them, past a Your buffs row on that side; Defensives on you, a Cooldowns row and Trackers placed at that display sit past it in turn. With that display off or hidden, it goes to its own spot. Own spot has a handle in /flatui move. Choices: Under the personal resource display, Above the personal resource display, Own spot. |
 
 **When shown**
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Only in combat** | Off | Out of a fight the orbs stay hidden; test mode and the samples still show them. |
-| **Hide while mounted** | Off | Hidden while you ride, and back as you get off. |
+| **Only in combat** | Off | Out of a fight the orbs stay hidden and the rows past them close up; test mode and the samples still show them. |
+| **Hide while mounted** | Off | Hidden while you ride, the rows past it closing up, and back as you get off. |
 
 **Sound**
 
@@ -598,9 +615,10 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Outgoing direction** | Up | Which way your hits move in the Outgoing area. Horizontal and Static numbers stack their rows this way. Choices: Up, Down. Needs **Where your hits show** at Scroll area or Both. |
 | **Incoming direction** | Down | Which way the numbers on you move in the Incoming area. Horizontal and Static numbers stack their rows this way. Choices: Up, Down. |
 | **Arc width** | Wide | How far an arc number curves out to the side. Choices: Narrow, Wide. |
-| **Spell icons** | All | Shows the icon of your spell, swing or shot. Damage on you shows none. Choices: All, Spells only, Off. |
+| **Spell icons** | All | Shows the icon of your spell, swing or shot in the Outgoing area, while Where your hits show is Scroll area or Both, and of your own heals on you in the Incoming area. Numbers over enemies and damage on you show none. Choices: All, Spells only, Off. |
 | **Speed** | Slow | How long a number stays in the scroll areas. Choices: Fast, Normal, Slow. |
-| **Your interrupts** | Off | Interrupted with the icon of your Kick, Counterspell, Pummel or your pet's Spell Lock pops into the Outgoing area in Interrupt ready colour each time it stops an enemy's cast, so you see each kick land without looking up. It shows when the game names you or your pet as the one who stopped the cast; when the game keeps that secret, it follows the target or focus bar turning Interrupted right after your interrupt. Needs **Where your hits show** at Scroll area or Both. |
+| **Your interrupts** | Off | Interrupted with the icon of your Kick, Counterspell, Pummel or your pet's Spell Lock pops up in Interrupt ready colour each time it stops an enemy's cast, so you see each kick land without looking up. It shows in the Outgoing area while Where your hits show is Scroll area or Both, and otherwise over the nameplate of the enemy you stopped, at the size of the miss words (this needs Numbers over enemies at In front of nameplates). It shows when the game names you or your pet as the one who stopped the cast; when the game keeps that secret, it follows the target or focus bar turning Interrupted right after your interrupt. |
+| **Also kicks that stop nothing** | On | Not interrupted with your interrupt's icon, in Interrupt on cooldown colour, when your interrupt went off while your target or focus was casting and the cast went on; Too late when another player's interrupt stopped it first. It only judges once the game has named who stopped a cast this session, so it never guesses while the game keeps that secret. A cast that cannot be interrupted counts as neither. Needs **Your interrupts** on. |
 
 **Classic**
 
@@ -688,8 +706,9 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Announce blocks, dodges and parries** | Off | While you count as a tank (your group role, a tank stance or form, Your role on the Threat tab of Nameplates, or most talent points in a tank tree) in a party or raid, each attack on you that you block, dodge or parry, or that misses you, sends a short line to the chat Send to names: Dodged, Parried, Missed me, Blocked 245 when the game gives the amount, or Blocked 120 of a hit when a hit gets through your shield, 120 being your block value. Nothing is sent alone, in a battleground or arena, while you do not count as a tank, or while the game closes addon chat. Off at first; /flatui announce test shows sample lines in your own chat window only. |
+| **Announce blocks, dodges and parries** | Off | While you count as a tank (your group role, a tank stance or form, Your role on the Threat tab of Nameplates, or most talent points in a tank tree) in a party or raid, each attack on you that you block, dodge or parry, or that misses you, sends a short line to the chat Send to names: Dodged, Parried, Missed me, Blocked 245 when the game gives the amount, or Blocked 120 of a hit when a hit gets through your shield, 120 being your block value. Nothing is sent alone, in a battleground or arena, outside a dungeon or raid while Only in dungeons and raids is on, while you do not count as a tank, or while the game closes addon chat. Off at first; /flatui announce test shows sample lines in your own chat window only. |
 | **Send to** | Your group's chat | Your group's chat sends to instance chat in an instance group, else raid chat in a raid and party chat in a party. Party chat only uses party chat, which in a raid reaches the members of your raid group, and instance chat in an instance party. Raid chat only sends nothing outside a raid. Only me writes the lines in your own chat window and sends nothing to anyone. Choices: Your group's chat, Party chat only, Raid chat only, Only me. Needs **Announce blocks, dodges and parries** on. |
+| **Only in dungeons and raids** | On | Sends the lines only while you are in a dungeon or raid, so a party out in the world, questing with a friend, gets none. It holds for every line on this part of the page, Announce your interrupts too. Turn it off to send them in any party or raid. |
 | **How often** | Each one | Each one sends a line as it happens, at most one a second; the ones within that second go into the next line, as Dodged x3 or Dodged, Parried x2. A summary every few seconds sends one line as Last 5 s: 3 dodges, 2 parries, 4 blocks. One line when the fight ends sends Fight: 12 dodges, 8 parries, 15 blocks, 3 misses as you leave combat. Never more than one line a second. Choices: Each one, A summary every few seconds, One line when the fight ends. Needs **Announce blocks, dodges and parries** on. |
 | **Seconds of a summary** | 5 s | A summary counts this long from the first block, dodge, parry or miss it holds, then sends one line. Needs **How often** at A summary every few seconds. |
 | **Announce blocks** | On | Blocked for an attack your shield stops whole, Blocked 245 when the game gives the amount, and Blocked 120 of a hit when a hit gets through, 120 being your block value as last read (Blocked part of a hit while the game has not given it). Needs **Announce blocks, dodges and parries** on. |
@@ -699,3 +718,5 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Announce resists** | Off | Resisted, for a spell you resist whole; a spell partly resisted sends nothing. Off at first. Needs **Announce blocks, dodges and parries** on. |
 | **Announce immunities** | Off | Immune, for an attack or spell you are immune to. Off at first. Needs **Announce blocks, dodges and parries** on. |
 | **Announce absorbs** | Off | Absorbed, for an attack an absorb on you, such as Power Word: Shield, takes whole; part of a hit absorbed sends nothing. Off at first. Needs **Announce blocks, dodges and parries** on. |
+| **Announce your defensives** | Off | Shield Wall up (12 s) or Last Stand up (20 s) as you use a defensive with a cooldown of a minute or more, such as Shield Wall, Last Stand, Barkskin or Divine Protection, so your healers know. It goes to Send to's chat while you count as a tank, at most one line a second. Off at first. Needs **Announce blocks, dodges and parries** on. |
+| **Announce your interrupts** | Off | Interrupted Shadow Bolt each time the game names you or your pet as the one who stopped an enemy's cast, sent to the chat this names, at most one line a second. It works in any role, never claims another player's interrupt, and sends nothing while the game keeps the name secret, alone, in a battleground or arena, outside a dungeon or raid while Only in dungeons and raids is on, or while the game closes addon chat. Your group's chat, Party chat only and Raid chat only work as in Send to; Only me writes the line in your own chat window. Off at first. Choices: Off, Your group's chat, Party chat only, Raid chat only, Only me. |

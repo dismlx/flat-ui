@@ -55,7 +55,7 @@ ns.ClassTrackers = {
 		{ name = "Armor", kind = "buff", spells = { 687, 696, 706, 1086, 11733, 11734, 11735 }, names = { "Demon Skin", "Demon Armor" } },
 		{ name = "Demon", kind = "pet", summon = { 688, 697, 712, 713, 691 }, unless = { 18789, 18790, 18791, 18792 } },
 		{ name = "Soul Link", kind = "buff", spells = { 19028, 25228 }, names = { "Soul Link" } },
-		{ name = "Healthstone", kind = "item", items = { 9421, 5510, 5509, 5511, 5512 }, low = 0 },
+		{ name = "Healthstone", kind = "item", items = { 19013, 19012, 9421, 19011, 19010, 5510, 19009, 19008, 5509, 19007, 19006, 5511, 19005, 19004, 5512 }, low = 0 },
 		{ name = "Soul Shard", kind = "item", items = { 6265 }, low = 3 },
 		{ name = "Soulstone", kind = "item", items = { 16896, 16895, 16893, 16892, 5232 }, low = 0, on = false },
 		{ name = "Firestone or Spellstone", kind = "weapon", slot = "main", apply = { 13701, 13700, 13699, 1254, 13603, 13602, 5522 }, lowTime = 120, on = false },

@@ -200,15 +200,34 @@ local function Sizes()
 	local size = ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and tonumber(ns.Get(KEY .. ".zoneTitleSize")) or 100
 	size = math.max(50, math.min(150, size))
 	sizeRefused = false
+	Z.objects = Z.objects or {}
 	for _, row in ipairs(ROWS) do
 		for _, name in ipairs(STRINGS[row]) do
 			local text = Global(name)
+			if text ~= nil and size ~= 100 and Z.objects[name] == nil and type(text.GetFontObject) == "function" then
+				local ok, object = pcall(text.GetFontObject, text)
+				Z.objects[name] = ok and type(object) == "table" and not ns.IsSecret(object) and object or false
+			end
 			if text ~= nil and type(text.SetFont) == "function" and ns.TextStyle(text, { percent = size }) == false then
 				sizeRefused = size ~= 100
 			end
 		end
 	end
 	return size
+end
+
+function ns.ZoneTitleRefont()
+	local again = false
+	for name, object in pairs(Z.objects or {}) do
+		local text = object and Global(name) or nil
+		if text ~= nil and type(text.SetFontObject) == "function" and pcall(text.SetFontObject, text, object) then
+			ns.TextStyleForget(text)
+			again = true
+		end
+	end
+	if again then
+		Sizes()
+	end
 end
 
 function Z.Copy(text, name)

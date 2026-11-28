@@ -1212,6 +1212,7 @@ local I = {
 	NO_COUNT = "Trackers: the game gave no item count, so item trackers show a grey icon.",
 	NAMES = { ammo = "Ammunition", tracking = "Tracking", form = "Stance or form", durability = "Durability" },
 	AMMO_WORDS = { [2] = "arrows", [3] = "bullets" },
+	IMPROVED = { [9421] = { 19013, 19012 }, [5510] = { 19011, 19010 }, [5509] = { 19009, 19008 }, [5511] = { 19007, 19006 }, [5512] = { 19005, 19004 } },
 }
 
 local function Ask(call, ...)
@@ -1347,11 +1348,29 @@ local function ItemRead(entry)
 	return reading
 end
 
+local function Improved(items)
+	local have, room, list = {}, I.MAX_ITEMS - #items, {}
+	for _, id in ipairs(items) do
+		have[id] = true
+	end
+	for _, id in ipairs(items) do
+		for _, extra in ipairs(I.IMPROVED[id] or {}) do
+			if not have[extra] and room > 0 then
+				have[extra], room = true, room - 1
+				list[#list + 1] = extra
+			end
+		end
+		list[#list + 1] = id
+	end
+	return list
+end
+
 local function ItemClean(entry)
 	entry.items = WholeList(entry.items, I.MAX_ITEMS)
 	if not entry.items then
 		return false
 	end
+	entry.items = Improved(entry.items)
 	Named(entry, "Item " .. entry.items[1])
 	return true
 end

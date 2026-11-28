@@ -249,6 +249,10 @@ local function KeyHeld()
 	return true
 end
 
+function ns.FadeKeyHeld()
+	return ns.Enabled(KEY) and not ns.PartStopped(KEY, PART) and KeyHeld()
+end
+
 local function Wanted()
 	return (Opt("combat") and Fighting()) or Holding() or FlyoutOpen() or ns.EditModeOpen() or MoversOpen()
 		or (Opt("cast") == true and Casting()) or (Opt("hurt") == true and Hurt()) or KeyHeld()
@@ -564,6 +568,80 @@ local function RowFloor(entry, floor)
 	return floor
 end
 
+local function FramesFor(entry)
+	local frames = entry.cache
+	if OwnRow(entry) then
+		frames = {}
+		for _, name in ipairs(entry.frames) do
+			local frame = state.found[name]
+			if frame and state.orig[frame] ~= nil then
+				Release(frame)
+			end
+		end
+	elseif not frames and Left(entry) then
+		frames = {}
+		for _, name in ipairs(entry.frames) do
+			local frame = state.found[name]
+			if frame then
+				frames[#frames + 1] = { frame, name }
+			end
+		end
+	elseif not frames then
+		frames = {}
+		for _, name in ipairs(entry.frames) do
+			local frame = Resolve(name)
+			if frame then
+				frames[#frames + 1] = { frame, name }
+			end
+		end
+		if #frames == #entry.frames then
+			entry.cache = frames
+		end
+	end
+	return frames
+end
+
+local function Hovered(entry, frames, added)
+	local over = false
+	local hover = entry.hover and Resolve(entry.hover)
+	if hover then
+		over = Over(hover)
+	else
+		for _, held in ipairs(frames) do
+			if Over(held[1]) then
+				over = true
+				break
+			end
+		end
+	end
+	for _, held in ipairs(not over and added or {}) do
+		if Over(held[1]) then
+			over = true
+			break
+		end
+	end
+	if not over and entry.beside then
+		over = Beside(entry.beside)
+	end
+	return over
+end
+
+local function BarsOver(early)
+	local any = false
+	for _, entry in ipairs(ENTRIES) do
+		if entry.bar == true then
+			local frames = FramesFor(entry)
+			local live = not Left(entry) and Active(entry) and (#frames > 0 or entry.more ~= nil)
+			local added = live and entry.more and Added(entry) or nil
+			early[entry] = { frames, added }
+			if live and not any and not (ns.BarBlockFades and ns.BarBlockFades(entry.frames[1])) and Hovered(entry, frames, added) then
+				any = true
+			end
+		end
+	end
+	return any
+end
+
 local function Step(dt)
 	if ns.PartStopped(KEY, PART) then
 		state.barsOver = false
@@ -575,40 +653,14 @@ local function Step(dt)
 	local up = dt / math.min(seconds, RETURN_TIME)
 	local always, targeted = Wanted(), Opt("target") and HasTarget()
 	local procs, shown = Opt("proc") == true and type(ns.ProcUpOn) == "function", Previewing()
-	local together, wasOver, anyBar = Opt("barsTogether") == true, state.barsOver == true, false
+	local together, early = Opt("barsTogether") == true, {}
 	for rule in pairs(asked) do
 		asked[rule] = nil
 	end
+	local anyBar = together and BarsOver(early)
 	for _, entry in ipairs(ENTRIES) do
-		local frames = entry.cache
-		if OwnRow(entry) then
-			frames = {}
-			for _, name in ipairs(entry.frames) do
-				local frame = state.found[name]
-				if frame and state.orig[frame] ~= nil then
-					Release(frame)
-				end
-			end
-		elseif not frames and Left(entry) then
-			frames = {}
-			for _, name in ipairs(entry.frames) do
-				local frame = state.found[name]
-				if frame then
-					frames[#frames + 1] = { frame, name }
-				end
-			end
-		elseif not frames then
-			frames = {}
-			for _, name in ipairs(entry.frames) do
-				local frame = Resolve(name)
-				if frame then
-					frames[#frames + 1] = { frame, name }
-				end
-			end
-			if #frames == #entry.frames then
-				entry.cache = frames
-			end
-		end
+		local seen = early[entry]
+		local frames = seen and seen[1] or FramesFor(entry)
 		if Left(entry) or not Active(entry) then
 			for _, held in ipairs(frames) do
 				Release(held[1])
@@ -619,39 +671,16 @@ local function Step(dt)
 			state.idle[entry.row] = nil
 		elseif #frames > 0 or entry.more then
 			local added, fresh = nil, false
-			if entry.more then
+			if seen then
+				added = seen[2]
+			elseif entry.more then
 				added, fresh = Added(entry)
 			end
 			local full = always or (targeted and not entry.targeted) or (entry.rule == true and Holds(Opt(entry.row)))
 				or (entry.opens == true and fresh) or (entry.busy ~= nil and entry.busy(added) == true)
-				or (entry.bar == true and (shown or (together and wasOver) or (procs and ns.ProcUpOn(entry.frames[1]) == true)))
-			local joined = together and entry.bar == true
-			if not full or joined then
-				local over = false
-				local hover = entry.hover and Resolve(entry.hover)
-				if hover then
-					over = Over(hover)
-				else
-					for _, held in ipairs(frames) do
-						if Over(held[1]) then
-							over = true
-							break
-						end
-					end
-				end
-				for _, held in ipairs(not over and added or {}) do
-					if Over(held[1]) then
-						over = true
-						break
-					end
-				end
-				if not over and entry.beside then
-					over = Beside(entry.beside)
-				end
-				if over and joined and not (ns.BarBlockFades and ns.BarBlockFades(entry.frames[1])) then
-					anyBar = true
-				end
-				full = full or over
+				or (entry.bar == true and (shown or (together and anyBar) or (procs and ns.ProcUpOn(entry.frames[1]) == true)))
+			if not full then
+				full = Hovered(entry, frames, added)
 			end
 			local idle = full and 0 or (state.idle[entry.row] or 0) + dt
 			state.idle[entry.row] = idle
@@ -665,7 +694,7 @@ local function Step(dt)
 			end
 		end
 	end
-	state.barsOver = anyBar
+	state.barsOver = anyBar == true
 end
 
 local function FightStarts()

@@ -11,7 +11,7 @@ local K = {
 	NO_SOUND = "Trackers: the game played no sound, so proc alerts are silent.",
 	COUNT = { SPELL_ACTIVATION_OVERLAY_SHOW = "show", SPELL_ACTIVATION_OVERLAY_HIDE = "hide", SPELL_ACTIVATION_OVERLAY_GLOW_SHOW = "glowShow",
 		SPELL_ACTIVATION_OVERLAY_GLOW_HIDE = "glowHide" },
-	USAGE = "Usage: /flatui tracker proc colour 1 ffd100, proc time 1 10 or proc trigger 1 aura.",
+	USAGE = "Usage: /flatui tracker proc colour 1 ffd100, proc sound 1 bell, proc time 1 10, proc trigger 1 aura or proc reset 1. A proc of your class goes by its name or its number in Remove a proc, as proc colour Execute ff3030.",
 	AUTO_KINDS = { proc = true, reactive = true }, AUTO_LINE = 1000,
 }
 local A = { list = {}, byId = {}, stale = true }
@@ -138,6 +138,20 @@ local function OffSet(make)
 	return saved.procsOff
 end
 
+local function LookSet(make)
+	local saved = ns.Character()
+	if type(saved) ~= "table" then
+		return {}
+	end
+	if type(saved.procLooks) ~= "table" then
+		if not make then
+			return {}
+		end
+		saved.procLooks = {}
+	end
+	return saved.procLooks
+end
+
 local function Off(entry)
 	return entry.auto == true and (ns.Get(KEY .. ".procAuto") == false or OffSet(false)[entry.name] == true)
 end
@@ -184,19 +198,24 @@ local function KitOf(entry)
 	return K.KITS[ns.Get(KEY .. ".procSound")]
 end
 
+local function Most(row)
+	local most = row and row.most
+	return Whole(most) and most > 1 and most or nil
+end
+
 local function ArtData(entry)
 	local signal = P.signalled[entry.id]
-	if signal then
-		return { file = signal.file, location = signal.location, scale = signal.scale or 1, r = signal.r, g = signal.g, b = signal.b }
-	end
 	local row = RowOf(entry)
+	if signal then
+		return { file = signal.file, location = signal.location, scale = signal.scale or 1, r = signal.r, g = signal.g, b = signal.b, most = Most(row) }
+	end
 	if row and row.noArt == true then
 		return false
 	end
 	local art = row and row.art
 	if type(art) == "table" then
 		return { file = art.file, location = art.location, scale = art.scale or 1, alpha = art.alpha, r = art.r, g = art.g, b = art.b,
-			turn = art.turn, pulse = art.pulse, seconds = art.seconds }
+			turn = art.turn, pulse = art.pulse, seconds = art.seconds, most = Most(row) }
 	end
 	return nil
 end
@@ -263,6 +282,7 @@ local function Gone(id)
 		Stop(entry)
 	end
 	P.since[id], P.signalled[id], P.glow[id], P.ended[id], P.stopped[id] = nil, nil, nil, nil, nil
+	Call(ns.ProcArtDrop, id)
 	for _, def in pairs(P.triggers) do
 		if type(def.Forget) == "function" then
 			pcall(def.Forget, id)
@@ -333,13 +353,25 @@ end
 
 local function Read(entry)
 	local id, now = entry.id, Now()
+	local most = (entry.trigger == nil or entry.trigger == "aura") and Most(RowOf(entry)) or nil
 	if Off(entry) then
 		P.ended[id], P.since[id] = nil, nil
+		if most then
+			Call(ns.ProcArtStacks, entry, 0, most, false)
+		end
 		return { state = "missing", hidden = false }
 	end
 	local reading = Raw(entry)
 	if reading.state == "low" then
 		reading.state = "fine"
+	end
+	if most then
+		local count = reading.state == "fine" and math.max(1, Number(reading.count)) or 0
+		Call(ns.ProcArtStacks, entry, count, most, reading.state == "unknown")
+		if count > 0 and count < most then
+			P.ended[id], P.since[id] = nil, nil
+			return { state = "missing", hidden = false, icon = reading.icon, count = count }
+		end
 	end
 	if reading.state == "fine" then
 		local time = Number(entry.time)
@@ -348,6 +380,9 @@ local function Read(entry)
 		end
 		P.since[id] = P.since[id] or now
 		if time > 0 then
+			if most and Plain(reading.expires, "number") and reading.expires > P.since[id] + time then
+				P.since[id] = reading.expires - time
+			end
 			local ends = P.since[id] + time
 			if now >= ends then
 				P.ended[id] = true
@@ -661,6 +696,17 @@ local function Build()
 				else
 					entry.glow = nil
 				end
+				local look = LookSet(false)[row.name]
+				look = type(look) == "table" and look or {}
+				entry.colour = Plain(look.colour, "string") and look.colour or nil
+				if look.sound == false or Plain(look.sound, "number") then
+					entry.sound = look.sound
+				else
+					entry.sound = nil
+				end
+				if Plain(look.time, "number") and look.time >= 0 and look.time <= K.MAX_TIME then
+					entry.time = look.time > 0 and look.time or nil
+				end
 				if Refused(entry) then
 					entry.trigger = "aura"
 				end
@@ -700,6 +746,18 @@ end
 function ns.ProcAutoBuild()
 	Build()
 	Call(ns.ProcGlowPrepare, All())
+end
+
+function ns.ProcShowsStacks(spellID)
+	if not ns.Enabled(KEY) or ns.PartStopped(KEY, PART) or ns.Get(KEY .. ".art") ~= true or ns.Get(KEY .. ".artStacks") == false then
+		return false
+	end
+	for _, entry in ipairs(All()) do
+		if entry.on ~= false and not Off(entry) and (entry.trigger == nil or entry.trigger == "aura") and Lists(entry.spells, spellID) and Most(RowOf(entry)) then
+			return true
+		end
+	end
+	return false
 end
 
 local function World()
@@ -838,8 +896,13 @@ local function Level(entry)
 end
 
 local function UpNow(entry)
-	local state = Raw(entry).state
+	local reading = Raw(entry)
+	local state = reading.state
 	if state == "fine" or state == "low" then
+		local most, count = Most(RowOf(entry)), math.max(1, Number(reading.count))
+		if most and count < most then
+			return ("no, %d of %d stacks"):format(count, most)
+		end
 		return P.ended[entry.id] and "no" or "yes"
 	elseif state == "missing" then
 		return "no"
@@ -1065,6 +1128,20 @@ function ns.ProcEnds(entry)
 	return nil
 end
 
+function ns.ProcSampleSince(entry)
+	if type(entry) ~= "table" then
+		return nil
+	end
+	local preview = P.preview
+	if preview ~= nil and preview.entry == entry and Plain(preview.since, "number") then
+		return preview.since, false
+	end
+	if P.held == entry and Plain(P.heldSince, "number") and not ns.ProcReal(entry) then
+		return P.heldSince, true
+	end
+	return nil
+end
+
 function ns.ProcReal(entry)
 	if type(entry) ~= "table" or entry.id == nil or P.up[entry.id] ~= entry or P.ended[entry.id] then
 		return false
@@ -1113,18 +1190,90 @@ local function Find(text)
 			return entry, found[1]
 		end
 	end
+	for _, entry in ipairs(ns.ProcAutoEntries()) do
+		local number = Line(entry.name)
+		if number and ((text:find("^%d+$") and K.AUTO_LINE + number == tonumber(text)) or entry.name:lower() == wanted) then
+			return entry, K.AUTO_LINE + number, true
+		end
+	end
 	return nil
 end
 
+local function Restyled(auto)
+	if auto then
+		Build()
+	end
+	ns.TrackerDirty()
+	for _, name in ipairs({ "ProcArtChanged", "ProcGlowChanged" }) do
+		if type(ns[name]) == "function" then
+			pcall(ns[name])
+		end
+	end
+end
+
+local function Keep(entry, field, value)
+	local look = LookSet(true)[entry.name] or {}
+	LookSet(true)[entry.name] = look
+	look[field] = value
+end
+
+local function SoundWord(value)
+	local word = value:lower()
+	if word == "none" or word == "off" then
+		return false, "none"
+	end
+	local kit = K.KITS[word]
+	return kit, kit and word or nil
+end
+
 local function Word(text)
-	local word, proc, value = text:match("^(%S+)%s+(%S+)%s*(.-)$")
+	local word = text:match("^(%S+)")
 	if not word then
 		return K.USAGE
 	end
 	word = word:lower()
-	local entry, number = Find(proc)
+	local proc, value
+	if word == "reset" then
+		proc, value = text:match("^%S+%s+(.-)%s*$"), ""
+	else
+		proc, value = text:match("^%S+%s+(.-)%s+(%S+)%s*$")
+	end
+	if not proc or proc == "" then
+		return K.USAGE
+	end
+	local entry, number, auto = Find(proc)
 	if not entry then
 		return ('No proc found for "%s".'):format(proc)
+	end
+	local label = auto and ("%s (of your class)"):format(entry.name) or ("Proc %d"):format(number)
+	if word == "reset" then
+		if auto then
+			LookSet(true)[entry.name] = nil
+		else
+			local row = RowOf(entry)
+			local seconds = row and row.seconds
+			entry.colour, entry.sound = nil, nil
+			entry.time = (Plain(seconds, "number") and seconds > 0 and seconds <= K.MAX_TIME) and seconds or nil
+		end
+		Restyled(auto)
+		return ("%s: colour, sound and time are as the page has them."):format(label)
+	elseif word == "sound" then
+		local kit, name = SoundWord(value)
+		if kit == nil then
+			return ('%s: "%s" is not a sound. Use none, spell, chimes, bell, warhorn, raid, alarm or whisper.'):format(label, value)
+		end
+		if auto then
+			Keep(entry, "sound", kit)
+		end
+		entry.sound = kit
+		Restyled(auto)
+		if kit ~= false then
+			Sound(entry, true)
+		end
+		return ("%s: sound is %s."):format(label, name)
+	end
+	if auto and word == "trigger" then
+		return ("%s: add it with Add a proc to give it a trigger of its own."):format(label)
 	end
 	if word == "colour" then
 		local hex = value:lower():gsub("^#", "")
@@ -1132,19 +1281,27 @@ local function Word(text)
 			hex = "ff" .. hex
 		end
 		if not (#hex == 8 and hex:find("^%x+$")) then
-			return ("Proc %d: %s is not a colour. Six or eight digits, such as ffd100."):format(number, value)
+			return ("%s: %s is not a colour. Six or eight digits, such as ffd100."):format(label, value)
+		end
+		if auto then
+			Keep(entry, "colour", hex)
 		end
 		entry.colour = hex
-		ns.TrackerDirty()
-		return ("Proc %d: colour is %s."):format(number, hex:sub(3))
+		Restyled(auto)
+		return ("%s: colour is %s."):format(label, hex:sub(3))
 	elseif word == "time" then
 		local seconds = tonumber(value)
 		if not (seconds and seconds >= 0 and seconds <= K.MAX_TIME) then
-			return ("Proc %d: time is 0 to %d seconds."):format(number, K.MAX_TIME)
+			return ("%s: time is 0 to %d seconds."):format(label, K.MAX_TIME)
 		end
-		entry.time = seconds
-		ns.TrackerDirty()
-		return seconds == 0 and ("Proc %d: no time limit."):format(number) or ("Proc %d: time is %s seconds."):format(number, tostring(seconds))
+		if auto then
+			Keep(entry, "time", seconds)
+			entry.time = seconds > 0 and seconds or nil
+		else
+			entry.time = seconds
+		end
+		Restyled(auto)
+		return seconds == 0 and ("%s: no time limit."):format(label) or ("%s: time is %s seconds."):format(label, tostring(seconds))
 	elseif word == "trigger" then
 		local def = P.triggers[value:lower()]
 		if not def then

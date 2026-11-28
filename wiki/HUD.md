@@ -34,7 +34,7 @@ To show the minimap buttons only while the mouse is over the minimap, turn on **
 
 ### Text around the map
 
-Four lines of text can sit above or below the map. Each has its own place row, **Above the map** or **Below the map**.
+Four lines of text can sit above or below the map, or on it. Each has its own place row, **Above the map**, **Below the map** or **On the map, at the bottom**. On the map, the line sits just inside the map's bottom edge, outlined so it reads over the ground, with its tooltip, click and light under the mouse as before; on a round map it is raised so it stays inside the circle. Lines on the map stack upward from the edge and take no room under the map, so the **Row under the map** of addon buttons and the zone name keep their place.
 
 - **Coordinates** (on, below the map): your place on the zone map. **Coordinate decimals** is **One (45.3, 62.1)** by default, or **None (45, 62)** or **Two (45.31, 62.08)**. The line is hidden in instances, where the game gives no position. It also hides while the game's own coordinates show under the map (the game's Options, Interface, Coordinates), so you see your place once. Turn the game's off to have Flat UI's line, with its tooltip and Shift-click.
 - **Durability** (on, below the map): your most worn equipped item, yellow at 50% or less and red at 20% or less. **Durability shows** is **Always** by default. Pick **At 50% or less** or **At 20% or less** and the line only comes as an item wears to that mark, and goes again after a repair. The lines under it close up while it is away.
@@ -85,7 +85,7 @@ The **Buffs and debuffs** page styles the game's buff and debuff icons.
 **Duration format**, **Duration colour** and **Red under** also cover the totem times under the player frame.
 
 - **Duration size** (100%) and **Stack count size** (100%) size the time and the stack count.
-- **Duration format**: **No space (8m)** by default, **As the game has it (8 m)**, or **Minutes and seconds (28:41)**. With minutes and seconds, a flask or Arcane Intellect reads 28:41 or 1:05 before a pull, then plain seconds in its last minute. An hour or more keeps the short form, as 2h.
+- **Duration format**: **No space (8m)** by default, **As the game has it (8 m)**, or **Minutes and seconds (28:41)**. With minutes and seconds, a flask or Arcane Intellect reads 28:41 or 1:05 before a pull, then plain seconds in its last minute. An hour or more reads as hours and minutes, as 1h42 or 1h05, down to 59:59.
 - **Duration colour**: **White** by default, in place of the game's gold. **White, red near the end** turns a time red once **Red under** (10 s, 3 to 60 s) is left, and white again on a fresh buff, so a buff about to drop stands out. 60 s suits a flask, 3 s a Sunder Armor. A time the game withholds in a fight stays white. **As the game has it (gold, white under 90 s)** gives the game's colours back.
 - **Tenths below** (0 s, which is off, up to 10 s) writes the last seconds of a buff or debuff with tenths, as 4.8, 4.7. A rogue can refresh Slice and Dice at the last moment this way. The time still turns red at **Red under**. Totem times stay in whole seconds, as the game gives them.
 
@@ -110,7 +110,7 @@ The **Objective tracker** row of the **Fading** page can fade the tracker too. S
 - **Warn as the log fills** (on) turns the count amber at one free slot. When the log becomes full while you play, the count gives a short red pulse and chat says once "Flat UI: your quest log is full (20/20)." The first count after you log in or reload never warns.
 - **Quests ready in the count** (on) adds how many of your quests are ready to hand in, as "12/20  3 ready", in the experience bar's **Quest colour**. The count pulses once as another quest becomes ready.
 
-Point at the count for your quests, those ready to hand in and their experience. A click opens the quest log, in a fight as the fight ends.
+Point at the count for your quests, those ready to hand in and their experience. With **Quests ready in the count** on, up to five of the quests ready to hand in follow by name in **Quest colour**, as "Kobold Camp Cleanup", then "and 2 more" for the rest, kept up to date while you point at it. A click opens the quest log, in a fight as the fight ends.
 
 ### Questie's tracker
 
@@ -209,6 +209,7 @@ The rest of this section is about Flat UI's own bar.
 - **Experience colour** fills the bar. With **Rested experience** (on), a stretch shows how far your rested experience reaches, and the fill takes **Rested colour** while you are rested.
 - **Reputation fill** is **By standing** (the default) or **One colour**, with **Reputation colour**.
 - **Bar texture** sets the fill's texture.
+- **Bar art**: **Flat fill** (the default) or **The game's modern art**, which fills the experience bar with the game's purple, blue while you are rested, and the reputation bar with its standing's red, orange, yellow, green or blue, on the game's dark bar background. **Bar texture**, **Experience colour** and the standing colours then give way to it, and **Bar background** off leaves out the dark background. The tooltip, the quest stretch, the gains and the text work as before. Where the game has no such art, the bar keeps its flat fill and `/flatui status` says so.
 
 ### Text
 
@@ -282,7 +283,7 @@ Place the panels with the **Top data panel** and **Bottom data panel** boxes in 
 | **Guild online** | how many guild members are online | opens the guild window |
 | **Equipment set** | the equipment set you wear | changes the set |
 
-A slot that shows nothing for this character takes no room: **Soul shards** for a warrior, **Ammunition** without a bow, crossbow, gun or thrown weapon, **Experience** at the top level. A window a click opens in a fight opens as the fight ends, with a line in chat that says so. Feeds that other addons offer can fill a slot too.
+A slot that shows nothing for this character takes no room: **Soul shards** for a warrior, **Ammunition** without a bow, crossbow, gun or thrown weapon, **Experience** at the top level. A window a click opens in a fight opens as the fight ends, with a line in chat that says so. The **Hearthstone** slot's click goes with its panel: if the panel or the page is turned off in a fight, nothing is left to click where it was once the fight ends. Feeds that other addons offer can fill a slot too.
 
 ### Choosing a slot's content with the mouse
 

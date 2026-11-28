@@ -438,7 +438,33 @@ local function Room(edge, anchor, offset)
 	end
 end
 
-local function Place()
+local function Catch()
+	local catch, frame = S.catch, S.frame
+	if not (catch and frame) then
+		return
+	end
+	local ok, left, bottom, width, height = pcall(function()
+		return frame:GetLeft(), frame:GetBottom(), frame:GetWidth(), frame:GetHeight()
+	end)
+	if not (ok and Finite(left) and Finite(bottom) and Finite(width) and Finite(height)) then
+		return
+	end
+	local k = Scale(frame) / Scale(catch)
+	local x, y, right, top = left * k, bottom * k, (left + width) * k, (bottom + height) * k
+	local key = ("%.2f:%.2f:%.2f:%.2f"):format(x, y, right, top)
+	if S.caught == key then
+		return
+	end
+	if pcall(function()
+		catch:ClearAllPoints()
+		catch:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
+		catch:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", right, top)
+	end) then
+		S.caught = key
+	end
+end
+
+local function Settle()
 	local frame = S.frame
 	if not frame then
 		return
@@ -506,6 +532,11 @@ local function Place()
 	end
 	S.where, S.stepped = "screen", false
 	SetRoom(nil, nil)
+end
+
+local function Place()
+	Settle()
+	Catch()
 end
 
 Later = function()
@@ -855,10 +886,10 @@ end
 
 local function Owned()
 	local tip = GameTooltip
-	if not S.frame or ns.Forbidden(tip) then
+	if not S.catch or ns.Forbidden(tip) then
 		return false
 	end
-	local ok, owned = pcall(tip.IsOwned, tip, S.frame)
+	local ok, owned = pcall(tip.IsOwned, tip, S.catch)
 	return ok and not IsSecret(owned) and owned == true
 end
 
@@ -888,7 +919,7 @@ local function Tip()
 			none, unknown = none or value == false, unknown or value == nil
 		end
 	end
-	tip:SetOwner(S.frame, "ANCHOR_BOTTOM")
+	tip:SetOwner(S.catch, "ANCHOR_BOTTOM")
 	tip:AddLine(TIP.title, 1, 1, 1)
 	tip:AddLine(TIP.percent, DIM[1], DIM[2], DIM[3], true)
 	if cap then
@@ -907,32 +938,11 @@ local function Tip()
 	S.tipped = true
 end
 
-local function Guarded(frame)
-	if Ask(InCombatLockdown) ~= true then
-		return false
-	end
-	local ok, protected = pcall(frame.IsProtected, frame)
-	return not ok or IsSecret(protected) or protected == true
-end
-
 local function Hover()
-	local frame = S.frame
+	local catch = S.catch
 	local want = S.visible == true and Opt("hitTableHover") ~= false
-	if frame and S.motion ~= want then
-		if Guarded(frame) then
-			if not S.hoverWaits then
-				S.hoverWaits = true
-				ns.OutOfCombat(function()
-					S.hoverWaits = false
-					Safe(Hover)
-				end)
-			end
-		else
-			pcall(frame.SetMouseClickEnabled, frame, false)
-			if pcall(frame.SetMouseMotionEnabled, frame, want) then
-				S.motion = want
-			end
-		end
+	if catch then
+		pcall(catch.SetShown, catch, want)
 	end
 	if not want then
 		Untip()
@@ -1004,6 +1014,7 @@ Update = function(force)
 	Layout(g, lines)
 	Fill(columns, lines, title, note)
 	Visible(allowed and #lines > 0, force)
+	Catch()
 	if S.tipped then
 		if Owned() then
 			Tip()
@@ -1172,6 +1183,9 @@ Off = function()
 		S.frame:Hide()
 		S.visible = nil
 	end
+	if S.catch then
+		pcall(S.catch.Hide, S.catch)
+	end
 end
 
 local function Build()
@@ -1182,14 +1196,21 @@ local function Build()
 	ns.Own[frame] = true
 	frame:SetFrameStrata("LOW")
 	frame:EnableMouse(false)
-	frame:SetScript("OnEnter", function()
-		Safe(Tip)
-	end)
-	frame:SetScript("OnLeave", function()
-		pcall(Untip)
-	end)
 	frame:SetSize(1, 1)
 	frame:Hide()
+	local catch = CreateFrame("Frame", nil, UIParent)
+	ns.Own[catch] = true
+	catch:SetFrameStrata("LOW")
+	pcall(catch.SetMouseClickEnabled, catch, false)
+	pcall(catch.SetMouseMotionEnabled, catch, true)
+	catch:SetScript("OnEnter", function()
+		Safe(Tip)
+	end)
+	catch:SetScript("OnLeave", function()
+		pcall(Untip)
+	end)
+	catch:Hide()
+	S.catch = catch
 	local rail = CreateFrame("Frame", nil, UIParent)
 	ns.Own[rail] = true
 	local outline = ns.Outline(frame, frame, true)

@@ -1,8 +1,8 @@
-Every setting of the **Frames and bars** group of the options window, 532 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Frames and bars](Frames-and-bars) and [Nameplates](Nameplates).
+Every setting of the **Frames and bars** group of the options window, 537 in all, with its default in a new profile, which is how **Jon Default** has it. The guide is [Frames and bars](Frames-and-bars) and [Nameplates](Nameplates).
 
 Pages: [Unit frames](#unit-frames) · [Nameplates](#nameplates) · [Cast bars](#cast-bars) · [Personal resource display](#personal-resource-display) · [Swing timers](#swing-timers)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 ## Unit frames
 
@@ -183,6 +183,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Health text** | As the game has it | Choices: As the game has it, Hidden, Current, Current / max, Percent, Current and percent, Missing. |
 | **Power text** | As the game has it | Choices: As the game has it, Hidden, Current, Current / max, Percent, Current and percent, Missing. |
 | **Power bar** | On |  |
+| **Party power bars for** | Every member | Healers only keeps the power bar on members with the healer role. A member with no role keeps theirs. Choices: Every member, Healers only. Needs **Power bar** on. |
 
 **Range**
 
@@ -237,6 +238,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Power bar width** | Same as the health bar | Game's width can run past the health bar on the target, focus and target of target frames. Choices: Same as the health bar, Game's width. Needs **Frame style** at Separate parts. |
 | **Hide empty power bar** | On | Hides the power bar of a unit that has no power. |
 | **Colour health bars by health left** | Off | In the three colours of the Colours page, raid cells too. Needs **Flat bars** on. |
+| **Lost health trail** | On | A pale band shows the health a hit took and drains to the new health. Not on raid cells, nor with Dark health bar, colour shows what is lost. Needs **Flat bars** on. |
 
 **Portraits**
 
@@ -470,7 +472,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Low health border** | On | A nameplate's health bar border lights in Low health border colour once its health drops below Low health below. |
 | **Low health below** | 20% | The share of health under which the low health border lights, and where its line crosses enemy health bars. Needs **Low health border** on. |
 | **Low health border colour** | #FF3333 | The colour of the low health border and of its line. Needs **Low health border** on. |
-| **Line at Low health below** | On | A thin line in the Low health border colour across each enemy's health bar at Low health below, so you see how near an enemy is to it, such as Execute range at 20%. Needs **Low health border** on. |
+| **Line at Low health below** | On | A thin line in the Low health border colour across the health bar of each enemy in a fight at Low health below, so you see how near an enemy is to it, such as Execute range at 20%. Enemies out of a fight show none, and the line stays one screen pixel wide on your target too. Needs **Low health border** on. |
 
 ### Threat
 
@@ -523,7 +525,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Flash the ring when threat goes wrong** | On | The ring flashes twice as an enemy turns to you, or away from you while you tank. Needs **Threat glow** at When the enemy needs you or Every threat state. |
 | **Threat ring thickness** | 2 px | In screen pixels, so it keeps its thickness at any resolution. It grows outward, clear of an elite's border. Needs **Threat glow** at When the enemy needs you or Every threat state. |
 | **Mark enemies you are losing** | On | While you count as a tank, an enemy changing hands or on someone else pulses with a soft glow in its threat colour, faster once it is lost, under a small arrow, so you see which to take back. Enemies you hold, and every enemy while you are not a tank, show none. Needs **Threat on nameplates** on. |
-| **Magnified plate for enemies you are losing** | On | While you count as a tank, an enemy you are losing gets a magnified copy of its plate, drawn over it and above every other plate: its health bar in its threat colour, its name and its raid marker, carrying the glow and arrow, and the target or focus border while it is your target or focus. It starts at the plate's own size once another member reaches Slipping at of your threat (Threat list), grows as their share rises and reaches the size below once someone else holds the enemy, easing as the threat moves, then shrinks back and goes once you take the enemy back and their share falls under Slipping at. It takes no clicks, so a click still reaches the enemy's plate, and it works in a fight. Needs **Mark enemies you are losing** on. |
+| **Magnified plate for enemies you are losing** | On | While you count as a tank, an enemy you are losing gets a magnified copy of its plate, drawn over it and above every other plate: its health bar in its threat colour, its name, its raid marker, its threat value outside the bar on the side Threat value position sets, its health text and the line at Low health below, carrying the glow and arrow, and the target or focus border, target mark and flash while it is your target or focus. The plate's own name, raid marker and threat value fade out under it, and the arrow stands over the plate's debuffs, Overpower icon and quest mark. While the enemy casts, it grows upward so its cast bar stays clear. It starts at the plate's own size once another member reaches Slipping at of your threat (Threat list), grows as their share rises and reaches the size below once someone else holds the enemy, easing as the threat moves, then shrinks back and goes once you take the enemy back and their share falls under Slipping at. It takes no clicks, so a click still reaches the enemy's plate, and it works in a fight. Needs **Mark enemies you are losing** on. |
 | **Size of an enemy you have lost** | 150% | How large the magnified plate of an enemy grows once someone else holds it. On the way there it grows with the threat another member has of yours, from the plate's own size at Slipping at; at 100% it stays the plate's size. Needs **Magnified plate for enemies you are losing** on. |
 | **Flash as you take an enemy back** | On | While you count as a tank, the glow of an enemy someone else held flashes once in Threat you want as it turns back to you, so you see your taunt land. Needs **Mark enemies you are losing** on. |
 | **Threat colour on the health bar border** | Off | Your target, focus and mouseover keep their border colour, and it needs Health bar border. Needs **Threat on nameplates** on. |
@@ -653,6 +655,9 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Soft glow round the mark** | On | A soft glow in Target mark colour fades out from the target mark, past the threat ring while that shows. Off leaves the bright outline alone. Needs **Target mark** on. |
 | **Arrows at your target** | On | Two arrows in Target mark colour, edged in black so they read on bright ground, point in at your target's health bar from both sides, outside what sits beside it: its class icon, quest mark, level box, raid marker, elite icon, threat value and auras. They move out with the threat value as it grows in a fight. Needs **Target mark** on. |
 | **Arrow size** | 100% | 100% makes each arrow about twice as tall as the health bar. Needs **Arrows at your target** on. |
+| **Arrows turn red in Low health** | On | Once your target drops under Low health below, the two arrows turn Low health border colour, so Execute or Hammer of Wrath range shows on the brightest thing on screen. They turn back as the target heals or you change target. While Mark your focus too is on, your focus's arrows turn red the same way. Needs **Arrows at your target** on. |
+| **Arrows move** | On | On each new target the arrows slide in from a little further out, and while the target stays they push in and out a little about once a second, so your eye finds the target in a busy pull. Off keeps them still. Needs **Arrows at your target** on. |
+| **Mark your focus too** | Off | Your focus gets its own outline, glow and arrows in Focus colour, as your target does, turning red in Low health as your target's do, so a Polymorph or Sap you keep on it stays easy to find in a pack. They follow its nameplate in a fight too, and are left off while your focus is also your target. Needs **Target mark** on. |
 | **Target nameplate size** | 120% | The game's own size of your target's nameplate against the others, so the nameplate Tab takes stands out; 120% is the game's own. The game keeps it for each character, so an alt has its own, whatever the profile. Sets the game's `nameplateSelectedScale`. |
 | **Other nameplates' opacity** | 100% | While you have a target, the game fades every other nameplate to this, so your target stands out; 100% is no fade, as the game has it, and 80% a light one. The game keeps it on this computer, for every character, whatever the profile. Sets the game's `nameplateNotSelectedAlpha`. |
 
@@ -878,7 +883,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Spell name colour** | #FFFFFF | Used while Own spell name colour is on. White at first. Needs **Own spell name colour** on. |
 | **Cast time on target and focus bars** | On | Seconds left, at the right end of the bar, in the spell name's size and outline. |
 | **Target of enemy casts** | On | Whom the cast on your target's or focus's bar is aimed at, as &gt; Bex, just past the bar's right end, so you see who is about to be hit or sheeped. The name takes the class colour of that player, as the game's nameplates colour it. It stays while the bar fades or holds Interrupted, so you still see whom a kicked cast was aimed at. |
-| **Seconds until your interrupt is ready** | On | While an enemy you target or focus casts and your interrupt cools down, your own or your Felhunter's Spell Lock, its seconds left count down inside the left end of the bar, outlined, in Interrupt on cooldown colour, so you see whether Kick is back before the cast lands. On a Flat fill, which already takes that colour, the number is white, or Spell name colour with Own spell name colour. Works while Interrupt readiness on enemy casts is on. |
+| **Seconds until your interrupt is ready** | On | While an enemy you target or focus casts and your interrupt cools down, your own or your Felhunter's Spell Lock, its seconds left count down inside the left end of the bar, outlined, in Interrupt on cooldown colour, so you see whether Kick is back before the cast lands. On a Flat fill, which already takes that colour, the number is white, or Spell name colour with Own spell name colour. The cast bar on the nameplate of your target and focus counts them too, in white on a Flat nameplate cast bar, inside its right end beside the cast time, as the spell name takes the left. Works while Interrupt readiness on enemy casts is on. |
 | **Cast time on your bars** | Off | Seconds left, inside the right end of your cast bar and your pet's; the game's own time from Edit Mode is hidden meanwhile. |
 | **Total cast time too** | Off | Seconds left and the whole cast, as 1.2 / 2.5, on the bars of the two rows above. |
 | **Pushback on your bar** | On | How far hits have set your cast back, as +0.5 in Pushback colour just past the right end of your cast bar, or after the game's own seconds from Edit Mode; a channel cut short shows -0.8. Each new delay makes it pop. It stays as the bar flashes or holds Interrupted, and fades with it. |
@@ -968,8 +973,8 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | **Spacing** | 3 |  |
 | **Icon border** | On |  |
 | **Flash when one lands** | On | A quick white flash on the icon as one of these buffs comes, not when one that shows is cast again. Drawn by the game, so also in a fight. |
-| **Sound when one ends** | None | Once as one of the short buffs of your class leaves you, such as Slice and Dice, also in a fight, since the game plays it. Also for your own defensives shown on Defensives on you, such as Ice Barrier or Shield Wall. A buff with a tracker is left out, since the tracker has its own sound, and so is one that lasts longer than Time limit. Out of combat, a pick plays it. Choices: None, Raid warning, Alarm, Whisper warning. |
-| **Bar texture** | `default` | Needs **Time left** at Thin bar under the icon. |
+| **Sound when one ends** | None | Once as one of the short buffs of your class leaves you, such as Slice and Dice, also in a fight, since the game plays it. Also for your own defensives shown on Defensives on you, such as Ice Barrier or Shield Wall. A buff whose tracker plays its own sound as it drops is left out, and so is one that lasts longer than Time limit. Out of combat, a pick plays it. Choices: None, Raid warning, Alarm, Whisper warning. |
+| **Bar texture** | `default` | The thin bar under each icon, here and on Defensives on you, so the two rows match. Dimmed while neither has Time left at Thin bar under the icon. |
 | **Buff tooltips** | On | Settings on the Tooltips page do not change this tooltip. Choices: On, Out of combat only, Off. |
 
 **Position**
@@ -1040,7 +1045,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.48.
 | Setting | Default | Notes |
 | --- | --- | --- |
 | **Out of range opacity** | 40% | How see-through a timer is while your target is out of its reach. The game's own is 40%. |
-| **Show the timer** | In combat | Works with Main hand border, Off hand border or Ranged border on. In combat and Only while swinging fade the timer and its border out over a quarter second as the fight ends or the swings stop. With Edit Mode's own Visibility at In combat, the game hides the timer itself, at once. Choices: Always, In combat, Only while swinging. |
+| **Show the timer** | In combat | Works with Main hand border, Off hand border or Ranged border on. In combat and Only while swinging fade the timer and its border in as a fight or the first swing starts, and out over a quarter second as the fight ends or the swings stop. With Edit Mode's own Visibility at In combat, the game hides the timer itself, at once. Choices: Always, In combat, Only while swinging. |
 
 **Text**
 
