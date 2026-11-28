@@ -208,8 +208,9 @@ local function ArtData(entry)
 	local row = RowOf(entry)
 	local own = row and type(row.art) == "table" and row.art.look or nil
 	if signal then
-		return { file = signal.file, location = signal.location, scale = signal.scale or 1, r = signal.r, g = signal.g, b = signal.b, most = Most(row),
-			look = own }
+		local tinted = type(own) == "table" and type(own.tint) == "table"
+		return { file = signal.file, location = signal.location, scale = signal.scale or 1, r = not tinted and signal.r or nil,
+			g = not tinted and signal.g or nil, b = not tinted and signal.b or nil, most = Most(row), look = own }
 	end
 	if row and row.noArt == true then
 		return false

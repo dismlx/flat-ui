@@ -569,8 +569,10 @@ local function MakeMist()
 		fade:SetToAlpha(step[3])
 		fade:SetDuration(step[4])
 		made[step[1]] = group
+		made[step[1] .. "Step"] = fade
 	end
 	made.fadeIn:SetScript("OnPlay", function()
+		made.since = Now()
 		frame:SetAlpha(0)
 	end)
 	made.fadeIn:SetScript("OnFinished", function()
@@ -613,16 +615,24 @@ local function MistOut(now)
 		return
 	end
 	mist.rec = nil
+	local from = 1
+	if mist.fadeIn:IsPlaying() then
+		local since = Plain(mist.since, "number") and mist.since or Now()
+		from = math.max(0, math.min(1, (Now() - since) / K.MIST_IN))
+	end
 	mist.fadeIn:Stop()
-	if now or not mist.frame:IsShown() then
+	if now or not mist.frame:IsShown() or from <= 0 then
 		mist.fadeOut:Stop()
 		mist.frame:Hide()
 	elseif not mist.fadeOut:IsPlaying() then
+		mist.fadeOutStep:SetFromAlpha(from)
+		mist.fadeOutStep:SetDuration(math.max(0.05, K.MIST_OUT * from))
+		mist.frame:SetAlpha(from)
 		mist.fadeOut:Play()
 	end
 end
 
-local function Mist(rec, r, g, b, wanted)
+local function Mist(rec, r, g, b, wanted, again)
 	if not mist then
 		return
 	end
@@ -633,10 +643,16 @@ local function Mist(rec, r, g, b, wanted)
 		return
 	end
 	if mist.rec ~= rec then
+		local shown = mist.frame:IsShown() and mist.fadeOut:IsPlaying()
 		mist.rec = rec
 		mist.fadeOut:Stop()
 		mist.frame:Show()
-		mist.fadeIn:Play()
+		if again or shown then
+			mist.fadeIn:Stop()
+			mist.frame:SetAlpha(1)
+		else
+			mist.fadeIn:Play()
+		end
 	end
 end
 
@@ -727,7 +743,7 @@ local function Layout(rec, again)
 		end
 	end
 	rec.first = rec.pieces[wanted[1]]
-	Mist(rec, r, g, b, moves ~= nil and moves.mist and next(rec.pieces) ~= nil)
+	Mist(rec, r, g, b, moves ~= nil and moves.mist and next(rec.pieces) ~= nil, again)
 	Wake()
 end
 
@@ -800,13 +816,15 @@ local function Flickers(rec)
 			left = ends - Now()
 		end
 	end
-	local up = left ~= nil and left > 0
-	local want = up and left <= K.FLICKER_AT
+	if not (left ~= nil and left > 0) then
+		return false
+	end
+	local want = left <= K.FLICKER_AT
 	if want ~= (rec.flicker == true) then
 		rec.flicker = want
 		Layout(rec)
 	end
-	return up
+	return true
 end
 
 local function Step()
