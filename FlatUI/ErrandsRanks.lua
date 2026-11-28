@@ -660,6 +660,8 @@ local function Pickup(item)
 	return false
 end
 
+E.PickupSpell, E.Placer, E.CursorBusy = Pickup, Placer, Busy
+
 local function CursorSpell(item)
 	local ok, kind, _, _, id = pcall(GetCursorInfo)
 	if not ok or ns.IsSecret(kind) or ns.IsSecret(id) or kind ~= "spell" then

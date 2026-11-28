@@ -2,6 +2,10 @@ local _, ns = ...
 
 ns.WhatsNewData = {
 	{
+		version = "0.5.52",
+		lines = {},
+	},
+	{
 		version = "0.5.51",
 		lines = {
 			"Windows: new row \001Theme\002 at the top of the \001Look\002 section: \001Flat\002 (as before) or \001Starcaller Dark Side\002, black and red. \001Starcaller Dark Side\002 gives the game's windows, Flat UI's own windows (the bags and bank, the gear comparison window and item finder, the trinket queue, \001What's new\002 and the copy boxes) and the options window near-black backgrounds, nearly solid, with deep red borders, the titles, the chosen tab, highlights and ticked check boxes in a deep red, and a faint red glow just outside each window's edge that brightens a little while you point at it. The options window takes the red as its accent. It changes at once, and a window the game guards in a fight changes as the fight ends. Your own colours, \001Window opacity\002 and the options window's \001Accent colour\002 are kept and come back with \001Flat\002.",
@@ -183,34 +187,6 @@ ns.WhatsNewData = {
 			"\001Combat text\002: new \001Size of the Incoming area\002 on the \001Scroll areas\002 tab: \001Same as numbers over enemies\002 (the default), \001Same as your text\002 or \001Smaller than numbers over enemies\002. The numbers on you now follow \001Size\002 like your own hits do, so a hit on you is as easy to read as your hit on the enemy. Before, the numbers on you were always \001Size of your text\002 (90%) next to numbers at 170%. Pick \001Same as your text\002 to keep them at \001Size of your text\002.",
 			"\001Combat text\002: \001Miss words\002 now shows Miss, Dodge, Parry and the other words as a bare word by default, as \"Dodge\". \001In parentheses\002 still gives \"(Dodge)\".",
 			"\001Combat text\002: new \001Size of miss words\002 under \001Look\002. These words are now three quarters the size of the numbers they show with by default (over enemies, over friendly units and in both scroll areas), so a Dodge no longer looks larger than the hits around it. \001Same as the numbers\002 keeps the old size. Setup's combat text picture, and the On you column of its \001Combat alerts\002 picture, follow both new rows.",
-		},
-	},
-	{
-		version = "0.5.46",
-		lines = {
-			"Tanks can announce what they avoid: turn on \001Announce blocks, dodges and parries\002 (off by default, under the new \001Announce to your group\002 section on the \001You and warnings\002 tab of \001Combat text\002). While you count as a tank in a party or raid, each attack you block, dodge or parry, or that misses you, sends a short line to your group's chat: \"Dodged\", \"Parried\", \"Missed me\", \"Blocked 245\", or \"Blocked 120 of a hit\" when a hit gets through your shield.",
-			"\001Send to\002 picks where the lines go: \001Your group's chat\002 (instance chat in an instance group, else raid chat in a raid and party chat in a party), \001Party chat only\002, \001Raid chat only\002, or \001Only me\002, which writes them in your own chat window and sends nothing.",
-			"\001How often\002 keeps the group's chat calm. \001Each one\002 (the default) sends at most one line a second and counts the rest into the next line, as \"Dodged x3\". \001A summary every few seconds\002 sends \"Last 5 s: 3 dodges, 2 parries, 4 blocks\" (\001Seconds of a summary\002, 3 to 15). \001One line when the fight ends\002 sends \"Fight: 12 dodges, 8 parries, 15 blocks, 3 misses\" once the fight is over.",
-			"\001Announce blocks\002, \001dodges\002, \001parries\002 and \001misses\002 are on at first. \001Announce resists\002, \001immunities\002 and \001absorbs\002 (whole ones only) are off.",
-			"Nothing is sent while you are alone, in a battleground or arena, while you do not count as a tank, or while the game closes addon chat. The announce needs \001Place combat numbers\002 on, as the combat alerts do.",
-			"/flatui announce says where the lines go now, or why nothing is sent, and whether you count as a tank. /flatui announce test shows sample lines in your own chat window only. /flatui status counts the lines sent.",
-			"Nameplates: \001Enlarge enemies you are losing\002 is now \001Magnified plate for enemies you are losing\002 (on), under \001Mark enemies you are losing\002 on the \001Threat\002 tab. While you tank, an enemy you are losing gets a larger copy of its plate, drawn over it and above every other plate: its health bar in its threat colour, its name and its raid marker, with the glow and arrow on it. Before, the game kept the plate from changing size in a fight, so only its glow grew, as a red line round the plate.",
-			"Nameplates: the magnified plate grows smoothly with how far your threat has slipped instead of in two steps. It starts at the plate's own size once another member reaches \001Slipping at\002 of your threat (80% by default, the same share the threat list uses). It reaches \001Size of an enemy you have lost\002 once they reach 110% or someone else holds the enemy, easing over a fifth of a second about the centre of the health bar as the share moves.",
-			"Nameplates: the magnified plate shrinks back and goes once you take the enemy back and the share falls under \001Slipping at\002, or once you no longer count as a tank. It goes at once as the plate hides or the row is turned off. Where the game withholds the threat on an enemy, or you are not in a group, one changing hands is drawn halfway and one on someone else at full size.",
-			"Nameplates: the magnified plate of your target or focus carries the \001Target and focus border\002 in \001Target colour\002 or \001Focus colour\002, as the plate under it does, and changes the moment you change target or focus, so the enemy you tab to stands out.",
-			"Nameplates: the magnified plate takes no clicks, so a click on it still reaches the enemy's plate underneath, and it works in a fight. Flat UI no longer tries to resize or move the game's own plate.",
-			"Nameplates: \001Size of an enemy you have lost\002 is now 150% by default and goes up to 200% (before, 130% and up to 160%).",
-			"Nameplates: \001Flash as you take an enemy back\002 now flashes on the magnified plate while it shows.",
-			"Nameplates: test mode's sample nameplate and Setup's \001Nameplate colours and threat\002 step show the magnified plate on the sample with threat you do not want; in test mode it grows in as it appears.",
-			"Nameplates: the \001Mark enemies you are losing\002 line of /flatui status now counts the plates shown magnified, in place of the plates enlarged and the glows that grew while the game kept their plate.",
-			"Setup: the \001Slipping at\002 sentence on the \001Threat list\002 step now says the magnified nameplate starts to grow from that share.",
-			"New \001Target mark\002 (on), under \001Target and focus\002 on the \001Marks and icons\002 tab of \001Nameplates\002: a bright outline round your target's health bar in \001Target mark colour\002 (white at first), one pixel thicker than the threat ring and drawn above the bars of the nameplates round it, so your target reads at a glance in a pack, in a fight too. A nameplate the game first shows in a fight takes its mark as that fight ends.",
-			"New \001Arrows at your target\002 (on): two small arrows in \001Target mark colour\002 point in at your target's health bar from both sides, past what sits beside it (its class icon, level, raid marker, elite icon, threat value and quest mark), above the nameplates round it, and move out with the threat value as it grows in a fight, so they stay clear of the number.",
-			"\001Flash as you change target\002 now flashes just past the target mark and above the nameplates round it, so the flash still shows over the mark.",
-			"\001Target nameplate size\002 (was \001Target nameplate scale\002) and \001Other nameplates' opacity\002 (was \001Opacity of other nameplates with a target\002), the game's own size of your target's nameplate and its fade of the others, now sit under \001Target and focus\002 on the \001Marks and icons\002 tab, with tips that say what they do. The game keeps both, so they show the game's value and Flat UI writes nothing until you move them.",
-			"New \001Spread of enemy nameplates\002 under \001Size and stacking\002: \001Overlap, as the game has it\002, \001A slight spread\002 (the game's stacking for enemies with \001Vertical overlap\002 at 70% and a slightly slower plate motion, so a pack still clusters but every nameplate shows) or \001Stack them\002, the game's full stacking. It sets \001Stack enemy nameplates\002 and \001Vertical overlap\002 and follows them as they change, and is left out where the game lacks or locks them.",
-			"The tip of \001Vertical overlap\002 now says it the right way round: higher spreads stacked nameplates further apart, lower lets them cluster.",
-			"Setup's nameplate drawings show the target mark and its arrows on their target samples, the \001Nameplate size, distance and clicks\002 drawing spreads its plates to match \001Spread of enemy nameplates\002, and test mode's sample nameplate is now your target, with its mark.",
 		},
 	},
 }
