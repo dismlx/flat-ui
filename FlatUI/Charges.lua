@@ -738,6 +738,10 @@ function C.Layout()
 	end
 end
 
+local function Room()
+	return C.spot == "below" or C.spot == "above"
+end
+
 function C.Across(list)
 	local gap = L.Number("orbSize", 12) * 0.6 + 6
 	local total, kept, tall = -gap, 0, 1
@@ -745,6 +749,8 @@ function C.Across(list)
 		if not Spare(d) then
 			total = total + d.w + gap
 			kept = kept + 1
+			tall = math.max(tall, d.h)
+		elseif Room() then
 			tall = math.max(tall, d.h)
 		end
 	end
@@ -756,8 +762,13 @@ function C.Across(list)
 		end
 	end
 	for _, d in ipairs(list) do
-		if Spare(d) then
+		if Spare(d) and not Room() then
 			C.Put(d, kept > 0 and x + d.w / 2 or 0, 0)
+		elseif Spare(d) then
+			x = kept > 0 and x or -d.w / 2
+			C.Put(d, x + d.w / 2, 0)
+			x = x + d.w + gap
+			kept = kept + 1
 		end
 	end
 	C.Height(tall)
@@ -776,6 +787,10 @@ function C.Stack(list)
 	for _, d in ipairs(list) do
 		if Spare(d) then
 			C.Put(d, 0, y > 0 and y or 0)
+			if Room() then
+				last = y
+				y = y + d.h + gap
+			end
 		end
 	end
 	C.Height(math.max(1, y - gap, last))
@@ -785,6 +800,8 @@ function C.Height(height)
 	local holder = C.holder
 	if C.spot == "own" then
 		holder:SetSize(L.Ringed() and 1 or ns.ChargesBar.WIDTH, L.Ringed() and 1 or height)
+	elseif not C.Gate() and not C.sample then
+		holder:SetHeight(1)
 	else
 		holder:SetHeight(height)
 	end
@@ -981,7 +998,7 @@ end
 
 function C.AnyUp()
 	for _, family in ipairs(C.Families()) do
-		if type(C.Read(family)) == "table" then
+		if not C.Covered(family) and type(C.Read(family)) == "table" then
 			return true
 		end
 	end
@@ -998,7 +1015,7 @@ local function SampleCount(steps, t)
 end
 
 function C.SampleKey()
-	return Opt("style") == "art" and ns.ChargesBar.ArtFor(BUILT.maelstrom) and "maelstrom" or "lightning"
+	return Opt("style") == "art" and ns.ChargesBar.ArtFor(BUILT.maelstrom) and not C.Covered(BUILT.maelstrom) and "maelstrom" or "lightning"
 end
 
 function C.SampleApply(now)

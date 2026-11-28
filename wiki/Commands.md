@@ -148,8 +148,7 @@ Guide: [Combat](Combat)
 | `/flatui tracker set 1 shape bar` | Draws one tracker as an `icon`, `bar` or `text` |
 | `/flatui tracker set 1 health 40` | Shows pet tracker 1's health in red under 40% |
 | `/flatui tracker set 3 kit bell` | Gives tracker 3 a sound of its own, as the **Sound** row of **Edit a tracker** does |
-| `/flatui tracker proc colour 1 ffd100` | Sets one proc's colour; `proc time` and `proc trigger` set its time and trigger |
-| `/flatui tracker proc colour Execute ff3030` | Gives a proc of your class its own colour, by its name or its number in **Remove a proc**; the art, border and glow take it at once |
+| `/flatui tracker proc colour 1 ffd100`, `proc colour Execute ff3030` | Gives a proc its own colour, by its number in `/flatui tracker list` or, for a proc of your class, its name or its number in **Remove a proc**; the art, border and glow take it at once. `proc trigger` sets its trigger |
 | `/flatui tracker proc sound Overpower bell` | Gives a proc its own sound: `none`, `spell`, `chimes`, `bell`, `warhorn`, `raid`, `alarm` or `whisper`. `none` silences it |
 | `/flatui tracker proc time Revenge 5` | Gives a proc its own time in seconds; `0` is no time limit |
 | `/flatui tracker proc reset Execute` | Puts a proc's colour, sound and time back as the page has them |
@@ -166,7 +165,7 @@ Guide: [Combat](Combat)
 | `/flatui absorbs test` | Shows sample bars of **Absorb shields** for a few seconds |
 | `/flatui absorbs check` | Says the amount, time and secrecy of each shield on you |
 | `/flatui absorbs add 17`, `remove 17`, `list` | Adds, removes or lists the shields it follows |
-| `/flatui charges` | Shows a sample of **Charges** in its look for 8 seconds, out of combat and while none of its buffs is on you: Lightning Shield losing its charges, or Maelstrom Weapon gaining stacks with **Spell art** |
+| `/flatui charges` | Shows a sample of **Charges** in its look for 8 seconds, out of combat and while none of its buffs is on you: Lightning Shield losing its charges, or Maelstrom Weapon gaining stacks with **Spell art** while the **Proc alerts** art does not build up its stacks |
 | `/flatui charges add Lightning Shield`, `remove`, `list` | Adds a buff with charges or stacks by name, spell ID or shift-clicked spell, takes one off, or lists them |
 | `/flatui enemy add Blink 15` | Adds an enemy ability and its cooldown in seconds |
 | `/flatui enemy hide 2139` | Hides an ability, by name or spell ID |

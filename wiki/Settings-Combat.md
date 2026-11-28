@@ -366,7 +366,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | **Art size** | 150% | 100% is the game's size. Needs **Art beside the character** on. |
 | **Art opacity** | 40% | 65% is the game's. The game's Spell Alert Opacity has no effect here. Needs **Art beside the character** on. |
 | **Art height** | 0 | Positive moves the art up from its Proc art box in /flatui move. Needs **Art beside the character** on. |
-| **Stacks build the art** | On | Maelstrom Weapon fills its art a fifth per stack from a faint outline, with the count on it. At 5 stacks it is full and pulses, the proc sound plays and, with Glow on the action button, Lightning Bolt glows. In a fight the game draws the fill and the number. Off, the art shows at 5 stacks alone. Needs **Art beside the character** on. |
+| **Stacks build the art** | On | Maelstrom Weapon fills its art a fifth per stack from a faint outline, with the count on it. At 5 stacks it is full and pulses, the proc sound plays and, with Glow on the action button, Lightning Bolt glows. In a fight the game draws the fill and the number. Off, the art shows at 5 stacks alone and the stacks show on Charges. Needs **Art beside the character** on. |
 | **Seconds left on the art** | On | The seconds a proc with a time has left, such as Overpower or Revenge, as a large number on its art in its colour, white and a little larger for the last 2 seconds. It fades out with the art. Execute and other procs with no time show none. Needs **Art beside the character** on. |
 
 **Glow**
@@ -391,7 +391,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 | **X offset** | 0 | Moves the row left or right of where Place puts it. Out of combat with no defensive on you, the samples show the new spot as you drag. Needs **Place** at Above the player frame or At the personal resource display. |
 | **Y offset** | 0 | Moves the row up or down from where Place puts it. Needs **Place** at Above the player frame or At the personal resource display. |
 | **Icon size** | 32 | Out of combat with no defensive on you, a change of this or another row of the look shows samples in the new look for a few seconds. The time left turns amber in its last 5 seconds. The numbers on the icon grow and shrink with it. |
-| **Time left** | On the icon | A thin bar under the icon runs down with the time left, in the Bar texture of Your buffs, open there while this row is the bar, and the caster's name moves under it. The bars the game draws in a fight change once the game shows your buffs again. Choices: On the icon, Thin bar under the icon, Off. |
+| **Time left** | On the icon | A thin bar under the icon runs down with the time left, in the Bar texture of Your buffs, open there while this row is the bar and Your buffs is on, and the caster's name moves under it. The bars the game draws in a fight change once the game shows your buffs again. Choices: On the icon, Thin bar under the icon, Off. |
 | **Spacing** | 3 |  |
 | **Caster's name** | On |  |
 | **Icon border** | On |  |
@@ -472,7 +472,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Charges** | On | Your buffs with charges, such as Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, and the stacks of Maelstrom Weapon, as a row of glowing gems like the game's own class resources, under the bars of the personal resource display: lit gems are the charges left, empty sockets the ones used, with the spell's name, the charges left and the time left. It shows while the buff is up. /flatui charges shows a sample. |
+| **Charges** | On | Your buffs with charges, such as Lightning Shield, Water Shield, Earth Shield, Inner Fire, Shadowguard and Holy Shield, and the stacks of Maelstrom Weapon while the Proc alerts art does not build them, as a row of glowing gems like the game's own class resources, under the bars of the personal resource display: lit gems are the charges left, empty sockets the ones used, with the spell's name, the charges left and the time left. It shows while the buff is up. /flatui charges shows a sample. |
 
 **Spells**
 
@@ -485,7 +485,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Orb style** | Resource bar | Resource bar: a row of gems in sockets, drawn with the game's own class resource art. Spell art: the game's own spell alert art for the buff, brighter with each charge, with the count and time under it; a buff without such art, such as Lightning Shield, shows the resource bar. Out of combat with no buff with charges on you, a change of this or another row of the look shows a sample for a few seconds. Choices: Resource bar, Spell art, Ring round the icon, Arc over the icon, Row under the icon. |
+| **Orb style** | Resource bar | Resource bar: a row of gems in sockets, drawn with the game's own class resource art. Spell art: the game's own spell alert art for the buff, brighter with each charge, with the count and time under it; a buff without such art, such as Lightning Shield, shows the resource bar. Maelstrom Weapon has such art, but while Art beside the character and Stacks build the art of Proc alerts are on, its stacks show on that art and not here. Out of combat with no buff with charges on you, a change of this or another row of the look shows a sample for a few seconds. Choices: Resource bar, Spell art, Ring round the icon, Arc over the icon, Row under the icon. |
 | **Fill the width** | On | Under or above the personal resource display, the gems spread out from end to end of its bars, each keeping its shape. Off, the gems sit 3 px apart in the middle, as they do at the row's own spot. With Spell art, the art takes the width of the bars, at most 240 px. Needs **Orb style** at Resource bar or Spell art. |
 | **Gem size** | 20 px | The size of each gem and its socket. The name, count and time grow and shrink with it. With Spell art, it sets only the size of the text under the art. Needs **Orb style** at Resource bar or Spell art. |
 | **Spell icon** | Off | The round spell icon in the middle of the orbs. Off, the orbs ring the count alone. Needs **Orb style** at Ring round the icon or Arc over the icon or Row under the icon. |
@@ -510,8 +510,8 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Only in combat** | Off | Out of a fight the orbs stay hidden; test mode and the samples still show them. |
-| **Hide while mounted** | Off | Hidden while you ride, and back as you get off. |
+| **Only in combat** | Off | Out of a fight the orbs stay hidden and the rows past them close up; test mode and the samples still show them. |
+| **Hide while mounted** | Off | Hidden while you ride, the rows past it closing up, and back as you get off. |
 
 **Sound**
 

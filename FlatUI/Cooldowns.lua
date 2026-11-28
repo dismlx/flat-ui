@@ -1886,6 +1886,7 @@ local function Layout()
 		RangeWatch()
 		R.Call("AfterLayout")
 		R.TellHitTable()
+		R.TellTrackers()
 		return
 	end
 	Holder():Show()
@@ -1925,11 +1926,23 @@ local function Layout()
 	RangeWatch()
 	R.Call("AfterLayout")
 	R.TellHitTable()
+	R.TellTrackers()
 end
 
 function R.TellHitTable()
 	if type(ns.HitTableMoved) == "function" then
 		pcall(ns.HitTableMoved)
+	end
+end
+
+function R.TellTrackers()
+	local frames, row = ns.CooldownRow()
+	local told = #frames .. (row and row:IsShown() and "+" or "-")
+	if R.told ~= told then
+		R.told = told
+		if type(ns.TrackerPlaceAgain) == "function" then
+			pcall(ns.TrackerPlaceAgain)
+		end
 	end
 end
 

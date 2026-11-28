@@ -83,7 +83,7 @@ Real nameplates are not forced on screen, so threat colours show on the sample p
 - The **hit table**, the sample text of empty **data panel** slots, and the **experience bar**: a sample bar while your real one has nothing to show, and sample gains rising from it. Your real numbers stay as they are.
 - **Group tools**, the **ping bar**, the **consumables bar**, the **cursor ring** and the **lava tick timer**.
 - The new spell ranks line, and the **reload notice** as a dimmed sample while nothing needs a reload.
-- **Charges**: a sample Lightning Shield with 3 charges that uses one every 2 seconds and is then cast again, while no buff with charges is on you.
+- **Charges**: a sample Lightning Shield with 3 charges that uses one every 2 seconds and is then cast again, or with **Orb style** at **Spell art** a sample Maelstrom Weapon gaining a stack each second up to 5 (Lightning Shield again while the **Proc alerts** art builds up Maelstrom Weapon's stacks), while no buff with charges is on you.
 - The minimap's text lines with sample values, as "45.2, 61.8" for the coordinates, "Durability 42%", the frame rate and the clock, while the real line has nothing to show, and the name of a sample ping, "Bex", every 5 seconds.
 - The **Zone text** and **Error text** boxes, with "Elwynn Forest" and "Not enough mana", where the game shows them.
 

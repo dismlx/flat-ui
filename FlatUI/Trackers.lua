@@ -67,7 +67,7 @@ local HELP = {
 	"/flatui tracker set 1 shape bar - icon, bar or text, and colour 4d99e6 for a bar or text",
 	"/flatui tracker set 1 happy on - a pet tracker is low while a hunter's pet is not happy",
 	"/flatui tracker set 1 health 40 - a pet tracker shows your pet's health in red under 40%, or clear to use the page's",
-	"/flatui tracker proc colour 1 ffd100 - one proc's colour, time (proc time 1 10) or trigger (proc trigger 1 overlay)",
+	"/flatui tracker proc colour 1 ffd100 - one proc's colour, sound (proc sound 1 bell), time (proc time 1 10) or trigger (proc trigger 1 overlay); proc reset 1 puts them back. A proc of your class also goes by its name",
 	"/flatui tracker check - what each tracker shows and why, and what happened in the last fight",
 	"/flatui tracker check sound - the game's own sound when a tracked buff ends, until /reload",
 	"/flatui tracker test - each look for 3 seconds: fine, low, missing, then the game's own look",
@@ -3112,10 +3112,16 @@ local function Layout()
 		HideHolders()
 		K.EndKinds()
 		shown = {}
+		if type(ns.ChargesRecheck) == "function" then
+			ns.ChargesRecheck()
+		end
 		return
 	end
 	if type(ns.ProcAutoBuild) == "function" then
 		ns.EachPart(KEY, "procs", ns.ProcAutoBuild)
+	end
+	if type(ns.ChargesRecheck) == "function" then
+		ns.ChargesRecheck()
 	end
 	local entries, wanted = OnEntries(), {}
 	tracked = #entries

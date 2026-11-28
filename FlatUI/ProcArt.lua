@@ -781,6 +781,9 @@ function ns.ProcArtChanged()
 	if type(ns.ChargesRecheck) == "function" then
 		ns.ChargesRecheck()
 	end
+	if type(ns.TrackerDirty) == "function" then
+		ns.TrackerDirty()
+	end
 	if holder then
 		if not On() then
 			ns.ProcArtReset()

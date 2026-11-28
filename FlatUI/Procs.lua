@@ -749,14 +749,11 @@ function ns.ProcAutoBuild()
 end
 
 function ns.ProcShowsStacks(spellID)
-	if not ns.Enabled(KEY) or ns.Get(KEY .. ".art") ~= true or ns.Get(KEY .. ".artStacks") == false then
+	if not ns.Enabled(KEY) or ns.PartStopped(KEY, PART) or ns.Get(KEY .. ".art") ~= true or ns.Get(KEY .. ".artStacks") == false then
 		return false
 	end
-	if A.stale then
-		Build()
-	end
-	for _, entry in ipairs(A.list) do
-		if Lists(entry.spells, spellID) then
+	for _, entry in ipairs(All()) do
+		if entry.on ~= false and not Off(entry) and (entry.trigger == nil or entry.trigger == "aura") and Lists(entry.spells, spellID) and Most(RowOf(entry)) then
 			return true
 		end
 	end

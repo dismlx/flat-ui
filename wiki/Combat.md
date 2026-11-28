@@ -312,7 +312,7 @@ Proc alerts show the moment a proc of yours is up, such as Overpower after a dod
 - **Art size** (150%) sets its size; 100% is the game's size.
 - **Art opacity** (40%) sets how solid it is; 65% is the game's. The game's Spell Alert Opacity has no effect here.
 - **Art height** (0) raises or lowers it.
-- **Stacks build the art** (on) is for Maelstrom Weapon, which is one of the procs of a shaman's class. Its art over your character starts as a faint outline and fills a fifth with each stack, with a large outlined count on it in the proc's colour. At 5 stacks the art is full and pulses, the count turns white, the proc sound plays and, with **Glow on the action button**, Lightning Bolt, Chain Lightning and the heals glow. In a fight, while the game hides your buffs, the game itself fills the art and writes the number. Off, the art shows at 5 stacks alone.
+- **Stacks build the art** (on) is for Maelstrom Weapon, which is one of the procs of a shaman's class. Its art over your character starts as a faint outline and fills a fifth with each stack, with a large outlined count on it in the proc's colour. At 5 stacks the art is full and pulses, the count turns white, the proc sound plays and, with **Glow on the action button**, Lightning Bolt, Chain Lightning and the heals glow. In a fight, while the game hides your buffs, the game itself fills the art and writes the number. Off, the art shows at 5 stacks alone and the stacks show on **Charges**.
 - **Seconds left on the art** (on) writes the seconds a proc with a time has left, such as Overpower, Revenge, Riposte or Nature's Grace, as a large, thin, outlined number on its art in its colour. For its last 2 seconds it turns white and grows a little, and it fades out with the art. Execute and other procs with no time show none.
 - The **Proc art** box in `/flatui move` puts the art anywhere. It sits in the middle of the screen until you move it.
 
@@ -396,7 +396,7 @@ The **Defensives on you** page (on by default) shows a row of icons for the shie
 ### Look
 
 - **Icon size** (32). The time left and the charges on an icon grow and shrink with it.
-- **Time left**: **On the icon** (the default), **Thin bar under the icon** or **Off**. The bar runs down with the time left, in the **Bar texture** of **Your buffs**, so the two rows can match, and the caster's name moves under it. That row stays open while this one is the bar, even with the time of **Your buffs** on the icon, and a change reaches this bar at once. The bars the game draws in a fight change once the game shows your buffs again.
+- **Time left**: **On the icon** (the default), **Thin bar under the icon** or **Off**. The bar runs down with the time left, in the **Bar texture** of **Your buffs**, so the two rows can match, and the caster's name moves under it. That row stays open while this one is the bar and **Your buffs** is on, even with the time of **Your buffs** on the icon, and a change reaches this bar at once. The bars the game draws in a fight change once the game shows your buffs again.
 - **Spacing** (3), **Caster's name** (on) and **Icon border** (on).
 - **Buff tooltips** shows the game's own tooltip over each icon: **On** (the default), **Out of combat only** or **Off**. A click still goes through to the world. Settings on the **Tooltips** page do not change this tooltip.
 - **Your own defensives** (on) also shows the ones you cast on yourself, such as Shield Wall or Ice Barrier.
@@ -519,14 +519,14 @@ Where the game lacks a piece of that art, the next set fills in for it, and then
 - As you cast the buff again, or it gains charges or stacks, the gems light in turn, each with a short glow.
 - On the last charge, the last gem pulses.
 - There are as many gems as the most charges the buff has had since you cast it, at most 10. Maelstrom Weapon has at least 5 gems, or as many as the game says it can stack, and more once it has had more stacks, at most 10; it lights one more with each stack, and its first stack does not pulse. In a fight it shows its stacks even when it was not on you as the fight began.
-- While the **Proc alerts** art builds up Maelstrom Weapon's stacks over your character (**Art beside the character** and **Stacks build the art** on, as they are at first), its stacks show there and not here. Turn either off and they show here as gems.
+- While the **Proc alerts** art builds up Maelstrom Weapon's stacks over your character (**Art beside the character** and **Stacks build the art** on, as they are at first), its stacks show there and not here. Turn either off and they show here, as gems, or as its art with **Spell art**.
 - With **Show used charges** (on), each charge you use stays as an empty socket. Off, only the charges left show.
-- Two buffs at once, such as a shaman's Lightning Shield and Maelstrom Weapon, sit one above the other, or side by side with the ring, arc or row of orbs.
+- Two buffs at once, such as a priest's Inner Fire and Shadowguard, sit one above the other, or side by side with the ring, arc or row of orbs.
 
 ### Look
 
 - **Orb style**: **Resource bar** (the default), **Spell art**, **Ring round the icon**, **Arc over the icon** or **Row under the icon**.
-- **Spell art** shows the game's own spell alert art for the buff, Maelstrom Weapon's for now, fainter on one charge and brighter with each one, with the count, time and name under it. A buff without such art, such as Lightning Shield, shows the resource bar.
+- **Spell art** shows the game's own spell alert art for the buff, Maelstrom Weapon's for now, fainter on one charge and brighter with each one, with the count, time and name under it. A buff without such art, such as Lightning Shield, shows the resource bar. Maelstrom Weapon shows here only while **Art beside the character** or **Stacks build the art** of **Proc alerts** is off; with both on, its stacks build the **Proc alerts** art instead.
 - **Fill the width** (on) spreads the gems out from end to end of the bars, each keeping its shape. Off, the gems sit 3 px apart in the middle, as they do at the row's own spot. With **Spell art**, the art takes the width of the bars, at most 240 px.
 - **Gem size** (20 px) sets the size of each gem and its socket. The text grows and shrinks with it. With **Spell art**, it sets only the size of the text under the art.
 - **Name**, **Count** and **Time left** (all on) choose the text. The time turns amber in its last 10 seconds. With **Count** off, the number shows only past 10 charges.
@@ -536,13 +536,13 @@ The ring, arc and row of orbs round the icon stay as choices. Their orbs sit clo
 
 ### Where it sits
 
-**Place** puts the row **Under the personal resource display** (the default), **Above the personal resource display**, or at its **Own spot**. Under or above, it sits just clear of the bars, past a **Your buffs** row on that side, and follows them, also as Edit Mode moves the display or **Your buffs** changes its place. **Defensives on you**, a **Cooldowns** row and the **Trackers** placed at that display sit past it in turn, so nothing overlaps. While that display is off or hidden, the row goes to its own spot, the **Charges** box of `/flatui move`, under the middle of the screen until you move it.
+**Place** puts the row **Under the personal resource display** (the default), **Above the personal resource display**, or at its **Own spot**. Under or above, it sits just clear of the bars, past a **Your buffs** row on that side, and follows them, also as Edit Mode moves the display or **Your buffs** changes its place. **Defensives on you**, a **Cooldowns** row and the **Trackers** placed at that display sit past it in turn. Above the display, **Defensives on you** and the **Trackers** both start at its top edge, so with both there, put the **Trackers** on the other **Side of the personal resource display** or move one with its **Y offset**. While that display is off or hidden, the row goes to its own spot, the **Charges** box of `/flatui move`, under the middle of the screen until you move it.
 
 ### When it shows
 
-**Only in combat** and **Hide while mounted** (both off) hide it at those times. **Sound when the last charge goes** (**None** by default) plays as such a buff leaves you on its last charge before its time is up; Maelstrom Weapon, which you spend on purpose, plays none.
+**Only in combat** and **Hide while mounted** (both off) hide it at those times, and the rows past it close up. **Sound when the last charge goes** (**None** by default) plays as such a buff leaves you on its last charge before its time is up; Maelstrom Weapon, which you spend on purpose, plays none.
 
-In a fight, while the game hides your buffs, the game itself lights the gems and writes the count and time left. The glows, fades and pulse come back once it shows your buffs again.
+In a fight, while the game hides your buffs, the game itself lights the gems and writes the count and time left. The glows, fades and pulse come back once it shows your buffs again. Under or above the display, the row keeps room in a fight for each such buff you have, so one you cast as the fight goes on does not run over the rows past it or over another.
 
 ### Which spells
 
@@ -550,7 +550,7 @@ In a fight, while the game hides your buffs, the game itself lights the gems and
 
 ### Seeing it
 
-Test mode, a change of its look out of combat, and `/flatui charges` show a sample in the look you chose: Lightning Shield with 3 charges, one used every 2 seconds, then cast again, or with **Spell art**, Maelstrom Weapon gaining a stack each second up to 5.
+Test mode, a change of its look out of combat, and `/flatui charges` show a sample in the look you chose: Lightning Shield with 3 charges, one used every 2 seconds, then cast again, or with **Spell art**, Maelstrom Weapon gaining a stack each second up to 5. While the **Proc alerts** art builds up Maelstrom Weapon's stacks, the **Spell art** sample is Lightning Shield in the resource bar.
 
 ### Charges commands
 

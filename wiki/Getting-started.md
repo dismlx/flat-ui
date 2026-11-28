@@ -145,7 +145,7 @@ You can search from chat too: `/flatui border colour` opens the window with thos
 - A sound dropdown plays each sound once as you pick it. The **Play** button beside it plays the one chosen now.
 - Right-click a colour swatch for a short list: **Copy #D93A30** and, once a colour is copied, **Paste #D93A30**. Paste writes the colour at once, and Ctrl+Z puts the old one back.
 - A changed row has a small reset arrow. Point at it to see the default it puts back, and click it to reset that row.
-- A dimmed row waits for another setting, as its tip says ("Needs Fade the block on. Click to go to it."). Click it to go to that setting: the window scrolls to it and flashes it, on another tab or page if it lives there, and the strip says "Turn on Fade the block first.". When the setting is a module's own switch, the strip says it is the switch at the top of its page. A row dimmed because another setting takes its place now, such as **Custom scale** while **Pixel-perfect scale** is on, says why in the strip.
+- A dimmed row waits for another setting, as its tip says ("Needs Fade the block. Click to go to it."). Click it to go to that setting: the window scrolls to it and flashes it, on another tab or page if it lives there, and the strip says "Turn on Fade the block first.". When the setting is a module's own switch, the strip says it is the switch at the top of its page. A row dimmed because another setting takes its place now, such as **Custom scale** while **Pixel-perfect scale** is on, says why in the strip.
 - A press on a button counts only when you let go over it, so sliding off before letting go changes your mind.
 
 ### Undo and redo

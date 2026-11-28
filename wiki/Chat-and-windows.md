@@ -96,7 +96,7 @@ The **Tooltips** page has two tabs: **General** for the look of every tooltip, a
 - **Unit tooltip border** is **Plain** (the default), **Reaction colour** or **Class colour for players**.
 - **Class colour on player names** (on) and **Class colour on the class line** (on) colour a player's name and the line with their level, race and class.
 - **Raid marker on the name** (on) puts the skull, moon or other raid marker a unit carries as a small icon before its name, so the sheep target stands out in a dungeon.
-- **Away and busy after the name** (on) writes a dim <AFK> or <DND> after the name of a player who is away or busy, as "Mara <AFK>".
+- **Away and busy after the name** (on) writes a dim `<AFK>` or `<DND>` after the name of a player who is away or busy, as "`Mara <AFK>`".
 - **Guild colour and rank** (on) colours a player's guild line green for your own guild and a soft blue for another, with their rank after the guild's name, as "Officer".
 
 #### Size and text
