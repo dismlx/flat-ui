@@ -1290,7 +1290,7 @@ AREAS = [
         PanelTabs PanelHome PanelPreview WhatsNewData WhatsNew TestMode TestUnits TestHud"""),
     ("setup", "Setup", "SetupSteps SetupProfiles SetupStops Setup SetupWalk SetupWelcome"),
     ("unitframes", "Unit frames", """ClassData UnitFrames UnitFramePortrait UnitFrameLevel UnitFrameCells UnitFrameLooks
-        UnitFrameHead UnitText UnitParts UnitExtras UnitFrameSpots UnitGroupMarks UnitDruidMana UnitManaRule UnitPetTarget UnitHots HealthColour
+        UnitFrameHead UnitText UnitParts UnitExtras UnitFrameSpots UnitTrail UnitGroupMarks UnitDruidMana UnitManaRule UnitPetTarget UnitHots HealthColour
         PetFrameSize"""),
     ("nameplates", "Nameplates, combat text and cast bars", """Nameplates PlateThreat PlateColours PlateThreatLook PlateText
         PlateClick PlateThreatText PlateSlip PlateOverpower PlateQuest PlateCombo PlateTarget PlateMark PlateSpread CombatBurst CombatTextSpells CombatText ScrollText CombatCues AvoidAnnounce Bars CastTime CastTicks CastRank
