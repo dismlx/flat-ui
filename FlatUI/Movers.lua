@@ -3051,6 +3051,21 @@ function win.Hover(name)
 	end
 end
 
+function win.CornerOwn(frame)
+	local ok, _, right, _, bottom = pcall(frame.GetHitRectInsets, frame)
+	if not ok then
+		return false
+	end
+	return (Number(right) and right > 0) or (Number(bottom) and bottom > 0) or false
+end
+
+function win.CornerHits(corner, frame)
+	local own = win.CornerOwn(frame)
+	local inset = own and 0 or WIN.corner - WIN.margin
+	corner:SetHitRectInsets(inset, 0, inset, 0)
+	corner:EnableMouse(own or not win.heard)
+end
+
 function win.MakeCorner(name, frame)
 	local corner = CreateFrame("Frame", nil, frame)
 	ns.Own[corner] = true
@@ -3061,8 +3076,7 @@ function win.MakeCorner(name, frame)
 	end
 	corner:SetSize(WIN.corner, WIN.corner)
 	corner:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-	corner:SetHitRectInsets(WIN.corner - WIN.margin, 0, WIN.corner - WIN.margin, 0)
-	corner:EnableMouse(not win.heard)
+	win.CornerHits(corner, frame)
 	local art = {}
 	for index, size in ipairs({ { 12, 2 }, { 2, 12 } }) do
 		local line = corner:CreateTexture(nil, "OVERLAY", nil, 0)
@@ -3096,7 +3110,7 @@ function win.CornerMouse()
 			if InCombatLockdown() and ns.MaybeProtected(frame) then
 				win.waiting = true
 			else
-				corner:EnableMouse(not win.heard)
+				win.CornerHits(corner, frame)
 			end
 		end
 	end

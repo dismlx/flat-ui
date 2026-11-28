@@ -2,7 +2,7 @@ Every setting of the **Chat and windows** group of the options window, 125 in al
 
 Pages: [Chat](#chat) · [Tooltips](#tooltips) · [Windows](#windows)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.50.
 
 ## Chat
 

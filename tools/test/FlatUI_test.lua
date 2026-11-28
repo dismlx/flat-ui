@@ -10931,7 +10931,7 @@ local function usable(W, row)
 end
 
 do
-	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.49" and TOC.SavedVariables == "FlatUIDB",
+	check("toc: interface, title, version, saved variable", TOC.Interface == "16001" and TOC.Title == "Flat UI" and TOC.Version == "0.5.50" and TOC.SavedVariables == "FlatUIDB",
 		tostring(TOC.Interface) .. " " .. tostring(TOC.Version))
 	local listed, missing, twice = {}, {}, {}
 	for _, file in ipairs(FILES) do

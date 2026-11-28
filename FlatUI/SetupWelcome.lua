@@ -154,7 +154,7 @@ function W.Pick(index)
 		return
 	end
 	if W.share then
-		ns.Set("setup.newCharacter", "preset:" .. tile.profile.id)
+		ns.Set("setup.newCharacter", S.ShareMode(ns.Profile() or tile.profile.label))
 	end
 	W.Done(true, true)
 	W.Used()
