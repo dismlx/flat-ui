@@ -312,9 +312,11 @@ Three rows under **Look** help you time your next spell. Each works with or with
 - **Interrupt on cooldown colour** (orange) while it cools down.
 - **Interrupt out of range colour** (grey-blue) while it is ready but the caster is out of its range.
 
-On flat nameplate cast bars, and on the target and focus bars with **Flat fill** on, the whole fill takes the colour. With **Flat fill** off, a thin strip along the bottom of the target and focus cast bars takes it. **Interrupt strip height** sets the strip from 1 to 6 screen pixels (2 at first). As your interrupt comes back, or you come into range during the cast, the strip blinks once as it turns to **Interrupt ready colour**. A cast that cannot be interrupted keeps its colour.
+On flat nameplate cast bars, and on the target and focus bars with **Flat fill** on, the whole fill takes the colour. With **Flat fill** off, a thin strip along the bottom of the target and focus cast bars takes it. **Interrupt strip height** sets the strip from 1 to 6 screen pixels (2 at first). As your interrupt comes back, or you come into range during the cast, the strip blinks once as it turns to **Interrupt ready colour**. A flat fill does the same: the whole fill dips and comes back once over a quarter second as it turns, on nameplates too, so the change is hard to miss in a fight. A cast that cannot be interrupted keeps its colour.
 
 **Seconds until your interrupt is ready** (on), on the **Text and icon** tab, counts the seconds left on your interrupt inside the left end of the target or focus cast bar, so you see whether Kick is back before the cast lands. It works for a warlock's Felhunter's Spell Lock too. The number goes as the bar turns to **Interrupt ready colour**.
+
+The cast bar on the nameplate of your target, and of your focus, counts the same seconds. As the spell name takes the left end of a nameplate cast bar, the number sits inside its right end, just left of the cast time, in white on a **Flat nameplate cast bar**.
 
 On the **States and text** tab of **Cooldowns**, **Glow on your interrupt** (on) rings your interrupt's icon on the cooldown row in gold while your target or focus casts something you can interrupt and the interrupt is ready. See [Combat](Combat).
 
@@ -324,7 +326,7 @@ Four rows under **Sound** on the **General** tab play a sound of your choice. Ea
 
 - **Sound when you are interrupted** plays as an enemy's Kick, Counterspell, Pummel, Earth Shock or stun stops your cast or channel, so you hear the lockout while you watch the boss. Moving, jumping or pressing Escape plays nothing.
 - **Sound when your interrupt lands** plays as your interrupt, or your Felhunter's Spell Lock, stops an enemy's cast, at most once a second. A kick that missed, came late or came after another player's stays silent.
-- **Sound when your focus casts** plays as the enemy you focus starts a cast or channel while your interrupt is ready and in range. It plays again, once a cast, as your interrupt comes back or you come into range during the cast. It needs **Interrupt readiness on enemy casts**.
+- **Sound when your focus casts** plays as the enemy you focus starts a cast or channel while your interrupt is ready and in range. It plays again, once a cast, as your interrupt comes back or you come into range during the cast, and only when the cast began while your interrupt was down or out of range. It needs **Interrupt readiness on enemy casts**.
 - **Sound when your target casts** does the same for your target. When your target is also your focus, only the focus sound plays.
 
 `/flatui status` counts the sounds played this session, as "Sound when your interrupt lands: 7 played."
@@ -435,7 +437,7 @@ The **Swing timers** page restyles the game's main hand, off hand and ranged swi
 ### When the timers show
 
 - **Out of range opacity** (40%, the game's own) sets how see-through a timer is while your target is out of its reach.
-- **Show the timer** is **Always**, **In combat** (the default) or **Only while swinging**. **In combat** and **Only while swinging** fade the timer and its border out over a quarter second as the fight ends or the swings stop. It works while the timer's border is on. With Edit Mode's own Visibility at In combat, the game hides the timer itself, at once.
+- **Show the timer** is **Always**, **In combat** (the default) or **Only while swinging**. **In combat** and **Only while swinging** fade the timer and its border in over about 0.15 seconds as a fight or the first swing starts, and out over a quarter second as the fight ends or the swings stop. It works while the timer's border is on. With Edit Mode's own Visibility at In combat, the game hides the timer itself, at once.
 
 `/flatui test` shows the swing timers while the game would show them.
 

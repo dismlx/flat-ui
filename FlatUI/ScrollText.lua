@@ -499,6 +499,10 @@ function ns.CombatOutShown()
 	return ST.On("out")
 end
 
+function ns.CombatIconsUnused()
+	return Opt("where") == "over" and Opt("own") == "off"
+end
+
 function ST.On(key)
 	if not ns.Enabled(KEY) then
 		return false

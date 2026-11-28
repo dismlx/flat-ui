@@ -453,6 +453,17 @@ local function AbilityOf(spell)
 	return nil
 end
 
+function ns.InterruptFirstSpell()
+	local list = Abilities()
+	for _, ab in ipairs(list) do
+		if ab.id ~= nil and not ab.pet then
+			return ab.id
+		end
+	end
+	local first = list[1]
+	return first and first.id or (first and first.ids[1]) or nil
+end
+
 function ns.InterruptSpell(id)
 	if IsSecret(id) or type(id) ~= "number" then
 		return false

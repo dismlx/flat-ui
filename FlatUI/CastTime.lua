@@ -451,7 +451,7 @@ local function LookAims(on)
 end
 
 local KT = { shown = 0, live = 0, refused = false }
-local KickTimeOn, LookKicks, KickAhead
+local KickTimeOn, LookKicks, KickAhead, KickGone
 do
 	local KICK_TIME_ROW, KICK_COLOUR_ROW = "castbars.kickTime", "castbars.interruptCooling"
 	local kicks, kickQueued = setmetatable({}, weak), setmetatable({}, weak)
@@ -520,6 +520,9 @@ do
 
 	local function KickColour(kick)
 		local r, g, b, key = ns.KickTimeColour()
+		if kick.plate and ns.Enabled("nameplates") and Get("nameplates.castFlat") == true then
+			r, g, b, key = 1, 1, 1, "plate"
+		end
 		if kick.hex == key then
 			return
 		end
@@ -610,6 +613,60 @@ do
 		end
 	end
 
+	local function KickPlace(bar, kick)
+		local rec = recs[bar]
+		local time = PlateRow() and rec ~= nil and rec.fs or nil
+		local at = time or bar
+		if kick.at == at then
+			return
+		end
+		kick.fs:ClearAllPoints()
+		if not (time and pcall(kick.fs.SetPoint, kick.fs, "RIGHT", time, "LEFT", -4, 0)) then
+			kick.fs:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
+			at = bar
+		end
+		kick.fs:SetJustifyH("RIGHT")
+		kick.at = at
+	end
+
+	local function Same(unit, other)
+		local ok, same = pcall(UnitIsUnit, unit, other)
+		return ok and Flag(same)
+	end
+
+	local function LookPlateKick(frame, on)
+		local bar = PlateBar(frame)
+		if bar == nil then
+			return
+		end
+		local unit = on and PlateUnit(frame) or nil
+		if unit ~= nil and (Same(unit, "target") or Same(unit, "focus")) then
+			local kick = kicks[bar]
+			if kick == nil then
+				kick = MakeKick(bar)
+			end
+			if kick and not kick.plate then
+				kick.plate, kick.hex = true, nil
+				if kick.shown then
+					KickColour(kick)
+				end
+			end
+			if kick then
+				KickPlace(bar, kick)
+				KickLook(bar, unit, on)
+			end
+		elseif kicks[bar] then
+			KickHide(kicks[bar])
+		end
+	end
+
+	function KickGone(frame)
+		local bar = PlateBar(frame)
+		if bar ~= nil and kicks[bar] then
+			KickHide(kicks[bar])
+		end
+	end
+
 	function LookKicks(on)
 		for _, entry in ipairs(OWN) do
 			local bar = _G[entry[1]]
@@ -617,6 +674,7 @@ do
 				KickLook(bar, entry[2], on)
 			end
 		end
+		ns.EachPlate(LookPlateKick, on)
 	end
 
 	function KickAhead(make)
@@ -1088,6 +1146,10 @@ do
 		if not rec.byUnit and (ns.IsSecret(unit) or unit ~= rec.unit) then
 			return
 		end
+		local ok, guid = pcall(UnitGUID, rec.unit)
+		if ok and not ns.IsSecret(guid) then
+			rec.guid = guid
+		end
 		rec.serial, rec.waitFor = rec.serial + 1, nil
 		pcall(C_Timer.After, 0, function()
 			pcall(WatchLook, rec)
@@ -1172,7 +1234,8 @@ do
 	local LAND_UNITS, LAND_SELVES = { "target", "focus" }, { "player", "pet" }
 	local LAND_STOPS = { UNIT_SPELLCAST_INTERRUPTED = true, UNIT_SPELLCAST_CHANNEL_STOP = true }
 	local WORD_ROW, WORD_GAP, WORD_RGB = "combattext.kicks", 0.3, { 0.2, 0.85, 0.35 }
-	local L = { on = false, played = 0, at = nil, frame = nil, ticker = nil, otherAt = {}, icons = {}, shown = 0 }
+	local MISS_ROW, MISS_RGB = "combattext.kicksMissed", { 0.85, 0.45, 0.18 }
+	local L = { on = false, played = 0, at = nil, frame = nil, ticker = nil, otherAt = {}, icons = {}, shown = 0, missed = 0, late = 0, named = false }
 	K.land = L
 
 	local function LandSoundOn()
@@ -1184,7 +1247,7 @@ do
 	end
 
 	local function LandOn()
-		return LandSoundOn() or LandWordOn()
+		return LandSoundOn() or LandWordOn() or (type(ns.AnnounceKicksOn) == "function" and ns.AnnounceKicksOn() == true)
 	end
 
 	local function Within(at, span)
@@ -1205,19 +1268,32 @@ do
 		return icon or nil
 	end
 
-	local function LandWordShow()
+	local function WordPut(word, row, rgb, icon, unit, sample)
 		local text = ns.ScrollText
-		if not (LandWordOn() and type(text) == "table" and type(text.On) == "function" and text.On("out")) or Within(L.wordAt, WORD_GAP) then
+		if type(text) ~= "table" or type(text.On) ~= "function" then
+			return false
+		end
+		local r, g, b = ns.Colour(row)
+		if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
+			r, g, b = rgb[1], rgb[2], rgb[3]
+		end
+		if text.On("out") then
+			return text.Show("out", "word", word, nil, false, r, g, b, nil, nil, sample == true, icon) == true
+		end
+		return type(ns.CombatWordOver) == "function" and type(unit) == "string" and ns.CombatWordOver(unit, word, r, g, b, icon, sample) == true
+	end
+
+	local function KickWord()
+		return type(_G.INTERRUPTED) == "string" and _G.INTERRUPTED or "Interrupted"
+	end
+
+	local function LandWordShow()
+		if not LandWordOn() or Within(L.wordAt, WORD_GAP) then
 			return
 		end
 		L.wordAt = GetTime()
-		local r, g, b = ns.Colour("castbars.interruptReady")
-		if not (ns.Finite(r) and ns.Finite(g) and ns.Finite(b)) then
-			r, g, b = WORD_RGB[1], WORD_RGB[2], WORD_RGB[3]
-		end
-		local word = type(_G.INTERRUPTED) == "string" and _G.INTERRUPTED or "Interrupted"
 		local icon = LandIcon(Within(L.spellAt, LAND_FOR) and L.spell or nil)
-		if text.Show("out", "word", word, nil, false, r, g, b, nil, nil, false, icon) then
+		if WordPut(KickWord(), "castbars.interruptReady", WORD_RGB, icon, L.wordUnit) then
 			L.shown = L.shown + 1
 		end
 	end
@@ -1270,6 +1346,7 @@ do
 		for index, name in ipairs(LAND_BARS) do
 			local bar = PlayerBar(name)
 			if bar and not Within(L.otherAt[LAND_UNITS[index]], LAND_FOR) and ns.CastBarInterrupted(bar) and (snap[index] or Fresh(bar)) then
+				L.wordUnit = LAND_UNITS[index]
 				LandPlay()
 				return true
 			end
@@ -1285,6 +1362,65 @@ do
 		end
 	end
 
+	local function LandShielded(bar)
+		local shield = bar.BorderShield
+		if ns.IsSecret(shield) or type(shield) ~= "table" then
+			return false
+		end
+		local ok, shown = pcall(shield.IsShown, shield)
+		return ok and Flag(shown)
+	end
+
+	local function MissWord(word, snap, unit)
+		if word == "late" then
+			L.late = L.late + 1
+		else
+			L.missed = L.missed + 1
+		end
+		WordPut(word == "late" and "Too late" or "Not interrupted", "castbars.interruptCooling", MISS_RGB, LandIcon(snap.spell), unit)
+	end
+
+	local function MissOn()
+		return L.named and LandWordOn() and Get(MISS_ROW) == true and not Within(L.sureAt, LAND_FOR)
+	end
+
+	local function LandLate(snap)
+		if not MissOn() then
+			return
+		end
+		for index in ipairs(LAND_BARS) do
+			if snap[index] then
+				return
+			end
+		end
+		for _, unit in ipairs(LAND_UNITS) do
+			if Within(L.otherAt[unit], LAND_FOR) then
+				MissWord("late", snap, unit)
+				return
+			end
+		end
+	end
+
+	local function LandMissed(snap)
+		if not MissOn() then
+			return
+		end
+		for index, name in ipairs(LAND_BARS) do
+			if snap[index] then
+				local unit = LAND_UNITS[index]
+				if Within(L.otherAt[unit], LAND_FOR) then
+					MissWord("late", snap, unit)
+				else
+					local bar = PlayerBar(name)
+					if bar and (Flag(bar.casting) or Flag(bar.channeling)) and not LandShielded(bar) then
+						MissWord("missed", snap, unit)
+					end
+				end
+				return
+			end
+		end
+	end
+
 	local function LandHeard(spell)
 		if ns.IsSecret(spell) or type(spell) ~= "number" then
 			return
@@ -1296,12 +1432,13 @@ do
 		if not kick or Within(L.sureAt, LAND_FOR) then
 			return
 		end
-		local snap = {}
+		local snap = { spell = spell }
 		for index, name in ipairs(LAND_BARS) do
 			local bar = PlayerBar(name)
 			snap[index] = bar ~= nil and (Flag(bar.casting) or Flag(bar.channeling))
 		end
 		LandStop()
+		pcall(LandLate, snap)
 		if LandLook(snap) or type(C_Timer) ~= "table" or type(C_Timer.NewTicker) ~= "function" then
 			return
 		end
@@ -1311,6 +1448,9 @@ do
 			local looked, done = pcall(LandLook, snap)
 			if not looked or done or left <= 0 then
 				LandStop()
+				if looked and not done then
+					pcall(LandMissed, snap)
+				end
 			end
 		end, left)
 		L.ticker = ok and ticker or nil
@@ -1326,18 +1466,22 @@ do
 		return false
 	end
 
-	local function LandStopped(unit, by)
+	local function LandStopped(unit, by, spell)
 		if ns.IsSecret(by) or type(by) ~= "string" or by == "" then
 			return
 		end
+		L.named = true
 		local ok, foe = pcall(UnitCanAttack, "player", unit)
 		if not (ok and not ns.IsSecret(foe) and foe == true) then
 			return
 		end
 		if Mine(by) then
-			L.sureAt = GetTime()
+			L.sureAt, L.wordUnit = GetTime(), unit
 			LandStop()
 			LandPlay()
+			if type(ns.AnnounceKick) == "function" then
+				pcall(ns.AnnounceKick, spell)
+			end
 		else
 			L.otherAt[unit] = GetTime()
 		end
@@ -1348,7 +1492,7 @@ do
 			return
 		end
 		if LAND_STOPS[event] then
-			pcall(LandStopped, unit, by)
+			pcall(LandStopped, unit, by, spell)
 		elseif unit == "player" or unit == "pet" then
 			pcall(LandHeard, spell)
 		end
@@ -1445,6 +1589,14 @@ do
 		Sample(LAND_ROW, "castland")
 	end
 
+	function ns.CastLandWordSample()
+		if not LandWordOn() then
+			return false
+		end
+		local spell = type(ns.InterruptFirstSpell) == "function" and ns.InterruptFirstSpell() or nil
+		return WordPut(KickWord(), "castbars.interruptReady", WORD_RGB, LandIcon(spell), "target", true)
+	end
+
 	function ns.CastKickedSoundPicked(path)
 		pcall(KickListen)
 		Sync()
@@ -1473,6 +1625,7 @@ extra.leave[#extra.leave + 1] = function(frame)
 	if rec ~= nil and rec.active then
 		Finish(rec)
 	end
+	pcall(KickGone, frame)
 end
 extra.refresh[#extra.refresh + 1] = Sync
 
@@ -1575,7 +1728,11 @@ function ns.StatusLines()
 		lines[#lines + 1] = ("Sound when your interrupt lands: %d played."):format(land.played)
 	end
 	if land and land.on and land.word then
-		lines[#lines + 1] = ("Your interrupts in the Outgoing area: %d shown."):format(land.shown)
+		lines[#lines + 1] = ("Your interrupts: %d shown."):format(land.shown)
+		if Get("combattext.kicksMissed") == true then
+			lines[#lines + 1] = land.named and ("Kicks that stopped nothing: %d Not interrupted, %d Too late."):format(land.missed, land.late)
+				or "Kicks that stopped nothing: none judged yet, as the game has not yet named who stopped a cast."
+		end
 	end
 	return lines
 end

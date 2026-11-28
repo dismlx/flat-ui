@@ -184,8 +184,8 @@ Guide: [Combat text](Combat-text)
 | `/flatui combat test` | Shows sample numbers for you, over your target and over friendly units, and one round of the combat alerts |
 | `/flatui combat reset` | Puts the game's combat number settings back to their defaults, and turns **Place combat numbers** off |
 | `/flatui combat trace` | Prints each hit report and signal of yours in chat, until you type it again |
-| `/flatui announce` | Says where **Announce blocks, dodges and parries** sends its lines now, or why it sends nothing |
-| `/flatui announce test` | Writes sample lines in your own chat window only, never sent to the group |
+| `/flatui announce` | Says where **Announce blocks, dodges and parries** and **Announce your interrupts** send their lines now, or why they send nothing |
+| `/flatui announce test` | Writes sample lines in your own chat window only, never sent to the group, with a defensive and an interrupt line while those rows are on |
 
 ## Group
 

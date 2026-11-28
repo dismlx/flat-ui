@@ -78,16 +78,26 @@ These rows work while **Combat text for you**, on the **You and warnings** tab, 
 
 #### Both areas
 
-- **Spell icons**: **All** (the default) shows the icon of your spell, swing or shot. **Spells only** leaves swings and shots bare, and **Off** shows none. Damage on you shows no icon.
+- **Spell icons**: **All** (the default) shows the icon of your spell, swing or shot in the Outgoing area, and of your own heals on you in the Incoming area. **Spells only** leaves swings and shots bare, and **Off** shows none. Numbers over enemies and damage on you show no icon. The row is greyed while **Where your hits show** is **Over enemies** and **Combat text for you** is **Off**, as no area then draws an icon.
 - **Speed**: how long a number stays. **Slow** (the default), **Normal** or **Fast**.
 
 The lanes of both areas lie about a number's width apart, so a burst stays a tight column by its box instead of spreading across the screen.
 
 #### Your interrupts
 
-**Your interrupts** (off, with the Outgoing area on) pops "Interrupted" into the Outgoing area each time your interrupt stops an enemy's cast. It shows the icon of your Kick, Counterspell, Pummel or your pet's Spell Lock, in **Interrupt ready colour** from the **Colours** tab of the **Flat UI** page. You see each kick land without looking up.
+**Your interrupts** (off) pops "Interrupted" each time your interrupt stops an enemy's cast. It shows the icon of your Kick, Counterspell, Pummel or your pet's Spell Lock, in **Interrupt ready colour** from the **Colours** tab of the **Flat UI** page. You see each kick land without looking up.
 
-It shows when the game names you or your pet as the one who stopped the cast. When the game keeps that secret, it follows the target or focus cast bar turning Interrupted right after your interrupt, as **Sound when your interrupt lands** on the **Cast bars** page does. See [Frames and bars](Frames-and-bars). `/flatui status` counts them, as "Your interrupts in the Outgoing area: 4 shown."
+- With **Where your hits show** at **Over enemies** (the default), it pops over the nameplate of the enemy you stopped, at the size of the miss words. This needs **Numbers over enemies** at **In front of nameplates**.
+- With **Scroll area** or **Both**, it goes into the Outgoing area.
+
+It shows when the game names you or your pet as the one who stopped the cast. When the game keeps that secret, it follows the target or focus cast bar turning Interrupted right after your interrupt, as **Sound when your interrupt lands** on the **Cast bars** page does. See [Frames and bars](Frames-and-bars). Test mode's target cast bar and `/flatui combat test` show it once.
+
+**Also kicks that stop nothing** (on, under it) answers a kick that did nothing, where **Your interrupts** shows, with your interrupt's icon in **Interrupt on cooldown colour**:
+
+- "Not interrupted" when your interrupt went off while your target or focus was casting and the cast went on: pressed half a second late, dodged or parried.
+- "Too late" when another player's interrupt stopped the cast first.
+
+It judges only once the game has named who stopped a cast this session, so it never guesses while the game keeps that secret. A cast that cannot be interrupted counts as neither. `/flatui status` counts both, as "Your interrupts: 4 shown." and "Kicks that stopped nothing: 2 Not interrupted, 1 Too late."
 
 #### Classic
 
@@ -215,11 +225,12 @@ Each attack on you that you block, dodge or parry, or that misses you, sends a s
 - "Blocked 245" when the game gives the blocked amount.
 - "Blocked 120 of a hit" when a hit gets through your shield, 120 being your block value. Until Flat UI has read it, the line says "Blocked part of a hit".
 
-Nothing is sent while you are alone, in a battleground or arena, while you do not count as a tank, or while the game closes addon chat, as it can in a boss fight.
+Nothing is sent while you are alone, in a battleground or arena, outside a dungeon or raid while **Only in dungeons and raids** is on, while you do not count as a tank, or while the game closes addon chat, as it can in a boss fight.
 
 #### Where and how often
 
 - **Send to**: **Your group's chat** (the default) uses instance chat in an instance group, else raid chat in a raid and party chat in a party. **Party chat only** reaches, in a raid, the members of your raid group. **Raid chat only** sends nothing outside a raid. **Only me** writes the lines in your own chat window and sends nothing to anyone.
+- **Only in dungeons and raids** (on): sends the lines only inside a dungeon or raid, so a party out in the world, questing with a friend, gets none. It holds for every line of this part, **Announce your interrupts** too. `/flatui announce` then says "nothing sent now, as you are not in a dungeon or raid".
 - **How often**: **Each one** (the default) sends a line as it happens, at most one a second, counting the rest into the next line, as "Dodged x3" or "Dodged, Parried x2". **A summary every few seconds** sends "Last 5 s: 3 dodges, 2 parries, 4 blocks" after **Seconds of a summary** (5; 3 to 15). **One line when the fight ends** sends "Fight: 12 dodges, 8 parries, 15 blocks, 3 misses" as you leave combat, and waits up to 30 seconds for addon chat to open.
 
 Never more than one line a second goes out, whichever you pick.
@@ -228,7 +239,17 @@ Never more than one line a second goes out, whichever you pick.
 
 **Announce blocks**, **Announce dodges**, **Announce parries** and **Announce misses** are on at first. **Announce resists**, **Announce immunities** and **Announce absorbs** are off. A resist or absorb counts only when it takes the whole spell or hit.
 
-Type `/flatui announce` to see where the lines go now, or why nothing is sent, whether you count as a tank, and the last line sent. `/flatui announce test` writes sample lines in your own chat window only; they are never sent.
+**Announce your defensives** (off) sends "Shield Wall up (12 s)" or "Last Stand up (20 s)" as you use a defensive with a cooldown of a minute or more, such as Shield Wall, Last Stand, Barkskin, Divine Protection or Evasion. It goes to **Send to**'s chat while you count as a tank, at most one line a second, so your healers know a big cooldown is running.
+
+#### Announce your interrupts
+
+**Announce your interrupts** (**Off** by default, at the end of the part) sends "Interrupted Shadow Bolt" each time the game names you or your pet as the one who stopped an enemy's cast. It needs neither **Announce blocks, dodges and parries** nor a tank role.
+
+- Its choices are **Your group's chat**, **Party chat only**, **Raid chat only** and **Only me**, as **Send to** has them.
+- It never claims another player's kick, and sends nothing while the game keeps that name secret.
+- At most one line a second goes out. Nothing is sent alone, in a battleground or arena, outside a dungeon or raid while **Only in dungeons and raids** is on, or while the game closes addon chat.
+
+Type `/flatui announce` to see where the lines go now, or why nothing is sent, whether you count as a tank, the last line sent, and where **Announce your interrupts** sends. `/flatui announce test` writes sample lines in your own chat window only; they are never sent. `/flatui status` counts the lines of each.
 
 ## Moving and trying the numbers
 
@@ -240,7 +261,7 @@ Type `/flatui announce` to see where the lines go now, or why nothing is sent, w
 
 To see your settings without a fight:
 
-- `/flatui combat test` shows sample numbers for you, over your target and over friendly units, then plays one quiet round of the alerts. Target an enemy with a nameplate to see the numbers over it.
+- `/flatui combat test` shows sample numbers for you, over your target and over friendly units, then plays one quiet round of the alerts. Target an enemy with a nameplate to see the numbers over it. With **Your interrupts** on, it also shows "Interrupted" once.
 - [Test mode](Test-mode) sends sample numbers and alerts while it runs.
 - The picture above the rows of each tab follows every change.
 
@@ -263,8 +284,8 @@ To see your settings without a fight:
 | `/flatui combat test` | Shows sample numbers for you, over your target and over friendly units, and one round of the combat alerts |
 | `/flatui combat reset` | Puts the game's combat number settings back to their defaults, and turns **Place combat numbers** off |
 | `/flatui combat trace` | Prints each hit report and signal of yours in chat, until you type it again |
-| `/flatui announce` | Says where **Announce blocks, dodges and parries** sends its lines now, or why it sends nothing |
-| `/flatui announce test` | Writes sample lines in your own chat window only, never sent to the group |
+| `/flatui announce` | Says where **Announce blocks, dodges and parries** and **Announce your interrupts** send their lines now, or why they send nothing |
+| `/flatui announce test` | Writes sample lines in your own chat window only, never sent to the group, with a defensive and an interrupt line while those rows are on |
 | `/flatui status` | Counts the numbers shown, your interrupts and the lines announced, and says what stops a part |
 
 See [Commands](Commands) for every command, and [Combat](Combat) for the rest of the **Combat** group.
