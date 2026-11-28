@@ -495,6 +495,11 @@ local function EaseDone(unitFrame)
 	end
 end
 
+function ns.PlateMarkerFaded(unitFrame)
+	local own = unitFrame ~= nil and not ns.IsSecret(unitFrame) and known[unitFrame] or nil
+	return own ~= nil and own.markerFade == true
+end
+
 function ns.PlateEase(unitFrame, region, to, instant)
 	if region == nil or ns.IsSecret(region) or ns.Forbidden(region) or not ns.Finite(to) then
 		return false, false

@@ -212,8 +212,8 @@ function Clear(rec, which, now)
 		if fadeIn then
 			pcall(fadeIn.Stop, fadeIn)
 		end
-		if not now and fadeOut and not rec[which .. "Withheld"] and Ask(text.IsShown, text) == true and not Playing(fadeOut)
-			and pcall(fadeOut.Play, fadeOut) then
+		if not now and fadeOut and not rec[which .. "Withheld"] and not (which == "value" and rec.covered) and Ask(text.IsShown, text) == true
+			and not Playing(fadeOut) and pcall(fadeOut.Play, fadeOut) then
 			return
 		end
 		StopFades(rec, which)
@@ -228,9 +228,12 @@ local function Appear(rec, which, text, fade)
 	if fadeOut then
 		pcall(fadeOut.Stop, fadeOut)
 	end
-	text:SetAlpha(1)
+	local covered = which == "value" and rec.covered == true
+	if not covered then
+		text:SetAlpha(1)
+	end
 	text:Show()
-	if fade and not cut and fadeIn then
+	if fade and not cut and not covered and fadeIn then
 		pcall(fadeIn.Stop, fadeIn)
 		pcall(fadeIn.Play, fadeIn)
 	end
@@ -758,6 +761,29 @@ function ns.PlateThreatTexts(unitFrame)
 		target = nil
 	end
 	return value, value and rec.valueSide or nil, target
+end
+
+function ns.PlateThreatValueCover(unitFrame, on, instant)
+	local rec = unitFrame ~= nil and not ns.IsSecret(unitFrame) and recs[unitFrame] or nil
+	if not rec then
+		return
+	end
+	on = on == true or nil
+	if rec.covered == on then
+		return
+	end
+	rec.covered = on
+	local text = rec.value
+	if text == nil or ns.Forbidden(unitFrame) then
+		return
+	end
+	if on and rec.valueIn then
+		pcall(rec.valueIn.Stop, rec.valueIn)
+	end
+	if type(ns.PlateEase) == "function" and pcall(ns.PlateEase, unitFrame, text, on and 0 or 1, instant) then
+		return
+	end
+	text:SetAlpha(on and 0 or 1)
 end
 
 function ns.PlateAurasSeen(unitFrame)

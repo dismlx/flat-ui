@@ -530,6 +530,31 @@ function ns.PlateNameShown(unitFrame)
 	return not (st and st.nameFaded == true)
 end
 
+local function Seen(region)
+	local ok, shown = pcall(region.IsShown, region)
+	if not ok or not Plain(shown, "boolean") or not shown then
+		return false
+	end
+	local okAlpha, alpha = pcall(region.GetAlpha, region)
+	return not okAlpha or not ns.Finite(alpha) or alpha > 0.05
+end
+
+function ns.PlateHealthText(unitFrame)
+	if unitFrame == nil or ns.IsSecret(unitFrame) or ns.Forbidden(unitFrame) then
+		return nil
+	end
+	local st = state[unitFrame]
+	if st and st.own and Seen(st.own) then
+		return st.own
+	end
+	for _, fontString in ipairs(Strings(HealthBarOf(unitFrame), HEALTH_TEXTS)) do
+		if Seen(fontString) then
+			return fontString
+		end
+	end
+	return nil
+end
+
 EXTRA.layout[#EXTRA.layout + 1] = Layout
 EXTRA.show[#EXTRA.show + 1] = FollowThreat
 EXTRA.show[#EXTRA.show + 1] = Layout

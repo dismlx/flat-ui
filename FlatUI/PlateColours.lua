@@ -295,6 +295,21 @@ do
 		return Call(UnitCanAttack, "player", unit) == true
 	end
 
+	local function Fighting(frame)
+		local PT = ns.PlateThreat
+		if type(PT) == "table" and type(PT.Active) == "function" and type(PT.Get) == "function" then
+			local ok, active = pcall(PT.Active)
+			if ok and active == true then
+				local okState, threat = pcall(PT.Get, frame)
+				if okState and type(threat) == "table" then
+					return true
+				end
+			end
+		end
+		local unit = frame.unit
+		return type(unit) == "string" and not ns.IsSecret(unit) and Call(UnitAffectingCombat, unit) == true
+	end
+
 	local function Spot(line)
 		local holder, texture = line.holder, line.texture
 		local ok, width = pcall(holder.GetWidth, holder)
@@ -389,6 +404,10 @@ do
 		if not (line and line.holder) then
 			return
 		end
+		if not Fighting(frame) then
+			Still(line)
+			return
+		end
 		local r, g, b = ns.Colour(KEY .. ".lowHealthColour")
 		if line.r ~= r or line.g ~= g or line.b ~= b then
 			line.r, line.g, line.b = r, g, b
@@ -443,12 +462,52 @@ do
 			end
 		end
 	end
-	ns.AddEvent(KEY, "UNIT_FACTION", function(unit)
+	local function Changed(unit)
 		local frame = ns.PlateUnitFrame(unit)
 		if frame ~= nil and (LineOn() or lines[frame] ~= nil) then
 			ns.EachPart(KEY, LINE_PART, Mark, frame)
 		end
-	end, function(unit)
+	end
+	local function Plate(unit)
 		return type(unit) == "string" and not ns.IsSecret(unit) and unit:find("^nameplate%d") ~= nil
+	end
+	ns.AddEvent(KEY, "UNIT_FACTION", Changed, Plate)
+	ns.AddEvent(KEY, "UNIT_FLAGS", Changed, Plate)
+	if ns.PlateThreat ~= nil and type(ns.PlateThreat.OnChange) == "function" then
+		ns.PlateThreat.OnChange(function(frame)
+			if frame ~= nil and not ns.IsSecret(frame) and (LineOn() or lines[frame] ~= nil) then
+				ns.EachPart(KEY, LINE_PART, Mark, frame)
+			end
+		end)
+	end
+
+	local targeted
+	local function Respot(frame)
+		local line = frame ~= nil and lines[frame] or nil
+		if line and line.holder and line.shown and not ns.Forbidden(frame) then
+			line.x, line.px = nil, nil
+			pcall(Spot, line)
+		end
+	end
+	ns.AddEvent(KEY, "PLAYER_TARGET_CHANGED", function()
+		local old, new = targeted, ns.PlateUnitFrame("target")
+		targeted = new
+		Respot(old)
+		Respot(new)
+		if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+			for _, delay in ipairs({ 0, 0.3 }) do
+				C_Timer.After(delay, function()
+					Respot(old)
+					Respot(new)
+				end)
+			end
+		end
 	end)
+
+	function ns.PlateLowLineShare(frame)
+		if frame == nil or ns.IsSecret(frame) or ns.Forbidden(frame) or not Wants(frame) or not Fighting(frame) then
+			return nil
+		end
+		return Share()
+	end
 end

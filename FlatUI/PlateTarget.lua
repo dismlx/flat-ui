@@ -10,6 +10,7 @@ end
 local K = { SECONDS = 0.35, GROW = 2, LEVEL = 8 }
 
 local recs = setmetatable({}, { __mode = "k" })
+local copies = setmetatable({}, { __mode = "k" })
 local owns = setmetatable({}, { __mode = "k" })
 local S = { on = false, waited = 0, played = 0 }
 local Prepare
@@ -84,6 +85,26 @@ local function Wait(unitFrame)
 	end)
 end
 
+local function Holder(parent, bar)
+	local holder = CreateFrame("Frame", nil, parent)
+	ns.Own[holder] = true
+	pcall(holder.EnableMouse, holder, false)
+	holder:SetAllPoints(bar)
+	holder:SetAlpha(0)
+	local top = type(ns.PlateMarkLevel) == "function" and ns.PlateMarkLevel() or nil
+	local ok, level = pcall(bar.GetFrameLevel, bar)
+	if ns.Finite(top) then
+		pcall(holder.SetFrameLevel, holder, top + 1)
+	elseif ok and ns.Finite(level) then
+		pcall(holder.SetFrameLevel, holder, level + K.LEVEL)
+	end
+	local outline = ns.SetOutlineArea(ns.Outline(holder, holder), KEY)
+	ns.KeepOutline(outline)
+	ns.SetOutline(outline, true, false)
+	ns.SetOutlineThickness(outline, Thickness())
+	return holder, outline, ns.PlateTargetFlash(holder)
+end
+
 local function Make(unitFrame)
 	local rec = recs[unitFrame]
 	if rec and rec.holder then
@@ -99,22 +120,24 @@ local function Make(unitFrame)
 	end
 	rec = rec or {}
 	recs[unitFrame] = rec
-	local holder = CreateFrame("Frame", nil, bar)
-	ns.Own[holder] = true
-	holder:SetAllPoints(bar)
-	holder:SetAlpha(0)
-	local top = type(ns.PlateMarkLevel) == "function" and ns.PlateMarkLevel() or nil
-	local ok, level = pcall(bar.GetFrameLevel, bar)
-	if ns.Finite(top) then
-		pcall(holder.SetFrameLevel, holder, top + 1)
-	elseif ok and ns.Finite(level) then
-		pcall(holder.SetFrameLevel, holder, level + K.LEVEL)
+	rec.holder, rec.outline, rec.flash = Holder(bar, bar)
+	return rec
+end
+
+local function Copy(unitFrame)
+	if type(ns.PlateSlipCopy) ~= "function" then
+		return nil
 	end
-	local outline = ns.SetOutlineArea(ns.Outline(holder, holder), KEY)
-	ns.KeepOutline(outline)
-	ns.SetOutline(outline, true, false)
-	ns.SetOutlineThickness(outline, Thickness())
-	rec.holder, rec.outline, rec.flash = holder, outline, ns.PlateTargetFlash(holder)
+	local ok, frame, bar = pcall(ns.PlateSlipCopy, unitFrame)
+	if not ok or type(frame) ~= "table" or type(bar) ~= "table" then
+		return nil
+	end
+	local rec = copies[frame]
+	if rec == nil then
+		rec = {}
+		rec.holder, rec.outline, rec.flash = Holder(frame, bar)
+		copies[frame] = rec
+	end
 	return rec
 end
 
@@ -151,7 +174,7 @@ local function Play(unit, row)
 	if type(own) ~= "table" or own.styleOn ~= true then
 		return
 	end
-	local rec = Make(unitFrame)
+	local rec = Copy(unitFrame) or Make(unitFrame)
 	if not (rec and rec.flash) then
 		return
 	end
@@ -168,6 +191,9 @@ local function StandDown()
 		if not ns.Forbidden(unitFrame) then
 			pcall(Still, rec)
 		end
+	end
+	for _, rec in pairs(copies) do
+		pcall(Still, rec)
 	end
 end
 
