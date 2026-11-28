@@ -651,7 +651,7 @@ function ns.ChatBoxDress(frame, close)
 		end
 		local r, g, b = CROSS.DIM[1], CROSS.DIM[2], CROSS.DIM[3]
 		if lit then
-			local ok, cr, cg, cb = pcall(ns.Colour, "windows.accent")
+			local ok, cr, cg, cb = pcall(ns.WindowColour, "windows.accent")
 			if ok and ns.Finite(cr) and ns.Finite(cg) and ns.Finite(cb) then
 				r, g, b = cr, cg, cb
 			end
@@ -744,7 +744,7 @@ local function BuildBox()
 	frame:SetFrameStrata("DIALOG")
 	pcall(frame.SetClampedToScreen, frame, true)
 	frame:EnableMouse(true)
-	ns.SetOutlineAlpha(ns.SetOutlineArea(ns.Outline(frame, frame, true), KEY), nil, 0.95)
+	ns.SetOutlineAlpha(ns.ThemeOutline(ns.SetOutlineArea(ns.Outline(frame, frame, true), KEY), true), nil, 0.95)
 	local help = ns.OwnText(frame, "OVERLAY", "GameFontNormalSmall")
 	if help then
 		help:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -7)

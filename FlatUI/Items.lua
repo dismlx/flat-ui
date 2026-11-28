@@ -110,10 +110,10 @@ local shownHooked = setmetatable({}, { __mode = "k" })
 local retitleQueued = false
 
 local function OnTitleColour(frame)
-	if ns.Enabled(KEY) and Opt("titleOwn") and not refused.titles then
+	if ns.Enabled(KEY) and not refused.titles then
 		local text = TitleOf(frame)
-		if text then
-			local r, g, b = ns.Colour(KEY .. ".titleColour")
+		local r, g, b = ns.WindowTitleRGB()
+		if text and r ~= nil then
 			pcall(text.SetTextColor, text, r, g, b, 1)
 		end
 	end
@@ -128,8 +128,9 @@ function Items.Title(frame, on)
 	local live = on and not refused.titles
 	if live then
 		spec.percent = Opt("titleSize")
-		if Opt("titleOwn") then
-			spec.r, spec.g, spec.b = ns.Colour(KEY .. ".titleColour")
+		local r, g, b = ns.WindowTitleRGB()
+		if r ~= nil then
+			spec.r, spec.g, spec.b = r, g, b
 			spec.a = 1
 		end
 	end

@@ -137,7 +137,7 @@ local function Holding()
 end
 
 local function Accent()
-	local ok, r, g, b = pcall(ns.Colour, "windows.accent")
+	local ok, r, g, b = pcall(ns.WindowColour, "windows.accent")
 	if ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
 		return r, g, b
 	end

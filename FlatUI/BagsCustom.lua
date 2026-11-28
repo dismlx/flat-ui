@@ -192,7 +192,7 @@ local function Number(frame, method, ...)
 end
 
 local function Colour(path, r, g, b)
-	local ok, cr, cg, cb = pcall(ns.Colour, path)
+	local ok, cr, cg, cb = pcall(ns.WindowColour, path)
 	if ok and ns.Finite(cr) and ns.Finite(cg) and ns.Finite(cb) then
 		return cr, cg, cb
 	end
@@ -208,7 +208,7 @@ local function Opacity()
 	if not ns.Finite(value) then
 		value = ns.Get("windows.opacity")
 	end
-	return ns.Finite(value) and math.max(0, math.min(1, value / 100)) or 0.8
+	return ns.WindowOpacity(ns.Finite(value) and math.max(0, math.min(1, value / 100)) or 0.8)
 end
 
 local function TextWidth(text)

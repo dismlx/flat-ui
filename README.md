@@ -21,7 +21,7 @@ The options window groups its pages the same way as the list below; each group h
 - **[Group](https://github.com/dismlx/flat-ui/wiki/Group)**: party cooldowns, a threat list, your healers' mana, group tools and a ping bar.
 - **[Character and gear](https://github.com/dismlx/flat-ui/wiki/Character-and-gear)**: gear comparison with an Overall line, spell tooltips with what your stats give, a hit table and a trinket queue.
 - **[HUD](https://github.com/dismlx/flat-ui/wiki/HUD)**: the minimap, buffs and debuffs, quests and loot, messages and timers, experience and reputation bars, and data panels.
-- **[Chat and windows](https://github.com/dismlx/flat-ui/wiki/Chat-and-windows)**: chat, tooltips and the game's windows in Flat UI's look, with links to copy and your name in colour.
+- **[Chat and windows](https://github.com/dismlx/flat-ui/wiki/Chat-and-windows)**: chat, tooltips and the game's windows in Flat UI's look, or black and red, with links to copy and your name in colour.
 - **[Bags and items](https://github.com/dismlx/flat-ui/wiki/Bags-and-items)**: one bag window with sections and a search, your bank and other characters away from the banker, and item slots that show more.
 - **[Helpers](https://github.com/dismlx/flat-ui/wiki/Helpers)**: errands such as selling, repairs and quests, drink and health macros, a consumables bar, a mount key and aids in the world.
 - **[Layout](https://github.com/dismlx/flat-ui/wiki/Layout)**: move and size any frame with `/flatui move`, fading, hidden frames and the tooltip's place.

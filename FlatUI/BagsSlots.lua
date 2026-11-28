@@ -256,7 +256,7 @@ end
 
 local function Paint(box)
 	if box then
-		local r, g, b = ns.Colour("windows.panel")
+		local r, g, b = ns.WindowColour("windows.panel")
 		ns.SetOutlineFill(box, r, g, b, 1)
 	end
 end
@@ -377,7 +377,7 @@ end
 
 local function Edge(slot, bag)
 	if Stuck() == bag and Holds(bag) then
-		local r, g, b = ns.Colour("windows.accent")
+		local r, g, b = ns.WindowColour("windows.accent")
 		ns.SetOutlineColour(slot.box, r, g, b)
 	else
 		ns.SetOutlineColour(slot.box, nil, nil, nil)

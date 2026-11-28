@@ -176,7 +176,14 @@ local function PresetRGB(id)
 end
 Look.PresetRGB = PresetRGB
 
+local function Themed()
+	return ns.ThemeDark ~= nil and ns.ThemeDark()
+end
+
 function Look.AccentRGB()
+	if Themed() then
+		return ns.WindowColour("windows.accent")
+	end
 	return PresetRGB(Look.Get("accent"))
 end
 
@@ -188,7 +195,7 @@ local function Accent(token)
 	if token == "on-accent" then
 		return Hex((0.299 * r + 0.587 * g + 0.114 * b) > 0.45 and ON_ACCENT or ON_DARK)
 	end
-	if Look.Get("accent") == "indigo" then
+	if Look.Get("accent") == "indigo" and not Themed() then
 		return Hex(token == "accent-hover" and INDIGO.hover or INDIGO.pressed)
 	elseif token == "accent-hover" then
 		return Clamp(r + (1 - r) * 0.22), Clamp(g + (1 - g) * 0.22), Clamp(b + (1 - b) * 0.22)

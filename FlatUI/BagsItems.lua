@@ -488,7 +488,7 @@ local function CropShare()
 end
 
 local function PanelColour()
-	local ok, r, g, b = pcall(ns.Colour, "windows.panel")
+	local ok, r, g, b = pcall(ns.WindowColour, "windows.panel")
 	if ok and ns.Finite(r) and ns.Finite(g) and ns.Finite(b) then
 		return r, g, b
 	end

@@ -1,3 +1,9 @@
+## 0.5.51
+
+- For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- Windows: new row **Theme** at the top of the **Look** section: **Flat** (as before) or **Dark side**, black and red. **Dark side** gives the game's windows, Flat UI's own windows (the bags and bank, the gear comparison window and item finder, the trinket queue, **What's new** and the copy boxes) and the options window near-black backgrounds, nearly solid, with deep red borders, the titles, the chosen tab, highlights and ticked check boxes in a deep red, and a faint red glow just outside each window's edge that brightens a little while you point at it. The options window takes the red as its accent. It changes at once, and a window the game guards in a fight changes as the fight ends. Your own colours, **Window opacity** and the options window's **Accent colour** are kept and come back with **Flat**.
+- Windows: new row **RestedXP's windows** (on), in the new **Other addons** section: while that guide addon is loaded, its guide window and the steps in it, the arrow, the active item and target buttons, its menus and its other windows take Flat UI's flat backdrop and thin border, the bar texture, the fonts of the **Fonts** page and the colours of **Theme**. Off gives it its own look back, in full after `/reload`.
+
 ## 0.5.50
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.

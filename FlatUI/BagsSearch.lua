@@ -790,7 +790,7 @@ end
 local function PaintCross(own)
 	local r, g, b, a = 1, 1, 1, CROSS_ALPHA
 	if own.hover then
-		r, g, b = ns.Colour("windows.accent")
+		r, g, b = ns.WindowColour("windows.accent")
 		a = 1
 	end
 	for _, line in ipairs(own.lines) do
@@ -803,10 +803,10 @@ local function Paint(box)
 	if not own then
 		return
 	end
-	local r, g, b = ns.Colour("windows.panel")
+	local r, g, b = ns.WindowColour("windows.panel")
 	ns.SetOutlineFill(own.outline, r, g, b, 1)
 	if Focused(box) then
-		local ar, ag, ab = ns.Colour("windows.accent")
+		local ar, ag, ab = ns.WindowColour("windows.accent")
 		ns.SetOutlineColour(own.outline, ar, ag, ab)
 	else
 		ns.SetOutlineColour(own.outline, nil, nil, nil)

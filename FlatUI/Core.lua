@@ -42,6 +42,7 @@ local status = {}
 local outlines = setmetatable({}, { __mode = "k" })
 local running
 local AREAS = { nameplates = true, actionbars = true, unitframes = true, hud = true, chat = true }
+local THEMED = { windows = true, bags = true }
 local PREFIXES = { look = true, tip = true }
 local SUFFIXES = { Own = true, Border = true, Back = true, BackAlpha = true }
 local own = setmetatable({}, { __mode = "k" })
@@ -1300,9 +1301,12 @@ local function PaintNow(outline)
 	local r, g, b = outline.r, outline.g, outline.b
 	local shown = outline.shown
 	local area, prefix = AreaOf(outline)
+	local dark = (outline.themed or THEMED[outline.area]) and ns.ThemeDark ~= nil and ns.ThemeDark()
 	if r == nil then
 		shown = shown and (outline.kept or not ns.Borderless())
-		if area then
+		if dark then
+			r, g, b = ns.WindowColour("general.border")
+		elseif area then
 			r, g, b = ns.Colour(area .. "." .. prefix .. "Border")
 		else
 			r, g, b = ns.BorderRGB()
@@ -1324,6 +1328,9 @@ local function PaintNow(outline)
 	local br, bg, bb, ba
 	if outline.fr ~= nil then
 		br, bg, bb, ba = outline.fr, outline.fg, outline.fb, outline.fa
+	elseif dark then
+		br, bg, bb = ns.WindowColour("general.backdrop")
+		ba = ns.WindowOpacity(outline.backAlpha or ns.OutlineBackdropAlpha(outline))
 	elseif area and ns.Get(area .. "." .. prefix .. "Back") ~= nil then
 		br, bg, bb = ns.Colour(area .. "." .. prefix .. "Back")
 		ba = outline.backAlpha or ns.Get(area .. "." .. prefix .. "BackAlpha") / 100
@@ -1335,6 +1342,9 @@ local function PaintNow(outline)
 	outline.backdrop:SetShown(outline.shown and outline.backdropOn)
 	if round then
 		outline.backdrop:Hide()
+	end
+	if outline.glow ~= nil and ns.ThemeGlowPaint ~= nil then
+		ns.ThemeGlowPaint(outline.glow, outline.shown and outline.backdropOn and dark)
 	end
 end
 
@@ -1621,6 +1631,10 @@ local function PaintAll()
 	for _, outline in pairs(outlines) do
 		pcall(Paint, outline)
 	end
+end
+
+function ns.RepaintOutlines()
+	PaintAll()
 end
 
 local function Stop(key, err)

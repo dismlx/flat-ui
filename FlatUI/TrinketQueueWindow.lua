@@ -139,7 +139,7 @@ local function Refusal()
 end
 
 function Z.RGB(path, r, g, b)
-	local ok, cr, cg, cb = pcall(ns.Colour, path)
+	local ok, cr, cg, cb = pcall(ns.WindowColour, path)
 	if ok and Finite(cr) and Finite(cg) and Finite(cb) then
 		return cr, cg, cb
 	end
@@ -148,7 +148,7 @@ end
 
 function Z.Opacity()
 	local value = ns.Get("windows.opacity")
-	return Finite(value) and math.max(0, math.min(1, value / 100)) or 0.8
+	return ns.WindowOpacity(Finite(value) and math.max(0, math.min(1, value / 100)) or 0.8)
 end
 
 function Z.Crop()
@@ -1313,7 +1313,7 @@ function U.Make()
 	frame:SetSize(SIZE.W, SIZE.H)
 	frame:Hide()
 	W.frame = frame
-	W.outline = ns.SetOutlineArea(ns.Outline(frame, frame), "windows")
+	W.outline = ns.ThemeOutline(ns.SetOutlineArea(ns.Outline(frame, frame), "windows"), true)
 	U.MakeBar(frame)
 	U.MakeSwitch(frame)
 	U.MakeSlot(frame)

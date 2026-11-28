@@ -358,7 +358,7 @@ end
 
 local function RoleColour(role)
 	if role == "accent" then
-		return ns.Colour(KEY .. ".accent")
+		return ns.WindowColour(KEY .. ".accent")
 	end
 	local colour = ROLES[role]
 	return colour[1], colour[2], colour[3]
@@ -475,7 +475,7 @@ local function Glyph(own, owner, target, spec)
 	return glyph
 end
 
-local function Outlined(own, owner, target, fill)
+local function Outlined(own, owner, target, fill, glow)
 	if dry then
 		return nil
 	end
@@ -483,19 +483,20 @@ local function Outlined(own, owner, target, fill)
 	if not outline then
 		error("no outline", 0)
 	end
+	ns.ThemeOutline(outline, glow)
 	own.outlines[#own.outlines + 1] = { outline = outline, fill = fill }
 	return outline
 end
 
 local function Fill(outline, fill)
 	if fill == "window" then
-		local r, g, b = ns.Colour("general.backdrop")
-		ns.SetOutlineFill(outline, r, g, b, Opt("opacity") / 100)
+		local r, g, b = ns.WindowColour("general.backdrop")
+		ns.SetOutlineFill(outline, r, g, b, ns.WindowOpacity(Opt("opacity") / 100))
 	elseif fill == "solid" then
-		local r, g, b = ns.Colour("general.backdrop")
-		ns.SetOutlineFill(outline, r, g, b, 0.95)
+		local r, g, b = ns.WindowColour("general.backdrop")
+		ns.SetOutlineFill(outline, r, g, b, ns.WindowOpacity(0.95))
 	else
-		local r, g, b = ns.Colour(KEY .. ".panel")
+		local r, g, b = ns.WindowColour(KEY .. ".panel")
 		ns.SetOutlineFill(outline, r, g, b, 1)
 	end
 end
@@ -624,7 +625,7 @@ Kind("window", "window frames", nil,
 			own.rock = RegionAt(frame, "BACKGROUND", -6)
 		end
 		if flag ~= true then
-			Outlined(own, MapWindow(frame) or frame, frame, flag == "solid" and "solid" or "window")
+			Outlined(own, MapWindow(frame) or frame, frame, flag == "solid" and "solid" or "window", true)
 		end
 	end,
 	function(frame, own, on)
@@ -797,6 +798,7 @@ Kind("tab", "tabs", "tabs",
 		local box = Box(frame, frame, 3, 3, top, bottom)
 		Outlined(own, frame, box, "panel")
 		Tint(own, frame, box, "HIGHLIGHT", "accent", 0.25)
+		own.chosen = Tint(own, frame, box, "BORDER", "accent", 0.35, nil, true)
 	end,
 	function(frame, own, on)
 		FadeArray(frame, "TabTextures", on)
@@ -805,7 +807,24 @@ Kind("tab", "tabs", "tabs",
 			Fade(Part(frame, key), on)
 		end
 		Reveal(own, on)
+		if own.chosen then
+			Show(own.chosen, on and ns.ThemeDark() and Watch.Chosen(frame))
+		end
 	end)
+
+function Watch.Chosen(frame)
+	if Shown(Part(frame, "LeftActive")) or Shown(Part(frame, "LeftDisabled")) then
+		return true
+	end
+	local name = NameOf(frame)
+	return name ~= nil and Shown(rawget(_G, name .. "LeftDisabled"))
+end
+
+function Watch.TabChosen(tab)
+	if ns.Enabled(KEY) and ns.ThemeDark() and Usable(tab) and styled[tab] and styled[tab].tab then
+		Soon(KINDS.tab.label, Again, tab, "tab")
+	end
+end
 
 local TAB_ICONS = { large = 42, medium = 36, small = 30 }
 local TAB_PADDING = 5
@@ -1115,6 +1134,16 @@ Kind("check", "check boxes", "checks",
 	function(frame, own, on)
 		Fade(State(frame, "Normal"), on)
 		Fade(State(frame, "Pushed"), on)
+		if on and not dry then
+			local r, g, b = ns.WindowCheckRGB(CHECK_ON[1], CHECK_ON[2], CHECK_ON[3])
+			if own.checkR ~= r or own.checkG ~= g or own.checkB ~= b then
+				local checked = State(frame, "Checked")
+				if checked then
+					checked:SetColorTexture(r, g, b, CHECK_ON[4])
+				end
+				own.checkR, own.checkG, own.checkB = r, g, b
+			end
+		end
 		Reveal(own, on)
 	end)
 
@@ -1188,7 +1217,7 @@ Kind("divider", "dividers", nil,
 		if not own.line then
 			return
 		end
-		local r, g, b = ns.BorderRGB()
+		local r, g, b = ns.WindowColour("general.border")
 		own.line:SetWidth(ns.Pixels(frame, ns.Get("general.thickness")))
 		own.line:SetColorTexture(r, g, b, 1)
 		own.line:SetShown(on and not ns.Borderless())
@@ -2232,6 +2261,8 @@ local function InstallHooks()
 	HookGlobal("CollectionsJournal_SetTab_Internal", Watch.RefreshSideTabs)
 	HookGlobal("ToggleCharacter", Watch.RefreshSideTabs)
 	HookGlobal("SetPaperDollBackground", Watch.RaceBackground)
+	HookGlobal("PanelTemplates_SelectTab", Watch.TabChosen)
+	HookGlobal("PanelTemplates_DeselectTab", Watch.TabChosen)
 end
 
 do
@@ -2367,6 +2398,7 @@ local function Refresh()
 	ns.CharacterDurability.Apply()
 	ns.CharacterThorns.Apply()
 	ns.QuestPagesSync()
+	ns.GuideSkinRefresh()
 	if ns.Enabled(KEY) and switched then
 		SweepAll()
 	end

@@ -1301,8 +1301,8 @@ AREAS = [
         PartySync EnemyCooldowns Threat ThreatLook ThreatMobs HealerMana GroupTools OwnBuffs TrackerShapes TrackerKinds TrackerMarks
         TrackerShare TrackerGroup TrackerClicks Pulse Items Absorbs ResourceBarrier ChargesLook ChargesBar ChargesGame Charges PingBar"""),
     ("hud", "HUD, windows, movers, chat and tooltips", """BagSort BagKey Bags BagsData BagsCategories BagsSearch BagsItems
-        BagsLayout BagsWindow BagsBank BagsSlots BagsCurrency BagsTooltip BagsOrder BagsPins BagsCustom Windows ItemMarks CharacterDurability CharacterThorns StatTips StatTipsMore Hud MapButtons
-        AuraTime XpStats XpBar QuestCount QuestieSkin MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable HitTableTip Chat
+        BagsLayout BagsWindow BagsBank BagsSlots BagsCurrency BagsTooltip BagsOrder BagsPins BagsCustom Windows WindowTheme ItemMarks CharacterDurability CharacterThorns StatTips StatTipsMore Hud MapButtons
+        AuraTime XpStats XpBar QuestCount QuestieSkin GuideSkin MapText ErrorFilter ScreenText MeterClear HitTableCalc HitTable HitTableTip Chat
         ChatText ChatTips ChatLinks ItemCompare ChatHistory SpellData SpellModel GearModel GearAvoid SpellLines GearLines GearWindow
         ItemIndex RotationData GearSearch GearButton TrinketQueue TrinketQueueWindow TrinketQueueButtons Movers MoversMode MoversSnap Hide Tooltip"""),
     ("errands", "Errands, panels and world", """Sparkle SparkleGlow CameraZoom CursorRing MountKey Errands ErrandsMerchant

@@ -2,7 +2,7 @@ Every setting of the **Layout** group of the options window, 122 in all, with it
 
 Pages: [Movers](#movers) · [Fading](#fading) · [Hidden frames](#hidden-frames) · [Tooltip position](#tooltip-position)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.50.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.51.
 
 ## Movers
 
