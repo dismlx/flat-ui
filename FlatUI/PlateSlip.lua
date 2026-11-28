@@ -1009,7 +1009,11 @@ end
 
 local function Copied(spec, region)
 	local ok, text = Call(region, "GetText")
-	spec.text = ok and text or ""
+	if ok and (ns.IsSecret(text) or type(text) == "string") then
+		spec.text = text
+	else
+		spec.text = ""
+	end
 	return spec
 end
 

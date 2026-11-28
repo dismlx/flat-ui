@@ -85,25 +85,6 @@ local function Wait(unitFrame)
 	end)
 end
 
-local function Make(unitFrame)
-	local rec = recs[unitFrame]
-	if rec and rec.holder then
-		return rec
-	end
-	local bar = Bar(unitFrame)
-	if bar == nil then
-		return nil
-	end
-	if Locked(unitFrame, bar) then
-		Wait(unitFrame)
-		return nil
-	end
-	rec = rec or {}
-	recs[unitFrame] = rec
-	rec.holder, rec.outline, rec.flash = Holder(bar, bar)
-	return rec
-end
-
 local function Holder(parent, bar)
 	local holder = CreateFrame("Frame", nil, parent)
 	ns.Own[holder] = true
@@ -122,6 +103,25 @@ local function Holder(parent, bar)
 	ns.SetOutline(outline, true, false)
 	ns.SetOutlineThickness(outline, Thickness())
 	return holder, outline, ns.PlateTargetFlash(holder)
+end
+
+local function Make(unitFrame)
+	local rec = recs[unitFrame]
+	if rec and rec.holder then
+		return rec
+	end
+	local bar = Bar(unitFrame)
+	if bar == nil then
+		return nil
+	end
+	if Locked(unitFrame, bar) then
+		Wait(unitFrame)
+		return nil
+	end
+	rec = rec or {}
+	recs[unitFrame] = rec
+	rec.holder, rec.outline, rec.flash = Holder(bar, bar)
+	return rec
 end
 
 local function Copy(unitFrame)
