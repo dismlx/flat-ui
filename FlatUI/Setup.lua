@@ -1710,7 +1710,8 @@ function S.Presets()
 	local defs = S.Defs()
 	local list, dropped = {}, {}
 	for _, raw in ipairs(S.Listed()) do
-		local profile = { id = raw.id, label = raw.label, line = raw.line, values = {}, screen = type(raw.screen) == "table" and raw.screen or nil, only = raw.only }
+		local profile = { id = raw.id, label = raw.label, line = raw.line, values = {}, screen = type(raw.screen) == "table" and raw.screen or nil, only = raw.only,
+			bars = type(raw.bars) == "table" and raw.bars or nil, trackers = type(raw.trackers) == "table" and raw.trackers or nil }
 		for _, spot in ipairs(type(raw.movers) == "table" and raw.movers or {}) do
 			local copy = { point = spot.point, x = spot.x, y = spot.y, scale = spot.scale, kind = spot.kind, label = spot.label }
 			if IsText(spot.frame) and ns.CleanSpot(copy) then
@@ -1874,6 +1875,9 @@ function S.UseReady(id)
 	if ok then
 		S.Flag()
 		print(("Flat UI: using %s."):format(found or profile.label))
+		if S.Touch then
+			S.Touch(profile)
+		end
 	end
 	return ok, why
 end
@@ -1919,6 +1923,9 @@ function S.OwnLook()
 			if ns.AssignProfile(name or profile.label, picks, spots) then
 				S.Flag()
 				S.line = ("Flat UI: welcome back, %s. Your look is ready; /flatui profiles has the others."):format(profile.label)
+				if S.Touch then
+					S.Touch(profile)
+				end
 			end
 			return
 		end
@@ -1962,6 +1969,9 @@ function S.ShowOffer()
 end
 
 function ns.SetupLogin()
+	if S.Touched then
+		S.Touched()
+	end
 	if S.line then
 		print(S.line)
 		S.line = nil

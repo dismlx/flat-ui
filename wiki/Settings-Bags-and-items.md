@@ -2,7 +2,7 @@ Every setting of the **Bags and items** group of the options window, 63 in all, 
 
 Pages: [Bags](#bags) · [Item slots](#item-slots)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.51.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.52.
 
 ## Bags
 

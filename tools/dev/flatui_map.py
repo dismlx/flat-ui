@@ -1288,7 +1288,7 @@ AREAS = [
     ("core", "Core and settings", """Config Core TaintScan Scale Fonts Fade LayoutSpots LayoutText ConfigGame Options Reload
         Panel ProfileSwitch ProfileShare PanelLook PanelCards PanelSamples PanelColour PanelTrust PanelSearch PanelNav
         PanelTabs PanelHome PanelPreview WhatsNewData WhatsNew TestMode TestUnits TestHud"""),
-    ("setup", "Setup", "SetupSteps SetupProfiles SetupStops Setup SetupWalk SetupWelcome"),
+    ("setup", "Setup", "SetupSteps SetupProfiles SetupStops Setup SetupWalk SetupWelcome SetupBars"),
     ("unitframes", "Unit frames", """ClassData UnitFrames UnitFramePortrait UnitFrameLevel UnitFrameCells UnitFrameLooks
         UnitFrameHead UnitText UnitParts UnitExtras UnitFrameSpots UnitTrail UnitGroupMarks UnitDruidMana UnitManaRule UnitPetTarget UnitHots HealthColour
         PetFrameSize"""),

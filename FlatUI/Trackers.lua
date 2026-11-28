@@ -767,14 +767,7 @@ function ns.TrackerClassCandidates()
 	return rows
 end
 
-function ns.TrackerAddClass(pick)
-	local data = ClassList()
-	local wanted = {}
-	for index, row in ipairs(data) do
-		if pick == 1 or pick == index + 1 then
-			wanted[#wanted + 1] = row
-		end
-	end
+local function AddClassRows(wanted, ready)
 	if #wanted == 0 then
 		return false, "No class trackers."
 	end
@@ -788,6 +781,9 @@ function ns.TrackerAddClass(pick)
 	local added, skipped, have, full = 0, {}, {}, false
 	for _, row in ipairs(wanted) do
 		local why = Missing(row)
+		if ready and row.kind == "item" then
+			why = nil
+		end
 		if OnList(list, row) then
 			have[#have + 1] = row.name
 		elseif #list >= K.MAX_TRACKERS then
@@ -797,6 +793,9 @@ function ns.TrackerAddClass(pick)
 			skipped[#skipped + 1] = ("%s, %s."):format(row.name, why)
 		else
 			local entry = CopyEntry(row, NewId(taken))
+			if ready then
+				entry.on = nil
+			end
 			taken[entry.id] = true
 			list[#list + 1] = entry
 			added = added + 1
@@ -814,9 +813,37 @@ function ns.TrackerAddClass(pick)
 	end
 	if added > 0 then
 		QueueLayout()
-		K.RowPreview()
+		if not ready then
+			K.RowPreview()
+		end
 	end
 	return added > 0, table.concat(parts, " ")
+end
+
+function ns.TrackerAddClass(pick)
+	local wanted = {}
+	for index, row in ipairs(ClassList()) do
+		if pick == 1 or pick == index + 1 then
+			wanted[#wanted + 1] = row
+		end
+	end
+	return AddClassRows(wanted)
+end
+
+function ns.TrackerAddClassNamed(names)
+	local named = {}
+	for _, name in ipairs(type(names) == "table" and names or {}) do
+		if type(name) == "string" then
+			named[name] = true
+		end
+	end
+	local wanted = {}
+	for _, row in ipairs(ClassList()) do
+		if named[row.name] then
+			wanted[#wanted + 1] = row
+		end
+	end
+	return AddClassRows(wanted, true)
 end
 
 function ns.TrackerAddBuff(spellID)
