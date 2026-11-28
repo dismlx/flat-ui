@@ -2,7 +2,7 @@ Every setting of the **Group** group of the options window, 86 in all, with its 
 
 Pages: [Party cooldowns](#party-cooldowns) · [Threat list](#threat-list) · [Healer mana](#healer-mana) · [Group tools](#group-tools) · [Ping bar](#ping-bar)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.51.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.52.
 
 ## Party cooldowns
 

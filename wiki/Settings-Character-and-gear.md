@@ -2,7 +2,7 @@ Every setting of the **Character and gear** group of the options window, 55 in a
 
 Pages: [Gear comparison](#gear-comparison) · [Spell tooltips](#spell-tooltips) · [Hit table](#hit-table) · [Trinket queue](#trinket-queue)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.51.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.52.
 
 ## Gear comparison
 
