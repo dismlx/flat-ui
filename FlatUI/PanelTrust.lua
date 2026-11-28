@@ -51,12 +51,26 @@ function Trust.Question(entry, name)
 	return ("Reset %d setting%s on %s?"):format(count, count == 1 and "" or "s", name)
 end
 
+function Trust.Wanted(path, item)
+	local row = item
+	for _ = 1, 8 do
+		if type(row) ~= "table" then
+			return nil
+		end
+		if row.needsPath == path then
+			return row.needsIn
+		end
+		row = type(row.needsPath) == "string" and ns.Def(row.needsPath) or nil
+	end
+	return nil
+end
+
 function Trust.Reason(path, item)
 	local def = ns.Def(path)
 	local name = def and def.label or path
 	local r, g, b = ns.PanelLook.Colour("accent")
 	local line = ("Needs |cff%02x%02x%02x%s|r"):format(math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5), name)
-	local wanted = item and item.needsPath == path and item.needsIn or nil
+	local wanted = Trust.Wanted(path, item)
 	if def and type(wanted) == "table" and #wanted == 1 and type(wanted[1]) == "boolean" then
 		return line .. (wanted[1] and " on." or " off.")
 	end
@@ -223,7 +237,7 @@ end
 function Trust.Prompt(path, item)
 	local def = ns.Def(path)
 	local name = type(def) == "table" and type(def.label) == "string" and def.label or path
-	local wanted = item and item.needsPath == path and item.needsIn or nil
+	local wanted = Trust.Wanted(path, item)
 	if type(wanted) == "table" and #wanted == 1 then
 		if wanted[1] == false then
 			return ("Turn off %s first."):format(name)

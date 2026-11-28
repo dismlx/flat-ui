@@ -37,10 +37,10 @@ Search.SPELLING = {
 
 function Search.Word(word)
 	word = Search.SPELLING[word] or word
-	if #word >= 5 and word:sub(-1) == "s" and word:sub(-2) ~= "ss" then
+	if #word >= 4 and word:sub(-1) == "s" and word:sub(-2) ~= "ss" then
 		word = word:sub(1, -2)
 	end
-	return word
+	return Search.SPELLING[word] or word
 end
 
 function Search.Words(typed)

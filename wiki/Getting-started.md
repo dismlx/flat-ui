@@ -134,7 +134,7 @@ Type in **Search** to find settings across every page.
 
 Type `#changed` to list every setting of the profile in use that is off its default, grouped by page. Each row works as on its page, with its reset arrow. The head says how many, as "37 changed settings", or "Every setting is at its default." More words narrow the list, as `#changed nameplate`; they match choice names too.
 
-While `#changed` lists any rows, the footer's button reads **Reset these (9)**. It asks "Reset the 9 changed settings listed? Ctrl+Z puts them back." and its red **Reset** is not answered by Enter. It resets them all as one step: the head counts down to "Every setting is at its default now", **Recent changes** on **Home** shows one line, as "Reset of #changed nameplate · 9 settings", and one Ctrl+Z puts them all back.
+While `#changed` lists any rows, the footer's button reads **Reset these (9)**. It asks "Reset the 9 changed settings listed? Ctrl+Z puts them back." and its red **Reset** is not answered by Enter. It resets them all as one step: the head counts down to "Every setting is at its default now" (or, with more words, to 'No changed settings for "nameplate"'), **Recent changes** on **Home** shows one line, as "Reset of #changed nameplate · 9 settings", and one Ctrl+Z puts them all back.
 
 You can search from chat too: `/flatui border colour` opens the window with those words in **Search**.
 

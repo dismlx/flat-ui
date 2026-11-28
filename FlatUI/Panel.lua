@@ -2854,6 +2854,7 @@ local function Search(typed)
 	if only then
 		ui.ResetMode(found)
 	else
+		ui.ResetMode(nil)
 		ui.reset:Hide()
 	end
 	ui.tip, ui.message = "", nil
@@ -2868,6 +2869,7 @@ function ui.ResetMode(count)
 	if ui.resetLabel then
 		ui.resetLabel:SetText(count and ("Reset these (%d)"):format(count) or "Reset page")
 	end
+	ui.resetWide = count ~= nil
 	ui.reset:SetWidth(count and 124 or 100)
 	if ui.strip and not ui.mode then
 		ui.strip:SetWidth(WIDTH - 24 - 330 - (count and 24 or 0))
@@ -3149,7 +3151,7 @@ local function SetParts()
 		ui.barVersion:SetShown(mode == nil)
 	end
 	ui.barCounter:SetShown(mode ~= nil)
-	ui.strip:SetWidth(mode and WIDTH - 24 or WIDTH - 24 - 330)
+	ui.strip:SetWidth(mode and WIDTH - 24 or WIDTH - 24 - 330 - (ui.resetWide and 24 or 0))
 	if ui.Keys then
 		ui.Keys()
 	end
