@@ -1159,8 +1159,8 @@ function hold.EyeHooks()
 		hold.eye.driver:Hide()
 		hold.eye.driver:SetScript("OnUpdate", EyeStep)
 	end
-	hooksecurefunc(eye, "UpdateDefaultAnchor", hold.EyeMark)
-	hooksecurefunc(cluster, "SetEditModeScale", hold.EyeMark)
+	ns.Follow(eye, "UpdateDefaultAnchor", hold.EyeMark)
+	ns.Follow(cluster, "SetEditModeScale", hold.EyeMark)
 	eye:HookScript("OnShow", hold.EyeMark)
 	hold.eye.hooked = true
 end
@@ -4098,12 +4098,8 @@ local function Watch()
 		EventRegistry:RegisterCallback("UIParentPanelManager.HideUIPanel", PanelChanged, owner)
 		EventRegistry:RegisterCallback("WorldMapMaximized", PanelChanged, owner)
 		EventRegistry:RegisterCallback("WorldMapMinimized", PanelChanged, owner)
-		if type(hooksecurefunc) == "function" and type(UpdateUIPanelPositions) == "function" then
-			hooksecurefunc("UpdateUIPanelPositions", PanelChanged)
-		end
-		if type(hooksecurefunc) == "function" and type(UpdateContainerFrameAnchors) == "function" then
-			hooksecurefunc("UpdateContainerFrameAnchors", PanelChanged)
-		end
+		ns.FollowGlobal("UpdateUIPanelPositions", PanelChanged)
+		ns.FollowGlobal("UpdateContainerFrameAnchors", PanelChanged)
 		hold.EyeHooks()
 	end)
 	if ok then

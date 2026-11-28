@@ -119,6 +119,7 @@
 - World and cursor: **Maximum camera distance** ticked in a fight now says "Flat UI: Maximum camera distance changes when the fight ends." When the fight ends the camera glides out, as it does when ticked at any other time.
 - World and cursor: the **Lava tick timer** box in `/flatui move` is now as wide and tall as **Lava bar width** and **Lava bar height** make the bar, so it lines up with other frames and the snap guides.
 - World and cursor: **Cursor ring colour** now greys out with "Needs Class colour off." while **Class colour** is on, and sits under it.
+- The queue eye by the minimap is now followed the same safe way as every other game frame Flat UI keeps in place: with the game's taint log on, Flat UI leaves its methods alone and counts them in `/flatui status`, while the regular check still keeps the eye where you put it.
 
 ## 0.5.48
 
