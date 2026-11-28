@@ -11,7 +11,6 @@ local NOTE = "Unit frames: Lost health trail: the game refused the band on one f
 
 local IsSecret = ns.IsSecret
 local trails = setmetatable({}, { __mode = "k" })
-local poll = { frame = nil, on = false, wait = 0 }
 
 local function Opt(key)
 	return ns.Get(KEY .. "." .. key)
@@ -81,6 +80,21 @@ local function Layer(entry)
 	return layer, math.min(TRAIL.high, sub - 1)
 end
 
+local function Ticker(t)
+	t.tick = function(_, elapsed)
+		t.wait = t.wait - (tonumber(elapsed) or 0)
+		if t.wait > 0 then
+			return
+		end
+		t.wait = TRAIL.every
+		X.run(PART, Feed, t)
+	end
+	t.shown = function()
+		t.wait = TRAIL.every
+		X.run(PART, Feed, t, true)
+	end
+end
+
 local function Make(rec, entry)
 	local bar = entry.bar
 	if bar == nil or ns.Forbidden(bar) or Layer(entry) == nil then
@@ -107,7 +121,11 @@ local function Make(rec, entry)
 	ns.Own[band] = true
 	band:SetAllPoints(fill)
 	band:Hide()
-	return { rec = rec, entry = entry, bar = bar, ghost = ghost, band = band, on = false, poll = POLLED[rec.kind] == true }
+	local t = { rec = rec, entry = entry, bar = bar, ghost = ghost, band = band, on = false, poll = POLLED[rec.kind] == true, polling = false, wait = TRAIL.every }
+	if t.poll then
+		Ticker(t)
+	end
+	return t
 end
 
 local function Paint(t)
@@ -154,36 +172,15 @@ local function Paint(t)
 	return true
 end
 
-local function OnPoll(_, elapsed)
-	poll.wait = poll.wait - (tonumber(elapsed) or 0)
-	if poll.wait > 0 then
+local function Poll(t)
+	local want = t.on and t.poll
+	if want == t.polling then
 		return
 	end
-	poll.wait = TRAIL.every
-	for _, t in pairs(trails) do
-		if t.on and t.poll then
-			X.run(PART, Feed, t)
-		end
-	end
-end
-
-local function Poll()
-	local want = false
-	for _, t in pairs(trails) do
-		want = want or (t.on and t.poll)
-	end
-	if want == poll.on then
-		return
-	end
-	if poll.frame == nil then
-		if not want then
-			return
-		end
-		poll.frame = CreateFrame("Frame")
-		ns.Own[poll.frame] = true
-	end
-	poll.on = want
-	poll.frame:SetScript("OnUpdate", want and OnPoll or nil)
+	t.polling = want
+	t.wait = TRAIL.every
+	t.ghost:SetScript("OnUpdate", want and t.tick or nil)
+	t.ghost:SetScript("OnShow", want and t.shown or nil)
 end
 
 local function Hide(t)
@@ -199,7 +196,7 @@ local function Sync(rec, on)
 	if not (on and rec.made and entry ~= nil and Wanted(rec)) then
 		if t ~= nil then
 			Hide(t)
-			Poll()
+			Poll(t)
 		end
 		return
 	end
@@ -227,7 +224,7 @@ local function Sync(rec, on)
 	end
 	if not Paint(t) then
 		Hide(t)
-		Poll()
+		Poll(t)
 		return
 	end
 	if not t.on then
@@ -235,7 +232,7 @@ local function Sync(rec, on)
 		Feed(t, true)
 		t.band:Show()
 	end
-	Poll()
+	Poll(t)
 end
 
 local function Changed(rec)

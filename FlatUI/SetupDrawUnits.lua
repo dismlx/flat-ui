@@ -1269,16 +1269,16 @@ function E.bars(o, g, L)
 	local segments = { { o.pred, hp, 0.12, g.healPrediction, 0.24, 0.86, 0.39, 0.75 }, { o.shield, hp + 0.12, 0.10, g.absorbShield, 1, 1, 1, 0.6 },
 		{ o.absorb, hp - 0.10, 0.10, g.healAbsorb, 0.47, 0.08, 0.08, 0.85 } }
 	o.segments = segments
+	local trail = L.on and g.flat and s.kind == "target" and Get("lostTrail") == true and not (Get("lookLostColour") == true and g.backdrop)
+		and not s.dead and not s.offline
 	for _, segment in ipairs(segments) do
-		local shown = not s.dead and not s.offline and (not L.on or segment[4])
+		local shown = not s.dead and not s.offline and (not L.on or segment[4]) and not (trail and segment[1] ~= o.absorb)
 		segment[1]:SetShown(shown)
 		if shown then
 			Stretch(segment[1], o.health, bar * segment[2], bar * (segment[2] + segment[3]), size.health)
 			Solid(segment[1], segment[5], segment[6], segment[7], segment[8])
 		end
 	end
-	local trail = L.on and g.flat and s.kind == "target" and Get("lostTrail") == true and not (Get("lookLostColour") == true and g.backdrop)
-		and not s.dead and not s.offline
 	o.trail:SetShown(trail and true or false)
 	if trail then
 		Stretch(o.trail, o.health, bar * hp, bar * math.min(1, hp + TRAIL.share), size.health)

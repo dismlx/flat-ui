@@ -3,13 +3,13 @@ local ADDON_NAME, ns = ...
 local X = ns.UnitFrameExtra
 local KEY = "unitframes"
 local ICONS, TOT = "Combat and resting icons", "Target of target position"
-local COMBO, MARKS, GROUP = "Combo points", "Target marks", "Raid group number"
+local COMBO, MARKS, GROUP, KIND = "Combo points", "Target marks", "Raid group number", "Elite and Rare"
 local GAP = { icon = 2, tot = 4 }
 local REST = { box = 20, spill = 5 }
 local RETRY = { tries = 5, wait = 0.2 }
 local NEAR = 0.05
 local RING = { radius = 39.6, reach = 45, room = 9, low = 0.6, high = 1.2 }
-local CAST = { far = -40, x = 43, small = 38, pad = 123, padSmall = 118, y = 5, smallY = 3, gameY = -46, smallGameY = -48, auraX = 18, auraY = -10 }
+local CAST = { far = -40, x = 43, small = 38, padSmall = 118, y = 5, smallY = 3, auraX = 18, auraY = -10 }
 local MARK = { lift = 1, quest = 3, name = -13, pad = 4 }
 local TELL = { tot = "Flat UI: the target of target frame moves when the fight ends.", icons = "Flat UI: the combat and resting icons move when the fight ends." }
 
@@ -251,8 +251,10 @@ local function Cast(bar, game)
 	end
 	local shown = X.ask(tot, "IsShown") == true
 	local beside = moved[tot] == true and shown and not Off(TOT) and Opt("totSpot") == "beside"
-	if (game or not cast[bar]) and not beside then
+	if game then
 		cast[bar] = nil
+	end
+	if cast[bar] == nil and not beside then
 		return
 	end
 	if InCombatLockdown() and type(ns.MaybeProtected) == "function" and ns.MaybeProtected(bar) then
@@ -265,19 +267,18 @@ local function Cast(bar, game)
 		end
 		return
 	end
+	if not beside then
+		local list = cast[bar]
+		cast[bar] = nil
+		pcall(Anchor, bar, list)
+		return
+	end
 	local list = Points(bar)
 	local p = list ~= nil and #list == 1 and list[1] or nil
 	if p == nil or p[1] ~= "TOPLEFT" or p[2] ~= parent or p[3] ~= "BOTTOMLEFT" then
 		return
 	end
 	local small = math.abs(p[4] - CAST.small) < 0.5 or math.abs(p[4] - CAST.padSmall) < 0.5
-	if not beside then
-		cast[bar] = nil
-		if shown and p[5] > CAST.far then
-			pcall(Anchor, bar, { { "TOPLEFT", parent, "BOTTOMLEFT", p[4], small and CAST.smallGameY or CAST.gameY } })
-		end
-		return
-	end
 	if p[5] >= CAST.far then
 		return
 	end
@@ -291,7 +292,9 @@ local function Cast(bar, game)
 		spot = { { "TOPLEFT", parent, "BOTTOMLEFT", small and CAST.small or CAST.x, small and CAST.smallY or CAST.y } }
 	end
 	if pcall(Anchor, bar, spot) then
-		cast[bar] = true
+		cast[bar] = list
+	else
+		pcall(Anchor, bar, list)
 	end
 end
 
@@ -435,6 +438,21 @@ local function Combo(job)
 	job.at, job.k, job.round = drawn and pic.frame or bar, k, drawn
 end
 
+local function Ranked(rec, pic)
+	local drawn = pic ~= nil and pic.drawn == true and not pic.none
+	if Opt("elite") == true and (X.joined(rec) or drawn) then
+		return true
+	end
+	if ns.PartStopped(KEY, KIND) or not X.rowOn(rec) then
+		return false
+	end
+	if Opt("kindWord") == true then
+		return true
+	end
+	local at = X.row.at(rec)
+	return Opt("kindMark") == true and X.levelWanted(rec) and (at == "end" or at == "before" or (at == "portrait" and drawn))
+end
+
 local function Marks(job)
 	local rec = X.known(Game(job.parent))
 	if rec == nil or not rec.made then
@@ -463,7 +481,7 @@ local function Marks(job)
 		Put(raid, { { "BOTTOM", Over(rec), "TOPRIGHT", MARK.name, t + MARK.lift } })
 		Put(quest, { { "CENTER", bar, "BOTTOMRIGHT", -MARK.quest, MARK.quest } })
 	end
-	local fade = Opt("elite") == true or Opt("kindMark") == true or Opt("kindWord") == true
+	local fade = Ranked(rec, pic)
 	if fade or job.faded then
 		ns.SetFaded(star, fade)
 		job.faded = fade or nil
