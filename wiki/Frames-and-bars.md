@@ -75,7 +75,7 @@ An Elite, Rare or Boss shows in several ways, each with its own row:
 - **Elite or Rare word**: Elite, Rare, Rare Elite or Boss in the name row.
 - **Line under the name row** (off at first): a thin coloured line between the name row and the health bar.
 
-An enemy that another player has tapped, which gives you no experience or loot, turns grey, as the game's own frames grey it. This shows in the name row and in a **Health bar colour** or **Name colour** of Class or Reaction.
+An enemy that another player has tapped, which gives you no experience or loot, turns grey, as the game's own frames grey it. This shows in the name row, in a **Health bar colour** or **Name colour** of Class or Reaction, in a **Portrait border** of **Class or reaction colour** (the whole frame's border in **One frame**) and on the pet target frame.
 
 ### Health and power bars
 
@@ -87,6 +87,7 @@ Under **Bars** on the **Bars and pictures** tab:
 - **Power bar width**, in **Separate parts**, is **Same as the health bar** (the default) or **Game's width**, which can run past the health bar on the target, focus and target of target frames.
 - **Hide empty power bar** (on) hides the power bar of a unit that has no power.
 - **Colour health bars by health left** (off at first) turns the health bars from green through yellow to red as health drops, in the three **Health left** colours of the **Colours** tab of the **Flat UI** page. It works on raid cells, raid-style party frames and the pet target frame too, also in a fight.
+- **Lost health trail** (on) shows the chunk of health a hit took as a pale band that drains smoothly down to the new health over a fraction of a second, so a big hit reads at a glance. Heals still jump up at once, and a new target never drains from the old one's health. It needs **Flat bars**, and is not on raid cells, nor with **Dark health bar, colour shows what is lost**.
 
 Each frame's tab has a **Health bar colour** row: **Health colour**, **Class** or **Reaction**. The player, party and target of target frames start at **Class**; the others start at **Health colour**. On the target frame, **Class** applies to players, and other units take their reaction colour.
 
@@ -141,6 +142,8 @@ The **Player frame** tab has the usual **Picture**, **Name**, **Level**, **Healt
 - **Combat icon** (on) keeps the game's crossed swords while you are in a fight.
 - **Combat and resting icons** at **Above the portrait** (the default) puts the crossed swords and the sleeping letters just above the portrait's top right corner, clear of the picture, or above the whole frame in **One frame**. **Game's spot** puts them back where the game draws them. It changes out of combat.
 
+In a raid, the game's gold Group tab over the player frame gives way to a small Group 3 in the name font, just above the right end of the name row, or above the whole frame in **One frame**.
+
 #### Druid mana in forms
 
 **Druid mana in forms** (on) gives a druid in Bear or Cat Form a thin mana bar under the player frame. It fades in as you shift and out as you shift back to caster form.
@@ -155,13 +158,17 @@ The **Player frame** tab has the usual **Picture**, **Name**, **Level**, **Healt
 
 #### Energy tick
 
-**Energy tick** (off at first) is for a rogue or a druid in Cat Form. A thin spark crosses the energy bar every 2 seconds and reaches its right end as the next energy comes in, so you can time an opener or a finishing move. It finds the beat from the first tick it sees and keeps it in a fight. It hides in other forms and for other classes.
+**Energy tick** (off at first) is for a rogue or a druid in Cat Form. A thin spark crosses the energy bar every 2 seconds and reaches its right end as the next energy comes in, so you can time an opener or a finishing move. It finds the beat from the first tick it sees and keeps it in a fight. It hides in other forms and for other classes. `/flatui status` says whether it is in step and how long ago the last tick came, or that it waits for the first tick of 15 energy or more. Where the game sends energy in small steps, there is no beat to show, and the status and a note say so.
 
 Turning **Five-second rule** or **Energy tick** on in a fight waits for the fight to end.
 
 ### Target, focus and boss frames
 
 The **Target frame**, **Focus frame** and **Boss frames** tabs have the usual picture, name, level, health colour, text and power bar rows. The **Boss frames** tab also has **Long names**: **Cut with dots** (the default) or **Smaller text**, which shrinks a long name to 75% before cutting it.
+
+The raid marker of the target and the focus sits just above Flat UI's picture, or above the right end of the name row with **Picture** at **None**. A quest unit's mark sits on the picture's lower right corner, and the game's rare star hides while **Portrait border colour**, **Mark after the level** or **Elite or Rare word** shows the rank.
+
+A rogue's or a Cat Form druid's combo points ring Flat UI's target picture, the way the game's ring hugs its round portrait, or sit at the right end of the health bar with **Picture** at **None**. While the character can have combo points, the target of target moves right just far enough to keep the ring clear. Both change out of combat.
 
 On the **Icons and auras** tab, **Dead text** (on) keeps the game's Dead across the health bar of a dead target, focus, boss or target of target, and **Raid marker on target, focus, boss and pet target frames** (on) shows their raid markers.
 
@@ -170,6 +177,8 @@ On the **Icons and auras** tab, **Dead text** (on) keeps the game's Dead across 
 The **Target of target frame** tab covers the target's target and the focus's target. **Long names** is **Smaller text** at first.
 
 **Position** at **Beside the target frame** (the default) puts the frame just right of the target frame with their tops in line, and the focus target beside the focus frame, in either **Frame style**. It goes with the target frame wherever `/flatui move` puts it. **Game's spot** leaves it below and to the right, where the game puts it. It changes out of combat.
+
+With the frame beside the target frame, the target's and the focus's cast bars keep the spot the game gives them when there is no target of target: just under the frame, or under the aura rows while the unit has auras. They no longer drop as the enemy's target comes and goes, also in a fight.
 
 ### Pet frame and pet target
 
@@ -188,6 +197,8 @@ Turning the frame on or off, or a new width, waits for the end of a fight.
 ### Party frames
 
 The **Party frames** tab also covers the party pets: **Party pet picture**, and **Name** and **Long names** for both.
+
+**Party power bars for** is **Every member** at first. **Healers only** keeps the power bar on members with the healer role and fades the others' bars, as **Hide empty power bar** does, also in a fight and as roles change. A member with no role, as in most groups made without the group finder, keeps theirs.
 
 Under **Range**, **Dim members out of range** (off at first) darkens a member's picture, name row and bars while they are out of your range, to **Out of range opacity** (50%). Their pet's frame dims by its own range, and the debuff icons under the frame stay clear.
 
@@ -247,7 +258,7 @@ The rest of the **Icons and auras** tab:
 
 ### Changes made in a fight
 
-The game protects unit frames in a fight, so some changes wait for its end. This covers the layout rows (**Frame style**, **Portrait size**, **Space between parts**, **Name room**, **Level position**, **Corners**, **Portrait shape**), **Shadow behind each frame**, **Custom pet frame size**, **Dim members out of range**, **Low health border**, the text formats, the party and raid marks and the heal over time squares. While the options window is open, chat says so once a fight, such as "Flat UI: unit frames take their new layout when the fight ends."
+The game protects unit frames in a fight, so some changes wait for its end. This covers the layout rows (**Frame style**, **Portrait size**, **Space between parts**, **Name room**, **Level position**, **Corners**, **Portrait shape**), **Shadow behind each frame**, **Custom pet frame size**, **Dim members out of range**, **Low health border**, the text formats, the party and raid marks and the heal over time squares. While the options window is open, chat says so once a fight, such as "Flat UI: unit frames take their new layout when the fight ends." The target of target's **Position** and **Combat and resting icons** have their own lines: "Flat UI: the target of target frame moves when the fight ends." and "Flat UI: the combat and resting icons move when the fight ends." A new target in a fight stays silent.
 
 ### Setup and test mode
 
