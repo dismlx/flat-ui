@@ -448,6 +448,13 @@ ns.ProcData = {
 			art = {
 				file = 449492,
 				location = "LeftRight",
+				look = {
+					add = true,
+					breathe = true,
+					burst = true,
+					mist = true,
+					tint = { 0.62, 0.32, 1 },
+				},
 			},
 			buffs = { 17941 },
 			kind = "proc",
