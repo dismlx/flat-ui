@@ -156,8 +156,10 @@ function ns.SetupNewChoices()
 	local list = { { "ask", "Show the welcome screen" }, { "default", "Default profile" }, { "recommended", "Suggested profile" } }
 	local named = {}
 	for _, profile in ipairs(S.Listed()) do
-		list[#list + 1] = { "preset:" .. profile.id, profile.label }
-		named[profile.label:lower()] = true
+		if profile.only == nil then
+			list[#list + 1] = { "preset:" .. profile.id, profile.label }
+			named[profile.label:lower()] = true
+		end
 	end
 	for _, name in ipairs(ns.Profiles()) do
 		if name ~= "Default" and not named[name:lower()] then
@@ -1878,7 +1880,7 @@ end
 
 function S.ShareMode(name)
 	for _, profile in ipairs(S.Presets()) do
-		if profile.label:lower() == name:lower() then
+		if profile.only == nil and profile.label:lower() == name:lower() then
 			return "preset:" .. profile.id
 		end
 	end
