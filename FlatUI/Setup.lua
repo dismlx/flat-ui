@@ -122,10 +122,40 @@ function ns.SetupGet(def)
 	return value
 end
 
+function S.ForYou(raw)
+	local only = raw.only
+	if only == nil then
+		return true
+	elseif type(only) ~= "string" or only == "" then
+		return false
+	end
+	if S.you == nil then
+		local ok, name = false, nil
+		if type(UnitName) == "function" then
+			ok, name = pcall(UnitName, "player")
+		end
+		if not ok or not IsText(name) or name == "" or name == UNKNOWNOBJECT then
+			return false
+		end
+		S.you = (name:lower():gsub("[^%a]", ""))
+	end
+	return #S.you >= #only and S.you:sub(-#only) == only
+end
+
+function S.Listed()
+	local list = {}
+	for _, raw in ipairs(type(ns.SETUP_PROFILES) == "table" and ns.SETUP_PROFILES or {}) do
+		if type(raw) == "table" and S.ForYou(raw) then
+			list[#list + 1] = raw
+		end
+	end
+	return list
+end
+
 function ns.SetupNewChoices()
 	local list = { { "ask", "Show the welcome screen" }, { "default", "Default profile" }, { "recommended", "Suggested profile" } }
 	local named = {}
-	for _, profile in ipairs(type(ns.SETUP_PROFILES) == "table" and ns.SETUP_PROFILES or {}) do
+	for _, profile in ipairs(S.Listed()) do
 		list[#list + 1] = { "preset:" .. profile.id, profile.label }
 		named[profile.label:lower()] = true
 	end
@@ -1677,8 +1707,8 @@ function S.Presets()
 	local started = type(ns.Started) ~= "function" or ns.Started()
 	local defs = S.Defs()
 	local list, dropped = {}, {}
-	for _, raw in ipairs(type(ns.SETUP_PROFILES) == "table" and ns.SETUP_PROFILES or {}) do
-		local profile = { id = raw.id, label = raw.label, line = raw.line, values = {}, screen = type(raw.screen) == "table" and raw.screen or nil }
+	for _, raw in ipairs(S.Listed()) do
+		local profile = { id = raw.id, label = raw.label, line = raw.line, values = {}, screen = type(raw.screen) == "table" and raw.screen or nil, only = raw.only }
 		for _, spot in ipairs(type(raw.movers) == "table" and raw.movers or {}) do
 			local copy = { point = spot.point, x = spot.x, y = spot.y, scale = spot.scale, kind = spot.kind, label = spot.label }
 			if IsText(spot.frame) and ns.CleanSpot(copy) then
@@ -1695,7 +1725,7 @@ function S.Presets()
 				why = "no such setting"
 			elseif ns.RowUnsaved(def) then
 				why = "the game holds it"
-			elseif path:find("^setup%.") or path:find("^barblock%.") or S.NEVER[path] then
+			elseif path:find("^setup%.") or (path:find("^barblock%.") and raw.blocks ~= true) or S.NEVER[path] then
 				why = "a profile never sets it"
 			elseif not S.where[path] then
 				why = "no step has it"
@@ -1875,10 +1905,31 @@ function S.Offerable(asked)
 		and character.setupOffered ~= true and (asked ~= true or ns.Get("setup.newCharacter") == "ask") and not S.Peek()
 end
 
+function S.OwnLook()
+	if type(ns.WelcomeWanted) ~= "function" or not ns.WelcomeWanted() then
+		return
+	end
+	for _, profile in ipairs(S.Presets()) do
+		if profile.only ~= nil then
+			local name = S.FindProfile(profile.label)
+			local picks = not name and profile.values or nil
+			local spots = not name and S.SpotsOf(profile) or nil
+			if ns.AssignProfile(name or profile.label, picks, spots) then
+				S.Flag()
+				S.line = ("Flat UI: welcome back, %s. Your look is ready; /flatui profiles has the others."):format(profile.label)
+			end
+			return
+		end
+	end
+end
+
 function ns.SetupAuto()
 	S.line = nil
 	local mode = ns.Get("setup.newCharacter")
-	if mode == "ask" or not S.Offerable() then
+	if mode == "ask" then
+		S.OwnLook()
+		return
+	elseif not S.Offerable() then
 		return
 	elseif mode == "default" then
 		S.Flag()
