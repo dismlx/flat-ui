@@ -43,21 +43,21 @@ How picking works:
 - The look in use is marked **In use**, and the one that fits your character is marked **Suggested**.
 - Tick **Same profile on new characters** before you pick, and new characters start with that look too.
 - **Same as** puts in use the profile most of your characters use, leaving out Default and the profile in use, as "Same as Raid". It shows only when there is one.
-- Looks cannot be picked in a fight ("In combat. Pick a look after combat.").
+- Looks cannot be picked in a fight ("In a fight. Pick a look after it.").
 
 After a pick, a card says which profile is in use. **Back to** puts the profile you had back in use. **Change it** opens setup, so you can change the look further. **Move frames**, **Options** and **Done** open `/flatui move`, open the options window or close the card. **Reload** shows when the look needs a reload.
 
 ## The Profiles page
 
-Open it with **Profiles** in the sidebar, or with a click on "Profile: Raid" in the title bar. Point at any row to see what it does. It has three sections: **Profile**, **Switch automatically** and **Share**.
+Open it with **Profiles** in the sidebar, or with a click on "Profile: Raid" in the title bar. A right-click on "Profile: Raid" opens the profile list right under it instead, to switch without leaving the page you are on. Point at any row to see what it does. It has three sections: **Profile**, **Switch automatically** and **Share**.
 
 ### Profile
 
-- **Profile in use** switches this character to another profile at once. Home's **Profile** card has the same row.
+- **Profile in use** switches this character to another profile at once. Home's **Profile** card has the same row. Its list shows how many characters use each profile, as "Raid  (3)", and a dim note beside it names them, as "Used by you, Bex and Ivo" ("and 2 more" past three; the realm is left out for characters on your own realm).
 - **New profile**: type a name, then press **Create** or **Duplicate**. **Create** starts from the defaults and the frame positions a new profile starts with. **Duplicate** copies the profile in use with its frame positions, as "Raid copy" when no name is typed. The new profile is put in use.
 - **Setup** has **Set up my screen** (it reads **Continue setup** while a setup waits) and **Ready-made looks**.
 - **Copy from** replaces every setting and frame position of the profile in use with those of another profile. To keep both, use **Duplicate** instead.
-- **Delete profile** deletes another profile. The question says how many other characters use it; they start as new characters at their next login. The profile in use and Default cannot be deleted.
+- **Delete profile** deletes another profile. The question names the other characters that use it, up to three, as "Delete "Alt"? Bex and Ivo use it and start as new characters at their next login.", or says how many when there are more; they start as new characters at their next login. The profile in use and Default cannot be deleted.
 - **Rename profile** gives the profile in use a new name. The characters that use it keep it, and its **Switch automatically** rules follow the new name.
 - **Reset profile** puts every setting of the profile in use back to its default, and every moved frame back to its own place.
 
@@ -76,12 +76,12 @@ None of **Reset profile**, **Copy from**, **Delete profile**, an import with **R
 
 The game does not let Flat UI change profile in a fight, so a switch waits for its end:
 
-- Pick a profile under **Profile in use**, or type `/flatui profile Raid`, in a fight. The strip, or chat, says "Switches to Raid when the fight ends.", and the title bar shows "Raid after the fight" in the accent.
+- Pick a profile under **Profile in use**, from the right-click list of the title bar, or type `/flatui profile Raid`, in a fight. The strip, or chat, says "Switches to Raid when the fight ends.", and the title bar shows "Raid after the fight" in the accent.
 - As the fight ends the profile switches, and chat says "Flat UI: using Raid.".
 - Picking the profile in use again in the same fight drops whatever waits, a switch of **Switch automatically** too, and says "Stays on Default.".
 - A profile you pick wins over a **Switch automatically** switch that waits for the same fight.
 
-Creating, copying, deleting, renaming, resetting and importing profiles do not work in a fight ("Profiles change after combat.").
+Creating, copying, deleting, renaming, resetting and importing profiles do not work in a fight ("Profiles change after the fight.").
 
 ## Switch automatically
 

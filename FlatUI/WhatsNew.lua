@@ -387,7 +387,7 @@ function W.Fill(sections, words)
 		end
 	end
 	if used == 0 then
-		Put(('No change mentions "%s".'):format(table.concat(words, " ")), nil)
+		Put(('No change mentions "%s".'):format(W.said or table.concat(words, " ")), nil)
 		y = y + PART_GAP
 	end
 	for index = heads + 1, #W.heads do
@@ -638,13 +638,18 @@ local function Steps(state)
 end
 
 local function Words(typed)
-	local words = {}
+	local words, raw = {}, {}
 	if IsText(typed) then
-		for word in typed:gsub("|", ""):lower():gmatch("%S+") do
+		local plain = typed:gsub("|", "")
+		if ns.PanelSearch and ns.PanelSearch.Words then
+			return ns.PanelSearch.Words(plain)
+		end
+		for word in plain:lower():gmatch("%S+") do
 			words[#words + 1] = word
+			raw[#raw + 1] = word
 		end
 	end
-	return words
+	return words, raw
 end
 
 function W.Step(version)
@@ -667,10 +672,11 @@ function W.Update()
 	W.title:SetText(("What's new in Flat UI %s"):format(state.version))
 	Steps(state)
 	W.typed = W.filter:GetText()
-	local words = Words(W.typed)
+	local words, raw = Words(W.typed)
+	W.said = table.concat(raw, " ")
 	local tall, matched, total = W.Fill(state.sections, words)
 	if #words > 0 then
-		local typed = table.concat(words, " ")
+		local typed = W.said
 		W.line:SetText(('%d of %d %s %s "%s".'):format(matched, total, total == 1 and "change" or "changes", matched == 1 and "mentions" or "mention", typed))
 	else
 		W.line:SetText(state.line or "")
@@ -726,6 +732,16 @@ local function Known()
 	return (" /flatui new knows %s to %s."):format(data[#data].version, data[1].version)
 end
 
+function W.Newest()
+	local now = Version()
+	for _, each in ipairs(W.Data()) do
+		if #Notes(each) > 0 and not (now and Newer(each.version, now)) then
+			return each
+		end
+	end
+	return W.Data()[1]
+end
+
 function ns.OpenWhatsNew(version)
 	local section
 	if IsText(version) and version ~= "" then
@@ -735,13 +751,7 @@ function ns.OpenWhatsNew(version)
 			return false
 		end
 	else
-		local now = Version()
-		for _, each in ipairs(W.Data()) do
-			if not section and #Notes(each) > 0 and not (now and Newer(each.version, now)) then
-				section = each
-			end
-		end
-		section = section or W.Data()[1]
+		section = W.Newest()
 	end
 	if not section then
 		print("Flat UI: no notes of what changed here. " .. FULL)

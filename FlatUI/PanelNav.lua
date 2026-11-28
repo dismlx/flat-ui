@@ -354,7 +354,7 @@ function Nav.Sidebar(left, host)
 					end
 				end,
 				status = id == "move" and function()
-					return InCombatLockdown() and "After combat" or nil
+					return InCombatLockdown() and "After the fight" or nil
 				end or nil,
 			})
 		end

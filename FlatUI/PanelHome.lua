@@ -366,6 +366,50 @@ function Home.UserCount(name)
 	return count
 end
 
+function Home.UserNames(name)
+	local db = ns.Account()
+	local me = type(ns.CharacterKey) == "function" and ns.CharacterKey() or nil
+	local realm = type(me) == "string" and me:match(" %- (.+)$") or nil
+	local mine, others = false, {}
+	for key, used in pairs(type(db) == "table" and type(db.profileOf) == "table" and db.profileOf or {}) do
+		if used == name and type(key) == "string" then
+			if key == me then
+				mine = true
+			else
+				local who, where = key:match("^(.-) %- (.+)$")
+				others[#others + 1] = who and where == realm and who or key
+			end
+		end
+	end
+	table.sort(others)
+	if not mine and #others == 0 and name == ns.Profile() then
+		mine = true
+	end
+	return others, mine
+end
+
+function Home.UsedBy(name)
+	local others, mine = Home.UserNames(name)
+	local list = {}
+	if mine then
+		list[1] = "you"
+	end
+	for index = 1, math.min(#others, mine and 2 or 3) do
+		list[#list + 1] = others[index]
+	end
+	local more = #others - (#list - (mine and 1 or 0))
+	if #list == 0 then
+		return "Used by no character yet"
+	end
+	if more > 0 then
+		return ("Used by %s and %d more"):format(table.concat(list, ", "), more)
+	end
+	if #list == 1 then
+		return "Used by " .. list[1]
+	end
+	return ("Used by %s and %s"):format(table.concat(list, ", ", 1, #list - 1), list[#list])
+end
+
 local function Users(name)
 	local count = Home.UserCount(name)
 	return count == 1 and "Used by 1 character" or ("Used by %d characters"):format(count)
@@ -709,15 +753,26 @@ function Home.Build(host)
 	news:SetSize(260, 20)
 	local newsText = kit.Dim(kit.Label(news, "GameFontHighlight", "LEFT", 260))
 	newsText:SetPoint("LEFT", news, "LEFT", 0, 0)
-	local version = type(ns.WhatsNewVersion) == "function" and ns.WhatsNewVersion()
-	newsText:SetText(version and ("What's new in %s"):format(version) or "What's new")
+	local newsAt, newsNow
+	local function News()
+		local now = type(ns.WhatsNewVersion) == "function" and ns.WhatsNewVersion() or nil
+		local newest = type(ns.WhatsNew) == "table" and type(ns.WhatsNew.Newest) == "function" and ns.WhatsNew.Newest() or nil
+		newsAt = type(newest) == "table" and type(newest.version) == "string" and newest.version ~= "" and newest.version or now
+		newsNow = now
+		newsText:SetText(newsAt and ("What's new in %s"):format(newsAt) or "What's new")
+	end
+	News()
 	news:SetShown(type(ns.OpenWhatsNew) == "function")
 	kit.Clickable(news, function()
 		ns.OpenWhatsNew()
 	end)
 	news:SetScript("OnEnter", function()
 		kit.Tint(newsText, "accent")
-		kit.Tip("What changed in this version of Flat UI, as /flatui new shows it.")
+		if newsAt and newsNow and newsAt ~= newsNow then
+			kit.Tip(("The newest changes, in %s, as /flatui new shows them."):format(newsAt))
+		else
+			kit.Tip("What changed in this version of Flat UI, as /flatui new shows it.")
+		end
 	end)
 	news:SetScript("OnLeave", function()
 		kit.Dim(newsText)
@@ -756,6 +811,7 @@ function Home.Build(host)
 	end
 
 	function view.Update()
+		News()
 		for _, refresh in ipairs(refreshers) do
 			refresh()
 		end

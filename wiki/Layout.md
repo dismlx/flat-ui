@@ -13,7 +13,7 @@ The **Layout** group decides where things sit and when they show. It holds four 
 - Escape first lets go of any selected boxes. With nothing selected, it asks **Keep your changes?** and says how many frames moved. **Keep moving** goes back to the boxes, **Discard** puts every frame back as it was when you opened them, and **Keep** keeps them.
 - While the boxes are open, every faded frame is at full, so a frame at 0% is never an empty box. After **Done**, faded frames wait **Wait before fading** and fade again.
 
-The boxes do not open in a fight. Typed in a fight, `/flatui move` says "Flat UI: /flatui move opens when the fight ends." and the boxes open as it ends; typing it again in the same fight takes that back. The **Move frames** row reads **After combat** while you are in a fight. If a fight starts while the boxes are open, chat says "Flat UI: Movers pause for combat." and they open again as it ends.
+The boxes do not open in a fight. Typed in a fight, `/flatui move` says "Flat UI: /flatui move opens when the fight ends." and the boxes open as it ends; typing it again in the same fight takes that back. The **Move frames** row reads **After the fight** while you are in a fight. If a fight starts while the boxes are open, chat says "Flat UI: Movers pause for combat." and they open again as it ends.
 
 ### Moving one frame
 

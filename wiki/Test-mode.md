@@ -83,6 +83,9 @@ Real nameplates are not forced on screen, so threat colours show on the sample p
 - The **hit table**, the sample text of empty **data panel** slots, and the **experience bar**: a sample bar while your real one has nothing to show, and sample gains rising from it. Your real numbers stay as they are.
 - **Group tools**, the **ping bar**, the **consumables bar**, the **cursor ring** and the **lava tick timer**.
 - The new spell ranks line, and the **reload notice** as a dimmed sample while nothing needs a reload.
+- **Charges**: a sample Lightning Shield with 3 charges that uses one every 2 seconds and is then cast again, while no buff with charges is on you.
+- The minimap's text lines with sample values, as "45.2, 61.8" for the coordinates, "Durability 42%", the frame rate and the clock, while the real line has nothing to show, and the name of a sample ping, "Bex", every 5 seconds.
+- The **Zone text** and **Error text** boxes, with "Elwynn Forest" and "Not enough mana", where the game shows them.
 
 ## How the samples behave
 
@@ -102,7 +105,7 @@ Test mode ends when:
 - setup takes the options window;
 - you reload.
 
-A fight pauses it ("Flat UI: test mode pauses for combat."). It comes back after the fight while what turned it on is still open.
+A fight pauses it ("Flat UI: test mode pauses for the fight."), and the bar's title reads "Test mode · paused for the fight". It comes back after the fight while what turned it on is still open.
 
 Test mode saves nothing: no setting, game setting, key binding, target or focus, and no number counts in a statistic. Only the bar's own **Group** and place are kept, for the account.
 
@@ -111,7 +114,7 @@ Test mode saves nothing: no setting, game setting, key binding, target or focus,
 - **The game's own unit frames are never shown or given a unit, and Flat UI never opens Edit Mode.** The game protects these frames, and doing either from an add-on taints them and can block targeting. The samples are Flat UI's own frames drawn where the game's are, so a sample can differ slightly from the real frame.
 - **Real nameplates are not forced on screen**, since that would change game settings. Threat colours show on the sample plate.
 - **The game's windows**, such as Character and Spellbook, are not opened, since an add-on opening them can taint the game's window manager. Open them yourself, and the **Windows** page restyles them as you change it.
-- **No drawing exists** for mirror timers, the loot window, the queue panel, alerts, zone text, the talking head, the extra action button, arena and vehicle frames. Errands' overlays need the NPC's window open.
+- **No drawing exists** for the loot window, the queue panel, alerts, the talking head, the extra action button, arena and vehicle frames. Errands' overlays need the NPC's window open.
 - **Chat and tooltips get no sample.** A printed line would skip the chat filters, and a tooltip shows on any mouse-over anyway.
 - **Party cooldown rows hang in the raid stack**, not beside the party samples.
 

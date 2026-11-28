@@ -76,7 +76,7 @@ In a fight, the game protects many of its frames: the unit frames, the action bu
 
 What waits:
 
-- **Profile changes.** A profile picked in a fight, by hand or by **Switch automatically**, switches as the fight ends. Creating, copying, deleting, renaming, resetting and importing profiles say "Profiles change after combat."
+- **Profile changes.** A profile picked in a fight, by hand or by **Switch automatically**, switches as the fight ends. Creating, copying, deleting, renaming, resetting and importing profiles say "Profiles change after the fight."
 - **The UI scale and the Fonts page.** Chat says "Flat UI: the UI scale changes when the fight ends." or "Flat UI: fonts change when the fight ends."
 - **Action buttons and bars.** A new button look, and bars that hide or show, wait. Chat says "Flat UI: action buttons take their new look when the fight ends."
 - **Frame sizes and places**, such as the cast bar sizes and the pet frame's size.

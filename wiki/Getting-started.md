@@ -107,14 +107,14 @@ The dot goes once the last of them is back at its default. The **Icon rail** sid
 
 - Drag the title bar to move the window. Double-click it to put the window back in the middle of the screen.
 - Ctrl and the mouse wheel over the title bar set **Window scale**.
-- "Profile: Raid", dim, names the profile your changes go into. Point at it to see how many characters use that profile, and click it for the **Profiles** page. It lights up for a second when the profile changes while the window is open. While a switch waits for the end of a fight, a second line in the accent says so, as "Raid after the fight".
+- "Profile: Raid", dim, names the profile your changes go into. Point at it to see how many characters use that profile, and click it for the **Profiles** page. Right-click it for the same list as **Profile in use**, right under the name: a pick switches at once, or as the fight ends when you pick in a fight. It lights up for a second when the profile changes while the window is open. While a switch waits for the end of a fight, a second line in the accent says so, as "Raid after the fight".
 - The **Test mode** switch shows your frames with sample content. See [Test mode](Test-mode).
 - **Search** finds any setting. See below.
 
 ### The bottom of the window
 
 - A strip shows messages, such as what Ctrl+Z undid, for about six seconds. Otherwise it counts the changes on the tab, as "3 changed on this tab. Click to go to each." Each click scrolls to the next changed row and flashes it.
-- **Reset page** puts every setting of the tab back to its default. It is dimmed while nothing on the tab is changed. One Ctrl+Z puts the whole page back.
+- **Reset page** puts every setting of the tab back to its default. It is dimmed while nothing on the tab is changed. One Ctrl+Z puts the whole page back. While `#changed` lists settings, it reads **Reset these (9)** instead. See [Search](#search).
 - **Reload** reads "Reload (2)" in the accent while changes wait for a reload. See [The reload notice](#the-reload-notice).
 - **Done** closes the window.
 
@@ -123,14 +123,18 @@ The dot goes once the last of them is back at its default. The **Icon rail** sid
 Type in **Search** to find settings across every page.
 
 - The words you typed are lit in each result, and the head counts the results.
+- US spellings find the British ones the rows use: "color", "gray", "center", "favor", "honor" and "armor" find the colour, grey, centre, favour, honour and armour rows. A plural finds the singular too, so "nameplates" finds **Nameplate** rows.
+- A row is found by the names of its choices too, below the rows whose name or tip match: "icon rail" finds **Sidebar**, and "hairline" finds **Borders**.
 - Each group of results, and each page chip, names its place, as "Nameplates > Colours" or "Unit frames > Per frame > Player".
 - A module's name counts as a word of each of its tabs, so "nameplate cast colour" finds the colour rows of **Nameplates > Cast bar**.
 - A click on a result opens its tab, scrolls to its row and flashes it.
 - Search also finds the window's own actions, under **Actions**: **Test mode**, **Move frames**, **Welcome screen** and **Ready-made looks**.
-- Rows of the **Profiles** page, such as **Import profile** or **In a raid**, open that page at the row.
+- Rows of the **Profiles** page, such as **Import profile** or **In a raid**, open that page at the row. They are found by their part of the page too: "switch automatically" lists **In a dungeon**, **In a raid**, **In a battleground or arena** and **Everywhere else**, and "share" lists the export and import rows.
 - The small cross at the right of the box clears it and shows the page you were on.
 
-Type `#changed` to list every setting of the profile in use that is off its default, grouped by page. Each row works as on its page, with its reset arrow. The head says how many, as "37 changed settings", or "Every setting is at its default." More words narrow the list, as `#changed nameplate`.
+Type `#changed` to list every setting of the profile in use that is off its default, grouped by page. Each row works as on its page, with its reset arrow. The head says how many, as "37 changed settings", or "Every setting is at its default." More words narrow the list, as `#changed nameplate`; they match choice names too.
+
+While `#changed` lists any rows, the footer's button reads **Reset these (9)**. It asks "Reset the 9 changed settings listed? Ctrl+Z puts them back." and its red **Reset** is not answered by Enter. It resets them all as one step: the head counts down to "Every setting is at its default now" (or, with more words, to 'No changed settings for "nameplate"'), **Recent changes** on **Home** shows one line, as "Reset of #changed nameplate · 9 settings", and one Ctrl+Z puts them all back.
 
 You can search from chat too: `/flatui border colour` opens the window with those words in **Search**.
 
@@ -141,6 +145,7 @@ You can search from chat too: `/flatui border colour` opens the window with thos
 - A sound dropdown plays each sound once as you pick it. The **Play** button beside it plays the one chosen now.
 - Right-click a colour swatch for a short list: **Copy #D93A30** and, once a colour is copied, **Paste #D93A30**. Paste writes the colour at once, and Ctrl+Z puts the old one back.
 - A changed row has a small reset arrow. Point at it to see the default it puts back, and click it to reset that row.
+- A dimmed row waits for another setting, as its tip says ("Needs Fade the block on. Click to go to it."). Click it to go to that setting: the window scrolls to it and flashes it, on another tab or page if it lives there, and the strip says "Turn on Fade the block first.". When the setting is a module's own switch, the strip says it is the switch at the top of its page. A row dimmed because another setting takes its place now, such as **Custom scale** while **Pixel-perfect scale** is on, says why in the strip.
 - A press on a button counts only when you let go over it, so sliding off before letting go changes your mind.
 
 ### Undo and redo
@@ -176,7 +181,7 @@ Most settings apply at once, in a fight too. A few wait for the end of the fight
 - **Needs a reload**: each change that waits for a reload, with its own **Undo**, and a **Reload** button.
 - **Recent changes**: your last changes, with **Every change** at its top right.
 - **Modules**: a tile for each module, with its switch and how many of its settings you changed, as "3 changed". A click on a tile opens its page.
-- **What's new in 0.5.47** at the bottom, which opens the **What's new** window.
+- **What's new** at the bottom, as "What's new in 0.5.48", which opens the **What's new** window. It names the newest version that has notes, the one it opens.
 
 ### Recent changes
 
@@ -185,7 +190,7 @@ Most settings apply at once, in a fight too. A few wait for the end of the fight
 - Each line says what changed, from the value before to the value now, as "Off to On" or "300 ms to 450 ms".
 - A click on a line opens that setting's tab, scrolls to its row and flashes it.
 - **Undo** on a line puts that value back. Point at it to see the value it puts back.
-- A **Reset page**, or the reload notice's **Undo**, is one line with one **Undo** for all its settings.
+- A **Reset page**, a **Reset these** of `#changed`, or the reload notice's **Undo**, is one line with one **Undo** for all its settings.
 - **Every change** opens **Search** on `#changed`, the list of every setting you changed.
 
 Renaming the profile keeps its recent changes. A change that a reset, a copy, an import or setup's **Finish** took away leaves the list until its value comes back.
@@ -217,10 +222,10 @@ After an update, the first login on the account shows **What's new**: a window w
 - **Open Flat UI's options** opens the options window, and **Close** (or Escape) closes What's new.
 - It waits for the end of a fight, steps aside if one starts and comes back after it. You can drag it anywhere on screen.
 - A line that names a setting lights up under the mouse. A click closes What's new and opens the options window at that setting, scrolled to its row and flashing.
-- The **Filter** box keeps only the changes that mention every word you type, as "party" or "threat list". The line under the title counts them, as "12 of 121 changes mention "party".". Clearing the box brings everything back. Escape leaves the box, and a second Escape closes the window.
+- The **Filter** box keeps only the changes that mention every word you type, as "party" or "threat list". It takes US spellings and plurals as **Search** does. The line under the title counts them, as "12 of 121 changes mention "party".". Clearing the box brings everything back. Escape leaves the box, and a second Escape closes the window.
 - Two small buttons at the top right, as "< 0.5.42" and "0.5.44 >", step to the version before and after, skipping versions with no notes.
 
-Open it at any time with **What's new in 0.5.47** at the bottom of **Home**, or with `/flatui new`. Both open the newest version that has notes. `/flatui new 0.5.45` opens that version, if it is one of the newest six.
+Open it at any time with **What's new** at the bottom of **Home**, which names the version it opens, or with `/flatui new`. Both open the newest version that has notes. `/flatui new 0.5.45` opens that version, if it is one of the newest six.
 
 A new install shows nothing, since the welcome screen and setup walk you through Flat UI. A new character that the welcome screen greets gets a chat line instead of the window.
 
