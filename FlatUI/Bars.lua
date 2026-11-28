@@ -1434,7 +1434,13 @@ local function CastCover(bar, record)
 		ns.Note(record.key, ("%s: the game refused a fill on one cast bar, which keeps its default fill."):format(ns.modules[record.key].label))
 		return false
 	end
-	record.fill, record.cover, record.failed = fill, cover, nil
+	local dim = bar:CreateTexture(nil, layer, nil, math.min(sublevel + 2, 7))
+	ns.Own[dim] = true
+	dim:SetColorTexture(0, 0, 0, 1)
+	dim:SetAllPoints(cover)
+	dim:SetAlpha(0)
+	dim:Hide()
+	record.fill, record.cover, record.dim, record.failed = fill, cover, dim, nil
 	if record.key == "castbars" then
 		Count("castbars", bar)
 	end
@@ -1810,19 +1816,19 @@ local function PaintFlash(bar, record, state, r, g, b, shield, otherwise)
 	end
 end
 
-local function Blink(holder, texture, low)
+local function Blink(holder, texture, rest, peak)
 	local group = holder.blink
 	if group == nil then
 		local ok, made = pcall(function()
 			local blink = texture:CreateAnimationGroup()
 			local down = blink:CreateAnimation("Alpha")
-			down:SetFromAlpha(1)
-			down:SetToAlpha(low)
+			down:SetFromAlpha(rest)
+			down:SetToAlpha(peak)
 			down:SetDuration(0.12)
 			down:SetOrder(1)
 			local up = blink:CreateAnimation("Alpha")
-			up:SetFromAlpha(low)
-			up:SetToAlpha(1)
+			up:SetFromAlpha(peak)
+			up:SetToAlpha(rest)
 			up:SetDuration(0.13)
 			up:SetOrder(2)
 			return blink
@@ -1847,6 +1853,7 @@ local function PaintCast(bar, record)
 	if state == "none" then
 		if record.shown then
 			cover:Hide()
+			record.dim:Hide()
 			record.shown, record.state = false, nil
 		end
 		record.kick = nil
@@ -1860,7 +1867,7 @@ local function PaintCast(bar, record)
 	local was = record.kick
 	record.kick = Kick(bar, record, state)
 	if record.kick == true and (was == false or was == "far") and (state == "cast" or state == "channel") then
-		Blink(record, cover, 0.35)
+		Blink(record, record.dim, 0, 0.65)
 	end
 	if state == "withheld" then
 		cover:SetVertexColorFromBoolean(shield, ColourObject(record, "shield"), ColourObject(record, otherwise))
@@ -1882,6 +1889,7 @@ local function PaintCast(bar, record)
 	end
 	if not record.shown then
 		cover:Show()
+		record.dim:Show()
 		record.shown = true
 	end
 	PaintMarks(bar, record, state)
@@ -1954,6 +1962,7 @@ function ns.CastFill(key, bar, on)
 	following[bar] = on and record or nil
 	if not on and record.shown and not forbidden then
 		record.cover:Hide()
+		record.dim:Hide()
 		record.shown, record.state = false, nil
 		PaintBorder(bar, nil)
 		HideMarks(record)
@@ -2000,7 +2009,7 @@ do
 	end
 
 	local function BlinkStrip(strip)
-		Blink(strip, strip.tex, 0.3)
+		Blink(strip, strip.tex, 1, 0.3)
 	end
 
 	local function MakeStrip(bar)

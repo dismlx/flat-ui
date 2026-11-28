@@ -644,8 +644,11 @@ do
 			local kick = kicks[bar]
 			if kick == nil then
 				kick = MakeKick(bar)
-				if kick then
-					kick.plate = true
+			end
+			if kick and not kick.plate then
+				kick.plate, kick.hex = true, nil
+				if kick.shown then
+					KickColour(kick)
 				end
 			end
 			if kick then
