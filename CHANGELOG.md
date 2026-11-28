@@ -1,3 +1,8 @@
+## 0.5.50
+
+- For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.
+- Windows: the size handle in the bottom right corner of a window now takes the drag itself on a window whose own clickable area stops short of that corner, such as the **Dressing room**. Before, a press on the handle went to the dressing room's Close button or through the window to the world behind, so after the first click of a session the dressing room could not be sized at all.
+
 ## 0.5.49
 
 - For WoW: Forever 1.60.1 build 70938. The interface number stays 16001.

@@ -2,7 +2,7 @@ Every setting of the **Combat** group of the options window, 358 in all, with it
 
 Pages: [Cooldowns](#cooldowns) · [Trackers](#trackers) · [Defensives on you](#defensives-on-you) · [Absorb shields](#absorb-shields) · [Charges](#charges) · [Enemy cooldowns](#enemy-cooldowns) · [Combat text](#combat-text)
 
-Made by `tools/dev/make_wiki.py` from Flat UI 0.5.49.
+Made by `tools/dev/make_wiki.py` from Flat UI 0.5.50.
 
 ## Cooldowns
 
