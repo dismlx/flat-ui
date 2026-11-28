@@ -8,15 +8,16 @@ local DRAWN = { "rxpBackground", "rxpBorder", "rxpShadow" }
 local ROOTS = { "RXPFrame", "RXPG_ARROW", "RXPItemFrame", "RXPTargetFrame", "RXPV2GuideWindow", "RXPActivePartyStepsFrame" }
 local COMMS = "RXPV2CommsWindow"
 local ARROW = "RXPG_ARROW"
-local FOLLOWED = { "UpdateTheme", "SetStep", "ReloadGuide", "LoadGuide", "UpdateItemFrame", "CreateActiveItemFrame", "ShowMenu" }
-local NESTED = { { "v2", { "UpdateGuideWindow", "GetGuideWindow" } }, { "targeting", { "CreateTargetFrame", "UpdateTargetFrame", "UpdateTheme" } } }
+local FOLLOWED = { "UpdateTheme", "SetStep", "ReloadGuide", "LoadGuide", "CreateActiveItemFrame", "ShowMenu" }
+local NESTED = { { { "v2" }, { "UpdateGuideWindow" } }, { { "ui", "v2" }, { "CreateAuctionHouse" } }, { { "targeting" }, { "CreateTargetFrame", "UpdateTheme" } } }
+local NARROW = { { {}, "UpdateItemFrame", "RXPItemFrame" }, { { "targeting" }, "UpdateTargetFrame", "RXPTargetFrame" } }
 local MENUS = { "DropDownList", "L_DropDownList" }
 local MENU_LIB = "LibUIDropDownMenu-4.0"
 local MOST = { DEPTH = 8, FRAMES = 1500, LEVELS = 3, BUTTONS = 40, COMMS = 6 }
-local WAIT, SETTLE = 0.05, 1
+local WAIT, SETTLE, LIT = 0.05, 1, 0.25
 
 local S = { frames = setmetatable({}, { __mode = "k" }), menus = setmetatable({}, { __mode = "k" }), texts = setmetatable({}, { __mode = "k" }),
-	lists = {} }
+	glows = setmetatable({}, { __mode = "k" }), lists = {}, counts = {}, narrow = {}, hooks = {} }
 
 local function Read(t, key)
 	if t == nil or ns.IsSecret(t) or type(t) ~= "table" then
@@ -68,14 +69,29 @@ local function Addon()
 	return nil
 end
 
-local function Loaded()
+local function Part(t, path)
+	for _, key in ipairs(path) do
+		t = Read(t, key)
+	end
+	return t
+end
+
+local function Present()
 	local api = rawget(_G, "C_AddOns")
 	local check = type(api) == "table" and not ns.IsSecret(api) and api.IsAddOnLoaded or rawget(_G, "IsAddOnLoaded")
 	if type(check) ~= "function" then
 		return Addon() ~= nil
 	end
 	local ok, loaded = pcall(check, ADDON)
-	return ok and not ns.IsSecret(loaded) and loaded == true and Addon() ~= nil
+	return ok and not ns.IsSecret(loaded) and loaded == true
+end
+
+local function Known()
+	return Addon() ~= nil and IsFrame(rawget(_G, "RXPFrame"))
+end
+
+local function Loaded()
+	return Present() and Known()
 end
 
 local function Wanted()
@@ -83,7 +99,7 @@ local function Wanted()
 end
 
 local function Styled()
-	return next(S.frames) ~= nil or next(S.menus) ~= nil
+	return next(S.frames) ~= nil or next(S.menus) ~= nil or next(S.glows) ~= nil
 end
 
 local Pass, Queue
@@ -175,7 +191,23 @@ end
 
 local PanelHook
 
-local function Panel(frame, nested)
+local function InList(frame)
+	local list = Read(rawget(_G, "RXPFrame"), "ScrollChild")
+	if not IsFrame(list) then
+		return false
+	end
+	local ok, parent = pcall(frame.GetParent, frame)
+	return ok and not ns.IsSecret(parent) and parent == list
+end
+
+local function Lit(frame)
+	local lit = frame:CreateTexture(nil, "HIGHLIGHT")
+	ns.Own[lit] = true
+	lit:SetAllPoints(frame)
+	return lit
+end
+
+local function Panel(frame, nested, root)
 	local rec = S.frames[frame]
 	local on = Wanted()
 	if rec == nil then
@@ -186,7 +218,7 @@ local function Panel(frame, nested)
 		if not outline then
 			return
 		end
-		rec = { fn = "panel", outline = ns.ThemeOutline(outline, not nested), nested = nested }
+		rec = { fn = "panel", outline = ns.ThemeOutline(outline, root == true), nested = nested, lit = InList(frame) and Lit(frame) or nil }
 		S.frames[frame] = rec
 		if type(Read(frame, "SetBackdrop")) == "function" then
 			ns.Follow(frame, "SetBackdrop", PanelHook)
@@ -199,6 +231,34 @@ local function Panel(frame, nested)
 	ns.SetOutlineFill(rec.outline, r, g, b, ns.WindowOpacity((ns.Finite(opacity) and opacity or 80) / 100))
 	ns.SetOutline(rec.outline, drawn, drawn)
 	Fade(frame, on)
+	if rec.lit then
+		if on then
+			local ar, ag, ab = ns.WindowColour("windows.accent")
+			rec.lit:SetColorTexture(ar, ag, ab, LIT)
+		end
+		rec.lit:SetShown(on)
+	end
+end
+
+local function RootGlow(frame, want)
+	local outline = S.glows[frame]
+	local on = want and Wanted()
+	if outline == nil then
+		if not on or Later(frame) then
+			return
+		end
+		local holder = CreateFrame("Frame", nil, frame)
+		ns.Own[holder] = true
+		holder:SetAllPoints(frame)
+		outline = ns.ThemeOutline(ns.Outline(holder, holder, true), true)
+		if not outline then
+			return
+		end
+		ns.SetOutlineEdges(outline, false)
+		ns.SetOutlineFill(outline, 0, 0, 0, 0)
+		S.glows[frame] = outline
+	end
+	ns.SetOutline(outline, on, on)
 end
 
 PanelHook = function(frame)
@@ -341,8 +401,11 @@ local function Walk(frame, depth, inside, state)
 	elseif kind == "Button" and IsTexture(Read(frame, "icon")) then
 		Run(Icon, frame)
 	elseif Backed(frame) or (S.frames[frame] and S.frames[frame].fn == "panel") then
-		Run(Panel, frame, inside)
+		Run(Panel, frame, inside, depth == 0)
 		boxed = true
+	end
+	if depth == 0 then
+		Run(RootGlow, frame, not boxed)
 	end
 	Run(Texts, frame, state.spec)
 	if depth >= MOST.DEPTH then
@@ -391,7 +454,7 @@ local function Roots()
 			Add(value)
 		end
 	end
-	Add(Read(addon, "auctionHouse"))
+	Add(Read(Part(addon, { "ui", "v2" }), "auctionHouse"))
 	return list
 end
 
@@ -476,6 +539,44 @@ local function FollowMenus()
 	end
 end
 
+local function Grown(name)
+	local frame = rawget(_G, name)
+	if not IsFrame(frame) then
+		return false
+	end
+	local ok, count = pcall(frame.GetNumChildren, frame)
+	if not ok or not ns.Finite(count) or S.counts[name] == count then
+		return false
+	end
+	S.counts[name] = count
+	return true
+end
+
+local function Narrow(name)
+	if S.narrow[name] or ns.IsStopped(KEY) or not Wanted() or not Grown(name) then
+		return
+	end
+	S.narrow[name] = true
+	C_Timer.After(WAIT, function()
+		S.narrow[name] = nil
+		local frame = rawget(_G, name)
+		if not ns.IsStopped(KEY) and Loaded() and Wanted() and IsFrame(frame) then
+			Walk(frame, 0, false, { seen = {}, count = 0, spec = Spec() })
+		end
+	end)
+end
+
+local function NarrowHook(name)
+	local hook = S.hooks[name]
+	if hook == nil then
+		hook = function()
+			Narrow(name)
+		end
+		S.hooks[name] = hook
+	end
+	return hook
+end
+
 local function Follow()
 	local addon = Addon()
 	if addon == nil then
@@ -489,13 +590,19 @@ local function Follow()
 			end
 		end
 		for _, entry in ipairs(NESTED) do
-			local part = Read(addon, entry[1])
+			local part = Part(addon, entry[1])
 			if type(part) == "table" then
 				for _, name in ipairs(entry[2]) do
 					if type(Read(part, name)) == "function" then
 						ns.FollowTable(part, name, Queue)
 					end
 				end
+			end
+		end
+		for _, entry in ipairs(NARROW) do
+			local part = Part(addon, entry[1])
+			if type(part) == "table" and type(Read(part, entry[2])) == "function" then
+				ns.FollowTable(part, entry[2], NarrowHook(entry[3]))
 			end
 		end
 		local frame = rawget(_G, "RXPFrame")
@@ -525,6 +632,14 @@ Pass = function()
 				Run(ACTIONS[rec.fn], frame, rec.nested)
 			end
 		end
+		for frame, outline in pairs(S.glows) do
+			if not state.seen[frame] then
+				ns.SetOutline(outline, false, false)
+			end
+		end
+	end
+	for _, entry in ipairs(NARROW) do
+		Grown(entry[3])
 	end
 end
 
@@ -554,14 +669,17 @@ local function Verify()
 end
 
 function ns.GuideSkinRefresh()
-	if not Loaded() then
+	if not Present() then
+		return
+	end
+	pcall(Verify)
+	if not Known() then
 		return
 	end
 	pcall(Follow)
 	if Wanted() or Styled() then
 		Pass()
 	end
-	pcall(Verify)
 end
 
 ns.AddEvent(KEY, "ADDON_LOADED", function()

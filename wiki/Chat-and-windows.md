@@ -186,7 +186,7 @@ These rows choose which of the game's pictures and page art the restyled windows
 
 #### Other addons
 
-**RestedXP's windows** (on) gives that guide addon's windows Flat UI's look while it is loaded: the guide window and the steps in it, the arrow, the active item and target buttons, its right-click and dropdown menus and its other windows, such as the party steps window. They take Flat UI's flat backdrop and thin border, the bar texture, the fonts of the **Fonts** page while that page is on, and the colours of **Theme**, black and red with **Dark side**. A window that addon hides the background of keeps it hidden. Without that addon the row does nothing, and its own settings are never changed. Off gives it its own look back, in full after `/reload`. `/flatui status` says when a version of it is not one Flat UI knows, which then keeps its own look.
+**RestedXP's windows** (on) gives that guide addon's windows Flat UI's look while it is loaded: the guide window and the steps in it, the arrow, the active item and target buttons, its right-click and dropdown menus and its other windows, such as the party steps window. They take Flat UI's flat backdrop and thin border, the bar texture, the fonts of the **Fonts** page while that page is on, and the colours of **Theme**, black and red with **Dark side**. The rows of its step list light up in the accent colour while you point at them. A window that addon hides the background of keeps it hidden. Without that addon the row does nothing, and its own settings are never changed. Off gives it its own look back, in full after `/reload`. `/flatui status` says when a version of it is not one Flat UI knows, which then keeps its own look.
 
 ### Which windows tab
 

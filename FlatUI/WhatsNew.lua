@@ -488,6 +488,12 @@ function W.Build()
 	local outline = ns.ThemeOutline(ns.Outline(frame, frame, true), true)
 	kit.Painted(function()
 		kit.Backing(outline, "window", 0.98)
+		if ns.ThemeDark() then
+			local r, g, b = ns.WindowColour("general.backdrop")
+			ns.SetOutlineEdges(outline, true)
+			ns.SetOutlineColour(outline, nil, nil, nil)
+			ns.SetOutlineFill(outline, r, g, b, ns.WindowOpacity(0.98))
+		end
 	end)
 	local grip = kit.Frame(frame)
 	grip:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
