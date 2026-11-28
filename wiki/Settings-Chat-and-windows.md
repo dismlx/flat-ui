@@ -205,7 +205,7 @@ Made by `tools/dev/make_wiki.py` from Flat UI 0.5.51.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| **Theme** | Flat | Dark side gives the game's windows, Flat UI's own windows (bags and bank, gear comparison, item finder, trinket queue, What's new, copy boxes) and the options window near-black backgrounds and deep red borders, with titles, the chosen tab, highlights and ticked check boxes in a deep red, and a faint red glow round each window that brightens a little while you point at it. Your colours below and the options window's accent stay as you set them, for Flat. Choices: Flat, Dark side. |
+| **Theme** | Flat | Starcaller Dark Side gives the game's windows, Flat UI's own windows (bags and bank, gear comparison, item finder, trinket queue, What's new, copy boxes) and the options window near-black backgrounds and deep red borders, with titles, the chosen tab, highlights and ticked check boxes in a deep red, and a faint red glow round each window that brightens a little while you point at it. Your colours below and the options window's accent stay as you set them, for Flat. Choices: Flat, Starcaller Dark Side. |
 | **Window opacity** | 80% |  |
 | **Button and slot colour** | #1E1E1E |  |
 | **Highlight colour** | #D9D9D9 |  |
